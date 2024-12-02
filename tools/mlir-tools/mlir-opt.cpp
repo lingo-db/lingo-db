@@ -1,5 +1,6 @@
 #include "execution/BackendPasses.h"
 #include "mlir-support/eval.h"
+#include "mlir/Dialect/DLTI/DLTI.h"
 #include "mlir/Conversion/DBToStd/DBToStd.h"
 #include "mlir/Conversion/DSAToStd/DSAToStd.h"
 #include "mlir/Conversion/RelAlgToSubOp/RelAlgToSubOpPass.h"
@@ -69,6 +70,7 @@ int main(int argc, char** argv) {
    registry.insert<mlir::dsa::DSADialect>();
    registry.insert<mlir::func::FuncDialect>();
    registry.insert<mlir::arith::ArithDialect>();
+   registry.insert<mlir::DLTIDialect>();
 
    registry.insert<mlir::memref::MemRefDialect>();
    registry.insert<mlir::util::UtilDialect>();

@@ -11,10 +11,11 @@ int main(int argc, char** argv) {
       inputFileName = std::string(argv[1]);
    }
 
+   bool eagerLoading=  std::getenv("LINGODB_BACKEND_ONLY");
    std::shared_ptr<runtime::Session> session;
    if (argc > 2) {
       std::cout << "Loading Database from: " << argv[2] << '\n';
-      session = runtime::Session::createSession(std::string(argv[2]), false);
+      session = runtime::Session::createSession(std::string(argv[2]), eagerLoading);
    } else {
       session = runtime::Session::createSession();
    }

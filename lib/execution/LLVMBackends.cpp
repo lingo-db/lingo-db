@@ -45,57 +45,66 @@
 #include "utility/Tracer.h"
 
 #include <iostream>
+#include <utility/Setting.h>
 namespace {
-static utility::Tracer::Event execution("Execution", "run");
+utility::Tracer::Event execution("Execution", "run");
 
-static utility::Tracer::Event llvmCodeGen("Compilation", "LLVMCodeGen");
-static utility::Tracer::Event llvmOpt("Compilation", "LLVMOptPasses");
+utility::Tracer::Event llvmCodeGen("Compilation", "LLVMCodeGen");
+utility::Tracer::Event llvmOpt("Compilation", "LLVMOptPasses");
+
+utility::GlobalSetting<bool> runLoweringPasses("system.compilation.llvm_lowering", true);
+utility::GlobalSetting<std::string> perfFile("system.execution.perf_file", "perf.data");
+utility::GlobalSetting<std::string> perfBinary("system.execution.perf_binary", "/usr/bin/perf");
 
 static bool lowerToLLVMDialect(mlir::ModuleOp& moduleOp, std::shared_ptr<execution::SnapshotState> serializationState, bool verify) {
-   std::string error;
-   auto targetTriple = llvm::sys::getDefaultTargetTriple();
+   if (runLoweringPasses.getValue()) {
+      std::string error;
+      auto targetTriple = llvm::sys::getDefaultTargetTriple();
 
-   // Look up the target using the target triple.
-   auto* target = llvm::TargetRegistry::lookupTarget(targetTriple, error);
-   if (!target) {
-      llvm::errs() << error;
-      return 1;
+      // Look up the target using the target triple.
+      auto* target = llvm::TargetRegistry::lookupTarget(targetTriple, error);
+      if (!target) {
+         llvm::errs() << error;
+         return 1;
+      }
+
+      // Create the TargetMachine.
+      const auto* cpu = "generic";
+      const auto* features = "";
+      llvm::TargetOptions opt;
+      auto rm = std::optional<llvm::Reloc::Model>();
+      auto* targetMachine = target->createTargetMachine(targetTriple, cpu, features, opt, rm);
+
+      if (!targetMachine) {
+         llvm::errs() << "Could not create TargetMachine!";
+         return 1;
+      }
+
+      // Retrieve the data layout from the TargetMachine.
+      const llvm::DataLayout& dataLayout = targetMachine->createDataLayout();
+      mlir::Attribute dataLayoutSpec = mlir::translateDataLayout(dataLayout, moduleOp->getContext());
+      moduleOp->setAttr("util.dataLayout", dataLayoutSpec);
+
+      mlir::PassManager pm2(moduleOp->getContext());
+      pm2.enableVerifier(verify);
+      addLingoDBInstrumentation(pm2, serializationState);
+      pm2.addPass(mlir::createConvertSCFToCFPass());
+      pm2.addPass(mlir::util::createUtilToLLVMPass());
+      pm2.addPass(mlir::createConvertControlFlowToLLVMPass());
+      pm2.addPass(mlir::createArithToLLVMConversionPass());
+      pm2.addPass(mlir::createFinalizeMemRefToLLVMConversionPass());
+      pm2.addPass(mlir::createArithToLLVMConversionPass());
+      pm2.addPass(mlir::createConvertFuncToLLVMPass());
+      pm2.addPass(mlir::createReconcileUnrealizedCastsPass());
+      pm2.addPass(execution::createEnforceCABI());
+      pm2.addPass(mlir::createCSEPass());
+      if (mlir::failed(pm2.run(moduleOp))) {
+         return false;
+      }
+      return true;
+   } else {
+      return true;
    }
-
-   // Create the TargetMachine.
-   const auto* cpu = "generic";
-   const auto* features = "";
-   llvm::TargetOptions opt;
-   auto rm = std::optional<llvm::Reloc::Model>();
-   auto* targetMachine = target->createTargetMachine(targetTriple, cpu, features, opt, rm);
-
-   if (!targetMachine) {
-      llvm::errs() << "Could not create TargetMachine!";
-      return 1;
-   }
-
-   // Retrieve the data layout from the TargetMachine.
-   const llvm::DataLayout& dataLayout = targetMachine->createDataLayout();
-   mlir::Attribute dataLayoutSpec = mlir::translateDataLayout(dataLayout, moduleOp->getContext());
-   moduleOp->setAttr("util.dataLayout", dataLayoutSpec);
-
-   mlir::PassManager pm2(moduleOp->getContext());
-   pm2.enableVerifier(verify);
-   addLingoDBInstrumentation(pm2, serializationState);
-   pm2.addPass(mlir::createConvertSCFToCFPass());
-   pm2.addPass(mlir::util::createUtilToLLVMPass());
-   pm2.addPass(mlir::createConvertControlFlowToLLVMPass());
-   pm2.addPass(mlir::createArithToLLVMConversionPass());
-   pm2.addPass(mlir::createFinalizeMemRefToLLVMConversionPass());
-   pm2.addPass(mlir::createArithToLLVMConversionPass());
-   pm2.addPass(mlir::createConvertFuncToLLVMPass());
-   pm2.addPass(mlir::createReconcileUnrealizedCastsPass());
-   pm2.addPass(execution::createEnforceCABI());
-   pm2.addPass(mlir::createCSEPass());
-   if (mlir::failed(pm2.run(moduleOp))) {
-      return false;
-   }
-   return true;
 }
 static void addLLVMExecutionContextFuncs(mlir::ModuleOp& moduleOp) {
    mlir::OpBuilder builder(moduleOp->getContext());
@@ -371,7 +380,7 @@ class DefaultCPULLVMBackend : public execution::ExecutionBackend {
       llvm::InitializeNativeTarget();
       llvm::InitializeNativeTargetAsmPrinter();
       auto startLowerToLLVM = std::chrono::high_resolution_clock::now();
-      if (!lowerToLLVMDialect(moduleOp,getSerializationState(), verify)) {
+      if (!lowerToLLVMDialect(moduleOp, getSerializationState(), verify)) {
          error.emit() << "Could not lower module to llvm dialect";
          return;
       }
@@ -472,7 +481,7 @@ static void addDebugInfo(mlir::ModuleOp module, std::string lastSnapShotFile) {
          compileUnitAt = compileUnitAttr;
       }
       auto subroutineType = mlir::LLVM::DISubroutineTypeAttr::get(module->getContext(), {});
-      auto subProgramAttr = mlir::LLVM::DISubprogramAttr::get(module->getContext(),id, compileUnitAt, fileAttr, funcOp.getNameAttr(), funcOp.getNameAttr(), fileAttr, 0, 0, subprogramFlags, subroutineType, {});
+      auto subProgramAttr = mlir::LLVM::DISubprogramAttr::get(module->getContext(), id, compileUnitAt, fileAttr, funcOp.getNameAttr(), funcOp.getNameAttr(), fileAttr, 0, 0, subprogramFlags, subroutineType, {});
       funcOp->setLoc(mlir::FusedLocWith<mlir::LLVM::DIScopeAttr>::get(funcOp->getLoc(), subProgramAttr, module->getContext()));
    });
 }
@@ -483,15 +492,15 @@ class CPULLVMDebugBackend : public execution::ExecutionBackend {
       llvm::InitializeNativeTarget();
       llvm::InitializeNativeTargetAsmPrinter();
       auto startLowerToLLVM = std::chrono::high_resolution_clock::now();
-      if (!lowerToLLVMDialect(moduleOp,getSerializationState(), verify)) {
+      if (!lowerToLLVMDialect(moduleOp, getSerializationState(), verify)) {
          error.emit() << "Could not lower module to llvm dialect";
          return;
       }
       addLLVMExecutionContextFuncs(moduleOp);
       auto endLowerToLLVM = std::chrono::high_resolution_clock::now();
-      auto llvmSnapshotFile = execution::getSnapshotDir()+"/llvm-debug.mlir";
-      snapshot(moduleOp, error, llvmSnapshotFile);
-      addDebugInfo(moduleOp, llvmSnapshotFile);
+      if (auto moduleFileLineLoc = mlir::dyn_cast_or_null<mlir::FileLineColLoc>(moduleOp.getLoc())) {
+         addDebugInfo(moduleOp, moduleFileLineLoc.getFilename().str());
+      }
       timing["lowerToLLVM"] = std::chrono::duration_cast<std::chrono::microseconds>(endLowerToLLVM - startLowerToLLVM).count() / 1000.0;
       auto convertFn = [&](mlir::Operation* module, llvm::LLVMContext& context) -> std::unique_ptr<llvm::Module> {
          return translateModuleToLLVMIR(module, context, "LLVMDialectModule", true);
@@ -550,8 +559,8 @@ class CPULLVMProfilingBackend : public execution::ExecutionBackend {
    pid_t runPerfRecord() {
       pid_t childPid = 0;
       auto parentPid = std::to_string(getpid());
-      const char* argV[] = {"perf", "record",  "-c", "5000","-p", parentPid.c_str(), nullptr};
-      auto status = posix_spawn(&childPid, "/home/michael/.local/bin/perf", nullptr, nullptr, const_cast<char**>(argV), environ);
+      const char* argV[] = {perfBinary.getValue().c_str(), "record", "-o", perfFile.getValue().c_str(), "-c", "5000", "-p", parentPid.c_str(), nullptr};
+      auto status = posix_spawn(&childPid, perfBinary.getValue().c_str(), nullptr, nullptr, const_cast<char**>(argV), environ); //"/home/michael/.local/bin/perf"
       sleep(10);
       if (status != 0)
          error.emit() << "Launching of perf failed" << status;
@@ -575,16 +584,16 @@ class CPULLVMProfilingBackend : public execution::ExecutionBackend {
       llvm::InitializeNativeTarget();
       llvm::InitializeNativeTargetAsmPrinter();
       auto startLowerToLLVM = std::chrono::high_resolution_clock::now();
-      if (!lowerToLLVMDialect(moduleOp,getSerializationState(), verify)) {
+      if (!lowerToLLVMDialect(moduleOp, getSerializationState(), verify)) {
          error.emit() << "Could not lower module to llvm dialect";
          return;
       }
       addLLVMExecutionContextFuncs(moduleOp);
       auto endLowerToLLVM = std::chrono::high_resolution_clock::now();
       timing["lowerToLLVM"] = std::chrono::duration_cast<std::chrono::microseconds>(endLowerToLLVM - startLowerToLLVM).count() / 1000.0;
-      auto llvmSnapshotFile = execution::getSnapshotDir()+"/llvm-profile.mlir";
-      snapshot(moduleOp, error, llvmSnapshotFile);
-      addDebugInfo(moduleOp, llvmSnapshotFile);
+      if (auto moduleFileLineLoc = mlir::dyn_cast_or_null<mlir::FileLineColLoc>(moduleOp.getLoc())) {
+         addDebugInfo(moduleOp, moduleFileLineLoc.getFilename().str());
+      }
       double translateToLLVMIRTime;
       auto convertFn = [&](mlir::Operation* module, llvm::LLVMContext& context) -> std::unique_ptr<llvm::Module> {
          auto startTranslationToLLVMIR = std::chrono::high_resolution_clock::now();
