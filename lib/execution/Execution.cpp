@@ -1,6 +1,5 @@
 #include "execution/Execution.h"
 #include "execution/CBackend.h"
-#include "execution/CraneliftBackend.h"
 #include "execution/LLVMBackends.h"
 #include "json.h"
 #include "mlir/Conversion/DBToStd/DBToStd.h"
@@ -350,12 +349,6 @@ std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(execution::Exec
       config->executionBackend = createCBackend();
    } else if (runMode == ExecutionMode::PERF) {
       config->executionBackend = createLLVMProfilingBackend();
-   } else if (runMode == ExecutionMode::CHEAP || runMode == ExecutionMode::EXTREME_CHEAP) {
-#if CRANELIFT_ENABLED == 1
-      config->executionBackend = createCraneliftBackend();
-#else
-      config->executionBackend = createDefaultLLVMBackend();
-#endif
    } else if (runMode == ExecutionMode::GPU) {
 #if GPU_ENABLED == 1
       config->executionBackend = createGPULLVMBackend();
