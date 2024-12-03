@@ -68,6 +68,8 @@ struct BlockArgDefElement {
 };
 struct BlockElement {
    mlir::Block* block;
+   bool startsWithCurlyBrace;
+   bool endsWithCurlyBrace;
 };
 struct DummyElement {
 };
@@ -195,6 +197,8 @@ nlohmann::json toJSON(size_t& startElement, std::vector<MLIRElement>& elements, 
          } else if (std::holds_alternative<BlockElement>(element.element)) {
             nlohmann::json block;
             block["type"] = "block";
+            block["sCB"] = std::get<BlockElement>(element.element).startsWithCurlyBrace;
+            block["eCB"] = std::get<BlockElement>(element.element).endsWithCurlyBrace;
             block["children"] = toJSON(startElement, elements, element.start, element.start + element.length, buf, [](nlohmann::json& j, std::string s) {
                j.push_back({{"type", "raw"}, {"value", s}});
             });
@@ -308,6 +312,11 @@ int main(int argc, char** argv) {
       }
       for (auto blockDef : state.getBlockDefs()) {
          size_t start = blockDef.definition.loc.Start.getPointer() - basePtr;
+         bool startsWithCurlyBrace=false;
+         if(auto firstOpDef= state.getOpDef(&*blockDef.block->getOperations().begin())) {
+            startsWithCurlyBrace=get(basePtr, start, firstOpDef->loc.Start.getPointer()-basePtr-start).find("{")!=std::string::npos;
+         }
+
          auto* end = blockDef.definition.loc.End.getPointer();
          for (auto rit = blockDef.block->getOperations().rbegin(); rit != blockDef.block->getOperations().rend(); rit++) {
             auto& lastOp = *rit;
@@ -317,12 +326,16 @@ int main(int argc, char** argv) {
                break;
             }
          }
-         while (*end != '}') {
+         bool endsWithCurlyBrace=false;
+         while (*end != '}' && *end!='^') {
             end++;
          }
-         end++;
+         if(*end!='^') {
+            end++;
+            endsWithCurlyBrace=true;
+         }
          size_t length = end - blockDef.definition.loc.Start.getPointer();
-         elements.push_back({start, length, BlockElement{blockDef.block}});
+         elements.push_back({start, length, BlockElement{blockDef.block,startsWithCurlyBrace,endsWithCurlyBrace}});
          for (auto [blockArgDef, blockArg] : llvm::zip(blockDef.arguments, blockDef.block->getArguments())) {
             size_t start = blockArgDef.loc.Start.getPointer() - basePtr;
             size_t length = blockArgDef.loc.End.getPointer() - blockArgDef.loc.Start.getPointer();
