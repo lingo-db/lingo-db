@@ -48,9 +48,9 @@ cl::opt<std::string> jsonInputFilename(cl::Positional,
                                        cl::value_desc("filename"));
 
 cl::opt<std::string> jsonOutputFilename(cl::Positional,
-                                       cl::desc("<output json file>"),
-                                       cl::init("-"),
-                                       cl::value_desc("filename"));
+                                        cl::desc("<output json file>"),
+                                        cl::init("-"),
+                                        cl::value_desc("filename"));
 struct OpElement {
    mlir::Operation* op;
    std::string id;
@@ -312,9 +312,9 @@ int main(int argc, char** argv) {
       }
       for (auto blockDef : state.getBlockDefs()) {
          size_t start = blockDef.definition.loc.Start.getPointer() - basePtr;
-         bool startsWithCurlyBrace=false;
-         if(auto firstOpDef= state.getOpDef(&*blockDef.block->getOperations().begin())) {
-            startsWithCurlyBrace=get(basePtr, start, firstOpDef->loc.Start.getPointer()-basePtr-start).find("{")!=std::string::npos;
+         bool startsWithCurlyBrace = false;
+         if (auto *firstOpDef = state.getOpDef(&*blockDef.block->getOperations().begin())) {
+            startsWithCurlyBrace = get(basePtr, start, firstOpDef->loc.Start.getPointer() - basePtr - start).find("{") != std::string::npos;
          }
 
          auto* end = blockDef.definition.loc.End.getPointer();
@@ -326,16 +326,16 @@ int main(int argc, char** argv) {
                break;
             }
          }
-         bool endsWithCurlyBrace=false;
-         while (*end != '}' && *end!='^') {
+         bool endsWithCurlyBrace = false;
+         while (*end != '}' && *end != '^') {
             end++;
          }
-         if(*end!='^') {
+         if (*end != '^') {
             end++;
-            endsWithCurlyBrace=true;
+            endsWithCurlyBrace = true;
          }
          size_t length = end - blockDef.definition.loc.Start.getPointer();
-         elements.push_back({start, length, BlockElement{blockDef.block,startsWithCurlyBrace,endsWithCurlyBrace}});
+         elements.push_back({start, length, BlockElement{blockDef.block, startsWithCurlyBrace, endsWithCurlyBrace}});
          for (auto [blockArgDef, blockArg] : llvm::zip(blockDef.arguments, blockDef.block->getArguments())) {
             size_t start = blockArgDef.loc.Start.getPointer() - basePtr;
             size_t length = blockArgDef.loc.End.getPointer() - blockArgDef.loc.Start.getPointer();
@@ -374,9 +374,9 @@ int main(int argc, char** argv) {
       auto parsed = toJSON(startElement, elements, 0, sourceMgr.getBufferInfo(bufferId).Buffer->getBuffer().size(), basePtr, [](nlohmann::json& j, std::string s) { j.push_back({{"type", "raw"}, {"value", s}}); });
       jsonOutput.push_back({{"parsed", std::move(parsed)}, {"passInfo", step}});
    }
-   if(jsonOutputFilename=="-") {
-      std::cout<<jsonOutput.dump()<<std::endl;
-   }else {
+   if (jsonOutputFilename == "-") {
+      std::cout << jsonOutput.dump() << std::endl;
+   } else {
       std::ofstream file(jsonOutputFilename);
       file << jsonOutput.dump() << std::endl;
    }

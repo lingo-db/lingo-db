@@ -367,9 +367,6 @@ class GPULLVMBackend : public execution::ExecutionBackend {
       timing["llvmCodeGen"] = totalJITTime;
       timing["executionTime"] = (measuredTimes.size() > 1 ? *std::min_element(measuredTimes.begin() + 1, measuredTimes.end()) : measuredTimes[0]);
    }
-   bool requiresSnapshotting() override {
-      return false;
-   }
 };
 #endif
 
@@ -459,15 +456,7 @@ class DefaultCPULLVMBackend : public execution::ExecutionBackend {
       timing["executionTime"] = (measuredTimes.size() > 1 ? *std::min_element(measuredTimes.begin() + 1, measuredTimes.end()) : measuredTimes[0]);
    }
 };
-static void snapshot(mlir::ModuleOp moduleOp, execution::Error& error, std::string fileName) {
-   mlir::PassManager pm(moduleOp->getContext());
-   mlir::OpPrintingFlags flags;
-   flags.enableDebugInfo(true, false);
-   pm.addPass(mlir::createLocationSnapshotPass(flags, fileName));
-   if (pm.run(moduleOp).failed()) {
-      error.emit() << "Snapshotting failed";
-   }
-}
+
 static void addDebugInfo(mlir::ModuleOp module, std::string lastSnapShotFile) {
    auto fileAttr = mlir::LLVM::DIFileAttr::get(module->getContext(), lastSnapShotFile, std::filesystem::current_path().string());
    auto compileUnitAttr = mlir::LLVM::DICompileUnitAttr::get(mlir::DistinctAttr::create(mlir::UnitAttr::get(module->getContext())), static_cast<uint8_t>(llvm::dwarf::DW_LANG_C), fileAttr, mlir::StringAttr::get(module->getContext(), "LingoDB"), true, mlir::LLVM::DIEmissionKind::Full);
@@ -559,8 +548,10 @@ class CPULLVMProfilingBackend : public execution::ExecutionBackend {
    pid_t runPerfRecord() {
       pid_t childPid = 0;
       auto parentPid = std::to_string(getpid());
-      const char* argV[] = {perfBinary.getValue().c_str(), "record", "-o", perfFile.getValue().c_str(), "-c", "5000", "-p", parentPid.c_str(), nullptr};
-      auto status = posix_spawn(&childPid, perfBinary.getValue().c_str(), nullptr, nullptr, const_cast<char**>(argV), environ); //"/home/michael/.local/bin/perf"
+      auto perfBinaryStr=perfBinary.getValue();
+      auto perfFileStr=perfFile.getValue();
+      const char* argV[] = {perfBinaryStr.c_str(), "record", "-o", perfFileStr.c_str(), "-c", "5000", "-p", parentPid.c_str(), nullptr};
+      auto status = posix_spawn(&childPid, perfBinaryStr.c_str(), nullptr, nullptr, const_cast<char**>(argV), environ);
       sleep(10);
       if (status != 0)
          error.emit() << "Launching of perf failed" << status;

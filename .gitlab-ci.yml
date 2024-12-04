@@ -127,18 +127,19 @@ build_pylingodb:
     expire_in: 1 hrs
 
 test_pylingodb:
+   image: gitlab.db.in.tum.de:5005/lingo-db/lingo-db/lingodb-dev:latest
    needs:
       - build_pylingodb
    script:
       - apt-get update
       - apt install -y python3.11-venv
-      - python3 -m venv venv
+      - python3.11 -m venv venv
       - . venv/bin/activate
       - pip install built-packages/*.whl
       - pip install pandas
       - python3 tools/python/test/test.py
    tags:
-      - "python3"
+      - "umbra-test"
 
 coverage:
   image: gitlab.db.in.tum.de:5005/lingo-db/lingo-db/lingodb-dev:latest
