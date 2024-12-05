@@ -113,7 +113,7 @@ build_pylingodb:
   script:
     - rm -rf /built-packages
     - mkdir -p /built-packages
-    - bash tools/python/bridge/create_package.sh cp311-cp311
+    - bash tools/python/bridge/create_package.sh cp312-cp312
     - cd tools/python
     - /opt/python/cp311-cp311/bin/python3 -m build .
     - cp dist/*.whl /built-packages/.
@@ -132,8 +132,8 @@ test_pylingodb:
       - build_pylingodb
    script:
       - apt-get update
-      - apt install -y python3.11-venv
-      - python3.11 -m venv venv
+      - apt install -y python3.12-venv
+      - python3.12 -m venv venv
       - . venv/bin/activate
       - pip install built-packages/*.whl
       - pip install pandas
@@ -145,8 +145,12 @@ coverage:
   image: gitlab.db.in.tum.de:5005/lingo-db/lingo-db/lingodb-dev:latest
   script:
     - make venv
-    - make test-coverage
-  coverage: '/lines\.{6}:\s+([0-9]+\.[0-9]+)%/'
+    - make coverage
+  coverage: '/coverage: \d+.?\d*\%/'
+  artifacts:
+    paths:
+      - build/coverage-report
+    expire_in: 24 hrs
   #rules:
   #  - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
   tags:

@@ -50,7 +50,7 @@ build/lingodb-release/.stamp: build/dependencies
 	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS) -DCMAKE_BUILD_TYPE=Release
 	touch $@
 build/lingodb-debug-coverage/.stamp: build/dependencies
-	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS) -DCMAKE_CXX_FLAGS=--coverage -DCMAKE_C_FLAGS=--coverage
+	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS) -DCMAKE_CXX_FLAGS="-O0 -fprofile-instr-generate -fcoverage-mapping" -DCMAKE_C_FLAGS="-O0 -fprofile-instr-generate -fcoverage-mapping" -DCMAKE_CXX_COMPILER=clang++-19 -DCMAKE_C_COMPILER=clang-19
 	touch $@
 
 .PHONY: run-test
@@ -68,15 +68,14 @@ sqlite-test-no-rebuild: build/lingodb-release/.buildstamp
 .PHONY: test-coverage
 test-coverage: build/lingodb-debug-coverage/.stamp
 	cmake --build $(dir $<) --target mlir-db-opt run-mlir run-sql sql-to-mlir -- -j${NPROCS}
-	${LLVM_LIT} -v $(dir $<)/test/lit
-	lcov --capture --directory $(dir $<)  --output-file $(dir $<)/coverage.info
-	lcov --remove $(dir $<)/coverage.info -o $(dir $<)/filtered-coverage.info \
-			'**/site-packages/**/*' '**/vendored/*' '/usr/*' '**/build/lingodb-debug-coverage/*'
+	${LLVM_LIT} -v --per-test-coverage  $(dir $<)/test/lit
+	find $(dir $<) -type f -name "*.profraw" > $(dir $<)/profraw-files
+	llvm-profdata-19 merge -o $(dir $<)/coverage.profdata --input-files=$(dir $<)/profraw-files
 
 coverage: build/lingodb-debug-coverage/.stamp
 	$(MAKE) test-coverage
-	genhtml  --ignore-errors source $(dir $<)/filtered-coverage.info --legend --title "lcov-test" --output-directory=$(dir $<)/coverage-report
-	open $(dir $<)/coverage-report/index.html
+	mkdir -p build/coverage-report
+	llvmcov2html --exclude-dir=$(dir $<),venv,vendored build/coverage-report $(dir $<)/run-mlir ./build/lingodb-debug-coverage/run-sql $(dir $<)/mlir-db-opt $(dir $<)/sql-to-mlir $(dir $<)/coverage.profdata
 
 
 .PHONY: run-benchmark
