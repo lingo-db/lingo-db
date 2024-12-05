@@ -1001,9 +1001,6 @@ mlir::Value frontend::sql::Parser::translateExpression(mlir::OpBuilder& builder,
             case AND_EXPR: return builder.create<mlir::db::AndOp>(builder.getUnknownLoc(), values);
             case OR_EXPR: return builder.create<mlir::db::OrOp>(builder.getUnknownLoc(), values);
             case NOT_EXPR: return builder.create<mlir::db::NotOp>(builder.getUnknownLoc(), values[0]);
-            default: {
-              throw std::runtime_error("unsupported boolean expression");
-            }
          }
          break;
       }
@@ -1208,9 +1205,6 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
       case SETOP_EXCEPT:
       case SETOP_INTERSECT:
       case SETOP_UNION: return translateSetOperation(builder, stmt, context, scope);
-      default: {
-        throw std::runtime_error("could not translate select statement type");
-      }
    }
    return std::make_pair(mlir::Value(), TargetInfo());
 }

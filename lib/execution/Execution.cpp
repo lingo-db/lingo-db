@@ -368,7 +368,7 @@ std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(execution::Exec
    return config;
 }
 std::unique_ptr<QueryExecuter> QueryExecuter::createDefaultExecuter(std::unique_ptr<QueryExecutionConfig> queryExecutionConfig, runtime::Session& session) {
-   return std::make_unique<DefaultQueryExecuter>(std::move(queryExecutionConfig), std::move(session.createExecutionContext()));
+   return std::make_unique<DefaultQueryExecuter>(std::move(queryExecutionConfig), session.createExecutionContext());
 }
 
 } // namespace execution

@@ -141,9 +141,8 @@ class ToJson {
             return "<>";
          case mlir::db::DBCmpPredicate::isa:
             return "isa";
-         default:
-            assert(false);
       }
+      return "?";
    }
    nlohmann::json innerExpression(const std::vector<std::string> strings, std::vector<nlohmann::json> operands) {
       nlohmann::json result{
@@ -632,22 +631,22 @@ class ToJson {
             result["subop"] = "reduce";
             result["reference"] = columnToJSON(op.getRef());
             result["updated"] = nlohmann::json::array();
-           for (auto [member, computed] : llvm::zip(op.getMembers(), op.getRegion().front().getTerminator()->getOperands())) {
-
-              result["updated"].push_back({{"member", mlir::cast<mlir::StringAttr>(member).str()}, {"expression", convertExpression(computed, [&](mlir::BlockArgument ba) {
-                                                                                           if (ba.getOwner()->getParentOp() == op.getOperation()) {
-                                                                                              auto argNr=ba.getArgNumber();
-                                                                                              if(argNr<op.getColumns().size()) {
-                                                                                                 auto accessedTuple = mlir::cast<mlir::tuples::ColumnRefAttr>(op.getColumns()[argNr]);;
-                                                                                                 return columnToJSON(accessedTuple);
-                                                                                              }else {
-                                                                                                 return nlohmann::json{{"type", "expression_leaf"}, {"leaf_type", "member"}, {"member", mlir::cast<mlir::StringAttr>(op.getMembers()[argNr-op.getColumns().size()]).str()}};
-                                                                                              }
-                                                                                           } else {
-                                                                                              return nlohmann::json{{"type", "expression_leaf"}, {"leaf_type", "unknown"}};
-                                                                                           }
-                                                                                        })}});
-           }
+            for (auto [member, computed] : llvm::zip(op.getMembers(), op.getRegion().front().getTerminator()->getOperands())) {
+               result["updated"].push_back({{"member", mlir::cast<mlir::StringAttr>(member).str()}, {"expression", convertExpression(computed, [&](mlir::BlockArgument ba) {
+                                                                                                        if (ba.getOwner()->getParentOp() == op.getOperation()) {
+                                                                                                           auto argNr = ba.getArgNumber();
+                                                                                                           if (argNr < op.getColumns().size()) {
+                                                                                                              auto accessedTuple = mlir::cast<mlir::tuples::ColumnRefAttr>(op.getColumns()[argNr]);
+                                                                                                              ;
+                                                                                                              return columnToJSON(accessedTuple);
+                                                                                                           } else {
+                                                                                                              return nlohmann::json{{"type", "expression_leaf"}, {"leaf_type", "member"}, {"member", mlir::cast<mlir::StringAttr>(op.getMembers()[argNr - op.getColumns().size()]).str()}};
+                                                                                                           }
+                                                                                                        } else {
+                                                                                                           return nlohmann::json{{"type", "expression_leaf"}, {"leaf_type", "unknown"}};
+                                                                                                        }
+                                                                                                     })}});
+            }
             return result;
          })
          //TODO: Loop

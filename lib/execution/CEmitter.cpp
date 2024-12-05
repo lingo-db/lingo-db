@@ -1274,8 +1274,6 @@ LogicalResult CppEmitter::emitOperation(Operation& op, bool trailingSemicolon) {
                   return printArithmeticOperation(*this, op, ArithmeticCOperation::COMPARE_GREATER_EQ);
                case arith::CmpIPredicate::uge:
                   return printArithmeticOperation(*this, op, ArithmeticCOperation::COMPARE_GREATER_EQ_U);
-               default:
-                  return failure();
             }
          })
          .Case<arith::CmpFOp>([&](auto op) {

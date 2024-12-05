@@ -139,9 +139,8 @@ class ToJson {
             return "<>";
          case mlir::db::DBCmpPredicate::isa:
             return "isa";
-         default:
-            assert(false);
       }
+      return "?";
    }
    nlohmann::json innerExpression(const std::vector<std::string> strings, std::vector<nlohmann::json> operands) {
       nlohmann::json result{

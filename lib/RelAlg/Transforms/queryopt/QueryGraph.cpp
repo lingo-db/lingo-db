@@ -56,7 +56,7 @@ void mlir::relalg::QueryGraph::print(llvm::raw_ostream& out) {
 }
 std::unique_ptr<support::eval::expr> mlir::relalg::buildEvalExpr(mlir::Value val, std::unordered_map<const mlir::tuples::Column*, std::string>& mapping){
    auto* op = val.getDefiningOp();
-   if (!op) return std::move(support::eval::createInvalid());
+   if (!op) return support::eval::createInvalid();
    if (auto constantOp = mlir::dyn_cast_or_null<mlir::db::ConstantOp>(op)) {
       std::variant<int64_t, double, std::string> parseArg;
       if (auto integerAttr = mlir::dyn_cast_or_null<mlir::IntegerAttr>(constantOp.getValue())) {

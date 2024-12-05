@@ -263,7 +263,7 @@ class GPULLVMBackend : public execution::ExecutionBackend {
          auto res = translateModuleToLLVMIR(module, context, "LLVMDialectModule", false);
          auto endTranslationToLLVMIR = std::chrono::high_resolution_clock::now();
          translateToLLVMIRTime = std::chrono::duration_cast<std::chrono::microseconds>(endTranslationToLLVMIR - startTranslationToLLVMIR).count() / 1000.0;
-         return std::move(res);
+         return res;
       };
       double llvmPassesTime;
 
@@ -390,7 +390,7 @@ class DefaultCPULLVMBackend : public execution::ExecutionBackend {
          auto res = translateModuleToLLVMIR(module, context, "LLVMDialectModule", false);
          auto endTranslationToLLVMIR = std::chrono::high_resolution_clock::now();
          translateToLLVMIRTime = std::chrono::duration_cast<std::chrono::microseconds>(endTranslationToLLVMIR - startTranslationToLLVMIR).count() / 1000.0;
-         return std::move(res);
+         return res;
       };
       double llvmPassesTime;
 
@@ -591,7 +591,7 @@ class CPULLVMProfilingBackend : public execution::ExecutionBackend {
          auto res = translateModuleToLLVMIR(module, context, "LLVMDialectModule", true);
          auto endTranslationToLLVMIR = std::chrono::high_resolution_clock::now();
          translateToLLVMIRTime = std::chrono::duration_cast<std::chrono::microseconds>(endTranslationToLLVMIR - startTranslationToLLVMIR).count() / 1000.0;
-         return std::move(res);
+         return res;
       };
       double llvmPassesTime;
 

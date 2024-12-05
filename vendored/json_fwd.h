@@ -3,7 +3,7 @@
 // |  |  |__   |  |  | | | |  version 3.11.3
 // |_____|_____|_____|_|___|  https://github.com/nlohmann/json
 //
-// SPDX-FileCopyrightText: 2013-2023 Niels Lohmann <https://nlohmann.me>
+// SPDX-FileCopyrightText: 2013 - 2024 Niels Lohmann <https://nlohmann.me>
 // SPDX-License-Identifier: MIT
 
 #ifndef INCLUDE_NLOHMANN_JSON_FWD_HPP_
@@ -21,7 +21,7 @@
 // |  |  |__   |  |  | | | |  version 3.11.3
 // |_____|_____|_____|_|___|  https://github.com/nlohmann/json
 //
-// SPDX-FileCopyrightText: 2013-2023 Niels Lohmann <https://nlohmann.me>
+// SPDX-FileCopyrightText: 2013 - 2024 Niels Lohmann <https://nlohmann.me>
 // SPDX-License-Identifier: MIT
 
 
@@ -29,11 +29,11 @@
 // This file contains all macro definitions affecting or depending on the ABI
 
 #ifndef JSON_SKIP_LIBRARY_VERSION_CHECK
-#if defined(NLOHMANN_JSON_VERSION_MAJOR) && defined(NLOHMANN_JSON_VERSION_MINOR) && defined(NLOHMANN_JSON_VERSION_PATCH)
-#if NLOHMANN_JSON_VERSION_MAJOR != 3 || NLOHMANN_JSON_VERSION_MINOR != 11 || NLOHMANN_JSON_VERSION_PATCH != 3
-#warning "Already included a different version of the library!"
-#endif
-#endif
+    #if defined(NLOHMANN_JSON_VERSION_MAJOR) && defined(NLOHMANN_JSON_VERSION_MINOR) && defined(NLOHMANN_JSON_VERSION_PATCH)
+        #if NLOHMANN_JSON_VERSION_MAJOR != 3 || NLOHMANN_JSON_VERSION_MINOR != 11 || NLOHMANN_JSON_VERSION_PATCH != 3
+            #warning "Already included a different version of the library!"
+        #endif
+    #endif
 #endif
 
 #define NLOHMANN_JSON_VERSION_MAJOR 3   // NOLINT(modernize-macro-to-enum)
@@ -41,27 +41,27 @@
 #define NLOHMANN_JSON_VERSION_PATCH 3   // NOLINT(modernize-macro-to-enum)
 
 #ifndef JSON_DIAGNOSTICS
-#define JSON_DIAGNOSTICS 0
+    #define JSON_DIAGNOSTICS 0
 #endif
 
 #ifndef JSON_USE_LEGACY_DISCARDED_VALUE_COMPARISON
-#define JSON_USE_LEGACY_DISCARDED_VALUE_COMPARISON 0
+    #define JSON_USE_LEGACY_DISCARDED_VALUE_COMPARISON 0
 #endif
 
 #if JSON_DIAGNOSTICS
-#define NLOHMANN_JSON_ABI_TAG_DIAGNOSTICS _diag
+    #define NLOHMANN_JSON_ABI_TAG_DIAGNOSTICS _diag
 #else
-#define NLOHMANN_JSON_ABI_TAG_DIAGNOSTICS
+    #define NLOHMANN_JSON_ABI_TAG_DIAGNOSTICS
 #endif
 
 #if JSON_USE_LEGACY_DISCARDED_VALUE_COMPARISON
-#define NLOHMANN_JSON_ABI_TAG_LEGACY_DISCARDED_VALUE_COMPARISON _ldvcmp
+    #define NLOHMANN_JSON_ABI_TAG_LEGACY_DISCARDED_VALUE_COMPARISON _ldvcmp
 #else
-#define NLOHMANN_JSON_ABI_TAG_LEGACY_DISCARDED_VALUE_COMPARISON
+    #define NLOHMANN_JSON_ABI_TAG_LEGACY_DISCARDED_VALUE_COMPARISON
 #endif
 
 #ifndef NLOHMANN_JSON_NAMESPACE_NO_VERSION
-#define NLOHMANN_JSON_NAMESPACE_NO_VERSION 0
+    #define NLOHMANN_JSON_NAMESPACE_NO_VERSION 0
 #endif
 
 // Construct the namespace ABI tags component
@@ -138,17 +138,17 @@ struct adl_serializer;
 /// a class to store JSON values
 /// @sa https://json.nlohmann.me/api/basic_json/
 template<template<typename U, typename V, typename... Args> class ObjectType =
-             std::map,
-          template<typename U, typename... Args> class ArrayType = std::vector,
-          class StringType = std::string, class BooleanType = bool,
-          class NumberIntegerType = std::int64_t,
-          class NumberUnsignedType = std::uint64_t,
-          class NumberFloatType = double,
-          template<typename U> class AllocatorType = std::allocator,
-          template<typename T, typename SFINAE = void> class JSONSerializer =
-             adl_serializer,
-          class BinaryType = std::vector<std::uint8_t>, // cppcheck-suppress syntaxError
-          class CustomBaseClass = void>
+         std::map,
+         template<typename U, typename... Args> class ArrayType = std::vector,
+         class StringType = std::string, class BooleanType = bool,
+         class NumberIntegerType = std::int64_t,
+         class NumberUnsignedType = std::uint64_t,
+         class NumberFloatType = double,
+         template<typename U> class AllocatorType = std::allocator,
+         template<typename T, typename SFINAE = void> class JSONSerializer =
+         adl_serializer,
+         class BinaryType = std::vector<std::uint8_t>, // cppcheck-suppress syntaxError
+         class CustomBaseClass = void>
 class basic_json;
 
 /// @brief JSON Pointer defines a string syntax for identifying a specific value within a JSON document
