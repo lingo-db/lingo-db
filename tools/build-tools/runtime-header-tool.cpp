@@ -45,7 +45,7 @@ class MethodPrinter : public MatchFinder::MatchCallback {
       if (const auto* tdType = type->getAs<TypedefType>()) {
          return translateType(tdType->desugar());
       }
-      if (const auto* pointerType = type->getAs<PointerType>()) {
+      if (const auto* pointerType = type->getAs<clang::PointerType>()) {
          auto pointeeType = pointerType->desugar()->getPointeeType();
          if (const auto* parenType = pointeeType->getAs<ParenType>()) {
             if (const auto* funcProtoType = parenType->getInnerType()->getAs<FunctionProtoType>()) {
@@ -133,16 +133,6 @@ class MethodPrinter : public MatchFinder::MatchCallback {
             if (isa<CXXConstructorDecl>(method)) continue;
             if (isa<CXXDestructorDecl>(method)) continue;
             if (method->getAccess() == clang::AS_protected || method->getAccess() == clang::AS_private) continue;
-            bool noSideEffects = false;
-            for (auto* attr : method->attrs()) {
-               if (attr->getKind() == clang::attr::Annotate) {
-                  if (auto* annotateAttr = llvm::dyn_cast<clang::AnnotateAttr>(attr)) {
-                     if (annotateAttr->getAnnotation() == "rt-no-sideffect") {
-                        noSideEffects = true;
-                     }
-                  }
-               }
-            }
             std::string methodName = method->getNameAsString();
             std::vector<std::string> types;
             std::vector<std::string> resTypes;
@@ -184,7 +174,7 @@ class MethodPrinter : public MatchFinder::MatchCallback {
             emitTypeCreateFn(hStream, types);
             hStream << ",";
             emitTypeCreateFn(hStream, resTypes);
-            hStream << "," << (noSideEffects ? "true" : "false") << "," << getPtrFuncName << ");\n";
+            hStream << "," << getPtrFuncName << ");\n";
             hStream << "#endif \n";
             cppStream << "void* "<<resultNamespace<<"::" << className << "::" << getPtrFuncName << "(){  auto x= &" << fullName << ";  return *reinterpret_cast<void**>(&x);}";
          };

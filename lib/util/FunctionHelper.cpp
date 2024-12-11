@@ -42,9 +42,6 @@ mlir::ResultRange mlir::util::FunctionHelper::call(OpBuilder& builder, mlir::Loc
       OpBuilder::InsertionGuard insertionGuard(builder);
       builder.setInsertionPointToStart(fnHelper.parentModule.getBody());
       funcOp = builder.create<mlir::func::FuncOp>(fnHelper.parentModule.getLoc(), function.getMangledName(), builder.getFunctionType(function.getParameterTypes()(builder.getContext()), function.getResultTypes()(builder.getContext())), builder.getStringAttr("private"), ArrayAttr{}, ArrayAttr{});
-      if (function.isNoSideEffects()) {
-         funcOp->setAttr("const", builder.getUnitAttr());
-      }
    }
    assert(values.size() == funcOp.getFunctionType().getNumInputs());
    std::vector<mlir::Value> convertedValues;
@@ -64,7 +61,7 @@ std::function<mlir::ResultRange(mlir::ValueRange)> mlir::util::FunctionSpec::ope
    std::function<mlir::ResultRange(mlir::ValueRange)> fn = [&builder, loc, this](mlir::ValueRange range) -> mlir::ResultRange { return mlir::util::FunctionHelper::call(builder, loc, *this, range); };
    return fn;
 }
-mlir::util::FunctionSpec::FunctionSpec(const std::string& name, const std::string& mangledName, const std::function<std::vector<mlir::Type>(mlir::MLIRContext*)>& parameterTypes, const std::function<std::vector<mlir::Type>(mlir::MLIRContext*)>& resultTypes, bool noSideEffects, void* (*getPointer)()) : name(name), mangledName(mangledName), parameterTypes(parameterTypes), resultTypes(resultTypes), noSideEffects(noSideEffects), getPointer(getPointer) {
+mlir::util::FunctionSpec::FunctionSpec(const std::string& name, const std::string& mangledName, const std::function<std::vector<mlir::Type>(mlir::MLIRContext*)>& parameterTypes, const std::function<std::vector<mlir::Type>(mlir::MLIRContext*)>& resultTypes, void* (*getPointer)()) : name(name), mangledName(mangledName), parameterTypes(parameterTypes), resultTypes(resultTypes), getPointer(getPointer) {
    getFunctions().insert({mangledName, *this});
 }
 

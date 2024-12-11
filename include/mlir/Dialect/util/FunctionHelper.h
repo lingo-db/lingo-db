@@ -12,7 +12,6 @@ class FunctionSpec {
    std::string mangledName;
    std::function<std::vector<mlir::Type>(mlir::MLIRContext*)> parameterTypes;
    std::function<std::vector<mlir::Type>(mlir::MLIRContext*)> resultTypes;
-   bool noSideEffects;
 
    public:
    void* (*getPointer)();
@@ -30,12 +29,9 @@ class FunctionSpec {
       return resultTypes;
    }
 
-   FunctionSpec(const std::string& name, const std::string& mangledName, const std::function<std::vector<mlir::Type>(mlir::MLIRContext*)>& parameterTypes, const std::function<std::vector<mlir::Type>(mlir::MLIRContext*)>& resultTypes, bool noSideEffects, void* (*getPointer)());
+   FunctionSpec(const std::string& name, const std::string& mangledName, const std::function<std::vector<mlir::Type>(mlir::MLIRContext*)>& parameterTypes, const std::function<std::vector<mlir::Type>(mlir::MLIRContext*)>& resultTypes, void* (*getPointer)());
 
    std::function<mlir::ResultRange(mlir::ValueRange)> operator()(mlir::OpBuilder& builder, mlir::Location loc) const;
-   bool isNoSideEffects() const {
-      return noSideEffects;
-   }
 };
 
 class FunctionHelper {

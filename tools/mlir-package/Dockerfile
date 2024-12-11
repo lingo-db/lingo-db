@@ -2,7 +2,7 @@ FROM quay.io/pypa/manylinux_2_28_x86_64 AS baseimg
 RUN yum install -y epel-release || sudo yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-$(cut -d: -f5 /etc/system-release-cpe | cut -d. -f1).noarch.rpm
 RUN yum install -y cmake ninja-build
 RUN /opt/python/cp310-cp310/bin/python3 -m venv /venv
-RUN /venv/bin/pip install numpy pybind11
+RUN /venv/bin/pip install numpy pybind11 nanobind
 
 ENV PLAT=manylinux_2_28_x86_64
 
@@ -11,7 +11,7 @@ RUN mkdir /llvm-src
 #COPY .git /llvm-src/.git
 RUN git clone https://github.com/lingo-db/llvm-project.git /llvm-src/llvm-project
 WORKDIR /llvm-src/llvm-project
-RUN git checkout patched-0.0.2
+RUN git checkout fix-snapshot-pass
 WORKDIR /llvm-src
 #RUN git submodule init
 #RUN git submodule update llvm-project

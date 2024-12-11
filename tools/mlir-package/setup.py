@@ -37,7 +37,7 @@ package_data = ['llvm/include/**/*',
                 'llvm/python_packages/**/*','llvm/src/*']
 setup(name='lingodb-llvm',
       description='',
-      version='0.0.2',
+      version='0.0.3',
       packages=['lingodbllvm'],
       package_data={'lingodbllvm': package_data},
       install_requires=[],
