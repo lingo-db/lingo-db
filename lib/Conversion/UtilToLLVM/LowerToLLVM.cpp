@@ -417,6 +417,21 @@ class BufferGetRefLowering : public OpConversionPattern<mlir::util::BufferGetRef
       return success();
    }
 };
+class BufferGetElementRefLowering : public OpConversionPattern<mlir::util::BufferGetElementRef> {
+   public:
+   using OpConversionPattern<mlir::util::BufferGetElementRef>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::util::BufferGetElementRef op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto const64 = rewriter.create<mlir::LLVM::ConstantOp>(op->getLoc(), rewriter.getIntegerType(128), rewriter.getIntegerAttr(rewriter.getIntegerType(128), 64));
+      auto shiftedLeft = rewriter.create<mlir::LLVM::LShrOp>(op->getLoc(), adaptor.getBuffer(), const64);
+      Value refInt = rewriter.create<LLVM::TruncOp>(op->getLoc(), rewriter.getI64Type(), shiftedLeft);
+      Value ptr=rewriter.create<LLVM::IntToPtrOp>(op->getLoc(), mlir::LLVM::LLVMPointerType::get(getContext()), refInt);
+      auto elemType = typeConverter->convertType(op.getBuffer().getType().getT());
+      auto targetPtrType = mlir::LLVM::LLVMPointerType::get(getContext());
+      Value elementPtr = rewriter.create<LLVM::GEPOp>(op->getLoc(), targetPtrType, elemType, ptr, adaptor.getIdx());
+        rewriter.replaceOp(op, elementPtr);
+      return success();
+   }
+};
 class Hash64Lowering : public OpConversionPattern<mlir::util::Hash64> {
    public:
    using OpConversionPattern<mlir::util::Hash64>::OpConversionPattern;
@@ -546,6 +561,7 @@ void mlir::util::populateUtilToLLVMConversionPatterns(LLVMTypeConverter& typeCon
    patterns.add<TagPtrLowering>(typeConverter, patterns.getContext());
    patterns.add<UnTagPtrLowering>(typeConverter, patterns.getContext());
    patterns.add<BufferCreateOpLowering>(typeConverter, patterns.getContext());
+   patterns.add<BufferGetElementRefLowering>(typeConverter, patterns.getContext());
 }
 namespace {
 

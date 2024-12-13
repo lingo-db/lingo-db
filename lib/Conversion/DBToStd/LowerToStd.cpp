@@ -60,26 +60,6 @@ static bool hasDBType(TypeConverter& converter, TypeRange types) {
 
 template <class Op>
 class SimpleTypeConversionPattern : public ConversionPattern {
-   mlir::LogicalResult safelyMoveRegion(ConversionPatternRewriter& rewriter, const mlir::TypeConverter& typeConverter, mlir::Region& source, mlir::Region& target) const {
-      rewriter.inlineRegionBefore(source, target, target.end());
-      {
-         if (!target.empty()) {
-            source.push_back(new Block);
-            std::vector<mlir::Location> locs;
-            for (size_t i = 0; i < target.front().getArgumentTypes().size(); i++) {
-               locs.push_back(target.front().getArgument(i).getLoc());
-            }
-            source.front().addArguments(target.front().getArgumentTypes(), locs);
-            mlir::OpBuilder::InsertionGuard guard(rewriter);
-            rewriter.setInsertionPointToStart(&source.front());
-            rewriter.create<mlir::dsa::YieldOp>(rewriter.getUnknownLoc());
-         }
-      }
-      if (failed(rewriter.convertRegionTypes(&target, typeConverter))) {
-         return rewriter.notifyMatchFailure(source.getParentOp(), "could not convert body types");
-      }
-      return success();
-   }
 
    public:
    explicit SimpleTypeConversionPattern(TypeConverter& typeConverter, MLIRContext* context)
@@ -93,11 +73,6 @@ class SimpleTypeConversionPattern : public ConversionPattern {
          return failure();
       }
       auto newOp = rewriter.create<Op>(op->getLoc(), convertedTypes, ValueRange(operands), op->getAttrs());
-      for (size_t i = 0; i < op->getNumRegions(); i++) {
-         if (safelyMoveRegion(rewriter, *typeConverter, op->getRegion(i), newOp->getRegion(i)).failed()) {
-            return failure();
-         }
-      }
       rewriter.replaceOp(op, newOp->getResults());
       return success();
    }
@@ -1128,17 +1103,19 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<SimpleTypeConversionPattern<mlir::func::ConstantOp>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::func::CallIndirectOp>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::arith::SelectOp>>(typeConverter, &getContext());
+   patterns.insert<SimpleTypeConversionPattern<mlir::dsa::GetRecord>>(typeConverter, &getContext());
+   patterns.insert<SimpleTypeConversionPattern<mlir::dsa::GetRecordBatchLen>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::Append>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::DownCast>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::CreateDS>>(typeConverter, &getContext());
-   patterns.insert<SimpleTypeConversionPattern<mlir::dsa::YieldOp>>(typeConverter, &getContext());
+   //patterns.insert<SimpleTypeConversionPattern<mlir::dsa::YieldOp>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::CreateTable>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::Concat>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::FinishColumn>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::SetResultOp>>(typeConverter, &getContext());
    patterns.insert<AtLowering>(typeConverter, &getContext());
    patterns.insert<AppendCBLowering>(typeConverter, &getContext());
-   patterns.insert<SimpleTypeConversionPattern<mlir::dsa::ForOp>>(typeConverter, &getContext());
+   //patterns.insert<SimpleTypeConversionPattern<mlir::dsa::ForOp>>(typeConverter, &getContext());
    patterns.insert<StringCmpOpLowering>(typeConverter, ctxt);
    patterns.insert<CharCmpOpLowering>(typeConverter, ctxt);
    patterns.insert<StringCastOpLowering>(typeConverter, ctxt);

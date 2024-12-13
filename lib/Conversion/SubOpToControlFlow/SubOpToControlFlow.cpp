@@ -1010,15 +1010,17 @@ class ScanRefsTableLowering : public SubOpConversionPattern<mlir::subop::ScanRef
       rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
          rewriter.loadStepRequirements(contextPtr, typeConverter);
          recordBatchPointer = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(getContext(), recordBatchType), recordBatchPointer);
+
          mlir::Value recordBatch = rewriter.create<mlir::util::LoadOp>(loc, recordBatchPointer, mlir::Value());
-         auto forOp2 = rewriter.create<mlir::dsa::ForOp>(scanOp->getLoc(), mlir::TypeRange{}, recordBatch, mlir::ValueRange{});
-         mlir::Block* block2 = new mlir::Block;
-         auto currentRecord = block2->addArgument(recordBatchType.getElementType(), scanOp->getLoc());
-         forOp2.getBodyRegion().push_back(block2);
-         rewriter.atStartOf(block2, [&](SubOpRewriter& rewriter) {
+
+         auto start = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
+         auto end = rewriter.create<mlir::dsa::GetRecordBatchLen>(loc, recordBatch);
+         auto c1 = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
+         auto forOp2 = rewriter.create<mlir::scf::ForOp>(loc, start, end, c1, mlir::ValueRange{});
+         rewriter.atStartOf(forOp2.getBody(), [&](SubOpRewriter& rewriter) {
+            auto currentRecord = rewriter.create<mlir::dsa::GetRecord>(loc, recordBatchType.getElementType(), recordBatch, forOp2.getInductionVar());
             mapping.define(scanOp.getRef(), currentRecord);
             rewriter.replaceTupleStream(scanOp, mapping);
-            rewriter.create<mlir::dsa::YieldOp>(scanOp->getLoc());
          });
          rewriter.create<mlir::func::ReturnOp>(loc);
       });
@@ -1247,14 +1249,13 @@ void implementBufferIterationRuntime(bool parallel, mlir::Value bufferIterator, 
    rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
       auto guard = rewriter.loadStepRequirements(contextPtr, &typeConverter);
       auto castedBuffer = rewriter.create<mlir::util::BufferCastOp>(loc, mlir::util::BufferType::get(rewriter.getContext(), entryType), buffer);
-
-      auto forOp = rewriter.create<mlir::dsa::ForOp>(loc, mlir::TypeRange{}, castedBuffer, mlir::ValueRange{});
-      mlir::Block* block = new mlir::Block;
-      block->addArgument(mlir::util::RefType::get(rewriter.getContext(), entryType), loc);
-      forOp.getBodyRegion().push_back(block);
-      rewriter.atStartOf(block, [&](SubOpRewriter& rewriter) {
-         fn(rewriter, forOp.getInductionVar());
-         rewriter.create<mlir::dsa::YieldOp>(loc);
+      auto start = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
+      auto end = rewriter.create<mlir::util::BufferGetLen>(loc, rewriter.getIndexType(), castedBuffer);
+      auto c1 = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
+      auto forOp = rewriter.create<mlir::scf::ForOp>(loc,start, end, c1, mlir::ValueRange{});
+      rewriter.atStartOf(forOp.getBody(), [&](SubOpRewriter& rewriter) {
+         auto currElementPtr = rewriter.create<mlir::util::BufferGetElementRef>(loc, mlir::util::RefType::get(entryType), castedBuffer, forOp.getInductionVar());
+         fn(rewriter, currElementPtr);
       });
       rewriter.create<mlir::func::ReturnOp>(loc);
    });
@@ -1753,14 +1754,15 @@ class ScanRefsSortedViewLowering : public SubOpConversionPattern<mlir::subop::Sc
       if (!sortedViewType) return failure();
       ColumnMapping mapping;
       auto elementType = mlir::util::RefType::get(getContext(), EntryStorageHelper(sortedViewType.getMembers(), typeConverter).getStorageType());
-      auto forOp = rewriter.create<mlir::dsa::ForOp>(scanOp->getLoc(), mlir::TypeRange{}, adaptor.getState(), mlir::ValueRange{});
-      mlir::Block* block = new mlir::Block;
-      block->addArgument(elementType, scanOp->getLoc());
-      forOp.getBodyRegion().push_back(block);
-      rewriter.atStartOf(block, [&](SubOpRewriter& rewriter) {
-         mapping.define(scanOp.getRef(), forOp.getInductionVar());
+      auto loc = scanOp->getLoc();
+      auto start = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
+      auto end = rewriter.create<mlir::util::BufferGetLen>(loc, rewriter.getIndexType(), adaptor.getState());
+      auto c1 = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
+      auto forOp = rewriter.create<mlir::scf::ForOp>(loc, start, end, c1, mlir::ValueRange{});
+      rewriter.atStartOf(forOp.getBody(), [&](SubOpRewriter& rewriter) {
+         auto currElementPtr = rewriter.create<mlir::util::BufferGetElementRef>(loc, mlir::util::RefType::get(elementType), adaptor.getState(), forOp.getInductionVar());
+         mapping.define(scanOp.getRef(), currElementPtr);
          rewriter.replaceTupleStream(scanOp, mapping);
-         rewriter.create<mlir::dsa::YieldOp>(scanOp->getLoc());
       });
 
       return success();
@@ -1780,15 +1782,16 @@ class ScanRefsHeapLowering : public SubOpConversionPattern<mlir::subop::ScanRefs
       mlir::TupleType elementType = storageHelper.getStorageType();
       auto buffer = rt::Heap::getBuffer(rewriter, scanOp->getLoc())({adaptor.getState()})[0];
       auto castedBuffer = rewriter.create<mlir::util::BufferCastOp>(loc, mlir::util::BufferType::get(rewriter.getContext(), elementType), buffer);
-      auto forOp = rewriter.create<mlir::dsa::ForOp>(scanOp->getLoc(), mlir::TypeRange{}, castedBuffer, mlir::ValueRange{});
-      mlir::Block* block = new mlir::Block;
-      block->addArgument(mlir::util::RefType::get(getContext(), elementType), scanOp->getLoc());
-      forOp.getBodyRegion().push_back(block);
-      rewriter.atStartOf(block, [&](SubOpRewriter& rewriter) {
-         mapping.define(scanOp.getRef(), forOp.getInductionVar());
+      auto start = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
+      auto end = rewriter.create<mlir::util::BufferGetLen>(loc, rewriter.getIndexType(), castedBuffer);
+      auto c1 = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
+      auto forOp = rewriter.create<mlir::scf::ForOp>(loc, start, end, c1, mlir::ValueRange{});
+      rewriter.atStartOf(forOp.getBody(), [&](SubOpRewriter& rewriter) {
+         auto currElementPtr = rewriter.create<mlir::util::BufferGetElementRef>(loc, mlir::util::RefType::get(elementType), castedBuffer, forOp.getInductionVar());
+         mapping.define(scanOp.getRef(), currElementPtr);
          rewriter.replaceTupleStream(scanOp, mapping);
-         rewriter.create<mlir::dsa::YieldOp>(scanOp->getLoc());
       });
+
       return success();
    }
 };
@@ -2123,19 +2126,19 @@ class ScanExternalHashIndexListLowering : public SubOpConversionPattern<mlir::su
          });
          rt::HashIndexIteration::consumeRecordBatch(rewriter, loc)({list, recordBatchPointer});
          mlir::Value recordBatch = rewriter.create<mlir::util::LoadOp>(loc, recordBatchPointer, mlir::Value());
-         // load tuple from record batch
-         auto forOp2 = rewriter.create<mlir::dsa::ForOp>(scanOp->getLoc(), mlir::TypeRange{}, recordBatch, mlir::ValueRange{});
-         {
-            mlir::Block* block2 = new mlir::Block;
-            block2->addArgument(recordBatchType.getElementType(), scanOp->getLoc());
-            forOp2.getBodyRegion().push_back(block2);
-            rewriter.atStartOf(block2, [&](SubOpRewriter& rewriter) {
-               mapping.define(scanOp.getElem(), block2->getArgument(0));
-               rewriter.replaceTupleStream(scanOp, mapping);
-               rewriter.create<mlir::dsa::YieldOp>(scanOp->getLoc());
-            });
-         }
-         rewriter.create<scf::YieldOp>(loc, list);
+
+
+
+         auto start = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
+         auto end = rewriter.create<mlir::dsa::GetRecordBatchLen>(loc, recordBatch);
+         auto c1 = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
+         auto forOp2 = rewriter.create<mlir::scf::ForOp>(loc, start, end, c1, mlir::ValueRange{});
+         rewriter.atStartOf(forOp2.getBody(), [&](SubOpRewriter& rewriter) {
+            auto currentRecord = rewriter.create<mlir::dsa::GetRecord>(loc, recordBatchType.getElementType(), recordBatch, forOp2.getInductionVar());
+            mapping.define(scanOp.getElem(), currentRecord);
+            rewriter.replaceTupleStream(scanOp, mapping);
+         });
+                rewriter.create<mlir::scf::YieldOp>(loc, list);
       });
 
       // Close iterator

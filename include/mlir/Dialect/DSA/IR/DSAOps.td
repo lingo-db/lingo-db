@@ -160,6 +160,22 @@ def DSA_CreateDS : DSA_Op<"create_ds"> {
     ];
 }
 
+def DSA_GetRecordBatchLen : DSA_Op<"get_record_batch_len", [Pure]> {
+    let summary = "get length of record batch";
+    let arguments = (ins DSA_RecordBatch:$batch);
+    let results = (outs Index:$len);
+    let assemblyFormat = "$batch `:` type($batch) attr-dict";
+}
+
+
+def DSA_GetRecord : DSA_Op<"get_record", [Pure]> {
+    let summary = "access record in a batch";
+    let arguments = (ins DSA_RecordBatch:$batch,Index:$pos);
+    let results = (outs DSA_Record:$record);
+    let assemblyFormat = "$batch `[` $pos `]` `:` type($batch) `->` type($record) attr-dict";
+}
+
+
 def DSA_At : DSA_Op<"at", [Pure]> {
     let summary = "access column in a record";
 
@@ -207,51 +223,6 @@ def DSA_ArrowTypeTo : DSA_Op<"arrow_type_to"> {
 	let arguments = (ins AnyType:$arrow_val);
 	let results = (outs AnyType:$val);
 	let assemblyFormat = "$arrow_val `:` type($arrow_val) `->` type($val) attr-dict";
-}
-
-
-def ForOp : DSA_Op<"for", [SingleBlockImplicitTerminator<"dsa::YieldOp">,
-                           RecursiveMemoryEffects]> {
-    let summary = "iterate over collection";
-    let description = [{
-        Iterate over all elements of a collection. The iteration can be interrupted when the optionally specified flag becomes set.
-    }];
-
-    let arguments = (ins AnyType:$collection,Variadic<AnyType>:$initArgs);
-    let results = (outs Variadic<AnyType>:$results);
-    let regions = (region SizedRegion<1>:$region);
-
-    let extraClassDeclaration = [{
-        Value getInductionVar() { return getBody()->getArgument(0); }
-        Block::BlockArgListType getRegionIterArgs() {
-            return getBody()->getArguments().drop_front();
-        }
-        Operation::operand_range getIterOperands() {
-            return getOperands().drop_front(getNumControlOperands());
-        }
-
-        /// Number of region arguments for loop-carried values
-        unsigned getNumRegionIterArgs() {
-            return getBody()->getNumArguments() - 1;
-        }
-        /// Number of operands controlling the loop: lb, ub, step
-        unsigned getNumControlOperands() { return 1; }
-        /// Does the operation hold operands for loop-carried values
-        bool hasIterOperands() {
-            return getOperation()->getNumOperands() > getNumControlOperands();
-        }
-        /// Get Number of loop-carried values
-        unsigned getNumIterOperands() {
-            return getOperation()->getNumOperands() - getNumControlOperands();
-        }
-    }];
-}
-
-def YieldOp : DSA_Op<"yield", [Pure, Terminator,
-                               ParentOneOf<["ForOp"]>]> {
-    let arguments = (ins Variadic<AnyType>:$results);
-    let builders = [OpBuilder<(ins), [{ /* nothing to do */ }]>];
-    let assemblyFormat = [{  attr-dict ($results^ `:` type($results))? }];
 }
 
 

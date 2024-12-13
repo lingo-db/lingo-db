@@ -72,6 +72,7 @@ void mlir::util::populateUtilTypeConversionPatterns(TypeConverter& typeConverter
    patterns.add<SimpleTypeConversionPattern<BufferCreateOp>>(typeConverter, patterns.getContext());
    patterns.add<SimpleTypeConversionPattern<BufferGetLen>>(typeConverter, patterns.getContext());
    patterns.add<SimpleTypeConversionPattern<BufferGetRef>>(typeConverter, patterns.getContext());
+   patterns.add<SimpleTypeConversionPattern<BufferGetElementRef>>(typeConverter, patterns.getContext());
 
    typeConverter.addConversion([&](mlir::util::RefType genericMemrefType) {
       return mlir::util::RefType::get(genericMemrefType.getContext(), typeConverter.convertType(genericMemrefType.getElementType()));

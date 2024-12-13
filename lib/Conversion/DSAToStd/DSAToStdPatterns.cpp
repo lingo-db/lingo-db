@@ -128,23 +128,26 @@ class CBAppendLowering : public OpConversionPattern<mlir::dsa::Append> {
       if (auto arrowListType = mlir::dyn_cast_or_null<mlir::dsa::ArrowListType>(arrowType)) {
          rt::ArrowColumnBuilder::addList(rewriter, loc)({builderVal, isValid});
          auto childBuilder = rt::ArrowColumnBuilder::getChildBuilder(rewriter, loc)({builderVal})[0];
-         auto forOp = rewriter.create<mlir::dsa::ForOp>(loc, mlir::TypeRange{}, adaptor.getVal(), mlir::ValueRange{});
-         mlir::Block* block = new mlir::Block;
-         block->addArgument(mlir::cast<mlir::util::BufferType>(adaptor.getVal().getType()).getElementType(), loc);
-         forOp.getBodyRegion().push_back(block);
-         {
-            mlir::OpBuilder::InsertionGuard guard(rewriter);
-            rewriter.setInsertionPointToStart(block);
-            mlir::Value loaded = rewriter.create<mlir::util::LoadOp>(loc, forOp.getInductionVar());
-            //mlir::Value arrowValue = rewriter.create<mlir::dsa::ArrowTypeFrom>(loc, arrowListType.getType(), loaded);
+         mlir::Value val = adaptor.getVal();
+         auto start = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
+         auto end = rewriter.create<mlir::util::BufferGetLen>(loc, rewriter.getIndexType(), val);
+         auto c1 = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
+         bool failure = false;
+         rewriter.create<mlir::scf::ForOp>(loc, start, end, c1, mlir::ValueRange{}, [&](mlir::OpBuilder& builder, mlir::Location loc, mlir::Value iv, mlir::ValueRange iters) {
+            auto ptr = builder.create<mlir::util::BufferGetElementRef>(loc, mlir::cast<mlir::util::BufferType>(adaptor.getVal().getType()).getElementType(), val, iv);
+            auto loaded = builder.create<mlir::util::LoadOp>(loc, ptr);
             auto arrowType = arrowListType.getType();
             auto physicalType = typeConverter->convertType(arrowType);
             auto inputType = loaded.getType();
             mlir::Value arrowValue = arrowTypeFrom(rewriter, loc, arrowType, physicalType, inputType, loaded);
             if (append(rewriter, loc, arrowListType.getType(), childBuilder, isValid, arrowValue).failed()) {
-               return failure();
+               failure = true;
+               return;
             }
-            rewriter.create<mlir::dsa::YieldOp>(loc);
+            builder.create<mlir::scf::YieldOp>(loc);
+         });
+         if (failure) {
+            return mlir::failure();
          }
       } else {
          if (append(rewriter, loc, arrowType, builderVal, isValid, val).failed()) {
@@ -290,11 +293,11 @@ class ArrowTypeFromLowering : public OpConversionPattern<mlir::dsa::ArrowTypeFro
 
 std::vector<mlir::Type> getColumnInfoTypes(mlir::Type t, mlir::Type converted) {
    std::vector<mlir::Type> types;
-   auto *context = t.getContext();
+   auto* context = t.getContext();
    auto indexType = IndexType::get(context);
    auto i8ptrType = mlir::util::RefType::get(context, IntegerType::get(context, 8));
    mlir::Type valueType = converted;
-   if (mlir::isa<mlir::dsa::ArrowStringType,mlir::dsa::ArrowListType>(t)) {
+   if (mlir::isa<mlir::dsa::ArrowStringType, mlir::dsa::ArrowListType>(t)) {
       valueType = mlir::IntegerType::get(context, 32);
    } else if (t == mlir::IntegerType::get(context, 1)) {
       valueType = mlir::IntegerType::get(context, 8);
@@ -471,7 +474,7 @@ class AtLowering : public OpConversionPattern<mlir::dsa::At> {
             mlir::Value loadedValue = loadValue(rewriter, loc, listType.getType(), childOriginalValueBuffer, childValueBuffer, childValidityBuffer, childVarLenBuffer, childChildPtr, childNullMultiplier, childColumnOffset, iv);
             loadedValue = arrowTypeTo(rewriter, loc, listType.getType(), typeConverter->convertType(listType.getType()), bufferType.getT(), loadedValue);
             assert(!!loadedValue);
-            mlir::Value pos=rewriter.create<mlir::arith::SubIOp>(loc, iv, start);
+            mlir::Value pos = rewriter.create<mlir::arith::SubIOp>(loc, iv, start);
             rewriter.create<mlir::util::StoreOp>(loc, loadedValue, allocated, pos);
             builder.create<mlir::scf::YieldOp>(loc);
          });
@@ -531,10 +534,29 @@ class AtLowering : public OpConversionPattern<mlir::dsa::At> {
       return success();
    }
 };
+
+class GetRecordBatchLenLowering : public OpConversionPattern<mlir::dsa::GetRecordBatchLen> {
+   public:
+   using OpConversionPattern<mlir::dsa::GetRecordBatchLen>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::dsa::GetRecordBatchLen getRecordBatchLen, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      rewriter.replaceOpWithNewOp<mlir::util::GetTupleOp>(getRecordBatchLen, rewriter.getIndexType(), adaptor.getBatch(), 0);
+      return success();
+   }
+};
+
+class GetRecordLowering : public OpConversionPattern<mlir::dsa::GetRecord> {
+   public:
+   using OpConversionPattern<mlir::dsa::GetRecord>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::dsa::GetRecord getRecord, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      rewriter.replaceOpWithNewOp<mlir::util::PackOp>(getRecord, typeConverter->convertType(getRecord.getRecord().getType()), mlir::ValueRange({adaptor.getPos(), adaptor.getBatch()}));
+      return success();
+   }
+};
+
 } // end namespace
 namespace mlir::dsa {
 void populateDSAToStdPatterns(mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns) { // NOLINT(misc-use-internal-linkage)
-   auto *context = patterns.getContext();
+   auto* context = patterns.getContext();
    auto indexType = IndexType::get(context);
 
    typeConverter.addConversion([context, indexType, &typeConverter](mlir::dsa::RecordBatchType recordBatchType) {
@@ -552,6 +574,6 @@ void populateDSAToStdPatterns(mlir::TypeConverter& typeConverter, mlir::RewriteP
    typeConverter.addConversion([context, &typeConverter, indexType](mlir::dsa::RecordType recordType) {
       return (Type) TupleType::get(context, {indexType, typeConverter.convertType(mlir::dsa::RecordBatchType::get(context, recordType.getRowType()))});
    });
-   patterns.insert<ColumnnBuilderConcat, CBAppendLowering, ColumnnBuilderFinish, CreateColumnBuilderLowering, CreateTableLowering, ArrowTypeToLowering, ArrowTypeFromLowering, AtLowering>(typeConverter, patterns.getContext());
+   patterns.insert<ColumnnBuilderConcat, CBAppendLowering, ColumnnBuilderFinish, CreateColumnBuilderLowering, CreateTableLowering, ArrowTypeToLowering, ArrowTypeFromLowering, AtLowering,GetRecordBatchLenLowering, GetRecordLowering>(typeConverter, patterns.getContext());
 }
 } // end namespace mlir::dsa

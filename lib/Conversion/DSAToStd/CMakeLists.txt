@@ -1,10 +1,8 @@
 
 
 add_mlir_conversion_library(MLIRDSAToStd
-        CollectionIterators.cpp
         LowerToStd.cpp
         DSAToStdPatterns.cpp
-        CollectionsToStdPatterns.cpp
 
         ADDITIONAL_HEADER_DIRS
         ../../../mlir/Conversion/DSAToStd
