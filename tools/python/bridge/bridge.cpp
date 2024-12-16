@@ -1,10 +1,13 @@
 #include "bridge.h"
-#include "execution/Execution.h"
+
+#include "lingodb/execution/Execution.h"
+
 #include "mlir/CAPI/IR.h"
-#include "mlir/Dialect/util/UtilOps.h"
+
 #include <arrow/table.h>
 
 namespace {
+using namespace lingodb;
 class TimingCollector : public execution::TimingProcessor {
    std::unordered_map<std::string, double> collected;
    std::unordered_map<std::string, double>& target;
@@ -106,13 +109,13 @@ struct MLIRValueRangeImpl {
 
 } // end namespace bridge
 
-void bridge::addUDF(bridge::Connection* con, const char* name,bridge::UDF* udf) {
-   std::cout<<"add udf "<<name<<std::endl;
+void bridge::addUDF(bridge::Connection* con, const char* name, bridge::UDF* udf) {
+   std::cout << "add udf " << name << std::endl;
 }
 void bridge::addValueToRange(bridge::MLIRValueRange range, MlirValue value) {
    range.impl->values.push_back(value);
 }
-MlirValue bridge::valueRangeGet(bridge::MLIRValueRange range,size_t offset) {
+MlirValue bridge::valueRangeGet(bridge::MLIRValueRange range, size_t offset) {
    return range.impl->values.at(offset);
 }
 size_t bridge::valueRangeGetLen(bridge::MLIRValueRange range) {

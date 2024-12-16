@@ -1,9 +1,0 @@
-#ifndef MLIR_DIALECT_SUBOPERATOR_SUBOPERATOROPSATTRIBUTES_H
-#define MLIR_DIALECT_SUBOPERATOR_SUBOPERATOROPSATTRIBUTES_H
-
-#include "mlir/IR/Dialect.h"
-#include "mlir/IR/OpDefinition.h"
-#define GET_ATTRDEF_CLASSES
-#include "mlir/Dialect/SubOperator/SubOperatorOpsAttributes.h.inc"
-
-#endif // MLIR_DIALECT_SUBOPERATOR_SUBOPERATOROPSATTRIBUTES_H

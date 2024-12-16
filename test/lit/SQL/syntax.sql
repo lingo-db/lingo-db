@@ -194,7 +194,7 @@ select min(x),max(x),sum(x),count(x), count(*)  from (values (1)) t(x);
 --//CHECK: }
 select y, min(x),max(x),sum(x),count(x), count(*) from (values (1,2)) t(x,y) group by x;
 --//CHECK: module
---//CHECK: call @_ZN7runtime14RelationHelper11createTableEPNS_16ExecutionContextENS_8VarLen32ES3_(%{{.*}}, %{{.*}}, %{{.*}}) : (!util.ref<i8>, !util.varlen32, !util.varlen32) -> ()
+--//CHECK: call @_ZN7lingodb7runtime14RelationHelper11createTableEPNS0_16ExecutionContextENS0_8VarLen32ES4_(%{{.*}}, %{{.*}}, %{{.*}}) : (!util.ref<i8>, !util.varlen32, !util.varlen32) -> ()
 create table test(
                      str varchar(20),
                      float32 float(2),
@@ -212,7 +212,7 @@ create table test(
 --//CHECK: %{{.*}} = relalg.map
 --//CHECK: %{{.*}} = relalg.materialize
 --//CHECK: subop.set_result 0
---//CHECK: call @_ZN7runtime14RelationHelper21appendTableFromResultENS_8VarLen32EPNS_16ExecutionContextEm(%{{.*}}, %{{.*}}, %{{.*}}) : (!util.varlen32, !util.ref<i8>, i64) -> ()
+--//CHECK: call @_ZN7lingodb7runtime14RelationHelper21appendTableFromResultENS0_8VarLen32EPNS0_16ExecutionContextEm(%{{.*}}, %{{.*}}, %{{.*}}) : (!util.varlen32, !util.ref<i8>, i64) -> ()
 INSERT into test(str, float32, float64, decimal, int32, int64, bool, date32, date64) values ('str', 1.1, 1.1, 1.10, 1, 1, 1, '1966-01-02', '1996-01-02'), (null, null, null, null, null, null, null, null, null);
 --//CHECK: module
 --//CHECK: %{{.*}} = util.varlen32_create_const "test"
@@ -220,7 +220,7 @@ INSERT into test(str, float32, float64, decimal, int32, int64, bool, date32, dat
 --//CHECK: %{{.*}} = util.varlen32_create_const "|"
 --//CHECK: %{{.*}} = util.varlen32_create_const "\\"
 --//CHECK: %{{.*}} = call @rt_get_execution_context() : () -> !util.ref<i8>
---//CHECK: call @_ZN7runtime14RelationHelper17copyFromIntoTableEPNS_16ExecutionContextENS_8VarLen32ES3_S3_S3_(%{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}) : (!util.ref<i8>, !util.varlen32, !util.varlen32, !util.varlen32, !util.varlen32) -> ()
+--//CHECK: call @_ZN7lingodb7runtime14RelationHelper17copyFromIntoTableEPNS0_16ExecutionContextENS0_8VarLen32ES4_S4_S4_(%{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}) : (!util.ref<i8>, !util.varlen32, !util.varlen32, !util.varlen32, !util.varlen32) -> ()
 copy test from 't.csv' csv escape '\' delimiter '|' null '';
 --//CHECK: %{{.*}} = relalg.aggregation %{{.*}} [@constrel{{.*}}::@const0] computes : [@aggr2::@tmp_attr31({type = i32})] (%arg0: !tuples.tuplestream,%arg1: !tuples.tuple){
 --//CHECK:       %{{.*}} = relalg.projection distinct [@constrel{{.*}}::@const1] %arg0
@@ -291,5 +291,5 @@ select 1=all(select 1);
 --//CHECK: }
 --//CHECK: %{{.*}} = relalg.exists %{{.*}}
 select 1=any(select 1);
---//CHECK: call @_ZN7runtime14RelationHelper10setPersistEPNS_16ExecutionContextEb(%{{.*}}, %true) : (!util.ref<i8>, i1) -> ()
+--//CHECK: call @_ZN7lingodb7runtime14RelationHelper10setPersistEPNS0_16ExecutionContextEb(%{{.*}}, %true) : (!util.ref<i8>, i1) -> ()
 set persist=1;

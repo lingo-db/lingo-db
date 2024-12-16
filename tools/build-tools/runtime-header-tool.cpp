@@ -39,7 +39,7 @@ class MethodPrinter : public MatchFinder::MatchCallback {
       return "mlir::FloatType::get(context," + std::to_string(width) + ")";
    }
    std::string translatePointer() {
-      return "mlir::util::RefType::get(context,mlir::IntegerType::get(context,8))";
+      return "lingodb::compiler::dialect::util::RefType::get(context,mlir::IntegerType::get(context,8))";
    }
    std::optional<std::string> translateType(QualType type) {
       if (const auto* tdType = type->getAs<TypedefType>()) {
@@ -73,7 +73,7 @@ class MethodPrinter : public MatchFinder::MatchCallback {
          }
          auto asString = pointeeType.getAsString();
          if (asString == "std::shared_ptr<arrow::Table>") {
-            return "mlir::dsa::TableType::get(context)";
+            return "lingodb::compiler::dialect::dsa::TableType::get(context)";
          }
          return translatePointer();
       }
@@ -97,10 +97,10 @@ class MethodPrinter : public MatchFinder::MatchCallback {
       }
       std::string asString = type.getAsString();
       if (asString.ends_with("VarLen32")) {
-         return "mlir::util::VarLen32Type::get(context)";
+         return "lingodb::compiler::dialect::util::VarLen32Type::get(context)";
       }
       if (asString.ends_with("Buffer")) {
-         return "mlir::util::BufferType::get(context," + translateIntegerType(8) + ")";
+         return "lingodb::compiler::dialect::util::BufferType::get(context," + translateIntegerType(8) + ")";
       }
       return std::optional<std::string>();
    }
@@ -168,9 +168,9 @@ class MethodPrinter : public MatchFinder::MatchCallback {
             auto getPtrFuncName = "getPtrOfMethod" + methodName;
             hStream << "static void* " << getPtrFuncName << "();\n";
             hStream << "#ifndef RUNTIME_PTR_LIB\n";
-            hStream << " inline static mlir::util::FunctionSpec " << methodName << " = ";
+            hStream << " inline static lingodb::compiler::dialect::util::FunctionSpec " << methodName << " = ";
             std::string fullName = libPrefix + className + "::" + methodName;
-            hStream << " mlir::util::FunctionSpec(\"" << fullName << "\", \"" << mangled << "\", ";
+            hStream << " lingodb::compiler::dialect::util::FunctionSpec(\"" << fullName << "\", \"" << mangled << "\", ";
             emitTypeCreateFn(hStream, types);
             hStream << ",";
             emitTypeCreateFn(hStream, resTypes);
@@ -206,7 +206,7 @@ int main(int argc, const char** argv) {
    MethodPrinter printer(hStream, cppStream);
    MatchFinder finder;
    finder.addMatcher(methodMatcher, &printer);
-   hStream << "#include <mlir/Dialect/util/FunctionHelper.h>\n";
+   hStream << "#include \"lingodb/compiler/Dialect/util/FunctionHelper.h\"\n";
    hStream << "namespace "<<resultNamespace<<" {\n";
    cppStream << "#define RUNTIME_PTR_LIB\n";
    cppStream << "#include \"" << headerOutputFile << "\"\n";

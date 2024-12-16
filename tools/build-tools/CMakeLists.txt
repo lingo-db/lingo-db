@@ -35,6 +35,6 @@ function(gen_rt_def_generic target_name header_file output_path input_path lib_p
 endfunction()
 
 function(gen_rt_def target_name header_file)
-    gen_rt_def_generic(${target_name} ${header_file} "include/runtime-defs" "include/runtime" "runtime::" "rt")
+    gen_rt_def_generic(${target_name} ${header_file} "include/lingodb/compiler/runtime" "include/lingodb/runtime" "lingodb::runtime::" "lingodb::compiler::runtime")
     set(runtime_funcs_ptr_libs "${runtime_funcs_ptr_libs} ${runtime_funcs_ptr_lib}" PARENT_SCOPE)
 endfunction()
