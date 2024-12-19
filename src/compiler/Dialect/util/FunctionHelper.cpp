@@ -35,7 +35,7 @@ mlir::Value lingodb::compiler::dialect::util::FunctionHelper::convertValue(mlir:
    }
    return v; //todo
 }
-mlir::ResultRange lingodb::compiler::dialect::util::FunctionHelper::call(mlir::OpBuilder& builder, mlir::Location loc, const FunctionSpec& function, mlir::ValueRange values) {
+mlir::func::CallOp lingodb::compiler::dialect::util::FunctionHelper::call(mlir::OpBuilder& builder, mlir::Location loc, const FunctionSpec& function, mlir::ValueRange values) {
    auto fnHelper = builder.getContext()->getLoadedDialect<UtilDialect>()->getFunctionHelper();
    mlir::func::FuncOp funcOp = fnHelper.parentModule.lookupSymbol<mlir::func::FuncOp>(function.getMangledName());
    if (!funcOp) {
@@ -51,16 +51,16 @@ mlir::ResultRange lingodb::compiler::dialect::util::FunctionHelper::call(mlir::O
       assert(converted.getType() == funcOp.getFunctionType().getInput(i));
    }
    auto funcCall = builder.create<mlir::func::CallOp>(loc, funcOp, convertedValues);
-   return funcCall.getResults();
-}
+   return funcCall;}
 void lingodb::compiler::dialect::util::FunctionHelper::setParentModule(const mlir::ModuleOp& parentModule) {
    FunctionHelper::parentModule = parentModule;
 }
 
 std::function<mlir::ResultRange(mlir::ValueRange)> lingodb::compiler::dialect::util::FunctionSpec::operator()(mlir::OpBuilder& builder, mlir::Location loc) const {
-   std::function<mlir::ResultRange(mlir::ValueRange)> fn = [&builder, loc, this](mlir::ValueRange range) -> mlir::ResultRange { return FunctionHelper::call(builder, loc, *this, range); };
+   std::function<mlir::ResultRange(mlir::ValueRange)> fn = [&builder, loc, this](mlir::ValueRange range) -> mlir::ResultRange { return lingodb::compiler::dialect::util::FunctionHelper::call(builder, loc, *this, range).getResults(); };
    return fn;
 }
+
 lingodb::compiler::dialect::util::FunctionSpec::FunctionSpec(const std::string& name, const std::string& mangledName, const std::function<std::vector<mlir::Type>(mlir::MLIRContext*)>& parameterTypes, const std::function<std::vector<mlir::Type>(mlir::MLIRContext*)>& resultTypes, void* (*getPointer)()) : name(name), mangledName(mangledName), parameterTypes(parameterTypes), resultTypes(resultTypes), getPointer(getPointer) {
    getFunctions().insert({mangledName, *this});
 }
