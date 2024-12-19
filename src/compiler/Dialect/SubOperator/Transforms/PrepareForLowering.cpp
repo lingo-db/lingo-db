@@ -21,14 +21,14 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
    public:
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(PrepareLoweringPass)
    virtual llvm::StringRef getArgument() const override { return "subop-prepare-lowering"; }
-   void splitNested(subop::ExecutionGroupOp executionGroupOp) {
+   void splitNested(subop::ExecutionGroupOp executionGroupOp) { // we take the query
       std::vector<subop::ContainsNestedSubOps> opsWithNesting;
-      executionGroupOp->walk<mlir::WalkOrder::PreOrder>([&](subop::ContainsNestedSubOps containsNestedSubOps) {
-         opsWithNesting.push_back(containsNestedSubOps);
+      executionGroupOp->walk<mlir::WalkOrder::PreOrder>([&](subop::ContainsNestedSubOps containsNestedSubOps) { // walk through query ops
+         opsWithNesting.push_back(containsNestedSubOps); // gather ops that follow ContainsNestedSubOps interface (e.g., nested map or loop)
       });
       for (auto containsNestedSubOps : opsWithNesting) {
-         std::unordered_map<mlir::Operation*, std::vector<mlir::Operation*>> steps;
-         std::unordered_map<mlir::Operation*, mlir::Operation*> opToStep;
+         std::unordered_map<mlir::Operation*, std::vector<mlir::Operation*>> steps; // {startPipelineOp, pipelineOps}
+         std::unordered_map<mlir::Operation*, mlir::Operation*> opToStep; // {pipelineOp, startPipelineOp}
          for (mlir::Operation& op : *containsNestedSubOps.getBody()) {
             if (&op == containsNestedSubOps.getBody()->getTerminator()) {
                continue;
@@ -38,7 +38,7 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
                if (mlir::isa<tuples::TupleStreamType>(operand.getType())) {
                   if (auto* producer = operand.getDefiningOp()) {
                      assert(!beforeInStream);
-                     beforeInStream = producer;
+                     beforeInStream = producer; // we expect only one tuple-stream per op in *containsNestedSubOps.getBody()
                   }
                }
             }
@@ -66,11 +66,13 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
 
          for (auto& step : steps) {
             for (auto* op : step.second) {
+               // collect produced state of nested operations that are currently investigated
                for (auto result : op->getResults()) {
                   if (!mlir::isa<tuples::TupleStreamType>(result.getType())) {
                      producedState[step.first].push_back(result);
                   }
                }
+               //check how states are used
                op->walk([&](mlir::Operation* nestedOp) {
                   if (subop::SubOperator potentialSubOp = mlir::dyn_cast_or_null<subop::SubOperator>(nestedOp)) {
                      for (auto member : potentialSubOp.getReadMembers()) {
@@ -81,9 +83,8 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
                      }
                   }
                   for (auto operand : nestedOp->getOperands()) {
-                     auto* parentOp = operand.getDefiningOp() ? operand.getDefiningOp() : mlir::cast<mlir::BlockArgument>(operand).getOwner()->getParentOp();
-
-                     if (parentOp->isProperAncestor(op) || (operand.getDefiningOp() && operand.getDefiningOp()->getBlock() == op->getBlock())) {
+                     auto* opProducingOperand = operand.getDefiningOp() ? operand.getDefiningOp() : mlir::cast<mlir::BlockArgument>(operand).getOwner()->getParentOp();
+                     if (opProducingOperand->isProperAncestor(op) || (operand.getDefiningOp() && operand.getDefiningOp()->getBlock()->getParentOp()->isAncestor(op->getBlock()->getParentOp()))) {
                         if (mlir::isa<tuples::TupleStreamType>(operand.getType())) {
                            continue;
                         }
@@ -264,7 +265,7 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
       subop::ColumnUsageAnalysis usedColumns(getOperation());
       subop::ColumnCreationAnalysis createdColumns(getOperation());
       std::vector<mlir::Operation*> opsToErase;
-      getOperation()->walk([&](subop::NestedMapOp nestedMapOp) {
+      getOperation()->walk([&](subop::NestedMapOp nestedMapOp) { // for each nested map
          std::unordered_map<tuples::Column*, size_t> colArgs;
          std::vector<mlir::Attribute> newParams;
          size_t argId = 1;
@@ -274,15 +275,15 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
          }
          auto tuple = nestedMapOp.getBody()->getArgument(0);
          for (auto* user : tuple.getUsers()) {
-            if (auto combineOp = mlir::dyn_cast<subop::CombineTupleOp>(user)) {
+            if (auto combineOp = mlir::dyn_cast<subop::CombineTupleOp>(user)) { // if this tuple gets combined
                if (combineOp->getBlock() != nestedMapOp.getBody()) {
                   nestedMapOp.emitError("NestedMapOp: tuple parameter must only be used in the body block");
                   return signalPassFailure();
                }
                std::unordered_set<tuples::Column*> availableColumns;
-               std::function<void(mlir::Value)> computeAvailableColumns = [&](mlir::Value v) {
+               std::function<void(mlir::Value)> computeAvailableColumns = [&](mlir::Value v) { // fills availableColumns
                   if (auto* defOp = v.getDefiningOp()) {
-                     auto createdOps = createdColumns.getCreatedColumns(defOp);
+                     auto createdOps = createdColumns.getCreatedColumns(defOp); // gather columns that combineOp's defining op created
 
                      availableColumns.insert(createdOps.begin(), createdOps.end());
                      for (auto operand : defOp->getOperands()) {
@@ -294,15 +295,15 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
                };
                std::unordered_set<tuples::Column*> requiredColumns;
                std::function<void(mlir::Operation*, std::unordered_set<tuples::Column*>)> addRequiredColumns = [&](mlir::Operation* op, std::unordered_set<tuples::Column*> availableColumns) {
-                  auto created = createdColumns.getCreatedColumns(op);
-                  availableColumns.insert(created.begin(), created.end());
+                  auto created = createdColumns.getCreatedColumns(op); // for the combine op, get the columns it creates
+                  availableColumns.insert(created.begin(), created.end()); // aggregate them in availableColumns, it contains all columns that are in the tuple-stream up to the current  combineOp 
                   for (auto* usedColumn : usedColumns.getUsedColumns(op)) {
-                     if (!availableColumns.contains(usedColumn)) {
-                        requiredColumns.insert(usedColumn);
+                     if (!availableColumns.contains(usedColumn)) { 
+                        requiredColumns.insert(usedColumn); // if the combineOp uses a column that it doesn't create or that doesn't come from its definitions, the combineOp requires it
                      }
                   }
                   for (auto* user : op->getUsers()) {
-                     addRequiredColumns(user, availableColumns);
+                     addRequiredColumns(user, availableColumns); // update the required cols for all users of this combineOp 
                   }
                };
                computeAvailableColumns(combineOp);
@@ -315,23 +316,23 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
                   b.setInsertionPointToStart(mapBlock);
                   auto& colManager = getContext().getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
                   std::vector<mlir::Value> mapOpReturnVals;
-                  for (auto* r : requiredColumns) {
+                  for (auto* r : requiredColumns) { // we need to introduce every required column to the MapOp (MapOp will replace CombineTupleOp)
                      auto colRefAttr = colManager.createRef(r);
                      auto colDefAttr = colManager.createDef(r);
 
-                     if (!colArgs.contains(r)) {
-                        nestedMapOp.getBody()->addArgument(r->type, b.getUnknownLoc());
+                     if (!colArgs.contains(r)) { // if the required column is not a param of nested map 
+                        nestedMapOp.getBody()->addArgument(r->type, b.getUnknownLoc()); // we need to add it to nested map op arguments
                         colArgs.insert({r, argId++});
-                        newParams.push_back(colRefAttr);
+                        newParams.push_back(colRefAttr); // and include in the parameter
                      }
-                     createdByMap.push_back(colDefAttr);
-                     mapOpReturnVals.push_back(nestedMapOp.getBody()->getArgument(colArgs[r]));
+                     createdByMap.push_back(colDefAttr); // every required column is created/returned by the MapOp
+                     mapOpReturnVals.push_back(nestedMapOp.getBody()->getArgument(colArgs[r])); 
                   }
                   b.create<tuples::ReturnOp>(b.getUnknownLoc(), mapOpReturnVals);
                }
                auto mapOp = b.create<subop::MapOp>(b.getUnknownLoc(), tuples::TupleStreamType::get(b.getContext()), combineOp.getStream(), b.getArrayAttr(createdByMap),b.getArrayAttr({}));
                mapOp.getFn().push_back(mapBlock);
-               combineOp->replaceAllUsesWith(mlir::ValueRange{mapOp.getResult()});
+               combineOp->replaceAllUsesWith(mlir::ValueRange{mapOp.getResult()}); // replace combineOp with mapOp
                opsToErase.push_back(combineOp);
 
             } else {
