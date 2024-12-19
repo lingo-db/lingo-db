@@ -3865,6 +3865,147 @@ class SetTrackedCountLowering : public SubOpConversionPattern<subop::SetTrackedC
 };
 
 }; // namespace
+namespace {
+
+void handleExecutionStepCPU(subop::ExecutionStepOp step, subop::ExecutionGroupOp executionGroup, mlir::IRMapping& mapping, mlir::TypeConverter& typeConverter) {
+   // llvm::dbgs() << "[CPU] HANDLING STEP " << step << "\n";
+   auto* ctxt = step->getContext();
+   SubOpRewriter rewriter(step, mapping);
+   rewriter.insertPattern<MapLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<FilterLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<RenameLowering>(typeConverter, ctxt);
+   //external
+   rewriter.insertPattern<GetExternalTableLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<GetExternalHashIndexLowering>(typeConverter, ctxt);
+   //ResultTable
+   rewriter.insertPattern<CreateTableLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<MaterializeTableLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<CreateFromResultTableLowering>(typeConverter, ctxt);
+   //SimpleState
+   rewriter.insertPattern<CreateSimpleStateLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<ScanRefsSimpleStateLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<LookupSimpleStateLowering>(typeConverter, ctxt);
+   //Table
+   rewriter.insertPattern<ScanRefsTableLowering>(typeConverter, ctxt);
+   //rewriter.insertPattern<ScanRefsLocalTableLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<TableRefGatherOpLowering>(typeConverter, ctxt);
+   //Buffer
+   rewriter.insertPattern<CreateBufferLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<ScanRefsVectorLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<MaterializeVectorLowering>(typeConverter, ctxt);
+
+   //Hashmap
+   rewriter.insertPattern<CreateHashMapLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<ScanHashMapLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<LookupHashMapLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<PureLookupHashMapLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<HashMapRefGatherOpLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<ScanHashMapListLowering>(typeConverter, ctxt);
+   //rewriter.insertPattern<LockLowering>(typeConverter, ctxt);
+
+   //HashMultiMap
+   rewriter.insertPattern<CreateHashMultiMapLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<InsertMultiMapLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<LookupHashMultiMapLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<ScanMultiMapListLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<ScanHashMultiMap>(typeConverter, ctxt);
+   rewriter.insertPattern<HashMultiMapRefGatherOpLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<HashMultiMapScatterOp>(typeConverter, ctxt);
+
+   // ExternalHashIndex
+   rewriter.insertPattern<ScanExternalHashIndexListLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<LookupExternalHashIndexLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<ExternalHashIndexRefGatherOpLowering>(typeConverter, ctxt);
+
+   //SortedView
+   rewriter.insertPattern<SortLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<ScanRefsSortedViewLowering>(typeConverter, ctxt);
+   //HashIndexedView
+   rewriter.insertPattern<CreateHashIndexedViewLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<LookupHashIndexedViewLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<ScanListLowering>(typeConverter, ctxt);
+   //ContinuousView
+   rewriter.insertPattern<CreateContinuousViewLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<ScanRefsContinuousViewLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<ContinuousRefGatherOpLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<ContinuousRefScatterOpLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<ReduceContinuousRefLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<ReduceContinuousRefAtomicLowering>(typeConverter, ctxt);
+
+   //Heap
+   rewriter.insertPattern<CreateHeapLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<ScanRefsHeapLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<MaterializeHeapLowering>(typeConverter, ctxt);
+   //SegmentTreeView
+   rewriter.insertPattern<CreateSegmentTreeViewLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<LookupSegmentTreeViewLowering>(typeConverter, ctxt);
+   //Array
+   rewriter.insertPattern<CreateArrayLowering>(typeConverter, ctxt);
+   //ThreadLocal
+   rewriter.insertPattern<CreateThreadLocalLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<MergeThreadLocalResultTable>(typeConverter, ctxt);
+   rewriter.insertPattern<MergeThreadLocalBuffer>(typeConverter, ctxt);
+   rewriter.insertPattern<MergeThreadLocalHeap>(typeConverter, ctxt);
+   rewriter.insertPattern<MergeThreadLocalSimpleState>(typeConverter, ctxt);
+   rewriter.insertPattern<MergeThreadLocalHashMap>(typeConverter, ctxt);
+   rewriter.insertPattern<CreateOpenHtFragmentLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<LookupPreAggrHtFragment>(typeConverter, ctxt);
+   rewriter.insertPattern<MergePreAggrHashMap>(typeConverter, ctxt);
+   rewriter.insertPattern<ScanPreAggrHtLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<PreAggrHtRefGatherOpLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<PureLookupPreAggregationHtLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<UnwrapOptionalPreAggregationHtRefLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<ScanPreAggregationHtListLowering>(typeConverter, ctxt);
+
+   rewriter.insertPattern<DefaultGatherOpLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<ScatterOpLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<ReduceOpLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<NestedMapLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<UnrealizedConversionCastLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<UnwrapOptionalHashmapRefLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<OffsetReferenceByLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<GetBeginLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<GetEndLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<EntriesBetweenLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<InFlightLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<GenerateLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<LoopLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<NestedExecutionGroupLowering>(typeConverter, ctxt);
+   //rewriter.insertPattern<GetSingleValLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<SetTrackedCountLowering>(typeConverter, ctxt);
+   //rewriter.insertPattern<SimpleStateGetScalarLowering>(typeConverter, ctxt);
+
+
+   for (auto [param, arg, isThreadLocal] : llvm::zip(step.getInputs(), step.getSubOps().front().getArguments(), step.getIsThreadLocal())) {
+      mlir::Value input = mapping.lookup(param);
+      if (!mlir::cast<mlir::BoolAttr>(isThreadLocal).getValue()) {
+         rewriter.map(arg, input);
+      } else {
+         mlir::OpBuilder b(executionGroup);
+         mlir::Value threadLocal = rt::ThreadLocal::getLocal(b, b.getUnknownLoc())({mapping.lookup(param)})[0];
+         threadLocal = b.create<util::GenericMemrefCastOp>(threadLocal.getLoc(), typeConverter.convertType(arg.getType()), threadLocal);
+         rewriter.map(arg, threadLocal);
+      }
+   }
+   std::vector<mlir::Operation*> ops;
+   for (auto& op : step.getSubOps().front()) {
+      if (&op == step.getSubOps().front().getTerminator()) {
+         break;
+      }
+      ops.push_back(&op);
+   }
+   for (auto* op : ops) {
+      // llvm::dbgs() << "====OP: " << *op <<"\n";
+      rewriter.rewrite(op, executionGroup);
+   }
+   auto returnOp = mlir::cast<subop::ExecutionStepReturnOp>(step.getSubOps().front().getTerminator());
+   for (auto [i, o] : llvm::zip(returnOp.getInputs(), step.getResults())) {
+      mapping.map(o, rewriter.getMapped(i));
+   }
+   rewriter.cleanup();
+}
+} // namespace
+
 void SubOpToControlFlowLoweringPass::runOnOperation() {
    auto module = getOperation();
    getContext().getLoadedDialect<util::UtilDialect>()->getFunctionHelper().setParentModule(module);
@@ -3979,7 +4120,7 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
 
    //rewriter.rewrite(module.getBody());
    std::vector<mlir::Operation*> toRemove;
-   module->walk([&](subop::ExecutionGroupOp executionGroup) {
+   module->walk([&](subop::ExecutionGroupOp executionGroup) { // walk over "queries"
       mlir::IRMapping mapping;
       //todo: handle arguments of executionGroup
       for (auto& op : executionGroup.getRegion().front().getOperations()) {
@@ -4007,137 +4148,7 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
                tracingStep = rt::ExecutionStepTracing::start(builder, op.getLoc())({stepLoc})[0];
             }
 #endif
-            SubOpRewriter rewriter(step, mapping);
-            rewriter.insertPattern<MapLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<FilterLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<RenameLowering>(typeConverter, ctxt);
-            //external
-            rewriter.insertPattern<GetExternalTableLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<GetExternalHashIndexLowering>(typeConverter, ctxt);
-            //ResultTable
-            rewriter.insertPattern<CreateTableLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<MaterializeTableLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<CreateFromResultTableLowering>(typeConverter, ctxt);
-            //SimpleState
-            rewriter.insertPattern<CreateSimpleStateLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<ScanRefsSimpleStateLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<LookupSimpleStateLowering>(typeConverter, ctxt);
-            //Table
-            rewriter.insertPattern<ScanRefsTableLowering>(typeConverter, ctxt);
-            //rewriter.insertPattern<ScanRefsLocalTableLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<TableRefGatherOpLowering>(typeConverter, ctxt);
-            //Buffer
-            rewriter.insertPattern<CreateBufferLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<ScanRefsVectorLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<MaterializeVectorLowering>(typeConverter, ctxt);
-
-            //Hashmap
-            rewriter.insertPattern<CreateHashMapLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<ScanHashMapLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<LookupHashMapLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<PureLookupHashMapLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<HashMapRefGatherOpLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<ScanHashMapListLowering>(typeConverter, ctxt);
-            //rewriter.insertPattern<LockLowering>(typeConverter, ctxt);
-
-            //HashMultiMap
-            rewriter.insertPattern<CreateHashMultiMapLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<InsertMultiMapLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<LookupHashMultiMapLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<ScanMultiMapListLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<ScanHashMultiMap>(typeConverter, ctxt);
-            rewriter.insertPattern<HashMultiMapRefGatherOpLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<HashMultiMapScatterOp>(typeConverter, ctxt);
-
-            // ExternalHashIndex
-            rewriter.insertPattern<ScanExternalHashIndexListLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<LookupExternalHashIndexLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<ExternalHashIndexRefGatherOpLowering>(typeConverter, ctxt);
-
-            //SortedView
-            rewriter.insertPattern<SortLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<ScanRefsSortedViewLowering>(typeConverter, ctxt);
-            //HashIndexedView
-            rewriter.insertPattern<CreateHashIndexedViewLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<LookupHashIndexedViewLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<ScanListLowering>(typeConverter, ctxt);
-            //ContinuousView
-            rewriter.insertPattern<CreateContinuousViewLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<ScanRefsContinuousViewLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<ContinuousRefGatherOpLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<ContinuousRefScatterOpLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<ReduceContinuousRefLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<ReduceContinuousRefAtomicLowering>(typeConverter, ctxt);
-
-            //Heap
-            rewriter.insertPattern<CreateHeapLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<ScanRefsHeapLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<MaterializeHeapLowering>(typeConverter, ctxt);
-            //SegmentTreeView
-            rewriter.insertPattern<CreateSegmentTreeViewLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<LookupSegmentTreeViewLowering>(typeConverter, ctxt);
-            //Array
-            rewriter.insertPattern<CreateArrayLowering>(typeConverter, ctxt);
-            //ThreadLocal
-            rewriter.insertPattern<CreateThreadLocalLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<MergeThreadLocalResultTable>(typeConverter, ctxt);
-            rewriter.insertPattern<MergeThreadLocalBuffer>(typeConverter, ctxt);
-            rewriter.insertPattern<MergeThreadLocalHeap>(typeConverter, ctxt);
-            rewriter.insertPattern<MergeThreadLocalSimpleState>(typeConverter, ctxt);
-            rewriter.insertPattern<MergeThreadLocalHashMap>(typeConverter, ctxt);
-            rewriter.insertPattern<CreateOpenHtFragmentLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<LookupPreAggrHtFragment>(typeConverter, ctxt);
-            rewriter.insertPattern<MergePreAggrHashMap>(typeConverter, ctxt);
-            rewriter.insertPattern<ScanPreAggrHtLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<PreAggrHtRefGatherOpLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<PureLookupPreAggregationHtLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<UnwrapOptionalPreAggregationHtRefLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<ScanPreAggregationHtListLowering>(typeConverter, ctxt);
-
-            rewriter.insertPattern<DefaultGatherOpLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<ScatterOpLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<ReduceOpLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<NestedMapLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<UnrealizedConversionCastLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<UnwrapOptionalHashmapRefLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<OffsetReferenceByLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<GetBeginLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<GetEndLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<EntriesBetweenLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<InFlightLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<GenerateLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<LoopLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<NestedExecutionGroupLowering>(typeConverter, ctxt);
-            //rewriter.insertPattern<GetSingleValLowering>(typeConverter, ctxt);
-            rewriter.insertPattern<SetTrackedCountLowering>(typeConverter, ctxt);
-            //rewriter.insertPattern<SimpleStateGetScalarLowering>(typeConverter, ctxt);
-
-            for (auto [param, arg, isThreadLocal] : llvm::zip(step.getInputs(), step.getSubOps().front().getArguments(), step.getIsThreadLocal())) {
-               mlir::Value input = mapping.lookup(param);
-               if (!mlir::cast<mlir::BoolAttr>(isThreadLocal).getValue()) {
-                  rewriter.map(arg, input);
-               } else {
-                  mlir::OpBuilder b(executionGroup);
-                  mlir::Value threadLocal = rt::ThreadLocal::getLocal(b, b.getUnknownLoc())({mapping.lookup(param)})[0];
-                  threadLocal = b.create<util::GenericMemrefCastOp>(threadLocal.getLoc(), typeConverter.convertType(arg.getType()), threadLocal);
-                  rewriter.map(arg, threadLocal);
-               }
-            }
-            std::vector<mlir::Operation*> ops;
-            for (auto& op : step.getSubOps().front()) {
-               if (&op == step.getSubOps().front().getTerminator()) {
-                  break;
-               }
-               ops.push_back(&op);
-            }
-            for (auto* op : ops) {
-               rewriter.rewrite(op, executionGroup);
-            }
-            auto returnOp = mlir::cast<subop::ExecutionStepReturnOp>(step.getSubOps().front().getTerminator());
-            for (auto [i, o] : llvm::zip(returnOp.getInputs(), step.getResults())) {
-               mapping.map(o, rewriter.getMapped(i));
-            }
-            rewriter.cleanup();
+            handleExecutionStepCPU(step, executionGroup, mapping, typeConverter);
 #if TRACER
             {
                mlir::OpBuilder builder(executionGroup);
