@@ -6,6 +6,7 @@
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Index/IR/IndexDialect.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/Transforms/FoldUtils.h"
 #include "mlir/Transforms/InliningUtils.h"
@@ -34,6 +35,7 @@ void subop::SubOperatorDialect::initialize() {
    addOperations<
 #define GET_OP_LIST
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.cpp.inc"
+
       >();
    registerTypes();
    registerAttrs();
@@ -42,6 +44,7 @@ void subop::SubOperatorDialect::initialize() {
    getContext()->loadDialect<db::DBDialect>();
    getContext()->loadDialect<dsa::DSADialect>();
    getContext()->loadDialect<mlir::arith::ArithDialect>();
+   getContext()->loadDialect<mlir::index::IndexDialect>();
    getContext()->loadDialect<tuples::TupleStreamDialect>();
 }
 
