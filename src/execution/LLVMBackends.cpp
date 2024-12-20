@@ -5,6 +5,7 @@
 #include "lingodb/execution/BackendPasses.h"
 #include "lingodb/execution/Error.h"
 #include "lingodb/execution/Instrumentation.h"
+#include "lingodb/runtime/GPU/Properties.h"
 #include "lingodb/utility/Setting.h"
 #include "lingodb/utility/Tracer.h"
 
@@ -525,27 +526,55 @@ static bool lowerToLLVMWithGPU(mlir::ModuleOp& moduleOp, bool verify) {
    LLVMInitializeNVPTXTargetInfo();
    LLVMInitializeNVPTXTargetMC();
    LLVMInitializeNVPTXAsmPrinter();
+   std::string error;
+   auto targetTriple = llvm::sys::getDefaultTargetTriple();
+
+   // Look up the target using the target triple.
+   auto* target = llvm::TargetRegistry::lookupTarget(targetTriple, error);
+   if (!target) {
+      llvm::errs() << error;
+      return 1;
+   }
+
+   // Create the TargetMachine.
+   const auto* cpu = "generic";
+   const auto* features = "";
+   llvm::TargetOptions opt;
+   auto rm = std::optional<llvm::Reloc::Model>();
+   auto* targetMachine = target->createTargetMachine(targetTriple, cpu, features, opt, rm);
+
+   if (!targetMachine) {
+      llvm::errs() << "Could not create TargetMachine!";
+      return 1;
+   }
+
+   // Retrieve the data layout from the TargetMachine.
+   const llvm::DataLayout& dataLayout = targetMachine->createDataLayout();
+   mlir::Attribute dataLayoutSpec = mlir::translateDataLayout(dataLayout, moduleOp->getContext());
+   moduleOp->setAttr("util.dataLayout", dataLayoutSpec);
 
    mlir::PassManager pm2(moduleOp->getContext());
    pm2.enableVerifier(verify);
 
-   //pm2.enableIRPrinting();
+   // pm2.enableIRPrinting();
 
+   pm2.addPass(util::createUtilToLLVMPass());
    pm2.addPass(mlir::createConvertSCFToCFPass());
+   // pm2.addPass(mlir::createGpuLauchSinkIndexComputationsPass());
    pm2.addPass(mlir::createConvertIndexToLLVMPass());
-   pm2.addNestedPass<mlir::func::FuncOp>(mlir::util::createUtilToLLVMPass());
-   //pm2.addPass(mlir::util::createUtilToLLVMPass());
-   pm2.addPass(mlir::createGpuKernelOutliningPass());
-   pm2.addPass(mlir::createGpuNVVMAttachTarget(mlir::GpuNVVMAttachTargetOptions{.chip = "sm_60"}));
+   // pm2.addPass(mlir::createGpuKernelOutliningPass());
+   llvm::SmallVector<std::string> linkFiles = {std::string(GPU_BC_DIR) + "/RTDeviceFuncs.bc"};
+   pm2.addPass(mlir::createGpuNVVMAttachTarget(mlir::GpuNVVMAttachTargetOptions{
+      .chip = lingodb::runtime::gpu::getChipStr(),
+      .optLevel = 3,
+      .linkLibs = linkFiles,
+   }));
    pm2.addNestedPass<mlir::gpu::GPUModuleOp>(mlir::createStripDebugInfoPass());
    pm2.addNestedPass<mlir::gpu::GPUModuleOp>(mlir::createConvertGpuOpsToNVVMOps());
+   pm2.addNestedPass<mlir::gpu::GPUModuleOp>(mlir::createConvertIndexToLLVMPass());
    pm2.addNestedPass<mlir::gpu::GPUModuleOp>(mlir::createReconcileUnrealizedCastsPass());
-   pm2.addNestedPass<mlir::func::FuncOp>(mlir::createGpuAsyncRegionPass());
    pm2.addPass(mlir::createGpuToLLVMConversionPass());
-   pm2.addPass(mlir::createGpuModuleToBinaryPass());
-   pm2.addPass(mlir::createAsyncToAsyncRuntimePass());
-   pm2.addPass(mlir::createAsyncRuntimeRefCountingPass());
-   pm2.addPass(mlir::createConvertAsyncToLLVMPass());
+   pm2.addPass(mlir::createGpuModuleToBinaryPass(mlir::GpuModuleToBinaryPassOptions{.cmdOptions = ""}));
 
    pm2.addPass(mlir::createConvertControlFlowToLLVMPass());
    pm2.addPass(mlir::createFinalizeMemRefToLLVMConversionPass());
@@ -594,7 +623,7 @@ class GPULLVMBackend : public execution::ExecutionBackend {
       };
       auto startJIT = std::chrono::high_resolution_clock::now();
       // Libraries that we'll pass to the LLVMBackend for loading.
-      llvm::SmallVector<llvm::StringRef, 4> LLVMBackendLibs = {RUNNER_UTILS_LIB, C_RUNNER_UTILS_LIB, ASYNC_RUNTIME_LIB, CUDA_RUNTIME_LIB};
+      llvm::SmallVector<llvm::StringRef, 4> requiredLibs = {CUDA_RUNTIME_LIB};
 
       auto tmBuilderOrError = llvm::orc::JITTargetMachineBuilder::detectHost();
       if (!tmBuilderOrError) {
@@ -607,7 +636,7 @@ class GPULLVMBackend : public execution::ExecutionBackend {
          assert(false && "should not happen");
       }
 
-      auto maybeEngine = LLVMBackend::create(moduleOp, {.llvmModuleBuilder = convertFn, .transformer = mlir::makeOptimizingTransformer(0, 0, tmOrError->get()), .jitCodeGenOptLevel = llvm::CodeGenOptLevel::Default, .sharedLibPaths = LLVMBackendLibs, .enableObjectDump = false});
+      auto maybeEngine = LLVMBackend::create(moduleOp, {.llvmModuleBuilder = convertFn, .transformer = optimizeFn, .jitCodeGenOptLevel = llvm::CodeGenOptLevel::Default, .sharedLibPaths = requiredLibs, .enableObjectDump = false});
       if (!maybeEngine) {
          error.emit() << "Could not create execution engine";
          return;
