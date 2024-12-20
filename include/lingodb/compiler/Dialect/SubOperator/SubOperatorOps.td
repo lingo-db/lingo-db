@@ -168,6 +168,31 @@ def Member : SubOperator_Attr<"Member"> {
     let storageClass = "MemberAttrStorage";
     let hasCustomAssemblyFormat = 1;
 }
+def DeviceType: I32EnumAttr<"DeviceType", "An attribute to mark execution step device",
+    [
+        I32EnumAttrCase<"CPU", 0>,
+        I32EnumAttrCase<"GPU", 1>
+    ]> {
+    let cppNamespace = "::lingodb::compiler::dialect::subop";
+}
+
+def DataMovementDirection: I32EnumAttr<"DataMovementDirection", "An attribute to indicate data transfer direction",
+    [
+        I32EnumAttrCase<"toDevice", 0>,
+        I32EnumAttrCase<"fromDevice", 1>
+    ]> {
+    let cppNamespace = "::lingodb::compiler::dialect::subop";
+}
+
+
+def KernelLocalityLvl: I32EnumAttr<"KernelLocalityLvl", "Indicate residency within GPU hierarchy",
+    [
+        I32EnumAttrCase<"thread", 0>,
+        I32EnumAttrCase<"warp", 1>,
+        I32EnumAttrCase<"thread_block", 2>
+    ]> {
+    let cppNamespace = "::lingodb::compiler::dialect::subop";
+}
 
 //===----------------------------------------------------------------------===//
 // Types
@@ -176,6 +201,12 @@ def Member : SubOperator_Attr<"Member"> {
 class SubOperator_Type<string name, string typeMnemonic, list<Trait> traits = []> : TypeDef<SubOperator_Dialect, name,traits> {
     let mnemonic = typeMnemonic;
 }
+def KernelLocal : SubOperator_Type<"KernelLocal", "kernel_local"> {
+    let summary = "Wraps any \"global\" State to mark as local within a kernel";
+    let parameters = (ins "State":$wrapped);
+    let assemblyFormat = "`<` $wrapped `>`";
+}
+
 def ThreadLocal : SubOperator_Type<"ThreadLocal", "thread_local"> {
     let summary = "wrapper around any State that makes it thread local";
     let parameters = (ins "State":$wrapped);
@@ -490,6 +521,38 @@ def SetResultOp : SubOperator_Op<"set_result"> {
     let arguments = (ins I32Attr:$result_id, AnyType : $state);
     let assemblyFormat = [{ $result_id $state `:` type($state)  attr-dict }];
 }
+def CreateKernelLocalOp : SubOperator_Op<"create_kernel_local", [Pure]> {
+    let summary = "create new kernel local";
+    let arguments = (ins KernelLocalityLvl : $locality);
+    let results = (outs KernelLocal : $res);
+    let regions = (region AnyRegion:$initFn);
+    let assemblyFormat = [{ type($res) $locality (`initial` `:` $initFn^)? attr-dict }];
+}
+def MergeIntoOp : SubOperator_Op<"merge_kernel_local_into", [SubOperator,DeclareOpInterfaceMethods<StateUsingSubOperator>]> {
+  let summary = "merges kernel local results into global ";
+  let arguments = (ins AnyType : $globalState, KernelLocal: $kernelLocal);
+  let extraClassDeclaration = [{
+    llvm::SmallVector<Member> getWrittenMembers();
+    llvm::SmallVector<Member> getReadMembers();
+  }];
+  let regions = (region AnyRegion:$combineFn,AnyRegion:$eqFn);
+  let assemblyFormat = [{ type($res)  attr-dict }];
+  let assemblyFormat = [{ $kernelLocal `into` $globalState`:` type($kernelLocal) `->` type($globalState) (`combine` `:` $combineFn^)? (`eq` `:` $eqFn^)? attr-dict }];
+}
+
+def MergeOneToOneOp : SubOperator_Op<"merge_one_to_one", [SubOperator]> {
+  let summary = "merges one state into another (producing new state)";
+  let arguments = (ins PreAggrHtFragment : $sourceState);
+  let results = (outs PreAggrHt : $destinationState);
+  let extraClassDeclaration = [{
+    llvm::SmallVector<Member> getWrittenMembers();
+    llvm::SmallVector<Member> getReadMembers();
+  }];
+  let regions = (region AnyRegion:$combineFn,AnyRegion:$eqFn);
+  let assemblyFormat = [{ type($res)  attr-dict }];
+  let assemblyFormat = [{ $sourceState `:` type($sourceState) `->` type($destinationState) (`combine` `:` $combineFn^)? (`eq` `:` $eqFn^)? attr-dict }];
+}
+
 def CreateThreadLocalOp : SubOperator_Op<"create_thread_local", [Pure]> {
     let summary = "create new thread local";
     let results = (outs ThreadLocal : $res);
@@ -519,6 +582,13 @@ def LockOp : SubOperator_Op<"lock", [SubOperator,DeclareOpInterfaceMethods<State
   }];
   let regions = (region SizedRegion<1>:$nested);
   let assemblyFormat = [{ $stream `lock` `(` $ref `)` $nested attr-dict }];
+}
+
+
+def StateContextSwitchOp : SubOperator_Op<"state_context_switch", [SubOperator,DeclareOpInterfaceMethods<StateUsingSubOperator>]> {
+   let arguments = (ins AnyType: $input, DataMovementDirection:$direction);
+   let results = (outs AnyType: $output);
+   let assemblyFormat = [{ $input `:` type($input) `->` type($output) attr-dict }];
 }
 
 
@@ -981,10 +1051,19 @@ def ExecutionGroupReturnOp : SubOperator_Op<"execution_group_return",[Terminator
 }
 def ExecutionStepOp : SubOperator_Op<"execution_step",[SubOperator,IsolatedFromAbove,DeclareOpInterfaceMethods<StateUsingSubOperator>]> {
     let summary = "execution step";
-    let arguments = (ins Variadic<AnyType>:$inputs, BoolArrayAttr:$is_thread_local);
+    let arguments = (ins Variadic<AnyType>:$inputs, BoolArrayAttr:$is_thread_local, DefaultValuedAttr<DeviceType, "DeviceType::CPU">:$device_type);
     let results = (outs Variadic<AnyType>:$results);
     let regions = (region SizedRegion<1>:$sub_ops);
     let assemblyFormat = [{ ($inputs^ `:` type($inputs))? $is_thread_local custom<CustRegion>($sub_ops)  (`->` type($results)^ )? attr-dict-with-keyword }];
+        let extraClassDeclaration = [{
+            bool isOnCPU() {
+                return getDeviceType() == DeviceType::CPU;
+            }
+            bool isOnGPU() {
+                return getDeviceType() == DeviceType::GPU;
+            }
+        }];
+
 }
 def ExecutionStepReturnOp : SubOperator_Op<"execution_step_return",[Terminator]> {
    let summary = "execution step return";

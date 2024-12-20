@@ -86,6 +86,9 @@ class LingoDBTable : public TableStorage {
    void append(const std::shared_ptr<arrow::Table>& toAppend) override;
    static std::unique_ptr<LingoDBTable> create(const catalog::CreateTableDef& def);
    std::pair<const TableChunk*, size_t> getByRowId(size_t rowId) const;
+   auto& rawData() const {
+      return tableData;
+   }
 
    std::shared_ptr<arrow::DataType> getColumnStorageType(std::string_view columnName) const override;
 };

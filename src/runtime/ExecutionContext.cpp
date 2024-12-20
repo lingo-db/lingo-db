@@ -1,6 +1,17 @@
 #include "lingodb/runtime/ExecutionContext.h"
 #include <cassert>
 
+#if GPU_ENABLED == 1
+#include "lingodb/runtime/GPU/CUDA/CudaMemPool.cuh"
+#include "lingodb/runtime/GPU/DeviceMemoryManager.h"
+#endif
+
+void lingodb::runtime::ExecutionContext::setGPUManager() {
+#if GPU_ENABLED == 1
+   gpuMemManager = std::make_unique<DeviceMemoryManager>((std::move(std::make_unique<CUDAMemoryPool>(0, 1100 * mb))));
+#endif
+}
+
 void lingodb::runtime::ExecutionContext::setResult(uint32_t id, uint8_t* ptr) {
    auto* context = getCurrentExecutionContext();
    assert(context);

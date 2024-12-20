@@ -1214,6 +1214,20 @@ llvm::SmallVector<subop::Member> subop::CreateArrayOp::getReadMembers() {
 llvm::SmallVector<subop::Member> subop::CreateArrayOp::getWrittenMembers() {
    return getRes().getType().getMembers().getMembers();
 }
+
+llvm::SmallVector<subop::Member> subop::MergeOneToOneOp::getReadMembers() {
+   return getSourceState().getType().getMembers().getMembers();
+}
+llvm::SmallVector<subop::Member> subop::MergeOneToOneOp::getWrittenMembers() {
+  return getSourceState().getType().getMembers().getMembers();
+}
+llvm::SmallVector<subop::Member> subop::MergeIntoOp::getReadMembers() {
+  return getKernelLocal().getType().getWrapped().getMembers().getMembers();
+}
+llvm::SmallVector<subop::Member> subop::MergeIntoOp::getWrittenMembers() {
+   return getKernelLocal().getType().getWrapped().getMembers().getMembers();
+}
+
 llvm::SmallVector<subop::Member> subop::CreateSortedViewOp::getWrittenMembers() {
    return mlir::cast<subop::BufferType>(getToSort().getType()).getMembers().getMembers();
 }
@@ -1287,7 +1301,11 @@ mlir::Operation* subop::ScatterOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IR
    return newOp;
 }
 llvm::SmallVector<subop::Member> subop::LookupOrInsertOp::getWrittenMembers() {
-   return mlir::cast<subop::State>(getState().getType()).getMembers().getMembers();
+   auto stateTy = getState().getType();
+   if (mlir::isa<subop::KernelLocalType>(stateTy)) {
+      stateTy = mlir::cast<subop::KernelLocalType>(stateTy).getWrapped();
+   }
+   return mlir::cast<subop::State>(stateTy).getMembers().getMembers();
 }
 mlir::Operation* subop::LookupOrInsertOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, subop::ColumnMapping& columnMapping) {
    auto newOp = builder.create<LookupOrInsertOp>(this->getLoc(), mapping.lookupOrDefault(getStream()), mapping.lookupOrDefault(getState()), columnMapping.remap(getKeys()), columnMapping.clone(getRef()));
@@ -1515,6 +1533,34 @@ void subop::MaterializeOp::updateStateType(subop::SubOpStateUsageTransformer& tr
    if (state == getState() && newType != state.getType()) {
       setMappingAttr(transformer.updateMapping(getMapping()));
    }
+}
+void subop::MergeIntoOp::replaceColumns(subop::SubOpStateUsageTransformer& transformer, tuples::Column* oldColumn, tuples::Column* newColumn) {
+   assert(false && "should not happen");
+}
+
+void subop::MergeIntoOp::updateStateType(subop::SubOpStateUsageTransformer& transformer, mlir::Value state, mlir::Type newType) {
+   mlir::Value val = getKernelLocal();
+   mlir::Value res = getGlobalState();
+   if (res == state) {
+      res.setType(newType);
+   } else {
+      val.setType(newType);
+   }
+}
+
+void subop::StateContextSwitchOp::replaceColumns(subop::SubOpStateUsageTransformer& transformer, tuples::Column* oldColumn, tuples::Column* newColumn) {
+   assert(false && "should not happen");
+}
+
+void subop::StateContextSwitchOp::updateStateType(subop::SubOpStateUsageTransformer& transformer, mlir::Value state, mlir::Type newType) {
+   auto val = getInput();
+   auto res = getOutput();
+   assert(val == state);
+   val.setType(newType);
+   for (auto& use : res.getUses()) {
+      mlir::cast<subop::StateUsingSubOperator>(use.getOwner()).updateStateType(transformer, res, newType);
+   }
+   res.setType(newType);
 }
 
 void subop::ExecutionStepOp::replaceColumns(subop::SubOpStateUsageTransformer& transformer, tuples::Column* oldColumn, tuples::Column* newColumn) {

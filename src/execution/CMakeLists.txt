@@ -5,7 +5,7 @@ if (ENABLE_GPU_BACKEND)
 
     add_mlir_library(mlir_cuda_runtime
             SHARED
-            ${LLVM_BINARY_DIR}/src/CudaRuntimeWrappers.cpp
+            ${CMAKE_SOURCE_DIR}/vendored/CudaRuntimeWrappers.cpp
             EXCLUDE_FROM_LIBMLIR
             PARTIAL_SOURCES_INTENDED
     )
@@ -35,6 +35,7 @@ endif (ENABLE_BASELINE_BACKEND)
 if (ENABLE_GPU_BACKEND)
     list(APPEND COMPILE_DEFS " GPU_ENABLED=1")
     list(APPEND COMPILE_DEFS " CUDA_RUNTIME_LIB=\"${CUDA_RT_OUTPUT_DIR}/libmlir_cuda_runtime.so\"")
+    list(APPEND COMPILE_DEFS " GPU_BC_DIR=\"${CMAKE_BINARY_DIR}/src/runtime/GPU/CUDA\"")
     add_dependencies(runner mlir_cuda_runtime)
 else ()
     list(APPEND COMPILE_DEFS " GPU_ENABLED=0")

@@ -22,6 +22,11 @@ add_mlir_dialect_library(MLIRSubOperator
         Transforms/FinalizePass.cpp
         Transforms/PrepareForLowering.cpp
         Transforms/CommonPipelineElimination.cpp
+        #GPU Passes:
+        Transforms/ParallelizeGPUPass.cpp
+        Transforms/SpecializeGPUPass.cpp
+        Transforms/SplitToDevicesPass.cpp
+
         ADDITIONAL_HEADER_DIRS
         ../../../../include/lingodb/compiler/Dialect/SubOperator
 

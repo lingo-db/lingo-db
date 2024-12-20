@@ -643,7 +643,9 @@ static void linkStatic(LLVMBackend* engine, execution::Error& error, execution::
    return;
 }
 #if GPU_ENABLED == 1
-static bool lowerToLLVMWithGPU(mlir::ModuleOp& moduleOp, bool verify) {
+//#define GPU_DEBUGGING
+static bool lowerToLLVMWithGPU(mlir::ModuleOp& moduleOp, bool verify,
+                               std::shared_ptr<execution::SnapshotState> serializationState) {
    LLVMInitializeNVPTXTarget();
    LLVMInitializeNVPTXTargetInfo();
    LLVMInitializeNVPTXTargetMC();
@@ -677,8 +679,10 @@ static bool lowerToLLVMWithGPU(mlir::ModuleOp& moduleOp, bool verify) {
 
    mlir::PassManager pm2(moduleOp->getContext());
    pm2.enableVerifier(verify);
+   lingodb::execution::addLingoDBInstrumentation(pm2, serializationState);
 
-   // pm2.enableIRPrinting();
+   //pm2.enableIRPrinting();
+   pm2.addPass(lingodb::compiler::createCanonicalizerPass());
 
    pm2.addPass(util::createUtilToLLVMPass());
    pm2.addPass(mlir::createConvertSCFToCFPass());
@@ -689,23 +693,63 @@ static bool lowerToLLVMWithGPU(mlir::ModuleOp& moduleOp, bool verify) {
    pm2.addPass(mlir::createGpuNVVMAttachTarget(mlir::GpuNVVMAttachTargetOptions{
       .chip = lingodb::runtime::gpu::getChipStr(),
       .optLevel = 3,
+#ifdef GPU_DEBUGGING
+      .features = "+ptx80",
+      .optLevel = 0,
+#endif
       .linkLibs = linkFiles,
    }));
+#ifndef GPU_DEBUGGING
    pm2.addNestedPass<mlir::gpu::GPUModuleOp>(mlir::createStripDebugInfoPass());
+#endif
    pm2.addNestedPass<mlir::gpu::GPUModuleOp>(mlir::createConvertGpuOpsToNVVMOps());
    pm2.addNestedPass<mlir::gpu::GPUModuleOp>(mlir::createConvertIndexToLLVMPass());
    pm2.addNestedPass<mlir::gpu::GPUModuleOp>(mlir::createReconcileUnrealizedCastsPass());
    pm2.addPass(mlir::createGpuToLLVMConversionPass());
-   pm2.addPass(mlir::createGpuModuleToBinaryPass(mlir::GpuModuleToBinaryPassOptions{.cmdOptions = ""}));
-
-   pm2.addPass(mlir::createConvertControlFlowToLLVMPass());
-   pm2.addPass(mlir::createFinalizeMemRefToLLVMConversionPass());
-   pm2.addPass(mlir::createArithToLLVMConversionPass());
-   pm2.addPass(mlir::createReconcileUnrealizedCastsPass());
-   pm2.addPass(mlir::createConvertFuncToLLVMPass());
-   pm2.addPass(mlir::createReconcileUnrealizedCastsPass());
-   pm2.addPass(mlir::createCSEPass());
    if (mlir::failed(pm2.run(moduleOp))) {
+      return false;
+   }
+#ifdef GPU_DEBUGGING
+
+   if (auto moduleFileLineLoc = mlir::dyn_cast_or_null<mlir::FileLineColLoc>(moduleOp.getLoc())) {
+      std::string lastSnapShotFile = moduleFileLineLoc.getFilename().str();
+      auto fileAttr = mlir::LLVM::DIFileAttr::get(moduleOp->getContext(), lastSnapShotFile, std::filesystem::current_path().string());
+      auto compileUnitAttr = mlir::LLVM::DICompileUnitAttr::get(mlir::DistinctAttr::create(mlir::UnitAttr::get(moduleOp->getContext())), static_cast<uint8_t>(llvm::dwarf::DW_LANG_C), fileAttr, mlir::StringAttr::get(moduleOp->getContext(), "LingoDB"), true, mlir::LLVM::DIEmissionKind::Full);
+
+      moduleOp.walk([&](mlir::gpu::GPUModuleOp module) {
+         module->walk([&](mlir::LLVM::LLVMFuncOp funcOp) {
+            mlir::DistinctAttr id;
+            mlir::LLVM::DICompileUnitAttr compileUnitAt;
+            auto subprogramFlags = mlir::LLVM::DISubprogramFlags::Optimized;
+            if (!funcOp.isExternal()) {
+               id = mlir::DistinctAttr::create(mlir::UnitAttr::get(module.getContext()));
+               subprogramFlags = subprogramFlags | mlir::LLVM::DISubprogramFlags::Definition;
+               compileUnitAt = compileUnitAttr;
+            }
+            auto subroutineType = mlir::LLVM::DISubroutineTypeAttr::get(module->getContext(), {});
+            auto subProgramAttr = mlir::LLVM::DISubprogramAttr::get(module->getContext(), id, compileUnitAt, fileAttr, funcOp.getNameAttr(), funcOp.getNameAttr(), fileAttr, 0, 0, subprogramFlags, subroutineType, {}, {});
+            funcOp->setLoc(mlir::FusedLocWith<mlir::LLVM::DIScopeAttr>::get(funcOp->getLoc(), subProgramAttr, module->getContext()));
+         });
+      });
+   }
+#endif
+   mlir::PassManager gpuPM(moduleOp->getContext());
+   gpuPM.enableVerifier(verify);
+   lingodb::execution::addLingoDBInstrumentation(gpuPM, serializationState);
+   gpuPM.addPass(mlir::createGpuModuleToBinaryPass(mlir::GpuModuleToBinaryPassOptions{
+#ifdef GPU_DEBUGGING
+      .cmdOptions = "--device-debug"
+#endif
+   }));
+
+   gpuPM.addPass(mlir::createConvertControlFlowToLLVMPass());
+   gpuPM.addPass(mlir::createFinalizeMemRefToLLVMConversionPass());
+   gpuPM.addPass(mlir::createArithToLLVMConversionPass());
+   gpuPM.addPass(mlir::createReconcileUnrealizedCastsPass());
+   gpuPM.addPass(mlir::createConvertFuncToLLVMPass());
+   gpuPM.addPass(mlir::createReconcileUnrealizedCastsPass());
+   gpuPM.addPass(mlir::createCSEPass());
+   if (mlir::failed(gpuPM.run(moduleOp))) {
       return false;
    }
    return true;
@@ -718,7 +762,7 @@ class GPULLVMBackend : public execution::ExecutionBackend {
       llvm::InitializeNativeTarget();
       llvm::InitializeNativeTargetAsmPrinter();
       auto startLowerToLLVM = std::chrono::high_resolution_clock::now();
-      if (!lowerToLLVMWithGPU(moduleOp, verify)) {
+      if (!lowerToLLVMWithGPU(moduleOp, verify, getSerializationState())) {
          error.emit() << "Could not lower module to llvm dialect";
          return;
       }
@@ -773,21 +817,15 @@ class GPULLVMBackend : public execution::ExecutionBackend {
       auto totalJITTime = std::chrono::duration_cast<std::chrono::microseconds>(endJIT - startJIT).count() / 1000.0;
       totalJITTime -= translateToLLVMIRTime;
       totalJITTime -= llvmPassesTime;
-
-      std::vector<double> measuredTimes;
-      for (size_t i = 0; i < numRepetitions; i++) {
-         auto executionStart = std::chrono::high_resolution_clock::now();
-         utility::Tracer::Trace trace(execution);
-         mainFunc();
-         trace.stop();
-         auto executionEnd = std::chrono::high_resolution_clock::now();
-         executionContext->reset();
-         measuredTimes.push_back(std::chrono::duration_cast<std::chrono::microseconds>(executionEnd - executionStart).count() / 1000.0);
-      }
+      auto executionStart = std::chrono::high_resolution_clock::now();
+      utility::Tracer::Trace trace(execution);
+      mainFunc();
+      trace.stop();
+      auto executionEnd = std::chrono::high_resolution_clock::now();
       timing["toLLVMIR"] = translateToLLVMIRTime;
       timing["llvmOptimize"] = llvmPassesTime;
       timing["llvmCodeGen"] = totalJITTime;
-      timing["executionTime"] = (measuredTimes.size() > 1 ? *std::min_element(measuredTimes.begin() + 1, measuredTimes.end()) : measuredTimes[0]);
+      timing["executionTime"] = std::chrono::duration_cast<std::chrono::microseconds>(executionEnd - executionStart).count() / 1000.0;
    }
 };
 #endif

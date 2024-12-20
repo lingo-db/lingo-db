@@ -13,9 +13,16 @@
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/LLVMIR/FunctionCallUtils.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SCF/Transforms/Patterns.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 
+#include <mlir/Dialect/GPU/TransformOps/GPUTransformOps.h>
+
+namespace mlir::memref {
+class MemRefDialect;
+} // namespace mlir::memref
 using namespace mlir;
 
 namespace {
@@ -88,8 +95,17 @@ class ToGenericMemrefOpLowering : public OpConversionPattern<util::ToGenericMemr
    public:
    using OpConversionPattern<util::ToGenericMemrefOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(util::ToGenericMemrefOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto ptrType = mlir::LLVM::LLVMPointerType::get(getContext());
-      Value elementPtr = rewriter.create<LLVM::ExtractValueOp>(op->getLoc(), ptrType, adaptor.getMemref(), rewriter.getDenseI64ArrayAttr(1));
+      mlir::LLVM::LLVMPointerType ptrType;
+      Value elementPtr;
+      if (auto gpuPtrAddrSpaceAttr = mlir::dyn_cast_or_null<mlir::gpu::AddressSpaceAttr>(op.getMemref().getType().getMemorySpace())) {
+         Value alignedPointerIndex = rewriter.create<mlir::memref::ExtractAlignedPointerAsIndexOp>(op->getLoc(), adaptor.getMemref());
+         Value indexToInt64 = rewriter.create<arith::IndexCastUIOp>(op->getLoc(), rewriter.getI64Type(), alignedPointerIndex);
+         ptrType = mlir::LLVM::LLVMPointerType::get(getContext(), static_cast<unsigned>(gpuPtrAddrSpaceAttr.getValue()));
+         elementPtr = rewriter.create<LLVM::IntToPtrOp>(op->getLoc(), ptrType, indexToInt64);
+      } else {
+         ptrType = mlir::LLVM::LLVMPointerType::get(getContext());
+         elementPtr = rewriter.create<LLVM::ExtractValueOp>(op->getLoc(), ptrType, adaptor.getMemref(), rewriter.getDenseI64ArrayAttr(1));
+      }
       rewriter.replaceOp(op, elementPtr);
       return success();
    }
@@ -99,10 +115,13 @@ class ToMemrefOpLowering : public OpConversionPattern<util::ToMemrefOp> {
    using OpConversionPattern<util::ToMemrefOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(util::ToMemrefOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto memrefType = mlir::cast<MemRefType>(op.getMemref().getType());
-
-      auto targetType = typeConverter->convertType(memrefType);
-
       auto targetPointerType = mlir::LLVM::LLVMPointerType::get(getContext());
+
+      std::vector<mlir::Type> structTypes = {targetPointerType, targetPointerType, rewriter.getI64Type()};
+      if (memrefType.getNumDynamicDims() > 0) {
+         return failure();
+      }
+      auto targetType = LLVM::LLVMStructType::getLiteral(getContext(), structTypes);
       Value tpl = rewriter.create<LLVM::UndefOp>(op->getLoc(), targetType);
 
       Value elementPtr = adaptor.getRef();
@@ -560,24 +579,41 @@ class BufferGetMemRefOpLowering : public OpConversionPattern<util::BufferGetMemR
       return success();
    }
 };
-
 class PtrTagMatchesLowering : public OpConversionPattern<util::PtrTagMatches> {
    public:
    using OpConversionPattern<util::PtrTagMatches>::OpConversionPattern;
    LogicalResult matchAndRewrite(util::PtrTagMatches op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto loc = op->getLoc();
-      //optain lookup table:
-      // if there is not yet a llvm.mlir global with name bloomMasks than create it in module (external linkage, no value)
-      auto moduleOp = op->getParentOfType<ModuleOp>();
-      auto globalOp = moduleOp.lookupSymbol<mlir::LLVM::GlobalOp>("bloomMasks");
-      if (!globalOp) {
-         OpBuilder::InsertionGuard guard(rewriter);
-         rewriter.setInsertionPointToStart(moduleOp.getBody());
-         //Type global_type, /*optional*/bool constant, ::llvm::StringRef sym_name, ::mlir::LLVM::Linkage linkage
-         globalOp = rewriter.create<mlir::LLVM::GlobalOp>(loc, mlir::LLVM::LLVMArrayType::get(rewriter.getI16Type(), 2048), true, mlir::LLVM::Linkage::External, "bloomMasks", mlir::Attribute());
+      mlir::Value bloomMaskPtr;
+      if (auto gpuModuleOp = op->getParentOfType<mlir::gpu::GPUModuleOp>()) {
+         //lookup or create a function (external linkage, no body) that returns the pointer to the bloomMask
+         auto fn = gpuModuleOp.lookupSymbol<mlir::func::FuncOp>("getBloomMasksPtr");
+         if (!fn) {
+            OpBuilder::InsertionGuard guard(rewriter);
+            rewriter.setInsertionPointToStart(gpuModuleOp.getBody());
+            //StringRef name, Type type, Linkage linkage = Linkage::External
+            fn = rewriter.create<mlir::func::FuncOp>(loc, "getBloomMasksPtr", mlir::FunctionType::get(rewriter.getContext(), {}, mlir::LLVM::LLVMPointerType::get(rewriter.getContext())), rewriter.getStringAttr("private"), mlir::ArrayAttr{}, mlir::ArrayAttr{});
+         }
+         // call function at the beginning of the current kernel function to obtain the pointer (set insertion point to the start of the current function)
+         {
+            auto funcOp = op->getParentOfType<mlir::gpu::GPUFuncOp>();
+            mlir::OpBuilder::InsertionGuard guard(rewriter);
+            rewriter.setInsertionPointToStart(&funcOp.getBody().front());
+            bloomMaskPtr = rewriter.create<mlir::func::CallOp>(loc, fn, mlir::ValueRange{}).getResult(0);
+         }
+      } else {
+         auto moduleOp = op->getParentOfType<mlir::ModuleOp>();
+         auto globalOp = moduleOp.lookupSymbol<mlir::LLVM::GlobalOp>("bloomMasks");
+         if (!globalOp) {
+            OpBuilder::InsertionGuard guard(rewriter);
+            rewriter.setInsertionPointToStart(moduleOp.getBody());
+            //Type global_type, /*optional*/bool constant, ::llvm::StringRef sym_name, ::mlir::LLVM::Linkage linkage
+            globalOp = rewriter.create<mlir::LLVM::GlobalOp>(loc, mlir::LLVM::LLVMArrayType::get(rewriter.getI16Type(), 2048), true, mlir::LLVM::Linkage::External, "bloomMasks", mlir::Attribute());
+         }
+         //load the bloom mask from global
+         bloomMaskPtr = rewriter.create<mlir::LLVM::AddressOfOp>(loc, globalOp);
       }
-      //load the bloom mask from global
-      mlir::Value bloomMaskPtr = rewriter.create<mlir::LLVM::AddressOfOp>(loc, globalOp);
+      //todo: we switch to 32-bit values due to broken LLVM that segfaults when using i16
 
       //take the top 11 bytes from hash value by shifting (64-11) bits to the right
       Value shiftAmount = rewriter.create<mlir::LLVM::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(53));
@@ -585,17 +621,20 @@ class PtrTagMatchesLowering : public OpConversionPattern<util::PtrTagMatches> {
       //tag = bloomMasks[slot]
       Value tagPtr = rewriter.create<LLVM::GEPOp>(loc, bloomMaskPtr.getType(), rewriter.getI16Type(), bloomMaskPtr, ValueRange{slot});
       Value tag = rewriter.create<LLVM::LoadOp>(loc, rewriter.getI16Type(), tagPtr);
+      tag = rewriter.create<LLVM::ZExtOp>(loc, rewriter.getI32Type(), tag);
       //entry: (uint16_t)ptr
-      Value entry = rewriter.create<LLVM::PtrToIntOp>(loc, rewriter.getI16Type(), adaptor.getRef());
+      Value entry = rewriter.create<LLVM::PtrToIntOp>(loc, rewriter.getI64Type(), adaptor.getRef());
+      entry = rewriter.create<LLVM::TruncOp>(loc, rewriter.getI32Type(), entry);
       //return ! (tag & ~ entry)
-      Value negatedEntry = rewriter.create<LLVM::XOrOp>(loc, entry, rewriter.create<LLVM::ConstantOp>(loc, rewriter.getI16Type(), rewriter.getI16IntegerAttr(0xffff)));
+      Value negatedEntry = rewriter.create<LLVM::XOrOp>(loc, entry, rewriter.create<LLVM::ConstantOp>(loc, rewriter.getI32Type(), rewriter.getI32IntegerAttr(-1)));
       Value anded = rewriter.create<LLVM::AndOp>(loc, tag, negatedEntry);
-      Value isMatch = rewriter.create<LLVM::ICmpOp>(loc, LLVM::ICmpPredicate::eq, anded, rewriter.create<LLVM::ConstantOp>(loc, rewriter.getI16Type(), rewriter.getI16IntegerAttr(0)));
+      Value isMatch = rewriter.create<LLVM::ICmpOp>(loc, LLVM::ICmpPredicate::eq, anded, rewriter.create<LLVM::ConstantOp>(loc, rewriter.getI32Type(), rewriter.getI32IntegerAttr(0)));
+      //check that the entry is not 0 (minimal check, for safety, no performance improvement)
       rewriter.replaceOp(op, isMatch);
-
       return success();
    }
 };
+
 class UnTagPtrLowering : public OpConversionPattern<util::UnTagPtr> {
    public:
    using OpConversionPattern<util::UnTagPtr>::OpConversionPattern;
@@ -604,7 +643,7 @@ class UnTagPtrLowering : public OpConversionPattern<util::UnTagPtr> {
       Value ptrAsInt = rewriter.create<LLVM::PtrToIntOp>(loc, rewriter.getI64Type(), adaptor.getRef());
       //shift 16 bits to right
       Value shiftAmount = rewriter.create<mlir::LLVM::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(16));
-      Value ptrWithoutTag = rewriter.create<LLVM::LShrOp>(loc, ptrAsInt, shiftAmount);
+      Value ptrWithoutTag = rewriter.create<LLVM::AShrOp>(loc, ptrAsInt, shiftAmount);
       ptrWithoutTag = rewriter.create<LLVM::IntToPtrOp>(loc, adaptor.getRef().getType(), ptrWithoutTag);
       rewriter.replaceOp(op, ptrWithoutTag);
       return success();
@@ -786,9 +825,19 @@ struct UtilToLLVMLoweringPass
       LowerToLLVMOptions options(&getContext(), dataLayoutAnalysis.getAtOrAbove(op));
 
       LLVMTypeConverter typeConverter(&getContext(), options, &dataLayoutAnalysis);
+      typeConverter.addConversion([&](mlir::MemRefType t) -> Type {
+         if (auto addrSpace = mlir::dyn_cast_or_null<mlir::gpu::AddressSpaceAttr>(t.getMemorySpace())) {
+            auto addressSpaceValue = mlir::IntegerAttr::get(mlir::IntegerType::get(&getContext(), 64), static_cast<unsigned>(addrSpace.getValue()));
+            return mlir::MemRefType::get(t.getShape(), t.getElementType(), t.getLayout(), addressSpaceValue);
+         }
+         return t;
+      });
+
       RewritePatternSet patterns(&getContext());
       util::populateUtilToLLVMConversionPatterns(typeConverter, patterns);
       mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::func::FuncOp>(patterns, typeConverter);
+      mlir::scf::populateSCFStructuralTypeConversions(typeConverter, patterns);
+
       mlir::populateCallOpTypeConversionPattern(patterns, typeConverter);
       mlir::populateReturnOpTypeConversionPattern(patterns, typeConverter);
       mlir::populateBranchOpInterfaceTypeConversionPattern(patterns, typeConverter);
@@ -797,13 +846,14 @@ struct UtilToLLVMLoweringPass
       patterns.add<ArithSelectTypeConversionPattern>(typeConverter, patterns.getContext());
       LLVMConversionTarget target(getContext());
       target.addIllegalDialect<util::UtilDialect>();
-      target.addLegalDialect<LLVM::LLVMDialect>();
+      target.addLegalDialect<LLVM::LLVMDialect, mlir::memref::MemRefDialect, arith::ArithDialect>();
       auto hasUtilType = [&](TypeConverter& converter, TypeRange types) {
          return llvm::any_of(types, [&](auto t) { return isUtilType(t, converter); });
       };
       auto opIsWithoutUtilTypes = [&](Operation* op) { return !hasUtilType(typeConverter, op->getOperandTypes()) && !hasUtilType(typeConverter, op->getResultTypes()); };
 
       target.addDynamicallyLegalOp<mlir::func::CallOp, mlir::func::CallIndirectOp, mlir::func::ReturnOp, mlir::arith::SelectOp>(opIsWithoutUtilTypes);
+      target.addDynamicallyLegalOp<scf::IfOp, scf::ConditionOp, scf::YieldOp, scf::ForOp, scf::WhileOp>(opIsWithoutUtilTypes);
       target.addDynamicallyLegalDialect<mlir::cf::ControlFlowDialect>(opIsWithoutUtilTypes);
 
       target.addDynamicallyLegalOp<func::FuncOp>([&](func::FuncOp op) {

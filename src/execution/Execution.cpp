@@ -102,6 +102,12 @@ class RelAlgLoweringStep : public LoweringStep {
    }
 };
 class SubOpLoweringStep : public LoweringStep {
+   bool withGPU;
+
+   public:
+   SubOpLoweringStep(bool withGPU) : withGPU(withGPU) {}
+
+   protected:
    std::string getShortName() const override {
       return "hl-imperative";
    }
@@ -134,6 +140,11 @@ class SubOpLoweringStep : public LoweringStep {
       if (!moduleOp->hasAttr("subop.sequential")) {
          optSubOpPm.addNestedPass<mlir::func::FuncOp>(subop::createParallelizePass());
          optSubOpPm.addPass(subop::createSpecializeParallelPass());
+      }
+      if (withGPU) {
+         optSubOpPm.addPass(subop::createSplitToDevicesPass());
+         optSubOpPm.addNestedPass<mlir::func::FuncOp>(subop::createParallelizeGPUPass());
+         optSubOpPm.addPass(subop::createSpecializeGPUPass());
       }
       optSubOpPm.addPass(subop::createPrepareLoweringPass());
       if (mlir::failed(optSubOpPm.run(moduleOp))) {
@@ -357,6 +368,9 @@ class DefaultQueryExecuter : public QueryExecuter {
       }
 
       bool parallelismEnabled = scheduler::getNumWorkers() != 1 && queryExecutionConfig->parallel;
+#if GPU_ENABLED == 1
+      parallelismEnabled = false; // for now we consider only seq execution on CPU
+#endif
       if (!frontend.isParallelismAllowed() || !parallelismEnabled) {
          moduleOp->setAttr("subop.sequential", mlir::UnitAttr::get(moduleOp->getContext()));
          //numThreads = 1;
@@ -405,7 +419,7 @@ std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(execution::Exec
    }
    config->queryOptimizer = std::make_unique<DefaultQueryOptimizer>();
    config->loweringSteps.emplace_back(std::make_unique<RelAlgLoweringStep>());
-   config->loweringSteps.emplace_back(std::make_unique<SubOpLoweringStep>());
+   config->loweringSteps.emplace_back(std::make_unique<SubOpLoweringStep>(GPU_ENABLED));
    config->loweringSteps.emplace_back(std::make_unique<DefaultImperativeLowering>());
 #if defined(ASAN_ACTIVE)
    if (runMode == ExecutionMode::DEBUGGING) {

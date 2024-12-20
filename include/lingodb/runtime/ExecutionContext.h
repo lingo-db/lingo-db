@@ -1,5 +1,8 @@
 #ifndef LINGODB_RUNTIME_EXECUTIONCONTEXT_H
 #define LINGODB_RUNTIME_EXECUTIONCONTEXT_H
+
+#include "lingodb/runtime/GPU/DeviceMemoryManager.h"
+
 #include <functional>
 #include <memory>
 #include <optional>
@@ -61,12 +64,14 @@ class ExecutionContext {
    std::vector<std::vector<State>> perWorkerStates;
    std::vector<Arena> stringArenas;
    Session& session;
+   std::unique_ptr<DeviceMemoryManager> gpuMemManager;
 
    public:
    ExecutionContext(Session& session) : session(session) {
       allocators.resize(lingodb::scheduler::getNumWorkers());
       stringArenas.resize(lingodb::scheduler::getNumWorkers());
       perWorkerStates.resize(lingodb::scheduler::getNumWorkers());
+      setGPUManager();
    }
    Session& getSession() {
       return session;
@@ -96,6 +101,10 @@ class ExecutionContext {
    static void setResult(uint32_t id, uint8_t* ptr);
    static uint8_t* allocStateRaw(size_t size);
    static void clearResult(uint32_t id);
+   void setGPUManager();
+   DeviceMemoryManager& getGPUMemManager() {
+      return *gpuMemManager;
+   }
    static void setTupleCount(uint32_t id, int64_t tupleCount);
    void registerState(const State& s) {
       perWorkerStates[lingodb::scheduler::currentWorkerId()].push_back(s);

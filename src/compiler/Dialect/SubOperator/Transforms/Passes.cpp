@@ -36,6 +36,15 @@ void subop::registerSubOpTransformations() {
       return subop::createSplitIntoExecutionStepsPass();
    });
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+      return subop::createSpecializeGPUPass();
+   });
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+      return subop::createParallelizeGPUPass();
+   });
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+      return subop::createPrepareLoweringPass();
+   });
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return subop::createCommonPiplineEliminationPass();
    });
 }
