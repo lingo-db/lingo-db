@@ -19,7 +19,7 @@ build-debug:
   script:
     - make clean
     - make build-debug
-    - tar -cvzf lingodb_debug.tar.gz build/lingodb-debug/mlir-db-opt build/lingodb-debug/run-sql build/lingodb-debug/run-mlir build/lingodb-debug/sql build/lingodb-debug/sqlite-tester build/lingodb-debug/test/ build/lingodb-debug/sql-to-mlir
+    - tar -cvzf lingodb_debug.tar.gz build/lingodb-debug/mlir-db-opt build/lingodb-debug/run-sql build/lingodb-debug/run-mlir build/lingodb-debug/sql build/lingodb-debug/sqlite-tester build/lingodb-debug/test/ build/lingodb-debug/sql-to-mlir build/lingodb-debug/tester
   tags:
     - "umbra-builder"
   artifacts:
