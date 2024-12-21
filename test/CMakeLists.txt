@@ -17,3 +17,7 @@ add_lit_testsuite(check-mlirdb "Running the mlirdb regression tests"
 set_target_properties(check-mlirdb PROPERTIES FOLDER "Tests")
 
 add_lit_testsuites(MLIRDB ${CMAKE_CURRENT_SOURCE_DIR}/lit DEPENDS ${MLIRDB_TEST_DEPENDS})
+
+
+
+add_subdirectory(unittests)

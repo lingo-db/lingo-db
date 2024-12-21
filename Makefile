@@ -82,11 +82,12 @@ build/lingodb-debug-coverage/.stamp: build
 
 .PHONY: run-test
 run-test: build/lingodb-$(TEST_BUILD_TYPE)/.stamp
-	cmake --build $(dir $<) --target mlir-db-opt run-mlir run-sql sql-to-mlir sqlite-tester -- -j${NPROCS}
+	cmake --build $(dir $<) --target mlir-db-opt run-mlir run-sql sql-to-mlir sqlite-tester tester -- -j${NPROCS}
 	$(MAKE) test-no-rebuild
 
 test-no-rebuild: build/lingodb-$(TEST_BUILD_TYPE)/.buildstamp resources/data/test/.stamp resources/data/uni/.stamp
 	${LLVM_LIT_BINARY} -v build/lingodb-$(TEST_BUILD_TYPE)/test/lit -j 1
+	./build/lingodb-$(TEST_BUILD_TYPE)/tester
 	find ./test/sqlite-small/ -maxdepth 1 -type f -name '*.test' | xargs -L 1 -P ${NPROCS} ./build/lingodb-$(TEST_BUILD_TYPE)/sqlite-tester
 
 sqlite-test-no-rebuild: build/lingodb-$(SQLITE_TEST_BUILD_TYPE)/.buildstamp
@@ -94,15 +95,17 @@ sqlite-test-no-rebuild: build/lingodb-$(SQLITE_TEST_BUILD_TYPE)/.buildstamp
 
 .PHONY: test-coverage
 test-coverage: build/lingodb-debug-coverage/.stamp resources/data/test/.stamp resources/data/uni/.stamp
-	cmake --build $(dir $<) --target mlir-db-opt run-mlir run-sql sql-to-mlir -- -j${NPROCS}
+	cmake --build $(dir $<) --target mlir-db-opt run-mlir run-sql sql-to-mlir tester -- -j${NPROCS}
 	${LLVM_LIT_BINARY} -v --per-test-coverage  $(dir $<)/test/lit
+	LLVM_PROFILE_FILE=$(dir $<)/tester.profraw ./build/lingodb-debug-coverage/tester
 	find $(dir $<) -type f -name "*.profraw" > $(dir $<)/profraw-files
+	echo $(dir $<)/tester.profraw >> $(dir $<)/profraw-files
 	llvm-profdata-20 merge -o $(dir $<)/coverage.profdata --input-files=$(dir $<)/profraw-files
 
 coverage: build/lingodb-debug-coverage/.stamp
 	$(MAKE) test-coverage
 	mkdir -p build/coverage-report
-	llvmcov2html --exclude-dir=$(dir $<),vendored build/coverage-report $(dir $<)/run-mlir ./build/lingodb-debug-coverage/run-sql $(dir $<)/mlir-db-opt $(dir $<)/sql-to-mlir $(dir $<)/coverage.profdata
+	llvmcov2html --exclude-dir=$(dir $<),vendored build/coverage-report $(dir $<)/run-mlir $(dir $<)/run-sql $(dir $<)/mlir-db-opt $(dir $<)/sql-to-mlir $(dir $<)/tester $(dir $<)/coverage.profdata
 
 
 .PHONY: run-benchmark

@@ -32,6 +32,7 @@ message("Using Python3: ${Python3_EXECUTABLE}")
 find_package(Arrow 19 REQUIRED)
 
 option(ENABLE_GPU_BACKEND "enable GPU backend" OFF)
+option(ENABLE_TESTS "enable tests" ON)
 
 
 find_package(Clang 20.1 REQUIRED)
@@ -169,7 +170,9 @@ add_subdirectory(src/execution)
 add_subdirectory(src/compiler/frontend/SQL)
 add_subdirectory(src/tools)
 add_subdirectory(tools)
-add_subdirectory(test)
+if (ENABLE_TESTS)
+    add_subdirectory(test)
+endif ()
 
 
 
