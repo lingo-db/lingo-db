@@ -12,6 +12,7 @@ struct ByteWriter {
       static_assert(std::is_standard_layout<T>::value, "T must be standard layout type");
       write(reinterpret_cast<const std::byte*>(&t), sizeof(T));
    }
+   virtual ~ByteWriter() = default;
 };
 struct ByteReader {
    virtual void read(std::byte* data, size_t size) = 0;
@@ -22,6 +23,7 @@ struct ByteReader {
       read(reinterpret_cast<std::byte*>(&t), sizeof(T));
       return t;
    }
+   virtual ~ByteReader() = default;
 };
 using marker_t = uint16_t;
 constexpr static marker_t present = 0xFFFC;

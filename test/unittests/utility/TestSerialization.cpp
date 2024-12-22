@@ -37,13 +37,6 @@ TEST_CASE("Serialization:BasicTypes") {
    REQUIRE(deserializer.readProperty<std::string>(5) == "Hello");
 }
 
-//dumps bytes as hex string
-void dumpBytes(const std::byte* data, size_t size) {
-   for (size_t i = 0; i < size; i++) {
-      printf("%02X ", static_cast<uint8_t>(data[i]));
-   }
-   printf("\n");
-}
 
 TEST_CASE("Serialization:CustomType") {
    SimpleByteWriter writer;
