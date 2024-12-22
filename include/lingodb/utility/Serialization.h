@@ -1,5 +1,5 @@
-#ifndef LINGODB_SERIALIZATION_H
-#define LINGODB_SERIALIZATION_H
+#ifndef LINGODB_UTILITY_SERIALIZATION_H
+#define LINGODB_UTILITY_SERIALIZATION_H
 #include <cstddef>
 #include <memory>
 #include <type_traits>
@@ -256,4 +256,4 @@ class SimpleByteReader : public ByteReader {
 };
 
 } //end namespace lingodb::utility
-#endif //LINGODB_SERIALIZATION_H
+#endif //LINGODB_UTILITY_SERIALIZATION_H
