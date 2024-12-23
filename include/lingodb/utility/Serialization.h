@@ -2,9 +2,9 @@
 #define LINGODB_UTILITY_SERIALIZATION_H
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <type_traits>
 #include <vector>
-#include <optional>
 namespace lingodb::utility {
 struct ByteWriter {
    virtual void write(const std::byte* data, size_t size) = 0;
