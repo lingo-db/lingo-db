@@ -4,6 +4,7 @@
 #include <memory>
 #include <type_traits>
 #include <vector>
+#include <optional>
 namespace lingodb::utility {
 struct ByteWriter {
    virtual void write(const std::byte* data, size_t size) = 0;
@@ -49,6 +50,20 @@ concept IsVector = requires(T& t) {
    typename T::value_type; // Ensure T has an `value_type`
    requires std::same_as<T, std::vector<typename T::value_type>>;
 };
+//concept for checking for enum class with valid underlying type (uint8_t or uint16_t)
+template <typename T>
+concept EnumClassWithValidUnderlyingType =
+   std::is_enum_v<T> &&
+   !std::is_convertible_v<T, int> && // Ensures it's a scoped enum (enum class)
+   (std::is_same_v<std::underlying_type_t<T>, uint8_t> ||
+    std::is_same_v<std::underlying_type_t<T>, uint16_t>);
+//concept for checking for optional
+template <class T>
+concept IsOptional = requires(T& t) {
+   typename T::value_type; // Ensure T has an `value_type`
+   requires std::same_as<T, std::optional<typename T::value_type>>;
+};
+
 class Serializer {
    ByteWriter& writer;
 
@@ -56,28 +71,25 @@ class Serializer {
    Serializer(ByteWriter& writer) : writer(writer) {}
 
    private:
-   template <std::same_as<bool> T>
-   void writeValue(T value) {
+   void writeValue(bool value) {
       writer.write(value);
    }
-   template <std::same_as<uint16_t> T>
-   void writeValue(T value) {
+   void writeValue(uint8_t value) {
       writer.write(value);
    }
-   template <std::same_as<int> T>
-   void writeValue(T value) {
+   void writeValue(uint16_t value) {
       writer.write(value);
    }
-   template <std::same_as<float> T>
-   void writeValue(T value) {
+   void writeValue(int value) {
       writer.write(value);
    }
-   template <std::same_as<double> T>
-   void writeValue(T value) {
+   void writeValue(float value) {
       writer.write(value);
    }
-   template <std::same_as<size_t> T>
-   void writeValue(T value) {
+   void writeValue(double value) {
+      writer.write(value);
+   }
+   void writeValue(size_t value) {
       writer.write(value);
    }
    void writeValue(const std::string_view& value) {
@@ -107,6 +119,24 @@ class Serializer {
       writeValue(value.size());
       for (const auto& v : value) {
          writeValue(v);
+      }
+   }
+   template <class T>
+   void writeValue(const std::optional<T>& value) {
+      if (value.has_value()) {
+         writeValue(present);
+         writeValue(*value);
+      } else {
+         writeValue(notPresent);
+      }
+   }
+   template <EnumClassWithValidUnderlyingType E>
+   void writeValue(E e) {
+      using Underlying = std::underlying_type_t<E>;
+      if constexpr (std::is_same_v<Underlying, uint8_t>) {
+         writeValue(static_cast<uint8_t>(e));
+      } else if constexpr (std::is_same_v<Underlying, uint16_t>) {
+         writeValue(static_cast<uint16_t>(e));
       }
    }
    void startObject() {
@@ -139,6 +169,10 @@ class Deserializer {
 
    private:
    template <std::same_as<bool> T>
+   T read() {
+      return reader.read<T>();
+   }
+   template <std::same_as<uint8_t> T>
    T read() {
       return reader.read<T>();
    }
@@ -178,11 +212,29 @@ class Deserializer {
       return std::make_unique<typename T::element_type>(read<typename T::element_type>());
    }
    template <IsSharedPtr T>
+      requires requires(T& t, Deserializer& self) {
+         typename T::element_type;
+         requires std::same_as<typename T::element_type, decltype(T::element_type::deserialize(self))>;
+      }
    T read() {
       if (read<marker_t>() == notPresent) {
          return nullptr;
       }
       return std::make_shared<typename T::element_type>(read<typename T::element_type>());
+   }
+   template <IsSharedPtr T>
+      requires requires(T& t, Deserializer& self) {
+         typename T::element_type;
+         requires std::same_as<T, decltype(T::element_type::deserialize(self))>;
+      }
+   T read() {
+      if (read<marker_t>() == notPresent) {
+         return nullptr;
+      }
+      startObject();
+      auto res = T::element_type::deserialize(*this);
+      endObject();
+      return res;
    }
    template <IsVector T>
    T read() {
@@ -194,6 +246,23 @@ class Deserializer {
       }
       return vec;
    }
+   template <EnumClassWithValidUnderlyingType E>
+   E read() {
+      using Underlying = std::underlying_type_t<E>;
+      if constexpr (std::is_same_v<Underlying, uint8_t>) {
+         return static_cast<E>(read<uint8_t>());
+      } else if constexpr (std::is_same_v<Underlying, uint16_t>) {
+         return static_cast<E>(read<uint16_t>());
+      }
+   }
+   template <IsOptional T>
+   T read() {
+      if (read<marker_t>() == notPresent) {
+         return std::nullopt;
+      }
+      return read<typename T::value_type>();
+   }
+
    void startObject() {
       if (read<marker_t>() != objectStart) {
          throw std::runtime_error("Expected object start marker");
