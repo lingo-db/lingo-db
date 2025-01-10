@@ -1,0 +1,39 @@
+name: Release Build for WebInterface
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'git ref to build'
+        required: true
+        type: string
+
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: ghcr.io/lingo-db/lingodb-dev:latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ inputs.ref }}
+      - name: CCache
+        id: ccache
+        uses: actions/cache@v3
+        with:
+          path: /ccache
+          key: ccache-release-build
+      - name: Build
+        run: |
+          mkdir -p /ccache
+          export CXX="ccache clang++-19"
+          export CC="ccache clang-19"
+          export CCACHE_DIR="/ccache"
+          make clean
+          make build-release
+      - uses: actions/upload-artifact@master
+        with:
+          name: release-build
+          path: build/lingodb-release
+          retention-days: 1

@@ -114,9 +114,9 @@ jobs:
         run: |
             rm -rf /built-packages          
             mkdir -p /built-packages
-            bash tools/python/bridge/create_package.sh cp310-cp310          
+            bash tools/python/bridge/create_package.sh cp312-cp312          
             cd tools/python
-            /opt/python/cp310-cp310/bin/python3 -m build .
+            /opt/python/cp312-cp312/bin/python3 -m build .
             cp dist/*.whl /built-packages/.
       - uses: actions/upload-artifact@master
         with:
@@ -124,7 +124,7 @@ jobs:
           path: /built-packages
   test_lingodb_python:
     needs: build_lingodb_python
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
