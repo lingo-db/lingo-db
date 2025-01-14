@@ -108,6 +108,9 @@ class ToJson {
          .Case<mlir::FloatType>([](mlir::FloatType floatType) {
             return nlohmann::json{{"type", "float"}};
          })
+         .Case<db::IntervalType>([](db::IntervalType intervalType) {
+            return nlohmann::json{{"type", "interval"},{"unit", stringifyIntervalUnitAttr(intervalType.getUnit())}};
+         })
          .Default([](mlir::Type type) {
             llvm::errs() << "type could not be converted ";
             type.dump();
@@ -202,6 +205,9 @@ class ToJson {
          .Case<db::AsNullableOp>([&](db::AsNullableOp asNullableOp) {
             return convertExpression(asNullableOp->getOperand(0).getDefiningOp());
          })
+         .Case<db::NullableGetVal>([&](db::NullableGetVal nullableGetVal) {
+            return convertExpression(nullableGetVal->getOperand(0).getDefiningOp());
+         })
          .Case<db::BetweenOp>([&](db::BetweenOp betweenOp) {
             return innerExpression({"", " between ", " and ", ""}, betweenOp.getOperands());
          })
@@ -241,6 +247,15 @@ class ToJson {
          })
          .Case<db::AddOp>([&](db::AddOp addOp) {
             return innerExpression({"", " + ", ""}, addOp.getOperands());
+         })
+         .Case<mlir::arith::AndIOp>([&](mlir::arith::AndIOp andIOp) {
+            return innerExpression({"", " & ", ""}, andIOp.getOperands());
+         })
+         .Case<mlir::arith::OrIOp>([&](mlir::arith::OrIOp orIOp) {
+            return innerExpression({"", " | ", ""}, orIOp.getOperands());
+         })
+         .Case<mlir::arith::ShRUIOp>([&](mlir::arith::ShRUIOp shRUIOp) {
+            return innerExpression({"", " >> ", ""}, shRUIOp.getOperands());
          })
          .Case<db::SubOp>([&](db::SubOp subOp) {
             return innerExpression({"", " + ", ""}, subOp.getOperands());
@@ -329,6 +344,7 @@ class ToJson {
          result["condition"] = convertExpression(predicateBlock.getTerminator());
       } else {
          result["joinImpl"] = "nested";
+         result["comparisons"] = nlohmann::json::array();
          result["condition"] = convertExpression(predicateBlock.getTerminator());
       }
    }
@@ -481,6 +497,12 @@ class ToJson {
          })
          .Case<relalg::SingleJoinOp>([&](relalg::SingleJoinOp singleJoinOp) {
             convertJoin(result, singleJoinOp, singleJoinOp.getPredicateBlock(), "single");
+            return result;
+         })
+         .Case<relalg::MarkJoinOp>([&](relalg::MarkJoinOp singleJoinOp) {
+            convertJoin(result, singleJoinOp, singleJoinOp.getPredicateBlock(), "leftmark"); //todo: maybe we need to generate both variants
+            result["operator"] = "markJoin";
+            result["markColumn"] = columnToJSON(mlir::cast<tuples::ColumnDefAttr>(singleJoinOp.getMarkattr()));
             return result;
          })
          .Case<relalg::MapOp>([&](relalg::MapOp mapOp) {
