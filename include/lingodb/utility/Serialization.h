@@ -4,6 +4,7 @@
 #include <memory>
 #include <optional>
 #include <type_traits>
+#include <unordered_map>
 #include <vector>
 namespace lingodb::utility {
 struct ByteWriter {
@@ -63,7 +64,13 @@ concept IsOptional = requires(T& t) {
    typename T::value_type; // Ensure T has an `value_type`
    requires std::same_as<T, std::optional<typename T::value_type>>;
 };
-
+//concept for checking for std::unordered_nmap
+template <class T>
+concept IsUnorderedMap = requires(T& t) {
+   typename T::mapped_type; // Ensure T has an `value_type`
+   typename T::key_type; // Ensure T has an `key_type`
+   requires std::same_as<T, std::unordered_map<typename T::key_type, typename T::mapped_type>>;
+};
 class Serializer {
    ByteWriter& writer;
 
@@ -118,6 +125,14 @@ class Serializer {
    void writeValue(const std::vector<T>& value) {
       writeValue(value.size());
       for (const auto& v : value) {
+         writeValue(v);
+      }
+   }
+   template <class K, class V>
+   void writeValue(const std::unordered_map<K, V>& value) {
+      writeValue(value.size());
+      for (const auto& [k, v] : value) {
+         writeValue(k);
          writeValue(v);
       }
    }
@@ -205,11 +220,30 @@ class Deserializer {
       return str;
    }
    template <IsUniquePtr T>
+      requires requires(T& t, Deserializer& self) {
+         typename T::element_type;
+         requires std::same_as<typename T::element_type, decltype(T::element_type::deserialize(self))>;
+      }
    T read() {
       if (read<marker_t>() == notPresent) {
          return nullptr;
       }
       return std::make_unique<typename T::element_type>(read<typename T::element_type>());
+   }
+   template <IsUniquePtr T>
+      requires requires(T& t, Deserializer& self) {
+         typename T::element_type;
+         requires std::same_as<T, decltype(T::element_type::deserialize(self))>;
+      }
+   T read() {
+      if (read<marker_t>() == notPresent) {
+         return nullptr;
+      }
+      startObject();
+
+      auto res= T::element_type::deserialize(*this);
+      endObject();
+      return res;
    }
    template <IsSharedPtr T>
       requires requires(T& t, Deserializer& self) {
@@ -261,6 +295,16 @@ class Deserializer {
          return std::nullopt;
       }
       return read<typename T::value_type>();
+   }
+
+   template <IsUnorderedMap T>
+   T read() {
+      size_t length = read<size_t>();
+      T res;
+      for (size_t i = 0; i < length; i++) {
+         res.insert({read<typename T::key_type>(), read<typename T::mapped_type>()});
+      }
+      return res;
    }
 
    void startObject() {

@@ -192,3 +192,16 @@ TEST_CASE("Serialization:optional") {
    REQUIRE(val2.has_value());
    REQUIRE(val2.value() == 42);
 }
+TEST_CASE("Serialization:unorderd_map"){
+   SimpleByteWriter writer;
+   Serializer serializer(writer);
+   std::unordered_map<std::string, size_t> m;
+   m.insert({"foo",2});
+   m.insert({"bar",42});
+   serializer.writeProperty(1,m);
+   SimpleByteReader reader(writer.data(), writer.size());
+   Deserializer deserializer(reader);
+   auto m2 = deserializer.readProperty<std::unordered_map<std::string, size_t>>(1);
+   REQUIRE(m.at("foo")==2);
+   REQUIRE(m.at("bar")==42);
+}

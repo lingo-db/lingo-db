@@ -3,10 +3,12 @@
 find_package(Catch2 REQUIRED)
 include_directories(CATCH2_INCLUDE_DIR)
 add_executable(tester
+        catalog/TestTypes.cpp
+        catalog/TestCatalog.cpp
         utility/TestSerialization.cpp
         utility/TestSketches.cpp
 )
-target_link_libraries(tester PRIVATE Catch2::Catch2WithMain utility)
+target_link_libraries(tester PRIVATE Catch2::Catch2WithMain utility catalog)
 set_target_properties(tester PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
 enable_testing()

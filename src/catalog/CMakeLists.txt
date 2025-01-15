@@ -1,0 +1,1 @@
+add_library(catalog Catalog.cpp Types.cpp)
