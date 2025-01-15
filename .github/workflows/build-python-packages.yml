@@ -1,0 +1,86 @@
+name: Build Python Packages for different versions
+
+# only run when tag is pushed
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build_python_10:
+    runs-on: ubuntu-latest
+    container: ghcr.io/lingo-db/lingodb-py-dev:0ada499e50fd0965f52c1b3ab198b55cbb69ce4b
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Build
+        run: |
+          rm -rf /built-packages          
+          mkdir -p /built-packages
+          bash tools/python/bridge/create_package.sh cp310-cp310          
+          cd tools/python
+          /opt/python/cp310-cp310/bin/python3 -m build .
+          cp dist/*.whl /built-packages/.
+      - uses: actions/upload-artifact@master
+        with:
+          name: python-dist-310
+          path: /built-packages
+  build_python_11:
+    runs-on: ubuntu-latest
+    container: ghcr.io/lingo-db/lingodb-py-dev:0ada499e50fd0965f52c1b3ab198b55cbb69ce4b
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Build
+        run: |
+          rm -rf /built-packages          
+          mkdir -p /built-packages
+          bash tools/python/bridge/create_package.sh cp311-cp311          
+          cd tools/python
+          /opt/python/cp311-cp311/bin/python3 -m build .
+          cp dist/*.whl /built-packages/.
+      - uses: actions/upload-artifact@master
+        with:
+          name: python-dist-311
+          path: /built-packages
+  build_python_12:
+    runs-on: ubuntu-latest
+    container: ghcr.io/lingo-db/lingodb-py-dev:0ada499e50fd0965f52c1b3ab198b55cbb69ce4b
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Build
+        run: |
+          rm -rf /built-packages          
+          mkdir -p /built-packages
+          bash tools/python/bridge/create_package.sh cp312-cp312          
+          cd tools/python
+          /opt/python/cp312-cp312/bin/python3 -m build .
+          cp dist/*.whl /built-packages/.
+      - uses: actions/upload-artifact@master
+        with:
+          name: python-dist-312
+          path: /built-packages
+  collect_packages:
+    needs: [build_python_10, build_python_11, build_python_12]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download 310 dist
+        uses: actions/download-artifact@v4
+        with:
+          name: python-dist-310
+          path: dist/
+      - name: Download 311 dist
+        uses: actions/download-artifact@v4
+        with:
+          name: python-dist-311
+          path: dist/
+      - name: Download 312 dist
+        uses: actions/download-artifact@v4
+        with:
+          name: python-dist-312
+          path: dist/
+      - uses: actions/upload-artifact@master
+        with:
+          name: built-python-wheels
+          path: dist/

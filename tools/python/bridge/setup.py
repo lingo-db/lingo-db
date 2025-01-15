@@ -52,7 +52,7 @@ mlir_lingodb_ext.libraries.append("LLVMDemangle")
 
 setup(name='lingodb-bridge',
       description='',
-      version='0.0.1',
+      version='0.0.2',
       packages=['lingodbbridge', 'lingodbbridge.mlir', 'lingodbbridge.mlir.dialects'],
       package_data={'lingodbbridge': ['libs/*.so']},
       ext_modules=[ext, mlirir_ext, mlirinit_ext, mlir_lingodb_ext]

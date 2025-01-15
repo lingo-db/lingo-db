@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lingodb-bridge"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
     "numpy===1.26.4",
     "pyarrow===14.0.1"
