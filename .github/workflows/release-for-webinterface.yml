@@ -12,7 +12,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-dev:latest
+    container: ghcr.io/lingo-db/lingodb-dev:0ada499e50fd0965f52c1b3ab198b55cbb69ce4b
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
