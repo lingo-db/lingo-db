@@ -5,7 +5,6 @@ RUN apt-get update && apt-get -y install python3 python3-venv git g++ cmake ninj
 ENV CC=clang-19 CXX=clang++-19
 RUN git clone https://github.com/lingo-db/llvmcov2html.git /llvmcov2html && cd /llvmcov2html && git checkout 7362ad2 && make && cp bin/llvmcov2html /usr/bin/. && cd / && rm -rf /llvmcov2html
 
-
 FROM baseimg AS lingodb
 COPY . /repo
 WORKDIR /repo

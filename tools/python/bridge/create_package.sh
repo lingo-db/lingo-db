@@ -1,8 +1,7 @@
 set -e
 ls -la
-ln -s "/opt/python/$1/bin/python3" /usr/bin/python3
-python3 -v
-make venv
+make PYTHON_BINARY="/opt/python/$1/bin/python3" venv
+venv/bin/python3 -m pip install build
 MLIR_PYTHON_BASE=$(venv/bin/python3 -c "import lingodbllvm; print(lingodbllvm.get_py_package_dir()+'/mlir_core')")
 MLIR_BIN_DIR=$(venv/bin/python3 -c "import lingodbllvm; print(lingodbllvm.get_bin_dir())")
 MLIR_INCLUDE_DIR=$(venv/bin/python3 -c "import lingodbllvm; print(lingodbllvm.get_bin_dir()+'/../include/')")
@@ -33,5 +32,5 @@ ${MLIR_BIN_DIR}/mlir-tblgen -gen-python-enum-bindings -bind-dialect=subop -I ${M
 
 mkdir -p lingodbbridge/libs
 cp ../lingodb-release/tools/python/bridge/libpybridge.so  lingodbbridge/libs/.
-python3 -m build --wheel
+$BASE_PATH/venv/bin/python3 -m build --wheel
 auditwheel repair dist/*.whl --plat "$PLAT" --exclude libarrow_python.so --exclude libarrow.so.1400 -w /built-packages

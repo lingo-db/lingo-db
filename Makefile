@@ -2,11 +2,11 @@ ROOT_DIR := $(dir $(abspath $(firstword $(MAKEFILE_LIST))))
 NPROCS := $(shell echo $$(nproc))
 LLVM_LIT := $(shell venv/bin/python3 -c "import pkg_resources; print(pkg_resources.get_distribution('lit').location+'/../../../bin/lit')")
 LLVM_BIN_DIR := $(shell venv/bin/python3 -c "import lingodbllvm; print(lingodbllvm.get_bin_dir())")
-
+PYTHON_BINARY := python3
 build:
 	mkdir -p $@
 venv:
-	python3 -m venv venv
+	$(PYTHON_BINARY) -m venv venv
 	venv/bin/pip install -r requirements.txt
 	venv/bin/python3 -c "import pyarrow; pyarrow.create_library_symlinks()"
 

@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools","numpy==1.26.4", "pyarrow===14.0.1","pybind11"]
+requires = ["setuptools","numpy==1.26.4", "pyarrow===14.0.1","pybind11","pip"]
 build-backend = "setuptools.build_meta"
 
 [project]
