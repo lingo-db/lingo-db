@@ -23,9 +23,14 @@ subop::ColumnCreationAnalysis::ColumnCreationAnalysis(mlir::Operation* op) {
       for (auto attr : curr->getAttrs()) {
          analyze(curr, attr.getValue());
       }
-      if (auto *parentOp = curr->getParentOp()) {
+      if (auto* parentOp = curr->getParentOp()) {
          auto& currUsedColumns = getCreatedColumns(curr);
          createdColumns[parentOp].insert(currUsedColumns.begin(), currUsedColumns.end());
       }
    });
+}
+void subop::ColumnCreationAnalysis::update(mlir::Operation* op) {
+   for (auto attr : op->getAttrs()) {
+      analyze(op, attr.getValue());
+   }
 }

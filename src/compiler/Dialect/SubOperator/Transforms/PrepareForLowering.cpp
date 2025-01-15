@@ -321,32 +321,39 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
                };
                computeAvailableColumns(combineOp);
                addRequiredColumns(combineOp, availableColumns);
-               std::vector<mlir::Attribute> createdByMap;
-               mlir::OpBuilder b(combineOp);
-               mlir::Block* mapBlock = new mlir::Block;
-               {
-                  mlir::OpBuilder::InsertionGuard guard(b);
-                  b.setInsertionPointToStart(mapBlock);
-                  auto& colManager = getContext().getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
-                  std::vector<mlir::Value> mapOpReturnVals;
-                  for (auto* r : requiredColumns) { // we need to introduce every required column to the MapOp (MapOp will replace CombineTupleOp)
-                     auto colRefAttr = colManager.createRef(r);
-                     auto colDefAttr = colManager.createDef(r);
+               if(requiredColumns.empty()) {
+                  combineOp->replaceAllUsesWith(mlir::ValueRange{combineOp.getStream()}); //useless combineop -> just remove
+                  opsToErase.push_back(combineOp);
+                  continue;
+               }else {
+                  std::vector<mlir::Attribute> createdByMap;
+                  mlir::OpBuilder b(combineOp);
+                  mlir::Block* mapBlock = new mlir::Block;
+                  {
+                     mlir::OpBuilder::InsertionGuard guard(b);
+                     b.setInsertionPointToStart(mapBlock);
+                     auto& colManager = getContext().getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+                     std::vector<mlir::Value> mapOpReturnVals;
+                     for (auto* r : requiredColumns) { // we need to introduce every required column to the MapOp (MapOp will replace CombineTupleOp)
+                        auto colRefAttr = colManager.createRef(r);
+                        auto colDefAttr = colManager.createDef(r);
 
-                     if (!colArgs.contains(r)) { // if the required column is not a param of nested map
-                        nestedMapOp.getBody()->addArgument(r->type, b.getUnknownLoc()); // we need to add it to nested map op arguments
-                        colArgs.insert({r, argId++});
-                        newParams.push_back(colRefAttr); // and include in the parameter
+                        if (!colArgs.contains(r)) { // if the required column is not a param of nested map
+                           nestedMapOp.getBody()->addArgument(r->type, b.getUnknownLoc()); // we need to add it to nested map op arguments
+                           colArgs.insert({r, argId++});
+                           newParams.push_back(colRefAttr); // and include in the parameter
+                        }
+                        createdByMap.push_back(colDefAttr); // every required column is created/returned by the MapOp
+                        mapOpReturnVals.push_back(nestedMapOp.getBody()->getArgument(colArgs[r]));
                      }
-                     createdByMap.push_back(colDefAttr); // every required column is created/returned by the MapOp
-                     mapOpReturnVals.push_back(nestedMapOp.getBody()->getArgument(colArgs[r]));
+                     b.create<tuples::ReturnOp>(b.getUnknownLoc(), mapOpReturnVals);
                   }
-                  b.create<tuples::ReturnOp>(b.getUnknownLoc(), mapOpReturnVals);
+                  auto mapOp = b.create<subop::MapOp>(b.getUnknownLoc(), tuples::TupleStreamType::get(b.getContext()), combineOp.getStream(), b.getArrayAttr(createdByMap), b.getArrayAttr({}));
+                  mapOp.getFn().push_back(mapBlock);
+                  combineOp->replaceAllUsesWith(mlir::ValueRange{mapOp.getResult()}); // replace combineOp with mapOp
+                  opsToErase.push_back(combineOp);
+                  createdColumns.update(mapOp);
                }
-               auto mapOp = b.create<subop::MapOp>(b.getUnknownLoc(), tuples::TupleStreamType::get(b.getContext()), combineOp.getStream(), b.getArrayAttr(createdByMap), b.getArrayAttr({}));
-               mapOp.getFn().push_back(mapBlock);
-               combineOp->replaceAllUsesWith(mlir::ValueRange{mapOp.getResult()}); // replace combineOp with mapOp
-               opsToErase.push_back(combineOp);
 
             } else {
                nestedMapOp.emitError("NestedMapOp: tuple parameter must only be used with CombineTupleOp");

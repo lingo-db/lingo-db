@@ -21,6 +21,7 @@ struct ColumnCreationAnalysis {
       assert(columnCreators.count(column) && "Column not created by any operation");
       return columnCreators[column];
    }
+   void update(mlir::Operation* op);
 };
 } // namespace lingodb::compiler::dialect::subop
 #endif //LINGODB_COMPILER_DIALECT_SUBOPERATOR_TRANSFORMS_COLUMNCREATIONANALYSIS_H
