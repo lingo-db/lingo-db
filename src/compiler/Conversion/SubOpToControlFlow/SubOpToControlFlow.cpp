@@ -4205,10 +4205,16 @@ void subop::createLowerSubOpPipeline(mlir::OpPassManager& pm) {
    pm.addPass(subop::createNormalizeSubOpPass());
    pm.addPass(subop::createPullGatherUpPass());
    pm.addPass(subop::createParallelizePass());
-   pm.addPass(subop::createSpecializeParallelPass());
    pm.addPass(subop::createEnforceOrderPass());
+   pm.addPass(subop::createInlineNestedMapPass());
+   pm.addPass(subop::createFinalizePass());
+   pm.addPass(subop::createSplitIntoExecutionStepsPass());
+   pm.addNestedPass<mlir::func::FuncOp>(subop::createParallelizePass());
+   pm.addPass(subop::createSpecializeParallelPass());
+   pm.addPass(subop::createPrepareLoweringPass());
    pm.addPass(subop::createLowerSubOpPass());
    pm.addPass(mlir::createCanonicalizerPass());
+   pm.addPass(mlir::createCSEPass());
 }
 void subop::registerSubOpToControlFlowConversionPasses() {
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
