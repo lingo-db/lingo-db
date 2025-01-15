@@ -1,6 +1,6 @@
-#include "llvm/Support/Debug.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorDialect.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
+#include "llvm/Support/Debug.h"
 
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/ColumnCreationAnalysis.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/ColumnUsageAnalysis.h"
@@ -27,6 +27,8 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
          opsWithNesting.push_back(containsNestedSubOps); // gather ops that follow ContainsNestedSubOps interface (e.g., nested map or loop)
       });
       for (auto containsNestedSubOps : opsWithNesting) {
+         llvm::DenseMap<mlir::Value, size_t> valueToNestedExecutionGroupOperand;
+
          std::unordered_map<mlir::Operation*, std::vector<mlir::Operation*>> steps; // {startPipelineOp, pipelineOps}
          std::unordered_map<mlir::Operation*, mlir::Operation*> opToStep; // {pipelineOp, startPipelineOp}
          for (mlir::Operation& op : *containsNestedSubOps.getBody()) {
@@ -187,18 +189,29 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
             std::vector<mlir::Value> blockArgs;
             llvm::SmallVector<bool> threadLocal;
             auto* block = new mlir::Block;
+            llvm::DenseMap<mlir::Value, size_t> availableStates;
 
             for (auto [required, local, isThreadLocal] : requiredState[currRoot]) {
+               if (availableStates.contains(required)) {
+                  blockArgs.push_back(block->getArgument(availableStates[required]));
+                  continue;
+               }
                if (stateMapping.count(required) == 0) {
-                  nestedExecutionOperands.push_back(required);
-                  auto nestedExecutionBlockArg = nestedExecutionBlock->addArgument(required.getType(), required.getLoc());
-                  inputs.push_back(nestedExecutionBlockArg);
+                  if (valueToNestedExecutionGroupOperand.contains(required)) {
+                     inputs.push_back(nestedExecutionBlock->getArgument(valueToNestedExecutionGroupOperand[required]));
+                  } else {
+                     nestedExecutionOperands.push_back(required);
+                     auto nestedExecutionBlockArg = nestedExecutionBlock->addArgument(required.getType(), required.getLoc());
+                     inputs.push_back(nestedExecutionBlockArg);
+                     valueToNestedExecutionGroupOperand[required] = nestedExecutionBlockArg.getArgNumber();
+                  }
                } else {
                   assert(stateMapping.count(required));
                   inputs.push_back(stateMapping[required]);
                }
                blockArgs.push_back(block->addArgument(local.getType(), local.getLoc()));
                threadLocal.push_back(isThreadLocal);
+               availableStates[required] = block->getNumArguments() - 1;
             }
             mlir::OpBuilder builder(&getContext());
             builder.setInsertionPointToStart(block);
@@ -296,14 +309,14 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
                std::unordered_set<tuples::Column*> requiredColumns;
                std::function<void(mlir::Operation*, std::unordered_set<tuples::Column*>)> addRequiredColumns = [&](mlir::Operation* op, std::unordered_set<tuples::Column*> availableColumns) {
                   auto created = createdColumns.getCreatedColumns(op); // for the combine op, get the columns it creates
-                  availableColumns.insert(created.begin(), created.end()); // aggregate them in availableColumns, it contains all columns that are in the tuple-stream up to the current  combineOp 
+                  availableColumns.insert(created.begin(), created.end()); // aggregate them in availableColumns, it contains all columns that are in the tuple-stream up to the current  combineOp
                   for (auto* usedColumn : usedColumns.getUsedColumns(op)) {
-                     if (!availableColumns.contains(usedColumn)) { 
+                     if (!availableColumns.contains(usedColumn)) {
                         requiredColumns.insert(usedColumn); // if the combineOp uses a column that it doesn't create or that doesn't come from its definitions, the combineOp requires it
                      }
                   }
                   for (auto* user : op->getUsers()) {
-                     addRequiredColumns(user, availableColumns); // update the required cols for all users of this combineOp 
+                     addRequiredColumns(user, availableColumns); // update the required cols for all users of this combineOp
                   }
                };
                computeAvailableColumns(combineOp);
@@ -320,17 +333,17 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
                      auto colRefAttr = colManager.createRef(r);
                      auto colDefAttr = colManager.createDef(r);
 
-                     if (!colArgs.contains(r)) { // if the required column is not a param of nested map 
+                     if (!colArgs.contains(r)) { // if the required column is not a param of nested map
                         nestedMapOp.getBody()->addArgument(r->type, b.getUnknownLoc()); // we need to add it to nested map op arguments
                         colArgs.insert({r, argId++});
                         newParams.push_back(colRefAttr); // and include in the parameter
                      }
                      createdByMap.push_back(colDefAttr); // every required column is created/returned by the MapOp
-                     mapOpReturnVals.push_back(nestedMapOp.getBody()->getArgument(colArgs[r])); 
+                     mapOpReturnVals.push_back(nestedMapOp.getBody()->getArgument(colArgs[r]));
                   }
                   b.create<tuples::ReturnOp>(b.getUnknownLoc(), mapOpReturnVals);
                }
-               auto mapOp = b.create<subop::MapOp>(b.getUnknownLoc(), tuples::TupleStreamType::get(b.getContext()), combineOp.getStream(), b.getArrayAttr(createdByMap),b.getArrayAttr({}));
+               auto mapOp = b.create<subop::MapOp>(b.getUnknownLoc(), tuples::TupleStreamType::get(b.getContext()), combineOp.getStream(), b.getArrayAttr(createdByMap), b.getArrayAttr({}));
                mapOp.getFn().push_back(mapBlock);
                combineOp->replaceAllUsesWith(mlir::ValueRange{mapOp.getResult()}); // replace combineOp with mapOp
                opsToErase.push_back(combineOp);
