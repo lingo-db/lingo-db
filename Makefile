@@ -54,6 +54,14 @@ build/lingodb-release/.buildstamp: build/lingodb-release/.stamp
 build/lingodb-release/.stamp: build/dependencies
 	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS) -DCMAKE_BUILD_TYPE=Release
 	touch $@
+
+build/lingodb-relwithdebinfo/.buildstamp: build/lingodb-relwithdebinfo/.stamp
+	cmake --build $(dir $@) -- -j${NPROCS}
+	touch $@
+
+build/lingodb-relwithdebinfo/.stamp: build/dependencies
+	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS) -DCMAKE_BUILD_TYPE=RelWithDebInfo
+	touch $@
 build/lingodb-debug-coverage/.stamp: build/dependencies
 	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS) -DCMAKE_CXX_FLAGS="-O0 -fprofile-instr-generate -fcoverage-mapping" -DCMAKE_C_FLAGS="-O0 -fprofile-instr-generate -fcoverage-mapping" -DCMAKE_CXX_COMPILER=clang++-19 -DCMAKE_C_COMPILER=clang-19
 	touch $@
