@@ -75,6 +75,20 @@ struct MLIRElement {
 std::string get(const char* buf, size_t start, size_t length) {
    return std::string(buf + start, length);
 }
+void addRaw(nlohmann::json& j, std::string s) {
+   size_t pos = 0;
+   while ((pos = s.find("loc(", pos)) != std::string::npos) {
+      size_t end = s.find(")", pos);
+      if (end == std::string::npos) {
+         break;
+      }
+      j.push_back({{"type", "raw"}, {"value", s.substr(0, pos)}});
+      j.push_back({{"type", "loc"}, {"value", s.substr(pos, end - pos + 1)}});
+      s = s.substr(end + 1);
+      pos = 0;
+   }
+   j.push_back({{"type", "raw"}, {"value", s}});
+}
 
 nlohmann::json toJSON(size_t& startElement, std::vector<MLIRElement>& elements, size_t startPos, size_t endPos, const char* buf, std::function<void(nlohmann::json&, std::string)> processRaw) {
    nlohmann::json j;
@@ -155,7 +169,7 @@ nlohmann::json toJSON(size_t& startElement, std::vector<MLIRElement>& elements, 
                while (pos < s.length()) {
                   auto [matchStart, matchLength, handler] = matches[matchPos];
                   if (pos < matchStart) {
-                     j.push_back({{"type", "raw"}, {"value", s.substr(pos, matchStart - pos)}});
+                     addRaw(j, s.substr(pos, matchStart - pos));
                      pos = matchStart;
                   } else if (pos == matchStart) {
                      handler(j, s.substr(matchStart, matchLength));
@@ -191,9 +205,7 @@ nlohmann::json toJSON(size_t& startElement, std::vector<MLIRElement>& elements, 
             block["type"] = "block";
             block["sCB"] = std::get<BlockElement>(element.element).startsWithCurlyBrace;
             block["eCB"] = std::get<BlockElement>(element.element).endsWithCurlyBrace;
-            block["children"] = toJSON(startElement, elements, element.start, element.start + element.length, buf, [](nlohmann::json& j, std::string s) {
-               j.push_back({{"type", "raw"}, {"value", s}});
-            });
+            block["children"] = toJSON(startElement, elements, element.start, element.start + element.length, buf, addRaw);
             j.push_back(std::move(block));
          } else if (std::holds_alternative<DummyElement>(element.element)) {
          } else {
@@ -363,7 +375,7 @@ int main(int argc, char** argv) {
 
       elements.push_back(MLIRElement{sourceMgr.getBufferInfo(bufferId).Buffer->getBuffer().size(), 0ull, DummyElement{}});
       size_t startElement = 0;
-      auto parsed = toJSON(startElement, elements, 0, sourceMgr.getBufferInfo(bufferId).Buffer->getBuffer().size(), basePtr, [](nlohmann::json& j, std::string s) { j.push_back({{"type", "raw"}, {"value", s}}); });
+      auto parsed = toJSON(startElement, elements, 0, sourceMgr.getBufferInfo(bufferId).Buffer->getBuffer().size(), basePtr, addRaw);
       jsonOutput.push_back({{"parsed", std::move(parsed)}, {"passInfo", step}});
    }
    if (jsonOutputFilename == "-") {

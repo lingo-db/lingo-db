@@ -64,54 +64,61 @@ class ToJson {
    }
 
    // Convert mlir Type to umbra json type
-   nlohmann::json convertDataType(mlir::Type type) {
+   std::string convertDataType(mlir::Type type) {
+      auto membersToString = [this](subop::StateMembersAttr attr) {
+         std::string result = "[";
+         for (auto [member, type] : llvm::zip(attr.getNames(), attr.getTypes())) {
+            result += mlir::cast<mlir::StringAttr>(member).str() + ":" + convertDataType(mlir::cast<mlir::TypeAttr>(type).getValue()) + ",";
+         }
+         result += "]";
+         return result;
+      };
       return llvm::TypeSwitch<mlir::Type, nlohmann::json>(type)
          .Case<db::DecimalType>([](db::DecimalType decimalType) {
-            return nlohmann::json{
-               {"type", "dataType"},
-               {"name", "decimal"},
-               {"precision", decimalType.getP()},
-               {"scale", decimalType.getS()},
-               {"nullable", false}};
+            return "decimal(" + std::to_string(decimalType.getP()) + "," + std::to_string(decimalType.getS()) + ")";
          })
          .Case<mlir::IndexType>([](mlir::IndexType indexType) {
-            return nlohmann::json{
-               {"type", "dataType"},
-               {"name", "index"},
-               {"signed", false},
-               {"nullable", false}};
+            return "index";
          })
          .Case<mlir::IntegerType>([](mlir::IntegerType integerType) {
-            return nlohmann::json{
-               {"baseType", "int"},
-               {"numBits", integerType.getWidth()},
-               {"signed", integerType.isSigned()},
-               {"nullable", false}};
+            return (integerType.isSigned() ? "int" : "uint") + std::to_string(integerType.getWidth());
          })
          .Case<db::DateType>([](db::DateType dateType) {
-            return nlohmann::json{
-               // Umbra treats date as int, we have (annotated) strings
-               {"baseType", "text"}};
+            return "date";
          })
          .Case<db::NullableType>([&](db::NullableType nullableType) {
             auto res = convertDataType(nullableType.getType());
-            res["nullable"] = true;
-            return res;
+            return "nullable(" + res + ")";
          })
          .Case<db::StringType>([&](db::StringType stringType) {
-            return nlohmann::json{{"type", "text"}};
+            return "str";
          })
          .Case<db::CharType>([](db::CharType charType) {
-            return nlohmann::json{{"type", "text"}};
+            return "char" + std::to_string(charType.getBytes());
          })
          .Case<mlir::FloatType>([](mlir::FloatType floatType) {
-            return nlohmann::json{{"type", "float"}};
+            return "float" + std::to_string(floatType.getWidth());
+         })
+         .Case<subop::BufferType>([&](subop::BufferType bufferType) {
+            return "Buffer" + membersToString(bufferType.getMembers());
+         })
+         .Case<subop::ResultTableType>([&](subop::ResultTableType resultTableType) {
+            return "ResultTable" + membersToString(resultTableType.getMembers());
+         })
+         .Case<subop::EntryRefType>([&](subop::EntryRefType entryRefType) {
+            return "EntryRef " + convertDataType(entryRefType.getState());
+         })
+         .Case<subop::SortedViewType>([&](subop::SortedViewType sortedViewType) {
+            return "SortedView " + convertDataType(sortedViewType.getBasedOn());
+         })
+         .Case<subop::TableType>([&](subop::TableType resultTableType) {
+            return "Table" + membersToString(resultTableType.getMembers());
          })
          .Default([](mlir::Type type) {
             llvm::errs() << "type could not be converted ";
             type.dump();
             llvm::errs() << "\n";
-            return nlohmann::json();
+            return "?";
          });
    }
    std::string convertCmpPredicate(db::DBCmpPredicate cmpPredicate) {
@@ -141,7 +148,7 @@ class ToJson {
       return result;
    }
 
-   nlohmann::json innerExpression(const std::vector<std::string> strings, mlir::ValueRange operands, std::function<nlohmann::json(mlir::BlockArgument)> resolveBlockArgs) {
+   nlohmann::json innerExpression(const std::vector<std::string> strings, mlir::ValueRange operands, std::function<nlohmann::json(mlir::BlockArgument, bool)> resolveBlockArgs) {
       nlohmann::json result{
          {"type", "expression_inner"},
          {"strings", strings},
@@ -176,7 +183,7 @@ class ToJson {
       }
       return result;
    }
-   nlohmann::json convertExpression(mlir::Operation* operation, std::function<nlohmann::json(mlir::BlockArgument)> resolveBlockArgs = nullptr) {
+   nlohmann::json convertExpression(mlir::Operation* operation, std::function<nlohmann::json(mlir::BlockArgument, bool)> resolveBlockArgs = nullptr) {
       return llvm::TypeSwitch<mlir::Operation*, nlohmann::json>(operation)
          .Case<tuples::ReturnOp>([&](tuples::ReturnOp returnOp) {
             if (returnOp->getOperands().size()) return convertExpression(returnOp.getOperand(0), resolveBlockArgs);
@@ -300,11 +307,11 @@ class ToJson {
             return nlohmann::json{{"type", "expression_leaf"}, {"leaf_type", "unknown"}};
          });
    }
-   nlohmann::json convertExpression(mlir::Value v, std::function<nlohmann::json(mlir::BlockArgument)> resolveBlockArgs = nullptr) {
+   nlohmann::json convertExpression(mlir::Value v, std::function<nlohmann::json(mlir::BlockArgument, bool)> resolveBlockArgs = nullptr) {
       if (auto m = mlir::dyn_cast_or_null<mlir::OpResult>(v)) {
          return convertExpression(v.getDefiningOp(), resolveBlockArgs);
       } else if (auto m = mlir::dyn_cast_or_null<mlir::BlockArgument>(v)) {
-         return resolveBlockArgs(m);
+         return resolveBlockArgs(m, true);
       } else {
          return nlohmann::json{{"type", "expression_leaf"}, {"leaf_type", "unknown"}};
       }
@@ -325,11 +332,14 @@ class ToJson {
       }
       return "";
    }
-   nlohmann::json getOperandReference(mlir::Value val) {
+   nlohmann::json getOperandReference(mlir::Value val, std::function<nlohmann::json(mlir::BlockArgument, bool)> resolveBlockArgs) {
       if (auto* op = val.getDefiningOp()) {
-         return nlohmann::json{{"producing", getOperationReference(op)}, {"resnr", mlir::cast<mlir::OpResult>(val).getResultNumber()}};
+         return nlohmann::json{{"type", "node"}, {"ref", getOperationReference(op)}, {"resnr", mlir::cast<mlir::OpResult>(val).getResultNumber()}};
       } else if (auto blockArg = mlir::dyn_cast_or_null<mlir::BlockArgument>(val)) {
-         return nlohmann::json{{"producing", "parent"}, {"parent", getOperationReference(blockArg.getOwner()->getParentOp())}, {"argnr", blockArg.getArgNumber()}};
+         if (resolveBlockArgs) {
+            return resolveBlockArgs(blockArg, false);
+         }
+         assert(false);
       } else {
          assert(false);
       }
@@ -363,35 +373,64 @@ class ToJson {
       }
       return result;
    }
-   nlohmann::json convertOperation(mlir::Operation* op) {
+   nlohmann::json convertOperation(mlir::Operation* op, std::function<nlohmann::json(mlir::BlockArgument, bool)> resolveBlockArgs = nullptr) {
       nlohmann::json result;
       result["ref"] = getOperationReference(op);
       result["type"] = "suboperator";
-      result["consuming"] = nlohmann::json::array();
+      result["outerEdges"] = nlohmann::json::array();
       result["accesses"] = nlohmann::json::array();
       for (auto operand : op->getOperands()) {
          if (mlir::isa<tuples::TupleStreamType>(operand.getType())) {
-            result["consuming"].push_back(getOperationReference(operand.getDefiningOp()));
+            result["outerEdges"].push_back({{"type", "stream"}, {"input", getOperandReference(operand, resolveBlockArgs)}, {"output", {{"type", "node"}, {"ref", getOperationReference(op)}}}});
          };
       }
 
       return llvm::TypeSwitch<mlir::Operation*, nlohmann::json>(op)
-         .Case<subop::ExecutionStepOp>([&](subop::ExecutionStepOp executionGroupOp) {
+         .Case<subop::ExecutionStepOp>([&](subop::ExecutionStepOp executionStepOp) {
             result["type"] = "execution_step";
             //todo: handle arguments etc
             result["subops"] = nlohmann::json::array();
-            for (auto& op : executionGroupOp.getSubOps().front()) {
+            result["inputs"] = nlohmann::json::array();
+            llvm::DenseMap<mlir::BlockArgument, size_t> blockArgToIndex;
+
+            for (auto& op : executionStepOp.getSubOps().front()) {
                if (!mlir::isa_and_nonnull<subop::ExecutionStepReturnOp>(&op)) {
-                  result["subops"].push_back(convertOperation(&op));
+                  auto r = convertOperation(&op, [&](mlir::BlockArgument ba, bool isExpression) {
+                     if (isExpression) {
+                        if (resolveBlockArgs) {
+                           if (ba.getOwner()->getParentOp() == executionStepOp.getOperation()) {
+                              auto selfInput = executionStepOp.getInputs()[ba.getArgNumber()];
+                              if (auto blockArg = mlir::dyn_cast_or_null<mlir::BlockArgument>(selfInput)) {
+                                 return resolveBlockArgs(blockArg, isExpression);
+                              } else {
+                                 return nlohmann::json{{"type", "expression_leaf"}, {"leaf_type", "unknown"}};
+                              }
+                           } else {
+                              return resolveBlockArgs(ba, isExpression);
+                           }
+                        } else {
+                           return nlohmann::json{{"type", "expression_leaf"}, {"leaf_type", "unknown"}};
+                        }
+                     } else {
+                        if (ba.getOwner()->getParentOp() == executionStepOp.getOperation()) {
+                           if (!blockArgToIndex.contains(ba)) {
+                              blockArgToIndex[ba] = blockArgToIndex.size();
+                              result["inputs"].push_back(nlohmann::json{{"type", convertDataType(ba.getType())}});
+                              result["outerEdges"].push_back({{"type", "requiredInput"}, {"input", getOperandReference(executionStepOp.getInputs()[ba.getArgNumber()], resolveBlockArgs)}, {"output", {{"type", "node"}, {"ref", getOperationReference(executionStepOp)}, {"argnr", result["inputs"].size() - 1}}}});
+                           }
+                           return nlohmann::json{{"type", "parentArg"}, {"argnr", blockArgToIndex[ba]}};
+                        } else {
+                           assert(false);
+                        }
+                     }
+                  });
+                  result["subops"].push_back(r);
                }
             }
-            result["inputs"] = nlohmann::json::array();
-            for (auto [i, a] : llvm::zip(op->getOperands(), executionGroupOp.getSubOps().getArguments())) {
-               result["inputs"].push_back(nlohmann::json{{"input", getOperandReference(i)}, {"argument", getOperandReference(a)}});
-            }
+
             result["results"] = nlohmann::json::array();
-            for (auto t : executionGroupOp.getSubOps().front().getTerminator()->getOperands()) {
-               result["results"].push_back(getOperandReference(t));
+            for (auto t : executionStepOp.getSubOps().front().getTerminator()->getOperands()) {
+               result["results"].push_back(getOperandReference(t, resolveBlockArgs));
             }
             return result;
          })
@@ -412,26 +451,26 @@ class ToJson {
          })
          .Case<subop::MergeOp>([&](subop::MergeOp op) {
             result["subop"] = "merge";
-            result["accesses"].push_back(getOperandReference(op.getThreadLocal()));
+            result["accesses"].push_back(getOperandReference(op.getThreadLocal(), resolveBlockArgs));
             return result;
          })
          //TODO .Case<subop::LockOp>([&](subop::LockOp lockOp) {})
          .Case<subop::ScanOp>([&](subop::ScanOp scanOp) {
             result["subop"] = "scan";
             result["mapping"] = serializeDefMapping(scanOp.getMapping());
-            result["accesses"].push_back(getOperandReference(scanOp.getState()));
+            result["accesses"].push_back(getOperandReference(scanOp.getState(), resolveBlockArgs));
             return result;
          })
          .Case<subop::ScanListOp>([&](subop::ScanListOp scanListOp) {
             result["subop"] = "scan_list";
             result["elem"] = columnToJSON(scanListOp.getElem());
-            result["accesses"].push_back(getOperandReference(scanListOp.getList()));
+            result["accesses"].push_back(getOperandReference(scanListOp.getList(), resolveBlockArgs));
             return result;
          })
          .Case<subop::ScanRefsOp>([&](subop::ScanRefsOp op) {
             result["subop"] = "scan_ref";
             result["reference"] = columnToJSON(op.getRef());
-            result["accesses"].push_back(getOperandReference(op.getState()));
+            result["accesses"].push_back(getOperandReference(op.getState(), resolveBlockArgs));
             return result;
          })
          .Case<subop::GenerateOp>([&](subop::GenerateOp generateOp) {
@@ -451,10 +490,13 @@ class ToJson {
             result["computed"] = nlohmann::json::array();
             for (auto [column, computed] : llvm::zip(mapOp.getComputedCols(), mapOp.getFn().front().getTerminator()->getOperands())) {
                auto columnDefAttr = mlir::cast<tuples::ColumnDefAttr>(column);
-               result["computed"].push_back({{"computed", columnToJSON(columnDefAttr)}, {"expression", convertExpression(computed, [&](mlir::BlockArgument ba) {
+               result["computed"].push_back({{"computed", columnToJSON(columnDefAttr)}, {"expression", convertExpression(computed, [&](mlir::BlockArgument ba, bool isExpression) {
                                                                                             if (ba.getOwner()->getParentOp() == mapOp.getOperation()) {
                                                                                                auto accessedTuple = mlir::cast<tuples::ColumnRefAttr>(mapOp.getInputCols()[ba.getArgNumber()]);
                                                                                                return columnToJSON(accessedTuple);
+                                                                                            }
+                                                                                            if (resolveBlockArgs) {
+                                                                                               return resolveBlockArgs(ba, true);
                                                                                             } else {
                                                                                                return nlohmann::json{{"type", "expression_leaf"}, {"leaf_type", "unknown"}};
                                                                                             }
@@ -484,25 +526,52 @@ class ToJson {
          .Case<subop::NestedMapOp>([&](subop::NestedMapOp nestedMapOp) {
             result["subop"] = "nested_map";
             result["inputs"] = nlohmann::json::array();
-            result["implicitInputs"] = nlohmann::json::array();
-            result["implicitEdges"] = nlohmann::json::array();
-            for (auto [col, a] : llvm::zip(nestedMapOp.getParameters(), nestedMapOp.getBody()->getArguments().drop_front())) {
-               result["inputs"].push_back(nlohmann::json{{"inputCol", columnToJSON(mlir::cast<tuples::ColumnRefAttr>(col))}, {"argument", getOperandReference(a)}});
-            }
+            llvm::DenseMap<mlir::Value, size_t> externalValueToIndex;
             if (nestedMapOp.getBody()->begin() != nestedMapOp.getBody()->end()) {
                mlir::Operation* firstOp = &*nestedMapOp.getBody()->begin();
                if (auto nestedExecutionGroup = mlir::dyn_cast_or_null<subop::NestedExecutionGroupOp>(firstOp)) {
-                  for (auto [i, a] : llvm::zip(nestedExecutionGroup->getOperands(), nestedExecutionGroup.getSubOps().getArguments())) {
-                     if (!nestedMapOp.getRegion().isAncestor(i.getParentRegion())) {
-                        result["implicitInputs"].push_back(getOperandReference(i));
-                     }
-                     result["implicitEdges"].push_back(nlohmann::json{{"from", getOperandReference(i)}, {"to", getOperandReference(a)}});
-                  }
-
                   result["subops"] = nlohmann::json::array();
                   for (auto& op : nestedExecutionGroup.getSubOps().front()) {
-                     if (!mlir::isa_and_nonnull<subop::ExecutionStepReturnOp>(&op)) {
-                        result["subops"].push_back(convertOperation(&op));
+                     if (!mlir::isa_and_nonnull<subop::NestedExecutionGroupReturnOp>(&op)) {
+                        result["subops"].push_back(convertOperation(&op, [&](mlir::BlockArgument ba, bool isExpression) {
+                           if (isExpression) {
+                              if (ba.getOwner()->getParentOp() == nestedExecutionGroup.getOperation()) {
+                                 if (auto operand = mlir::dyn_cast_or_null<mlir::BlockArgument>(nestedExecutionGroup.getOperands()[ba.getArgNumber()])) {
+                                    if (operand.getOwner()->getParentOp() == nestedMapOp.getOperation()) {
+                                       auto column = mlir::cast<tuples::ColumnRefAttr>(nestedMapOp.getParameters()[operand.getArgNumber() - 1]); //to account for the extra tuples parameter
+                                       auto res = columnToJSON(column);
+                                       res["leaf_type"] = "external_column";
+                                       return res;
+                                    }
+                                 }
+                              }
+                              if (resolveBlockArgs) {
+                                 return resolveBlockArgs(ba, isExpression);
+
+                              } else {
+                                 return nlohmann::json{{"type", "expression_leaf"}, {"leaf_type", "unknown"}};
+                              }
+                           } else {
+                              if (ba.getOwner()->getParentOp() == nestedExecutionGroup.getOperation()) {
+                                 auto realInput = nestedExecutionGroup.getOperands()[ba.getArgNumber()];
+                                 if (auto operand = mlir::dyn_cast_or_null<mlir::BlockArgument>(realInput)) {
+                                    if (operand.getOwner()->getParentOp() == nestedMapOp.getOperation()) {
+                                       auto column = mlir::cast<tuples::ColumnRefAttr>(nestedMapOp.getParameters()[operand.getArgNumber() - 1]); //to account for the extra tuples parameter
+                                       return nlohmann::json{{"type", "nested_map_arg"}, {"column", columnToJSON(column)}, {"id", std::string(result["ref"]) + "_" + std::to_string(externalValueToIndex.size())}};
+                                    }
+                                 }
+                                 if (!externalValueToIndex.contains(realInput)) {
+                                    externalValueToIndex[realInput] = externalValueToIndex.size();
+                                    result["inputs"].push_back(nlohmann::json{{"type", convertDataType(realInput.getType())}});
+                                    result["outerEdges"].push_back({{"type", "requiredInput"}, {"input", getOperandReference(realInput, resolveBlockArgs)}, {"output", {{"type", "node"}, {"ref", getOperationReference(nestedMapOp)}, {"argnr", result["inputs"].size() - 1}}}});
+                                 }
+                                 return nlohmann::json{{"type", "parentArg"}, {"argnr", externalValueToIndex[realInput]}};
+
+                              } else {
+                                 assert(false);
+                              }
+                           }
+                        }));
                      }
                   }
                }
@@ -512,6 +581,7 @@ class ToJson {
 
          .Case<subop::CreateFrom>([&](subop::CreateFrom op) {
             result["subop"] = "create_from";
+            result["accesses"].push_back(getOperandReference(op.getState(), resolveBlockArgs));
             return result;
          })
          .Case<subop::CreateSimpleStateOp>([&](subop::CreateSimpleStateOp op) {
@@ -532,54 +602,58 @@ class ToJson {
          })
          .Case<subop::CreateSortedViewOp>([&](subop::CreateSortedViewOp op) {
             result["subop"] = "create_sorted_view";
+            result["accesses"].push_back(getOperandReference(op.getToSort(), resolveBlockArgs));
             return result;
          })
          .Case<subop::CreateHashIndexedView>([&](subop::CreateHashIndexedView op) {
             result["subop"] = "create_hash_indexed_view";
+            result["accesses"].push_back(getOperandReference(op.getSource(), resolveBlockArgs));
             return result;
          })
          .Case<subop::CreateContinuousView>([&](subop::CreateContinuousView op) {
             result["subop"] = "create_continuous_view";
+            result["accesses"].push_back(getOperandReference(op.getSource(), resolveBlockArgs));
             return result;
          })
          .Case<subop::CreateSegmentTreeView>([&](subop::CreateSegmentTreeView op) {
             result["subop"] = "create_segment_tree_view";
+            result["accesses"].push_back(getOperandReference(op.getSource(), resolveBlockArgs));
             return result;
          })
 
          .Case<subop::MaterializeOp>([&](subop::MaterializeOp op) {
             result["subop"] = "materialize";
-            result["accesses"].push_back(getOperandReference(op.getState()));
+            result["accesses"].push_back(getOperandReference(op.getState(), resolveBlockArgs));
             result["mapping"] = serializeRefMapping(op.getMapping());
             return result;
          })
          .Case<subop::LookupOrInsertOp>([&](subop::LookupOrInsertOp op) {
             result["subop"] = "lookup_or_insert";
-            result["accesses"].push_back(getOperandReference(op.getState()));
+            result["accesses"].push_back(getOperandReference(op.getState(), resolveBlockArgs));
             result["reference"] = columnToJSON(op.getRef());
             return result;
          })
          .Case<subop::InsertOp>([&](subop::InsertOp op) {
             result["subop"] = "insert";
-            result["accesses"].push_back(getOperandReference(op.getState()));
+            result["accesses"].push_back(getOperandReference(op.getState(), resolveBlockArgs));
             result["mapping"] = serializeRefMapping(op.getMapping());
             return result;
          })
          .Case<subop::LookupOp>([&](subop::LookupOp op) {
             result["subop"] = "lookup";
-            result["accesses"].push_back(getOperandReference(op.getState()));
+            result["accesses"].push_back(getOperandReference(op.getState(), resolveBlockArgs));
             result["reference"] = columnToJSON(op.getRef());
             return result;
          })
          .Case<subop::GetBeginReferenceOp>([&](subop::GetBeginReferenceOp op) {
             result["subop"] = "get_begin_reference";
-            result["accesses"].push_back(getOperandReference(op.getState()));
+            result["accesses"].push_back(getOperandReference(op.getState(), resolveBlockArgs));
             result["reference"] = columnToJSON(op.getRef());
             return result;
          })
          .Case<subop::GetEndReferenceOp>([&](subop::GetEndReferenceOp op) {
             result["subop"] = "get_end_reference";
-            result["accesses"].push_back(getOperandReference(op.getState()));
+            result["accesses"].push_back(getOperandReference(op.getState(), resolveBlockArgs));
             result["reference"] = columnToJSON(op.getRef());
             return result;
          })
@@ -621,7 +695,7 @@ class ToJson {
             result["reference"] = columnToJSON(op.getRef());
             result["updated"] = nlohmann::json::array();
             for (auto [member, computed] : llvm::zip(op.getMembers(), op.getRegion().front().getTerminator()->getOperands())) {
-               result["updated"].push_back({{"member", mlir::cast<mlir::StringAttr>(member).str()}, {"expression", convertExpression(computed, [&](mlir::BlockArgument ba) {
+               result["updated"].push_back({{"member", mlir::cast<mlir::StringAttr>(member).str()}, {"expression", convertExpression(computed, [&](mlir::BlockArgument ba, bool isExpression) {
                                                                                                         if (ba.getOwner()->getParentOp() == op.getOperation()) {
                                                                                                            auto argNr = ba.getArgNumber();
                                                                                                            if (argNr < op.getColumns().size()) {
@@ -632,7 +706,11 @@ class ToJson {
                                                                                                               return nlohmann::json{{"type", "expression_leaf"}, {"leaf_type", "member"}, {"member", mlir::cast<mlir::StringAttr>(op.getMembers()[argNr - op.getColumns().size()]).str()}};
                                                                                                            }
                                                                                                         } else {
-                                                                                                           return nlohmann::json{{"type", "expression_leaf"}, {"leaf_type", "unknown"}};
+                                                                                                           if (resolveBlockArgs) {
+                                                                                                              return resolveBlockArgs(ba, true);
+                                                                                                           } else {
+                                                                                                              return nlohmann::json{{"type", "expression_leaf"}, {"leaf_type", "unknown"}};
+                                                                                                           }
                                                                                                         }
                                                                                                      })}});
             }
@@ -652,13 +730,17 @@ class ToJson {
    std::string run() {
       moduleOp = moduleOp.clone();
       mlir::func::FuncOp func = mlir::dyn_cast_or_null<mlir::func::FuncOp>(&moduleOp.getRegion().front().front());
-      nlohmann::json plan;
+      auto plan = nlohmann::json::array();
       func->walk([&](mlir::Operation* operation) {
          if (auto setResultOp = mlir::dyn_cast_or_null<subop::SetResultOp>(operation)) {
             if (auto relalgQuery = mlir::dyn_cast_or_null<subop::ExecutionGroupOp>(setResultOp.getState().getDefiningOp())) {
                for (auto& op : relalgQuery.getSubOps().front()) {
                   if (!mlir::isa<subop::ExecutionGroupReturnOp>(&op)) {
-                     plan.push_back(convertOperation(&op));
+                     auto r = convertOperation(&op);
+                     if (!plan.empty()) {
+                        r["outerEdges"].push_back({{"type", "order"}, {"input", {{"type", "node"}, {"ref", plan[plan.size() - 1]["ref"]}}}, {"output", {{"type", "node"}, {"ref", r["ref"]}}}});
+                     }
+                     plan.push_back(r);
                   }
                }
             }
