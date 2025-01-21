@@ -115,15 +115,16 @@ void Tracer::dumpInternal() {
    for (auto& r : traceRecords) {
       assert(r.eventId < eventDescriptions.size());
 #ifdef TRACER
-      auto *event = eventDescriptions[r.eventId];
+      auto* event = eventDescriptions[r.eventId];
       auto recordObject = nlohmann::json::object();
       event->writeOut(&r, recordObject);
       result.push_back(recordObject);
 #endif
    }
-   auto fileContent=nlohmann::json::object();
-   fileContent["fileType"]="traceOnly";
-   fileContent["trace"]=result;
+   auto fileContent = nlohmann::json::object();
+   fileContent["fileType"] = "traceOnly";
+   fileContent["version"] = "0.0.3";
+   fileContent["trace"] = result;
    out << to_string(fileContent) << std::endl;
 }
 } // end namespace utility

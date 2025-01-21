@@ -280,8 +280,7 @@ int main(int argc, char** argv) {
       mlir::Block block;
       mlir::AsmParserState state;
       if (mlir::parseAsmSourceFile(sourceMgr, &block, mlir::ParserConfig(&context), &state).failed()) {
-         llvm::errs() << "Error can't load file " << inputFilename << "\n";
-         return 3;
+         break;
       }
       const auto* basePtr = sourceMgr.getBufferInfo(bufferId).Buffer->getBuffer().data();
       std::vector<MLIRElement> elements;

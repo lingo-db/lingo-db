@@ -430,7 +430,8 @@ class ToJson {
 
             result["results"] = nlohmann::json::array();
             for (auto t : executionStepOp.getSubOps().front().getTerminator()->getOperands()) {
-               result["results"].push_back(getOperandReference(t, resolveBlockArgs));
+               result["results"].push_back(nlohmann::json{{"type", convertDataType(t.getType())}});
+               result["innerEdges"].push_back({{"type", "resultEdge"}, {"input", getOperandReference(t, resolveBlockArgs)}, {"output", {{"type", "parentResult"},  {"resnr", result["results"].size() - 1}}}});
             }
             return result;
          })
