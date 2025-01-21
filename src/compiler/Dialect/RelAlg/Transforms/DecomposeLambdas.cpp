@@ -240,6 +240,9 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
 
       getOperation().walk([&](relalg::OuterJoinOp op) {
          auto* terminator = op.getRegion().front().getTerminator();
+         if(terminator->getNumOperands()==0){
+            return;
+         }
          auto retval = terminator->getOperand(0);
          auto availableLeft = op.getChildren()[0].getAvailableColumns();
          auto availableRight = op.getChildren()[1].getAvailableColumns();
