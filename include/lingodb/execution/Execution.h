@@ -6,6 +6,7 @@
 #include "Instrumentation.h"
 #include "ResultProcessing.h"
 #include "Timing.h"
+#include "lingodb/scheduler/Scheduler.h"
 namespace mlir {
 class ModuleOp;
 } // namespace mlir
@@ -122,6 +123,21 @@ class QueryExecuter {
    static std::unique_ptr<QueryExecuter> createDefaultExecuter(std::unique_ptr<QueryExecutionConfig> queryExecutionConfig, runtime::Session& session);
    virtual ~QueryExecuter() {}
 };
+class QueryExecutionTask : public lingodb::scheduler::Task {
+   std::unique_ptr<QueryExecuter> queryExecutor;
+
+   public:
+   QueryExecutionTask(std::unique_ptr<QueryExecuter> queryExecutor) : queryExecutor(std::move(queryExecutor)) {}
+   void run() override {
+      if (workExhausted.exchange(true)) {
+         return;
+      }
+      queryExecutor->execute();
+      //todo: scheduler (we shouldn't stop the scheduler here, but easiest for prototype)
+      lingodb::scheduler::stopCurrentScheduler();
+   }
+};
 
 } // namespace lingodb::execution
+
 #endif //LINGODB_EXECUTION_EXECUTION_H

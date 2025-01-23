@@ -7,6 +7,7 @@
 
 #include "Session.h"
 
+#include <lingodb/scheduler/Scheduler.h>
 #include <oneapi/tbb.h>
 namespace lingodb::runtime {
 class Database;
@@ -19,11 +20,11 @@ class ExecutionContext {
    std::unordered_map<uint32_t, uint8_t*> results;
    std::unordered_map<uint32_t, int64_t> tupleCounts;
    tbb::concurrent_hash_map<void*, State> states;
-   tbb::enumerable_thread_specific<std::unordered_map<size_t, State>> allocators;
+   std::vector<std::unordered_map<size_t, State>> allocators;
    Session& session;
 
    public:
-   ExecutionContext(Session& session) : session(session) {}
+   ExecutionContext(Session& session) : session(session) { allocators.resize(lingodb::scheduler::getNumWorkers()); }
    Session& getSession() {
       return session;
    }
@@ -52,7 +53,7 @@ class ExecutionContext {
       states.insert({s.ptr, s});
    }
    State& getAllocator(size_t group) {
-      return allocators.local()[group];
+      return allocators[lingodb::scheduler::currentWorkerId()][group];
    }
    void reset();
    ~ExecutionContext();

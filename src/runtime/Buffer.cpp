@@ -1,7 +1,6 @@
 #include "lingodb/runtime/Buffer.h"
 #include "lingodb/utility/Tracer.h"
 #include <iostream>
-#include <oneapi/tbb.h>
 namespace {
 static utility::Tracer::Event iterateEvent("FlexibleBuffer", "iterateParallel");
 static utility::Tracer::Event bufferIteratorEvent("BufferIterator", "iterate");
@@ -20,6 +19,13 @@ void lingodb::runtime::BufferIterator::destroy(lingodb::runtime::BufferIterator*
    delete iterator;
 }
 void lingodb::runtime::FlexibleBuffer::iterateBuffersParallel(const std::function<void(Buffer)>& fn) {
+   //todo: scheduler
+   for (auto& buffer : buffers) {
+      utility::Tracer::Trace trace(iterateEvent);
+      fn(buffer);
+      trace.stop();
+   }
+   /*
    tbb::parallel_for_each(buffers.begin(), buffers.end(), [&](Buffer buffer, tbb::feeder<Buffer>& feeder) {
       if (buffer.numElements <= 20000) {
          utility::Tracer::Trace trace(iterateEvent);
@@ -35,6 +41,7 @@ void lingodb::runtime::FlexibleBuffer::iterateBuffersParallel(const std::functio
          }
       }
    });
+   */
 }
 class FlexibleBufferIterator : public lingodb::runtime::BufferIterator {
    lingodb::runtime::FlexibleBuffer& flexibleBuffer;
@@ -83,8 +90,8 @@ void lingodb::runtime::Buffer::iterate(bool parallel, lingodb::runtime::Buffer b
    size_t len = buffer.numElements / typeSize;
 
    auto range = tbb::blocked_range<size_t>(0, len);
-
-   if (parallel) {
+   //todo: scheduler
+   if (parallel&&false) {
       tbb::parallel_for(range, [&](tbb::blocked_range<size_t> r) {
          utility::Tracer::Trace trace(iterateEvent);
          //trace.setMetaData(r.size());

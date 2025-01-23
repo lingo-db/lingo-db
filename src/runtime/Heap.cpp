@@ -62,8 +62,8 @@ void lingodb::runtime::Heap::destroy(Heap* h) {
 lingodb::runtime::Heap* lingodb::runtime::Heap::merge(lingodb::runtime::ThreadLocal* threadLocal) {
    utility::Tracer::Trace trace(mergeHeapEvent);
    Heap* first = nullptr;
-   for (auto* ptr : threadLocal->getTls()) {
-      auto* current = reinterpret_cast<Heap*>(ptr);
+   for (auto* current : threadLocal->getTls<Heap>()) {
+      if(!current) continue;
       if (!first) {
          first = current;
       } else {
