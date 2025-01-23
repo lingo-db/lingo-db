@@ -45,8 +45,8 @@ lingodb::runtime::BufferIterator* lingodb::runtime::Hashtable::createIterator() 
 lingodb::runtime::Hashtable* lingodb::runtime::Hashtable::merge(lingodb::runtime::ThreadLocal* threadLocal, bool (*isEq)(uint8_t*, uint8_t*), void (*merge)(uint8_t*, uint8_t*)) {
    utility::Tracer::Trace mergeHt(mergeEvent);
    lingodb::runtime::Hashtable* first = nullptr;
-   for (auto* ptr : threadLocal->getTls()) {
-      auto* current = reinterpret_cast<lingodb::runtime::Hashtable*>(ptr);
+   for (auto* current : threadLocal->getTls<lingodb::runtime::Hashtable>()) {
+      if(!current) continue;
       if (!first) {
          first = current;
       } else {

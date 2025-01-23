@@ -1,11 +1,14 @@
 #include "lingodb/compiler/mlir-support/eval.h"
 #include "lingodb/execution/Execution.h"
 #include "lingodb/execution/Timing.h"
+#include "lingodb/scheduler/Scheduler.h"
 #include "lingodb/utility/Setting.h"
 
+#include <csignal>
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <lingodb/utility/Tracer.h>
 
 namespace {
 utility::GlobalSetting<bool> eagerLoading("system.eager_loading", false);
@@ -30,8 +33,12 @@ int main(int argc, char** argv) {
    }
    unsetenv("PERF_BUILDID_DIR");
    queryExecutionConfig->timingProcessor = std::make_unique<execution::TimingPrinter>(inputFileName);
+
+   auto scheduler = scheduler::createScheduler();
+   scheduler->start();
    auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), *session);
    executer->fromFile(inputFileName);
-   executer->execute();
+   scheduler->enqueueTask(std::make_unique<execution::QueryExecutionTask>(std::move(executer)));
+   scheduler->join();
    return 0;
 }

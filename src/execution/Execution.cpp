@@ -17,7 +17,7 @@
 
 #include "json.h"
 
-#include <oneapi/tbb.h>
+//#include <oneapi/tbb.h>
 
 #include <chrono>
 #include <sstream>
@@ -235,28 +235,16 @@ class DefaultQueryExecuter : public QueryExecuter {
    using QueryExecuter::QueryExecuter;
    void execute() override {
       bool parallelismEnabled = queryExecutionConfig->parallel;
-      size_t numThreads = tbb::info::default_concurrency() / 2;
+      //todo: scheduler (allow setting number of threads)
+      //size_t numThreads = tbb::info::default_concurrency() / 2;
       if (const char* mode = std::getenv("LINGODB_PARALLELISM")) {
          if (std::string(mode) == "OFF") {
             parallelismEnabled = false;
          } else {
-            numThreads = std::stol(mode);
+            //numThreads = std::stol(mode);
          }
       }
-      tbb::global_control c(tbb::global_control::max_allowed_parallelism, numThreads);
-      int sum = oneapi::tbb::parallel_reduce(
-         oneapi::tbb::blocked_range<int>(1, 100000), 0,
-         [](oneapi::tbb::blocked_range<int> const& r, int init) -> int {
-            for (int v = r.begin(); v != r.end(); v++) {
-               init += v;
-            }
-            return init;
-         },
-         [](int lhs, int rhs) -> int {
-            return lhs + rhs;
-         });
 
-      if (sum < 0) { exit(0); }
       if (!executionContext) {
          std::cerr << "Execution Context is missing" << std::endl;
          exit(1);
@@ -305,7 +293,7 @@ class DefaultQueryExecuter : public QueryExecuter {
 
       if (!frontend.isParallelismAllowed() || !parallelismEnabled) {
          moduleOp->setAttr("subop.sequential", mlir::UnitAttr::get(moduleOp->getContext()));
-         numThreads = 1;
+         //numThreads = 1;
       }
       for (auto& loweringStepPtr : queryExecutionConfig->loweringSteps) {
          auto& loweringStep = *loweringStepPtr;

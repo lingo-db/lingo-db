@@ -34,8 +34,8 @@ lingodb::runtime::PreAggregationHashtableFragment* lingodb::runtime::PreAggregat
    return fragment;
 }
 lingodb::runtime::PreAggregationHashtableFragment::~PreAggregationHashtableFragment() {
-   for(size_t i=0;i<numOutputs;i++){
-      if(outputs[i]){
+   for (size_t i = 0; i < numOutputs; i++) {
+      if (outputs[i]) {
          delete outputs[i];
       }
    }
@@ -48,8 +48,10 @@ lingodb::runtime::PreAggregationHashtable* lingodb::runtime::PreAggregationHasht
    using Entry = lingodb::runtime::PreAggregationHashtableFragment::Entry;
    constexpr size_t numPartitions = lingodb::runtime::PreAggregationHashtableFragment::numOutputs;
    std::vector<FlexibleBuffer*> outputs[numPartitions];
-   for (auto* ptr : threadLocal->getTls()) {
-      auto* fragment = reinterpret_cast<PreAggregationHashtableFragment*>(ptr);
+   for (auto* fragment : threadLocal->getTls<PreAggregationHashtableFragment>()) {
+      if (!fragment) {
+         continue;
+      }
       for (size_t i = 0; i < numPartitions; i++) {
          auto* current = fragment->outputs[i];
          if (current) {
@@ -59,8 +61,8 @@ lingodb::runtime::PreAggregationHashtable* lingodb::runtime::PreAggregationHasht
    }
    auto* res = new PreAggregationHashtable();
    context->registerState({res, [](void* ptr) { delete reinterpret_cast<PreAggregationHashtable*>(ptr); }});
-
-   tbb::parallel_for_each(&outputs[0], &outputs[numPartitions], [&](const std::vector<FlexibleBuffer*>& input) {
+   //todo: scheduler
+   for (auto& input : outputs) {
       size_t id = &input - &outputs[0];
       utility::Tracer::Trace trace(mergePartitionEvent);
       size_t totalValues = 0;
@@ -116,7 +118,7 @@ lingodb::runtime::PreAggregationHashtable* lingodb::runtime::PreAggregationHasht
       deallocTrace.stop();
       std::unique_lock<std::mutex> lock(mutex);
       res->buffer.merge(localBuffer);
-   });
+   }
    return res;
 }
 lingodb::runtime::BufferIterator* lingodb::runtime::PreAggregationHashtable::createIterator() {

@@ -4,12 +4,11 @@
 
 #include "lingodb/utility/Tracer.h"
 
+#include "lingodb/scheduler/Scheduler.h"
 #include <arrow/array.h>
 #include <arrow/table.h>
-#include <oneapi/tbb.h>
 namespace {
 static utility::Tracer::Event processMorsel("DataSourceIteration", "processMorsel");
-static utility::Tracer::Event tbbForEach("DataSourceIteration", "tbbForEach");
 
 static utility::Tracer::Event processMorselSingle("DataSourceIteration", "processMorselSingle");
 
@@ -48,6 +47,43 @@ static void access(std::vector<size_t> colIds, lingodb::runtime::RecordBatchInfo
    }
    info->numRows = currChunk->num_rows();
 }
+class ScanBatchesTask : public lingodb::scheduler::Task {
+   std::vector<std::shared_ptr<arrow::RecordBatch>>& batches;
+   std::vector<size_t> colIds;
+   std::function<void(lingodb::runtime::RecordBatchInfo*)> cb;
+   std::atomic<size_t> startIndex{0};
+   std::vector<lingodb::runtime::RecordBatchInfo*> batchInfos;
+
+   public:
+   ScanBatchesTask(std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, std::vector<size_t> colIds, const std::function<void(lingodb::runtime::RecordBatchInfo*)>& cb) : batches(batches), colIds(colIds), cb(cb) {
+      for (size_t i = 0; i < lingodb::scheduler::getNumWorkers(); i++) {
+         batchInfos.push_back(reinterpret_cast<lingodb::runtime::RecordBatchInfo*>(malloc(sizeof(lingodb::runtime::RecordBatchInfo) + sizeof(lingodb::runtime::ColumnInfo) * colIds.size())));
+      }
+   }
+   void run() override {
+      size_t localStartIndex = startIndex.fetch_add(1);
+      if (localStartIndex >= batches.size()) {
+         workExhausted.store(true);
+         return;
+      }
+      auto& batch = batches[localStartIndex];
+      auto batchInfo = batchInfos[lingodb::scheduler::currentWorkerId()];
+      utility::Tracer::Trace trace(processMorsel);
+      access(colIds, batchInfo, batch);
+      cb(batchInfo);
+      trace.stop();
+   }
+   ~ScanBatchesTask() {
+      utility::Tracer::Trace cleanUpTrace(cleanupTLS);
+      for (auto* bI : batchInfos) {
+         if (bI) {
+            free(bI);
+         }
+      }
+      cleanUpTrace.stop();
+   }
+};
+
 class RecordBatchTableSource : public lingodb::runtime::DataSource {
    std::vector<std::shared_ptr<arrow::RecordBatch>> batches; //todo: efficiency?
    std::unordered_map<std::string, size_t> memberToColumnId;
@@ -56,23 +92,7 @@ class RecordBatchTableSource : public lingodb::runtime::DataSource {
    RecordBatchTableSource(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, std::unordered_map<std::string, size_t> memberToColumnId) : batches(batches), memberToColumnId(memberToColumnId) {}
    void iterate(bool parallel, std::vector<size_t> colIds, const std::function<void(lingodb::runtime::RecordBatchInfo*)>& cb) override {
       if (parallel) {
-         tbb::enumerable_thread_specific<lingodb::runtime::RecordBatchInfo*> batchInfo([&]() { return reinterpret_cast<lingodb::runtime::RecordBatchInfo*>(malloc(sizeof(lingodb::runtime::RecordBatchInfo) + sizeof(lingodb::runtime::ColumnInfo) * colIds.size())); });
-         utility::Tracer::Trace tbbTrace(tbbForEach);
-         tbb::parallel_for_each(batches.begin(), batches.end(), [&](const std::shared_ptr<arrow::RecordBatch>& batch) {
-            utility::Tracer::Trace trace(processMorsel);
-            access(colIds, batchInfo.local(), batch);
-            cb(batchInfo.local());
-            trace.stop();
-         });
-         tbbTrace.stop();
-         utility::Tracer::Trace cleanUpTrace(cleanupTLS);
-
-         for (auto* bI : batchInfo) {
-            if (bI) {
-               free(bI);
-            }
-         }
-         cleanUpTrace.stop();
+         lingodb::scheduler::awaitChildTask(std::make_unique<ScanBatchesTask>(batches, colIds, cb));
       } else {
          auto* batchInfo = reinterpret_cast<lingodb::runtime::RecordBatchInfo*>(malloc(sizeof(lingodb::runtime::RecordBatchInfo) + sizeof(lingodb::runtime::ColumnInfo) * colIds.size()));
 
