@@ -1,5 +1,6 @@
 #ifndef LINGODB_EXECUTION_EXECUTION_H
 #define LINGODB_EXECUTION_EXECUTION_H
+#include <condition_variable>
 #include "Backend.h"
 #include "Error.h"
 #include "Frontend.h"
@@ -123,8 +124,10 @@ class QueryExecuter {
    static std::unique_ptr<QueryExecuter> createDefaultExecuter(std::unique_ptr<QueryExecutionConfig> queryExecutionConfig, runtime::Session& session);
    virtual ~QueryExecuter() {}
 };
-class QueryExecutionTask : public lingodb::scheduler::Task {
+class QueryExecutionTask : public lingodb::scheduler::EntryTask {
    std::unique_ptr<QueryExecuter> queryExecutor;
+   std::condition_variable finished;
+   std::mutex mutex;
 
    public:
    QueryExecutionTask(std::unique_ptr<QueryExecuter> queryExecutor) : queryExecutor(std::move(queryExecutor)) {}
@@ -133,9 +136,13 @@ class QueryExecutionTask : public lingodb::scheduler::Task {
          return;
       }
       queryExecutor->execute();
-      //todo: scheduler (we shouldn't stop the scheduler here, but easiest for prototype)
-      lingodb::scheduler::stopCurrentScheduler();
+      finished.notify_one();
    }
+
+   void await() override {
+      std::unique_lock lk(mutex);
+      finished.wait(lk);
+   };
 };
 
 } // namespace lingodb::execution

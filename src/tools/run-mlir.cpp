@@ -4,6 +4,7 @@
 
 #include "lingodb/execution/Execution.h"
 #include "lingodb/compiler/mlir-support/eval.h"
+#include "lingodb/scheduler/Scheduler.h"
 
 int main(int argc, char** argv) {
    using namespace lingodb;
@@ -32,9 +33,13 @@ int main(int argc, char** argv) {
       queryExecutionConfig->loweringSteps.clear();
    }
    queryExecutionConfig->timingProcessor = std::make_unique<execution::TimingPrinter>(inputFileName);
-   auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), *session);
 
+   auto scheduler = scheduler::createScheduler();
+   scheduler->start();
+   auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), *session);
    executer->fromFile(inputFileName);
-   executer->execute();
+   scheduler::awaitEntryTask(std::make_unique<execution::QueryExecutionTask>(std::move(executer)));
+   lingodb::scheduler::stopCurrentScheduler();
+   scheduler->join();
    return 0;
 }

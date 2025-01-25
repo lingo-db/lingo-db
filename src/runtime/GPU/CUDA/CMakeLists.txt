@@ -26,5 +26,5 @@ set_target_properties(CUDA-lingodb-rt PROPERTIES
 target_include_directories(CUDA-lingodb-rt PUBLIC ${CUDAToolkit_INCLUDE_DIRS})
 target_compile_features(CUDA-lingodb-rt PUBLIC cuda_std_17)
 target_compile_options(CUDA-lingodb-rt PRIVATE -O3 --ptxas-options=-v -Wall)
-target_link_libraries(CUDA-lingodb-rt PRIVATE CUDA::cudart CUDA::cuda_driver tbb)
+target_link_libraries(CUDA-lingodb-rt PRIVATE CUDA::cudart CUDA::cuda_driver)
 

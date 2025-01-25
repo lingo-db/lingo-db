@@ -2,7 +2,7 @@
 #include "lingodb/runtime/helpers.h"
 #include "lingodb/utility/Tracer.h"
 #include <iostream>
-#include <oneapi/tbb.h>
+
 namespace {
 static utility::Tracer::Event createEvent("OHtFragment", "create");
 static utility::Tracer::Event mergeEvent("Oht", "merge");
@@ -10,6 +10,25 @@ static utility::Tracer::Event mergePartitionEvent("Oht", "mergePartition");
 static utility::Tracer::Event mergeAllocate("Oht", "mergeAlloc");
 static utility::Tracer::Event mergeDeallocate("Oht", "mergeDealloc");
 
+
+class FragmentOutputsTask : public lingodb::scheduler::Task {
+   std::vector<lingodb::runtime::FlexibleBuffer*> *outputs;
+   std::function<void(std::vector<lingodb::runtime::FlexibleBuffer*>&)> cb;
+   std::atomic<size_t> startIndex{0};
+
+   public:
+   FragmentOutputsTask(std::vector<lingodb::runtime::FlexibleBuffer*> *outputs, std::function<void(std::vector<lingodb::runtime::FlexibleBuffer*>&)> cb) : outputs(outputs), cb(cb) {}
+   void run() override {
+      constexpr size_t numPartitions = lingodb::runtime::PreAggregationHashtableFragment::numOutputs;
+      size_t localStartIndex = startIndex.fetch_add(1);
+      if (localStartIndex >= numPartitions) {
+         workExhausted.store(true);
+         return;
+      }
+      auto& batch = outputs[localStartIndex];
+      cb(batch);
+   }
+};
 } // end namespace
 lingodb::runtime::PreAggregationHashtableFragment::Entry* lingodb::runtime::PreAggregationHashtableFragment::insert(size_t hash) {
    constexpr size_t outputMask = numOutputs - 1;
@@ -61,8 +80,7 @@ lingodb::runtime::PreAggregationHashtable* lingodb::runtime::PreAggregationHasht
    }
    auto* res = new PreAggregationHashtable();
    context->registerState({res, [](void* ptr) { delete reinterpret_cast<PreAggregationHashtable*>(ptr); }});
-   //todo: scheduler
-   for (auto& input : outputs) {
+   auto handleMerge = [&](std::vector<FlexibleBuffer*>& input) {
       size_t id = &input - &outputs[0];
       utility::Tracer::Trace trace(mergePartitionEvent);
       size_t totalValues = 0;
@@ -118,7 +136,9 @@ lingodb::runtime::PreAggregationHashtable* lingodb::runtime::PreAggregationHasht
       deallocTrace.stop();
       std::unique_lock<std::mutex> lock(mutex);
       res->buffer.merge(localBuffer);
-   }
+      trace.stop();
+   };
+   lingodb::scheduler::awaitChildTask(std::make_unique<FragmentOutputsTask>(outputs, handleMerge));
    return res;
 }
 lingodb::runtime::BufferIterator* lingodb::runtime::PreAggregationHashtable::createIterator() {

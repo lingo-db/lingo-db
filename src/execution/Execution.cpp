@@ -17,8 +17,6 @@
 
 #include "json.h"
 
-//#include <oneapi/tbb.h>
-
 #include <chrono>
 #include <sstream>
 #include <unordered_set>
@@ -234,17 +232,6 @@ class DefaultQueryExecuter : public QueryExecuter {
    public:
    using QueryExecuter::QueryExecuter;
    void execute() override {
-      bool parallelismEnabled = queryExecutionConfig->parallel;
-      //todo: scheduler (allow setting number of threads)
-      //size_t numThreads = tbb::info::default_concurrency() / 2;
-      if (const char* mode = std::getenv("LINGODB_PARALLELISM")) {
-         if (std::string(mode) == "OFF") {
-            parallelismEnabled = false;
-         } else {
-            //numThreads = std::stol(mode);
-         }
-      }
-
       if (!executionContext) {
          std::cerr << "Execution Context is missing" << std::endl;
          exit(1);
@@ -291,6 +278,7 @@ class DefaultQueryExecuter : public QueryExecuter {
          snapshotImportantStep("qopt", moduleOp, serializationState);
       }
 
+      bool parallelismEnabled = scheduler::getNumWorkers() != 1;
       if (!frontend.isParallelismAllowed() || !parallelismEnabled) {
          moduleOp->setAttr("subop.sequential", mlir::UnitAttr::get(moduleOp->getContext()));
          //numThreads = 1;

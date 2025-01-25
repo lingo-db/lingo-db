@@ -29,21 +29,8 @@ include(FindZLIB)
 message("Using ZLIB: ${ZLIB_INCLUDE_DIRS}")
 message("Using Python3: ${Python3_EXECUTABLE}")
 
-execute_process(
-        COMMAND ${Python3_EXECUTABLE} -c "import pkg_resources; print(pkg_resources.get_distribution('tbb').location+'/../../')"
-        OUTPUT_VARIABLE TBB_LIB_PATH
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-)
-execute_process(
-        COMMAND ${Python3_EXECUTABLE} -c "import pkg_resources; print(pkg_resources.get_distribution('tbb-devel').location+'/../../../include')"
-        OUTPUT_VARIABLE TBB_INCLUDE_DIR
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-)
 find_package(Arrow 19 REQUIRED)
-message("tbb: ${TBB_LIB_PATH} ${TBB_INCLUDE_DIR} ")
-include_directories(${TBB_INCLUDE_DIR})
 
-link_directories(${TBB_LIB_PATH})
 option(ENABLE_GPU_BACKEND "enable GPU backend" OFF)
 
 

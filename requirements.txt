@@ -1,3 +1,2 @@
 -f https://www.lingo-db.com/dev-dependencies/
-tbb-devel==2021.11.0
 setuptools
