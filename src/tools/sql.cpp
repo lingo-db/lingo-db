@@ -34,7 +34,7 @@ void handleQuery(runtime::Session& session, std::string sqlQuery, bool reportTim
    }
    auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), session);
    executer->fromData(sqlQuery);
-   executer->execute();
+   scheduler::awaitEntryTask(std::make_unique<execution::QueryExecutionTask>(std::move(executer)));
 }
 } // namespace
 int main(int argc, char** argv) {
@@ -54,6 +54,8 @@ int main(int argc, char** argv) {
    auto session = runtime::Session::createSession(std::string(argv[1]), true);
 
    lingodb::compiler::support::eval::init();
+   auto scheduler = scheduler::createScheduler();
+   scheduler->start();
    while (true) {
       //print prompt
       if (prompt){
@@ -76,6 +78,8 @@ int main(int argc, char** argv) {
       }
       handleQuery(*session, query.str(), reportTimes);
    }
+   lingodb::scheduler::stopCurrentScheduler();
+   scheduler->join();
 
    return 0;
 }

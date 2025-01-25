@@ -6,6 +6,7 @@
 #include "lingodb/compiler/mlir-support/eval.h"
 #include "lingodb/execution/Execution.h"
 #include "lingodb/execution/ResultProcessing.h"
+#include "lingodb/scheduler/Scheduler.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -659,9 +660,13 @@ void execute(std::string inputFileName, std::string databasePath, std::unordered
    queryExecutionConfig->timingProcessor = {};
    queryExecutionConfig->queryOptimizer = {};
    queryExecutionConfig->resultProcessor = std::make_unique<TupleCountResultProcessor>(tupleCounts);
+   auto scheduler = lingodb::scheduler::createScheduler();
+   scheduler->start();
    auto executer = lingodb::execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), *session);
    executer->fromFile(inputFileName);
-   executer->execute();
+   lingodb::scheduler::awaitEntryTask(std::make_unique<lingodb::execution::QueryExecutionTask>(std::move(executer)));
+   lingodb::scheduler::stopCurrentScheduler();
+   scheduler->join();
 }
 } // namespace
 

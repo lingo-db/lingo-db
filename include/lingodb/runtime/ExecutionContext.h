@@ -8,7 +8,7 @@
 #include "Session.h"
 
 #include <lingodb/scheduler/Scheduler.h>
-#include <oneapi/tbb.h>
+#include "ConcurrentMap.h"
 namespace lingodb::runtime {
 class Database;
 //some state required for query processing;
@@ -19,7 +19,7 @@ struct State {
 class ExecutionContext {
    std::unordered_map<uint32_t, uint8_t*> results;
    std::unordered_map<uint32_t, int64_t> tupleCounts;
-   tbb::concurrent_hash_map<void*, State> states;
+   ConcurrentMap<void*, State> states;
    std::vector<std::unordered_map<size_t, State>> allocators;
    Session& session;
 
@@ -50,7 +50,7 @@ class ExecutionContext {
    void clearResult(uint32_t id);
    void setTupleCount(uint32_t id, int64_t tupleCount);
    void registerState(const State& s) {
-      states.insert({s.ptr, s});
+      states.insert(s.ptr, s);
    }
    State& getAllocator(size_t group) {
       return allocators[lingodb::scheduler::currentWorkerId()][group];

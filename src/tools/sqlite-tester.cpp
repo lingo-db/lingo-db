@@ -247,7 +247,7 @@ void runStatement(runtime::Session& session, const std::vector<std::string>& lin
    queryExecutionConfig->resultProcessor = std::unique_ptr<execution::ResultProcessor>();
    auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), session);
    executer->fromData(statement);
-   executer->execute();
+   scheduler::awaitEntryTask(std::make_unique<execution::QueryExecutionTask>(std::move(executer)));
 }
 inline std::string& rtrim(std::string& s, const char* t) {
    s.erase(s.find_last_not_of(t) + 1);
@@ -357,16 +357,17 @@ void runQuery(runtime::Session& session, const std::vector<std::string>& lines, 
 
    auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), session);
    executer->fromData(query);
-   executer->execute();
-   std::string result = std::to_string(resultHasherRef.numValues) + " values hashing to " + resultHasherRef.hash + "\n";
-   auto resultLines = std::regex_replace(resultHasherRef.lines, std::regex("\\s+\n"), "\n");
-   if (result != expectedResult && !compareFuzzy(expectedResult, resultLines)) {
-      std::cerr << "executing:" << description << std::endl;
-      std::cerr << "ERROR: result did not match" << std::endl;
-      std::cerr << "RESULT: \"" << result << "\"" << std::endl;
-      std::cerr << "LINES: \"" << resultHasherRef.lines << "\"" << std::endl;
-      exit(1);
-   }
+   scheduler::awaitEntryTask(std::make_unique<execution::QueryExecutionTask>(std::move(executer)), [&]() {
+      std::string result = std::to_string(resultHasherRef.numValues) + " values hashing to " + resultHasherRef.hash + "\n";
+      auto resultLines = std::regex_replace(resultHasherRef.lines, std::regex("\\s+\n"), "\n");
+      if (result != expectedResult && !compareFuzzy(expectedResult, resultLines)) {
+         std::cerr << "executing:" << description << std::endl;
+         std::cerr << "ERROR: result did not match" << std::endl;
+         std::cerr << "RESULT: \"" << result << "\"" << std::endl;
+         std::cerr << "LINES: \"" << resultHasherRef.lines << "\"" << std::endl;
+         exit(1);
+      }
+   });
 }
 } // namespace
 int main(int argc, char** argv) {
@@ -381,6 +382,8 @@ int main(int argc, char** argv) {
    } else {
       session = runtime::Session::createSession();
    }
+   auto scheduler = scheduler::createScheduler();
+   scheduler->start();
    auto lines = filterLines(readTestFile(argv[1]));
    size_t line = 0;
    while (line < lines.size()) {
@@ -399,6 +402,8 @@ int main(int argc, char** argv) {
          line += 2;
       }
    }
+   lingodb::scheduler::stopCurrentScheduler();
+   scheduler->join();
 
    return 0;
 }

@@ -38,7 +38,8 @@ int main(int argc, char** argv) {
    scheduler->start();
    auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), *session);
    executer->fromFile(inputFileName);
-   scheduler->enqueueTask(std::make_unique<execution::QueryExecutionTask>(std::move(executer)));
+   scheduler::awaitEntryTask(std::make_unique<execution::QueryExecutionTask>(std::move(executer)));
+   lingodb::scheduler::stopCurrentScheduler();
    scheduler->join();
    return 0;
 }

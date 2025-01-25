@@ -115,8 +115,12 @@ struct TaskWrapper {
       return !task->hasWork() && nonCompletedFibers.load() == 0;
    }
 
-   void startFiber() {
-      nonCompletedFibers++;
+   bool startFiber() {
+      if (task->hasWork()) {
+         nonCompletedFibers++;
+         return true;
+      }
+      return false;
    }
 
    bool finishFiber() {
@@ -265,15 +269,19 @@ class SchedulerImpl : public Scheduler {
                dequeueTaskLocked(task);
             }
          }
+         // - If alreadyCoolingDown is true, last attempt to dequeue task is failed. task is appedn to coolingDown queue. need to remove it.
+         // - If alreadyCoolingDown is false, last attempt to dequeue task is ok. task is not inserted to coolingDown queue. no need to remove it.
          if (alreadyCoolingDown) {
             std::lock_guard lock(coolingDownMutex);
-            if (coolingDownTail) {
-               coolingDownTail->next = task;
-               task->prev = coolingDownTail;
-               coolingDownTail = task;
+            if (task->prev) {
+               task->prev->next = task->next;
             } else {
-               coolingDownHead = task;
-               coolingDownTail = task;
+               coolingDownHead = task->next;
+            }
+            if (task->next) {
+               task->next->prev = task->prev;
+            } else {
+               coolingDownTail = task->prev;
             }
          }
       }
@@ -413,11 +421,10 @@ class Worker {
                currTask = scheduler.getTask();
             }
 
-            if (currTask) {
+            if (currTask && currTask->startFiber()) {
                //work on (part of) (new) task
                currentFiber = fiberAllocator.allocate();
                assert(currentFiber);
-               currTask->startFiber();
                auto fiberDone = currentFiber->run(this, currTask, [&] {
                   currTask->task->run();
                });
@@ -491,6 +498,7 @@ void SchedulerImpl::enqueueTask(TaskWrapper* wrapper) {
    while (idleWorkers) {
       assert(cntr++ < numWorkers);
       Worker* currWorker = idleWorkers;
+      std::unique_lock workerLock(currWorker->mutex);
       currWorker->isInIdleList = false;
       idleWorkers = idleWorkers->nextIdleWorker;
 
@@ -528,11 +536,36 @@ void TaskWrapper::finalize() {
    }
 }
 
+void awaitEntryTask(std::unique_ptr<EntryTask> task, std::function<void()> beforeDestroyFn) {
+   TaskWrapper* taskWrapper = new TaskWrapper{std::move(task)};
+   scheduler->enqueueTask(taskWrapper);
+   (static_cast<EntryTask*>(taskWrapper->task.get()))->await();
+   if (beforeDestroyFn != nullptr) {
+      beforeDestroyFn();
+   }
+   scheduler->returnTask(taskWrapper);
+}
 void awaitChildTask(std::unique_ptr<Task> task) {
    currentWorker->awaitChildTask(std::move(task));
 }
 std::unique_ptr<Scheduler> createScheduler(size_t numWorkers) {
-   return std::make_unique<SchedulerImpl>(numWorkers);
+   // two ways of setting number of workers.
+   // - if provided actual param for createScheduler, this will override LINGODB_PARALLELISM system var
+   // - if no actual param provided, LINGODB_PARALLELISM is used
+   // - if no actual param and no LINGODB_PARALLELISM provided, hardware_concurrency() is used
+   if (numWorkers == 0) {
+      // LINGODB_PARALLELISM is one of ["OFF", positive integer]
+      numWorkers = std::thread::hardware_concurrency();
+      if (const char* mode = std::getenv("LINGODB_PARALLELISM")) {
+         if (std::string(mode) == "OFF") {
+            numWorkers = 1;
+         } else if (std::stol(mode) > 0) {
+            numWorkers = std::stol(mode);
+         }
+      }
+   }
+   auto s = std::make_unique<SchedulerImpl>(numWorkers);
+   return std::move(s);
 }
 void stopCurrentScheduler() {
    if (scheduler) {

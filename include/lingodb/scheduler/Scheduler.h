@@ -4,6 +4,7 @@
 #include "lingodb/scheduler/Task.h"
 #include <memory>
 #include <thread>
+#include <functional>
 namespace lingodb::scheduler {
 class Scheduler {
    protected:
@@ -22,8 +23,9 @@ class Scheduler {
    }
 };
 
-std::unique_ptr<Scheduler> createScheduler(size_t numWorkers = std::thread::hardware_concurrency());
+std::unique_ptr<Scheduler> createScheduler(size_t numWorkers = 0);
 void stopCurrentScheduler();
+void awaitEntryTask(std::unique_ptr<EntryTask> task, std::function<void()> beforeDestroyFn = nullptr);
 void awaitChildTask(std::unique_ptr<Task> task);
 
 

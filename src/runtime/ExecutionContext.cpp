@@ -13,9 +13,10 @@ void lingodb::runtime::ExecutionContext::setTupleCount(uint32_t id, int64_t tupl
    tupleCounts[id] = tupleCount;
 }
 void lingodb::runtime::ExecutionContext::reset() {
-   for (auto s : states) {
-      s.second.freeFn(s.second.ptr);
-   }
+   states.forEach([&](void* key, State value) {
+      value.freeFn(value.ptr);
+   });
+
    for (auto local : allocators) {
       for (auto a : local) {
          a.second.freeFn(a.second.ptr);
