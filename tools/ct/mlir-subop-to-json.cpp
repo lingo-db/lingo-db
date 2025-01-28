@@ -22,6 +22,8 @@
 
 #include "json.h"
 
+#include <llvm/IR/Type.h>
+
 namespace cl = llvm::cl;
 namespace {
 using namespace lingodb::compiler::dialect;
@@ -61,6 +63,51 @@ class ToJson {
    // Transform iu from symbol ref to string form
    std::string symbolRefToIuString(mlir::SymbolRefAttr symbolRefAttr) {
       return symbolRefAttr.getRootReference().str() + "::" + symbolRefAttr.getLeafReference().str();
+   }
+   nlohmann::json stateType(mlir::Type type) {
+      return llvm::TypeSwitch<mlir::Type, nlohmann::json>(type)
+         .Case<subop::TableType>([&](subop::TableType resultTableType) {
+            return "Table";
+         })
+         .Case<subop::ResultTableType>([&](subop::ResultTableType resultTableType) {
+            return "ResultTable";
+         })
+         .Case<subop::HashIndexedViewType>([&](subop::HashIndexedViewType resultTableType) {
+            return "HashIndexedView";
+         })
+         .Case<subop::HashMapType>([&](subop::HashMapType resultTableType) {
+            return "HashMap";
+         })
+         .Case<subop::HeapType>([&](subop::HeapType resultTableType) {
+            return "Heap";
+         })
+         .Case<subop::ArrayType>([&](subop::ArrayType arrayType) {
+            return "Array";
+         })
+         .Case<subop::BufferType>([&](subop::BufferType bufferType) {
+            return "Buffer";
+         })
+         .Case<subop::PreAggrHtType>([&](subop::PreAggrHtType preAggrHtType) {
+            return "PreAggrHt";
+         })
+         .Case<subop::PreAggrHtFragmentType>([&](subop::PreAggrHtFragmentType preAggrHtFragmentType) {
+            return "PreAggrHt";
+         })
+         .Case<subop::ContinuousViewType>([&](subop::ContinuousViewType continuousViewType) {
+            return "ContinuousView";
+         })
+         .Case<subop::SortedViewType>([&](subop::SortedViewType sortedViewType) {
+            return "SortedView";
+         })
+         .Case<subop::SimpleStateType>([&](subop::SimpleStateType resultTableType) {
+            return "SimpleState";
+         })
+         .Default([](mlir::Type type) {
+            llvm::errs() << "state type could not be converted ";
+            type.dump();
+            llvm::errs() << "\n";
+            return nlohmann::json{};
+         });
    }
 
    // Convert mlir Type to umbra json type
@@ -431,7 +478,7 @@ class ToJson {
             result["results"] = nlohmann::json::array();
             for (auto t : executionStepOp.getSubOps().front().getTerminator()->getOperands()) {
                result["results"].push_back(nlohmann::json{{"type", convertDataType(t.getType())}});
-               result["innerEdges"].push_back({{"type", "resultEdge"}, {"input", getOperandReference(t, resolveBlockArgs)}, {"output", {{"type", "parentResult"},  {"resnr", result["results"].size() - 1}}}});
+               result["innerEdges"].push_back({{"type", "resultEdge"}, {"input", getOperandReference(t, resolveBlockArgs)}, {"output", {{"type", "parentResult"}, {"resnr", result["results"].size() - 1}}}});
             }
             return result;
          })
@@ -452,6 +499,7 @@ class ToJson {
          })
          .Case<subop::MergeOp>([&](subop::MergeOp op) {
             result["subop"] = "merge";
+            result["stateType"] = stateType(op.getRes().getType());
             result["accesses"].push_back(getOperandReference(op.getThreadLocal(), resolveBlockArgs));
             return result;
          })
@@ -470,6 +518,7 @@ class ToJson {
          })
          .Case<subop::ScanRefsOp>([&](subop::ScanRefsOp op) {
             result["subop"] = "scan_ref";
+            result["stateType"] = stateType(op.getState().getType());
             result["reference"] = columnToJSON(op.getRef());
             result["accesses"].push_back(getOperandReference(op.getState(), resolveBlockArgs));
             return result;
@@ -624,24 +673,28 @@ class ToJson {
 
          .Case<subop::MaterializeOp>([&](subop::MaterializeOp op) {
             result["subop"] = "materialize";
+            result["stateType"] = stateType(op.getState().getType());
             result["accesses"].push_back(getOperandReference(op.getState(), resolveBlockArgs));
             result["mapping"] = serializeRefMapping(op.getMapping());
             return result;
          })
          .Case<subop::LookupOrInsertOp>([&](subop::LookupOrInsertOp op) {
             result["subop"] = "lookup_or_insert";
+            result["stateType"] = stateType(op.getState().getType());
             result["accesses"].push_back(getOperandReference(op.getState(), resolveBlockArgs));
             result["reference"] = columnToJSON(op.getRef());
             return result;
          })
          .Case<subop::InsertOp>([&](subop::InsertOp op) {
             result["subop"] = "insert";
+            result["stateType"] = stateType(op.getState().getType());
             result["accesses"].push_back(getOperandReference(op.getState(), resolveBlockArgs));
             result["mapping"] = serializeRefMapping(op.getMapping());
             return result;
          })
          .Case<subop::LookupOp>([&](subop::LookupOp op) {
             result["subop"] = "lookup";
+            result["stateType"] = stateType(op.getState().getType());
             result["accesses"].push_back(getOperandReference(op.getState(), resolveBlockArgs));
             result["reference"] = columnToJSON(op.getRef());
             return result;
