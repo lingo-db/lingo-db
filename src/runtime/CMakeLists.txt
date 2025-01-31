@@ -42,7 +42,7 @@ else()
 endif(ENABLE_GPU_BACKEND)
 
 target_compile_definitions(runtime PUBLIC ${COMPILE_DEFS} )
-target_link_libraries(runtime PRIVATE tbb arrow)
+target_link_libraries(runtime PRIVATE tbb Arrow::arrow_static)
 
 add_subdirectory(GPU)
 target_link_libraries(runtime PUBLIC GPU-rt)

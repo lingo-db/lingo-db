@@ -22,7 +22,7 @@
 //CHECK: int(0)
 //CHECK: float(0)
 //CHECK: float(0)
-//CHECK: decimal(0.E-10)
+//CHECK: decimal(0E-10)
 //CHECK: int(100)
 //CHECK: int(100)
 //CHECK: float(10000)

@@ -14,16 +14,7 @@ execute_process(
         OUTPUT_VARIABLE MLIR_DIR
         OUTPUT_STRIP_TRAILING_WHITESPACE
 )
-execute_process(
-        COMMAND ${Python3_EXECUTABLE} -c "import pyarrow as pa; print(pa.get_include())"
-        OUTPUT_VARIABLE ARROW_INCLUDE_DIR
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-)
-execute_process(
-        COMMAND ${Python3_EXECUTABLE} -c "import pyarrow as pa; print(pa.get_library_dirs()[0])"
-        OUTPUT_VARIABLE ARROW_LIB_PATH
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-)
+
 execute_process(
         COMMAND ${Python3_EXECUTABLE} -c "import pkg_resources; print(pkg_resources.get_distribution('tbb').location+'/../../')"
         OUTPUT_VARIABLE TBB_LIB_PATH
@@ -35,12 +26,10 @@ execute_process(
         OUTPUT_STRIP_TRAILING_WHITESPACE
 )
 set(LLVM_BINARY_DIR "${MLIR_DIR}/../../../")
-message("arrow: ${ARROW_INCLUDE_DIR} ${ARROW_LIB_PATH}")
+find_package(Arrow 19 REQUIRED)
 message("tbb: ${TBB_LIB_PATH} ${TBB_INCLUDE_DIR} ")
-include_directories(${ARROW_INCLUDE_DIR})
 include_directories(${TBB_INCLUDE_DIR})
 
-link_directories(${ARROW_LIB_PATH})
 link_directories(${TBB_LIB_PATH})
 option(ENABLE_GPU_BACKEND "enable GPU backend" OFF)
 

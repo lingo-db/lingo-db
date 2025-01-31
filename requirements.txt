@@ -1,7 +1,6 @@
 -f https://www.lingo-db.com/dev-dependencies/
 lingodb-llvm==0.0.3
 numpy==1.26.4
-pyarrow==14.0.0
 lit==18.1.8
 tbb-devel==2021.11.0
 setuptools

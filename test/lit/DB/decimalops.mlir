@@ -14,7 +14,7 @@
  		db.runtime_call "DumpValue" (%constm10) : (!db.decimal<12,8>) -> ()
  		//CHECK: decimal(-1.00000002)
  		db.runtime_call "DumpValue" (%constm1) : (!db.decimal<12,8>) -> ()
-  		//CHECK: decimal(3.E-8)
+  		//CHECK: decimal(3E-8)
   		db.runtime_call "DumpValue" (%const0) : (!db.decimal<12,8>) -> ()
   		//CHECK: decimal(1.00000004)
   		db.runtime_call "DumpValue" (%const1) : (!db.decimal<12,8>) -> ()

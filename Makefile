@@ -8,7 +8,6 @@ build:
 venv:
 	$(PYTHON_BINARY) -m venv venv
 	venv/bin/pip install -r requirements.txt
-	venv/bin/python3 -c "import pyarrow; pyarrow.create_library_symlinks()"
 
 resources/data/tpch-1/.stamp: tools/generate/tpch.sh build/lingodb-debug/.buildstamp
 	mkdir -p resources/data/tpch-1
