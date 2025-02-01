@@ -89,8 +89,8 @@ class MethodPrinter : public MatchFinder::MatchCallback {
             case clang::BuiltinType::Int: return translateIntegerType(32);
             case clang::BuiltinType::ULong: return translateIntegerType(64);
             case clang::BuiltinType::Long: return translateIntegerType(64);
-            case clang::BuiltinType::Float: return "mlir::FloatType::getF32(context)";
-            case clang::BuiltinType::Double: return "mlir::FloatType::getF64(context)";
+            case clang::BuiltinType::Float: return "mlir::Float32Type::get(context)";
+            case clang::BuiltinType::Double: return "mlir::Float64Type::get(context)";
             case clang::BuiltinType::Int128: return translateIntegerType(128);
             default: break;
          }

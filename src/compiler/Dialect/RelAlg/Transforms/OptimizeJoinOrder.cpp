@@ -68,7 +68,7 @@ class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::Oper
          })
          .Case<relalg::BaseTableOp>([&](relalg::BaseTableOp baseTableOp) {
             auto numRows = baseTableOp.getMeta().getMeta()->getNumRows();
-            baseTableOp->setAttr("rows", mlir::FloatAttr::get(mlir::FloatType::getF64(&getContext()), numRows));
+            baseTableOp->setAttr("rows", mlir::FloatAttr::get(mlir::Float64Type::get(&getContext()), numRows));
          })
          .Case<relalg::UnionOp>([&](relalg::UnionOp unionOp) {
             double sum = 0;

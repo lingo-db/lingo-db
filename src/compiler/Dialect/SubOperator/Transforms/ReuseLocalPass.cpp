@@ -360,7 +360,7 @@ class ReuseLocalPass : public mlir::PassWrapper<ReuseLocalPass, mlir::OperationP
       patterns.insert<AvoidArrayMaterialization>(&getContext(), columnUsageAnalysis);
       patterns.insert<AvoidDeadMaterialization>(&getContext());
       patterns.insert<ReuseHashtable>(&getContext(), columnUsageAnalysis);
-      if (mlir::applyPatternsAndFoldGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
+      if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
          signalPassFailure();
       }
    }

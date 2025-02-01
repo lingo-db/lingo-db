@@ -298,7 +298,7 @@ class SpecializeSubOpPass : public mlir::PassWrapper<SpecializeSubOpPass, mlir::
       patterns.insert<MapAsHashMap>(&getContext(), columnUsageAnalysis);
       patterns.insert<MultiMapAsHashMultiMap>(&getContext(), columnUsageAnalysis);
 
-      if (mlir::applyPatternsAndFoldGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
+      if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
          assert(false && "should not happen");
       }
    }

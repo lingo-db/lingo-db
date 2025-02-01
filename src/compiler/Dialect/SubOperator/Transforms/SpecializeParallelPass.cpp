@@ -187,7 +187,7 @@ class SpecializeParallelSubOpPass : public mlir::PassWrapper<SpecializeParallelS
       mlir::RewritePatternSet patterns(&getContext());
       patterns.insert<IntroducePreAggrHt>(&getContext(), columnUsageAnalysis);
 
-      if (mlir::applyPatternsAndFoldGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
+      if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
          assert(false && "should not happen");
       }
    }

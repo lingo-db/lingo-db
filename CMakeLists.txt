@@ -9,11 +9,6 @@ set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g -DTRACER")
 include(FindZLIB)
 message("Using ZLIB: ${ZLIB_INCLUDE_DIRS}")
 message("Using Python3: ${Python3_EXECUTABLE}")
-execute_process(
-        COMMAND ${Python3_EXECUTABLE} -c "import lingodbllvm; print(lingodbllvm.get_mlir_dir())"
-        OUTPUT_VARIABLE MLIR_DIR
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-)
 
 execute_process(
         COMMAND ${Python3_EXECUTABLE} -c "import pkg_resources; print(pkg_resources.get_distribution('tbb').location+'/../../')"
@@ -25,7 +20,6 @@ execute_process(
         OUTPUT_VARIABLE TBB_INCLUDE_DIR
         OUTPUT_STRIP_TRAILING_WHITESPACE
 )
-set(LLVM_BINARY_DIR "${MLIR_DIR}/../../../")
 find_package(Arrow 19 REQUIRED)
 message("tbb: ${TBB_LIB_PATH} ${TBB_INCLUDE_DIR} ")
 include_directories(${TBB_INCLUDE_DIR})
@@ -34,11 +28,14 @@ link_directories(${TBB_LIB_PATH})
 option(ENABLE_GPU_BACKEND "enable GPU backend" OFF)
 
 
-set (Clang_DIR "${MLIR_DIR}/../clang")
-message(STATUS "Using ClangConfig.cmake in: ${Clang_DIR}")
+find_package(Clang 20.1 REQUIRED)
+find_package(LLVM 20.1 REQUIRED)
+message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
+set (MLIR_DIR "${LLVM_DIR}/../mlir")
+find_package(MLIR 20.1 REQUIRED)
 
-find_package(Clang REQUIRED CONFIG)
-find_package(MLIR REQUIRED CONFIG)
+set(LLVM_BUILD_STATIC ON)
+
 
 message(STATUS "Using MLIRConfig.cmake in: ${MLIR_DIR}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
@@ -69,11 +66,11 @@ include_directories(${PROJECT_BINARY_DIR}/include)
 link_directories(${LLVM_BUILD_LIBRARY_DIR})
 add_definitions(${LLVM_DEFINITIONS})
 set(LLVM_LINK_COMPONENTS
-        Support
-        Core
-        nativecodegen
-        OrcJIT
-        X86
+        #Support
+        #Core
+        #nativecodegen
+        #OrcJIT
+        #X86
         )
 
 
@@ -148,7 +145,6 @@ set(LIBS
         MLIRParser
         MLIRPass
         MLIRSupport
-        MLIRExecutionEngine
         MLIRLLVMToLLVMIRTranslation
         MLIRTargetLLVMIRExport
         MLIRSupport

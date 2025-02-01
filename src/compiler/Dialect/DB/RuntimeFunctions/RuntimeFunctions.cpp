@@ -138,7 +138,7 @@ mlir::Value dumpValuesImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredAr
    auto nullableType = mlir::dyn_cast_or_null<db::NullableType>(originalArgumentTypes[0]);
    auto baseType = getBaseType(originalArgumentTypes[0]);
 
-   auto f64Type = FloatType::getF64(rewriter.getContext());
+   auto f64Type = Float64Type::get(rewriter.getContext());
    Value isNull;
    Value val;
    if (nullableType) {

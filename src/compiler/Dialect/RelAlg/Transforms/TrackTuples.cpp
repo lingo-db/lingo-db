@@ -67,7 +67,7 @@ class TrackTuples : public mlir::PassWrapper<TrackTuples, mlir::OperationPass<ml
    void runOnOperation() override {
       mlir::RewritePatternSet patterns(&getContext());
       patterns.insert<InsertTrackTuplesAfterRelalg>(&getContext());
-      if (mlir::applyPatternsAndFoldGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
+      if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
          signalPassFailure();
       }
    }

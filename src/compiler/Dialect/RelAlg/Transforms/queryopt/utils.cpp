@@ -113,8 +113,8 @@ Operator Plan::realizePlanRec() {
          x.getLambdaBlock().getOperations().splice(x.getLambdaBlock().end(), innerJoin.getLambdaBlock().getOperations());
          op = x;
       }
-      op->setAttr("cost", mlir::FloatAttr::get(mlir::FloatType::getF64(op.getContext()), cost));
-      op->setAttr("rows", mlir::FloatAttr::get(mlir::FloatType::getF64(op.getContext()), rows));
+      op->setAttr("cost", mlir::FloatAttr::get(mlir::Float64Type::get(op.getContext()), cost));
+      op->setAttr("rows", mlir::FloatAttr::get(mlir::Float64Type::get(op.getContext()), rows));
       if (lastNode) {
          lastNode.setChildren({op});
       }
@@ -144,13 +144,13 @@ Operator Plan::realizePlanRec() {
          } else if (mlir::isa<relalg::InnerJoinOp>(currop.getOperation()) && children.size() == 1) {
             assert(false && "need to implement Join -> Selection transition");
          }
-         currop->setAttr("cost", mlir::FloatAttr::get(mlir::FloatType::getF64(op.getContext()), cost));
-         currop->setAttr("rows", mlir::FloatAttr::get(mlir::FloatType::getF64(op.getContext()), rows));
+         currop->setAttr("cost", mlir::FloatAttr::get(mlir::Float64Type::get(op.getContext()), cost));
+         currop->setAttr("rows", mlir::FloatAttr::get(mlir::Float64Type::get(op.getContext()), rows));
       } else if (!currop && children.size() == 2) {
          mlir::OpBuilder builder(children[0]->isBeforeInBlock(children[1]) ? children[1].getOperation() : children[0].getOperation());
          currop = builder.create<relalg::CrossProductOp>(children[0].getOperation()->getLoc(), tuples::TupleStreamType::get(builder.getContext()), children[0]->getResult(0), children[1]->getResult(0));
-         //currop->setAttr("cost",mlir::FloatAttr::get(mlir::FloatType::getF64(op.getContext()),cost));
-         //currop->setAttr("rows",mlir::FloatAttr::get(mlir::FloatType::getF64(op.getContext()),rows));
+         //currop->setAttr("cost",mlir::FloatAttr::get(mlir::Float64Type::get(op.getContext()),cost));
+         //currop->setAttr("rows",mlir::FloatAttr::get(mlir::Float64Type::get(op.getContext()),rows));
       } else if (!currop && children.size() == 1) {
          if (lastNode) {
             lastNode.setChildren({children[0]});

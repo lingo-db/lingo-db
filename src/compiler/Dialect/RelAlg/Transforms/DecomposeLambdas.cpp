@@ -219,7 +219,7 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
    void runOnOperation() override {
       mlir::RewritePatternSet patterns(&getContext());
       patterns.insert<DecomposeInnerJoin>(&getContext());
-      if (mlir::applyPatternsAndFoldGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
+      if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
          signalPassFailure();
       }
       getOperation().walk([&](relalg::SelectionOp op) {

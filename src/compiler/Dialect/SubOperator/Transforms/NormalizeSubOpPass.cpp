@@ -291,7 +291,7 @@ class NormalizeSubOpPass : public mlir::PassWrapper<NormalizeSubOpPass, mlir::Op
       patterns.insert<SplitTableScan>(&getContext());
       patterns.insert<SplitGenericScan>(&getContext());
 
-      if (mlir::applyPatternsAndFoldGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
+      if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
          assert(false && "should not happen");
       }
    }

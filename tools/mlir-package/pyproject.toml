@@ -1,7 +1,0 @@
-[build-system]
-requires = ["setuptools"]
-build-backend = "setuptools.build_meta"
-
-[project]
-name = "lingodb-llvm"
-version = "0.0.3"

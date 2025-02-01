@@ -95,7 +95,7 @@ class OptimizeRuntimeFunctions : public mlir::PassWrapper<OptimizeRuntimeFunctio
          patterns.insert<ReplaceFnWithFn>(&getContext(), "ExtractFromDate", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("hour"), std::make_shared<AnyMatcher>()}, "ExtractHourFromDate");
          patterns.insert<ReplaceFnWithFn>(&getContext(), "DateDiff", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("second"), std::make_shared<AnyMatcher>(), std::make_shared<AnyMatcher>()}, "DateDiffSecond");
          patterns.insert<ReplaceFnWithFn>(&getContext(), "Like", std::vector<std::shared_ptr<Matcher>>{std::make_shared<AnyMatcher>(), std::make_shared<ConstStringMatcher>()}, "ConstLike");
-         if (mlir::applyPatternsAndFoldGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
+         if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
             assert(false && "should not happen");
          }
       }

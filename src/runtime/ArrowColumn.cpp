@@ -47,7 +47,7 @@ std::shared_ptr<arrow::DataType> createType(std::string name, uint32_t p1, uint3
    } else if (name == "timestamp") {
       return arrow::timestamp(static_cast<arrow::TimeUnit::type>(p1));
    } else if (name == "decimal") {
-      return arrow::decimal(p1, p2);
+      return arrow::decimal128(p1, p2);
    } else if (name == "bool") {
       return arrow::boolean();
    }

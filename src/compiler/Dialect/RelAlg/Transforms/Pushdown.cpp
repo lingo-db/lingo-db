@@ -264,7 +264,7 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
       mlir::RewritePatternSet patterns(&getContext());
       patterns.insert<OuterJoinToInnerJoin>(&getContext());
       patterns.insert<SingleJoinToInnerJoin>(&getContext());
-      if (mlir::applyPatternsAndFoldGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
+      if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
          signalPassFailure();
       }
    }

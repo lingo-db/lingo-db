@@ -7,7 +7,7 @@ env:
 jobs:
   build_release:
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-dev:0ada499e50fd0965f52c1b3ab198b55cbb69ce4b
+    container: ghcr.io/lingo-db/lingodb-dev:2aed01c5a0c1565ae1ad36f1fa5c7c42e4610944 
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -20,8 +20,8 @@ jobs:
       - name: Build
         run: |
             mkdir -p /ccache
-            export CXX="ccache clang++-19"
-            export CC="ccache clang-19"
+            export CXX="ccache clang++-20"
+            export CC="ccache clang-20"
             export CCACHE_DIR="/ccache"
             make clean
             make build-release
@@ -32,7 +32,7 @@ jobs:
           retention-days: 1
   build_debug:
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-dev:0ada499e50fd0965f52c1b3ab198b55cbb69ce4b
+    container: ghcr.io/lingo-db/lingodb-dev:2aed01c5a0c1565ae1ad36f1fa5c7c42e4610944 
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -45,8 +45,8 @@ jobs:
       - name: Build
         run: |
             mkdir -p /ccache
-            export CXX="ccache clang++-19"
-            export CC="ccache clang-19"
+            export CXX="ccache clang++-20"
+            export CC="ccache clang-20"
             export CCACHE_DIR="/ccache"
             make clean
             make build-debug
@@ -57,7 +57,7 @@ jobs:
           retention-days: 1
   lint:
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-dev:0ada499e50fd0965f52c1b3ab198b55cbb69ce4b
+    container: ghcr.io/lingo-db/lingodb-dev:2aed01c5a0c1565ae1ad36f1fa5c7c42e4610944 
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -70,7 +70,7 @@ jobs:
   test:
     needs: build_debug
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-dev:0ada499e50fd0965f52c1b3ab198b55cbb69ce4b
+    container: ghcr.io/lingo-db/lingodb-dev:2aed01c5a0c1565ae1ad36f1fa5c7c42e4610944 
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
@@ -88,7 +88,7 @@ jobs:
   sqlite_tests:
     needs: build_release
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-dev:0ada499e50fd0965f52c1b3ab198b55cbb69ce4b
+    container: ghcr.io/lingo-db/lingodb-dev:2aed01c5a0c1565ae1ad36f1fa5c7c42e4610944 
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
@@ -138,7 +138,7 @@ jobs:
             python3 tools/python/test/test.py
   coverage:
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-dev:0ada499e50fd0965f52c1b3ab198b55cbb69ce4b
+    container: ghcr.io/lingo-db/lingodb-dev:2aed01c5a0c1565ae1ad36f1fa5c7c42e4610944 
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -148,7 +148,7 @@ jobs:
             make venv
             make test-coverage
             mkdir -p /coverage
-            llvm-cov-19 show ./build/lingodb-debug-coverage/run-mlir -object ./build/lingodb-debug-coverage/mlir-db-opt -object ./build/lingodb-debug-coverage/run-sql  -instr-profile=build/lingodb-debug-coverage/coverage.profdata --ignore-filename-regex="venv" --ignore-filename-regex="vendored" --ignore-filename-regex="build/lingodb-debug-coverage" > /coverage/coverage.txt
+            llvm-cov-20 show ./build/lingodb-debug-coverage/run-mlir -object ./build/lingodb-debug-coverage/mlir-db-opt -object ./build/lingodb-debug-coverage/run-sql  -instr-profile=build/lingodb-debug-coverage/coverage.profdata --ignore-filename-regex="venv" --ignore-filename-regex="vendored" --ignore-filename-regex="build/lingodb-debug-coverage" > /coverage/coverage.txt
       - uses: actions/checkout@master
       - uses: codecov/codecov-action@v3
         with:

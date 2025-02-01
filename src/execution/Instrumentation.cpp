@@ -8,6 +8,7 @@
 #include "mlir/InitAllPasses.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
+#include "mlir/Transforms/LocationSnapshot.h"
 
 #include "json.h"
 
@@ -58,11 +59,8 @@ class SnapshotAfterEachPass : public mlir::PassInstrumentation {
                }
             });
             mlir::PassManager pm(module->getContext());
-            mlir::OpPrintingFlags flags;
-            flags.shouldPrintDebugInfo();
-            flags.enableDebugInfo(true, false);
             auto fileName = snapshotDir.getValue() + "/detailed-snapshot-" + std::to_string(id) + ".mlir";
-            pm.addPass(mlir::createLocationSnapshotPass(flags, fileName));
+            pm.addPass(mlir::createLocationSnapshot(mlir::LocationSnapshotOptions{.fileName=fileName,.tag={},.enableDebugInfo=true,.printGenericOpForm=false,.printPrettyDebugInfo=false}));
             serializationState->passes.push_back({fileName, pass->getName().str(), pass->getDescription().str(), pass->getArgument().str()});
             if (pm.run(module).failed()) {
                llvm::dbgs() << "Failed to run location snapshot pass\n";
@@ -119,11 +117,8 @@ void lingodb::execution::snapshotImportantStep(std::string shortName, mlir::Modu
          }
       });
       mlir::PassManager pm(moduleOp->getContext());
-      mlir::OpPrintingFlags flags;
-      flags.shouldPrintDebugInfo();
-      flags.enableDebugInfo(true, false);
       auto fileName = snapshotDir.getValue() + "/important-snapshot-" + shortName + ".mlir";
-      pm.addPass(mlir::createLocationSnapshotPass(flags, fileName));
+      pm.addPass(mlir::createLocationSnapshot(mlir::LocationSnapshotOptions{.fileName=fileName,.tag={},.enableDebugInfo=true,.printGenericOpForm=false,.printPrettyDebugInfo=false}));
       serializationState->passes.push_back({fileName, "", "", ""});
       if (pm.run(moduleOp).failed()) {
          llvm::dbgs() << "Failed to run location snapshot pass\n";
