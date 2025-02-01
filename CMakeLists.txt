@@ -66,11 +66,11 @@ include_directories(${PROJECT_BINARY_DIR}/include)
 link_directories(${LLVM_BUILD_LIBRARY_DIR})
 add_definitions(${LLVM_DEFINITIONS})
 set(LLVM_LINK_COMPONENTS
-        #Support
-        #Core
-        #nativecodegen
-        #OrcJIT
-        #X86
+        Support
+        Core
+        nativecodegen
+        OrcJIT
+        X86
         )
 
 
@@ -153,6 +153,7 @@ set(LIBS
         MLIRSideEffectInterfaces
         MLIRTransforms
         MLIRMathTransforms
+        MLIRExecutionEngine
         )
 set(PRECOMPILED_CC_PATH "${CMAKE_CURRENT_BINARY_DIR}/precompiled_bitcode.cc")
 add_subdirectory(src/runtime)

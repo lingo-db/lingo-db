@@ -1,2 +1,2 @@
-add_subdirectory(python/bridge)
+add_subdirectory(python/bridgelib)
 add_subdirectory(ct)

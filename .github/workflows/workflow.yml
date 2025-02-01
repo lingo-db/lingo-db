@@ -7,7 +7,7 @@ env:
 jobs:
   build_release:
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-dev:2aed01c5a0c1565ae1ad36f1fa5c7c42e4610944 
+    container: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059  
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -32,7 +32,7 @@ jobs:
           retention-days: 1
   build_debug:
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-dev:2aed01c5a0c1565ae1ad36f1fa5c7c42e4610944 
+    container: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059  
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -57,7 +57,7 @@ jobs:
           retention-days: 1
   lint:
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-dev:2aed01c5a0c1565ae1ad36f1fa5c7c42e4610944 
+    container: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059  
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -70,7 +70,7 @@ jobs:
   test:
     needs: build_debug
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-dev:2aed01c5a0c1565ae1ad36f1fa5c7c42e4610944 
+    container: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059  
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
@@ -88,7 +88,7 @@ jobs:
   sqlite_tests:
     needs: build_release
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-dev:2aed01c5a0c1565ae1ad36f1fa5c7c42e4610944 
+    container: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059  
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
@@ -106,7 +106,7 @@ jobs:
 
   build_lingodb_python:
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-py-dev:0ada499e50fd0965f52c1b3ab198b55cbb69ce4b
+    container: ghcr.io/lingo-db/lingodb-py-dev:1c7ad317756b6ce7a36f868ae14f0d064187d238 
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -136,9 +136,10 @@ jobs:
             pip install built-packages/*.whl
             pip install pandas
             python3 tools/python/test/test.py
+            python3 tools/python/test/mlir-construction.py
   coverage:
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-dev:2aed01c5a0c1565ae1ad36f1fa5c7c42e4610944 
+    container: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059  
     steps:
       - name: Checkout
         uses: actions/checkout@v2

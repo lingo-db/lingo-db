@@ -1,14 +1,13 @@
-#include <pybind11/pybind11.h>
-#include <pybind11/functional.h>
+#include <nanobind/nanobind.h>
 
 #include <iostream>
 #include "mlir-c/IR.h"
-#include "mlir/Bindings/Python/PybindAdaptors.h"
+#include "mlir/Bindings/Python/NanobindAdaptors.h"
 
 namespace bridge {
 __attribute__((visibility("default"))) void initContext(MlirContext context);
 }
 
-PYBIND11_MODULE(mlir_init, m) {
+NB_MODULE(mlir_init, m) {
    m.def("init_context", &bridge::initContext);
 }

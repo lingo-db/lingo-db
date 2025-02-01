@@ -1,11 +1,23 @@
 [build-system]
-requires = ["setuptools","numpy==1.26.4", "pyarrow===14.0.1","pybind11","pip"]
-build-backend = "setuptools.build_meta"
+requires = ["scikit-build-core", "nanobind", "cmake", "ninja","pyarrow===19.0.0"]
+build-backend = "scikit_build_core.build"
 
 [project]
 name = "lingodb-bridge"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
     "numpy===1.26.4",
-    "pyarrow===14.0.1"
+    "pyarrow===19.0.0"
 ]
+
+[tool.scikit-build]
+wheel.packages = ["src/lingodbbridge","src/lingodbbridge.mlir", "src/lingodbbridge.mlir.dialects"]   # Include the package
+cmake.verbose = true                 # Useful for debugging
+cmake.args = [
+    "-DCMAKE_CXX_STANDARD=17",        # Adjust as needed
+    "-DCMAKE_CXX_FLAGS=-O3"
+]
+cmake.minimum-version = "3.18"
+
+#[tool.scikit-build.generate]
+#manifest.in = true   # Ensures non-Python files (like .so) are included

@@ -15,7 +15,7 @@ workflow:
 
 
 build-debug:
-  image: ghcr.io/lingo-db/lingodb-dev:2aed01c5a0c1565ae1ad36f1fa5c7c42e4610944  
+  image: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059  
   script:
     - make clean
     - make build-debug
@@ -28,7 +28,7 @@ build-debug:
     expire_in: 1 hrs
 
 build-release:
-  image: ghcr.io/lingo-db/lingodb-dev:2aed01c5a0c1565ae1ad36f1fa5c7c42e4610944  
+  image: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059  
   script:
     - make clean
     - make build-release
@@ -41,7 +41,7 @@ build-release:
     expire_in: 1 hrs
 
 lint:
-  image: ghcr.io/lingo-db/lingodb-dev:2aed01c5a0c1565ae1ad36f1fa5c7c42e4610944  
+  image: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059  
   script:
     - make clean
     - make venv
@@ -50,7 +50,7 @@ lint:
     - "umbra-builder"
 
 test:
-  image: ghcr.io/lingo-db/lingodb-dev:2aed01c5a0c1565ae1ad36f1fa5c7c42e4610944  
+  image: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059  
   needs:
     - build-debug
   script:
@@ -65,7 +65,7 @@ test:
     - "umbra-integration"
 
 sqlite-tests:
-  image: ghcr.io/lingo-db/lingodb-dev:2aed01c5a0c1565ae1ad36f1fa5c7c42e4610944  
+  image: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059  
   needs:
     - build-release
   script:
@@ -80,7 +80,7 @@ sqlite-tests:
     - "umbra-integration"
 
 sqlite-dataset-tests:
-  image: ghcr.io/lingo-db/lingodb-dev:2aed01c5a0c1565ae1ad36f1fa5c7c42e4610944  
+  image: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059  
   needs:
     - build-release
   script:
@@ -109,7 +109,7 @@ sqlite-dataset-tests:
     - "umbra-integration"
 
 build_pylingodb:
-  image: ghcr.io/lingo-db/lingodb-py-dev:2aed01c5a0c1565ae1ad36f1fa5c7c42e4610944  
+  image: ghcr.io/lingo-db/lingodb-py-dev:1c7ad317756b6ce7a36f868ae14f0d064187d238  
   script:
     - rm -rf /built-packages
     - mkdir -p /built-packages
@@ -127,7 +127,7 @@ build_pylingodb:
     expire_in: 1 hrs
 
 test_pylingodb:
-   image: ghcr.io/lingo-db/lingodb-dev:2aed01c5a0c1565ae1ad36f1fa5c7c42e4610944  
+   image: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059  
    needs:
       - build_pylingodb
    script:
@@ -138,11 +138,12 @@ test_pylingodb:
       - pip install built-packages/*.whl
       - pip install pandas
       - python3 tools/python/test/test.py
+      - python3 tools/python/test/mlir-construction.py
    tags:
       - "umbra-test"
 
 coverage:
-  image: ghcr.io/lingo-db/lingodb-dev:2aed01c5a0c1565ae1ad36f1fa5c7c42e4610944  
+  image: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059  
   script:
     - make venv
     - make coverage
