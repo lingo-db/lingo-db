@@ -12,9 +12,7 @@ cd tools
 ls
 make
 set -x
-./dsdgen -FORCE -SCALE $3
+./dsdgen -FORCE -SCALE $2
 chmod +r *.dat
-for table in ./*.dat; do  sed -i 's/|$//' "$table"; mv "$table" "../$table";  done
-cd ..
-"$1/sql" $2 < initialize.sql
+for table in ./*.dat; do  sed -i 's/|$//' "$table"; mv "$table" "$1/$table";  done
 popd

@@ -2,6 +2,15 @@ import lingodb
 
 import pandas as pd
 import pyarrow as pa
+import os
+
+if not os.path.exists("./resources/data/uni"):
+    os.makedirs("./resources/data/uni")
+    con_create=lingodb.connect_to_db("./resources/data/uni")
+    with open("./resources/sql/uni/initialize.sql") as f:
+        # line for line
+        for line in f:
+            con_create.sql_stmt(line)
 
 con = lingodb.connect_to_db("./resources/data/uni")
 print(con.sql("""

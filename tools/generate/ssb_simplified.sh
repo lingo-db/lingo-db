@@ -17,7 +17,7 @@ sed -i 's/#define  MAXAGG_LEN    10/#define  MAXAGG_LEN    20/' shared.h
 sed -i 's/O_CREAT)/O_CREAT,0644)/' bm_utils.c
 
 make dbgen
-SF=$3
+SF=$2
 ./dbgen -f -T c -s "$SF"
 ./dbgen -qf -T d -s "$SF"
 ./dbgen -qf -T p -s "$SF"
@@ -27,5 +27,5 @@ chmod +r *.tbl
 for table in ./*.tbl; do  sed -i 's/|$//' "$table"; done
 python3 ssb_convert_to_simplified.py ./
 
-"$1/sql" $2 < initialize.sql
+for table in ./*.tbl; do mv "$table" "$1/$table"; done
 popd

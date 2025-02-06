@@ -9,26 +9,33 @@ venv:
 	$(PYTHON_BINARY) -m venv venv
 	venv/bin/pip install -r requirements.txt
 
-resources/data/tpch-1/.stamp: tools/generate/tpch.sh build/lingodb-debug/.buildstamp
-	mkdir -p resources/data/tpch-1
 
-	bash $< $(CURDIR)/build/lingodb-debug $(dir $(CURDIR)/$@) 1
-	touch $@
+resources/data/%/.rawdata:
+	@mkdir -p $@
+	@dir_name=$(shell dirname $@) && \
+	base_name=$$(basename $$dir_name) && \
+	script_name=$$(echo $$base_name | sed -E 's/-[0-9]+$$//') && \
+	scale_factor=$$(echo $$base_name | grep -oE '[0-9]+$$' || echo 1) && \
+	abs_path=$$(realpath $@) && \
+	if [ -f tools/generate/$$script_name.sh ]; then \
+		echo "Running bash tools/generate/$$script_name.sh with $$abs_path $$scale_factor"; \
+		bash tools/generate/$$script_name.sh $$abs_path $$scale_factor; \
+	else \
+		echo "Error: Script tools/generate/$$script_name.sh not found!" >&2; \
+		exit 1; \
+	fi
 
-resources/data/tpcds-1/.stamp: tools/generate/tpcds.sh build/lingodb-debug/.buildstamp
-	mkdir -p resources/data/tpcds-1
-	bash $< $(CURDIR)/build/lingodb-debug $(dir $(CURDIR)/$@) 1
-	touch $@
 
-resources/data/job/.stamp: tools/generate/job.sh build/lingodb-debug/.buildstamp
-	mkdir -p resources/data/job
-	bash $< $(CURDIR)/build/lingodb-debug $(dir $(CURDIR)/$@) 1
-	touch $@
 
-resources/data/ssb-simplified-1/.stamp: tools/generate/ssb_simplified.sh build/lingodb-debug/.buildstamp
-	mkdir -p resources/data/ssb-simplified-1
-	bash $< $(CURDIR)/build/lingodb-debug $(dir $(CURDIR)/$@) 1
+resources/data/%/.stamp: resources/data/%/.rawdata build/lingodb-debug/.buildstamp
+	@dir_name=$(shell dirname $@) && \
+	base_name=$$(basename $$dir_name) && \
+	dataset_name=$$(echo $$base_name | sed -E 's/-[0-9]+$$//') && \
+	cd $(dir $@)/.rawdata && $(ROOT_DIR)/build/lingodb-debug/sql ../ < $(ROOT_DIR)/resources/sql/$$dataset_name/initialize.sql
 	touch $@
+	rm -rf resources/data/$*/.rawdata
+
+
 
 LDB_ARGS= -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
 		 -DPython3_EXECUTABLE="${ROOT_DIR}/venv/bin/python3" \
@@ -70,7 +77,7 @@ run-test: build/lingodb-debug/.stamp
 	cmake --build $(dir $<) --target mlir-db-opt run-mlir run-sql sql-to-mlir sqlite-tester -- -j${NPROCS}
 	$(MAKE) test-no-rebuild
 
-test-no-rebuild: build/lingodb-debug/.buildstamp
+test-no-rebuild: build/lingodb-debug/.buildstamp resources/data/test/.stamp resources/data/uni/.stamp
 	${LLVM_LIT_BINARY} -v build/lingodb-debug/test/lit -j 1
 	find ./test/sqlite-small/ -maxdepth 1 -type f -name '*.test' | xargs -L 1 -P ${NPROCS} ./build/lingodb-debug/sqlite-tester
 
@@ -78,7 +85,7 @@ sqlite-test-no-rebuild: build/lingodb-release/.buildstamp
 	find ./test/sqlite/ -maxdepth 1 -type f -name '*.test' | xargs -L 1 -P ${NPROCS} ./build/lingodb-release/sqlite-tester
 
 .PHONY: test-coverage
-test-coverage: build/lingodb-debug-coverage/.stamp
+test-coverage: build/lingodb-debug-coverage/.stamp resources/data/test/.stamp resources/data/uni/.stamp
 	cmake --build $(dir $<) --target mlir-db-opt run-mlir run-sql sql-to-mlir -- -j${NPROCS}
 	${LLVM_LIT_BINARY} -v --per-test-coverage  $(dir $<)/test/lit
 	find $(dir $<) -type f -name "*.profraw" > $(dir $<)/profraw-files

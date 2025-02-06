@@ -13,7 +13,7 @@ rm dbgen.zip
 rm -rf ./*.tbl
 sed -i 's/#define  MAXAGG_LEN    10/#define  MAXAGG_LEN    20/' shared.h
 make dbgen
-SF=$3
+SF=$2
 ./dbgen -f -T c -s "$SF"
 ./dbgen -qf -T d -s "$SF"
 ./dbgen -qf -T p -s "$SF"
@@ -21,6 +21,5 @@ SF=$3
 ./dbgen -q -T l -s "$SF"
 chmod +r *.tbl
 for table in ./*.tbl; do  sed -i 's/|$//' "$table"; done
-
-"$1/sql" $2 < initialize.sql
+for table in ./*.tbl; do mv "$table" "$1/$table"; done
 popd

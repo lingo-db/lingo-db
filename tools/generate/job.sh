@@ -9,6 +9,5 @@ echo '6ec7a92fbd8a61c2d6d26e3aa78e6f84  imdb.tzst' | md5sum --check --status
 tar --skip-old-files -xf imdb.tzst
 chmod +r *.csv
 for table in ./*.csv; do  sed -i 's/\\\([^"\\]\)/\\\\\1/g' "$table"; done
-
-"$1/sql" $2 < initialize.sql
+for table in ./*.csv; do mv "$table" "$1/$table"; done
 popd

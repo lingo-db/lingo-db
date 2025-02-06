@@ -7,7 +7,7 @@ env:
 jobs:
   build_release:
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059  
+    container: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -32,7 +32,7 @@ jobs:
           retention-days: 1
   build_debug:
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059  
+    container: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -57,7 +57,7 @@ jobs:
           retention-days: 1
   lint:
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059  
+    container: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -70,7 +70,7 @@ jobs:
   test:
     needs: build_debug
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059  
+    container: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
@@ -88,7 +88,7 @@ jobs:
   sqlite_tests:
     needs: build_release
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059  
+    container: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
@@ -104,9 +104,60 @@ jobs:
           chmod +x build/lingodb-release/*
           make sqlite-test-no-rebuild
 
+  sqlite_dataset-tests:
+    needs: build_release
+    runs-on: ubuntu-latest
+    container: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059
+    steps:
+      - uses: actions/checkout@master
+      - uses: actions/download-artifact@master
+        with:
+          name: release-build
+          path: build/lingodb-release
+      - name: Prepare Binaries
+        run: |
+          make venv
+          chmod +x build/lingodb-release/*
+      - name: Restore datasets from cache
+        id: cache-datasets
+        uses: actions/cache@v4
+        with:
+          path: /datasets/
+          key: datasets
+
+      - name: Generate dataset if not cached
+        if: steps.cache-datasets.outputs.cache-hit != 'true'
+        run: |
+          apt-get update && apt-get install -y bison flex zstd
+          mkdir -p /datasets/tpch-1
+          mkdir -p /datasets/tpcds-1 
+          mkdir -p /datasets/job
+          bash tools/generate/tpch.sh /datasets/tpch-1 1
+          bash tools/generate/tpcds.sh /datasets/tpcds-1 1
+          bash tools/generate/job.sh /datasets/job
+      - name: Load datasets
+        run: |
+          export BASE_PATH=$(pwd)
+          mkdir -p /db/tpch-1
+          cd /datasets/tpch-1
+          $BASE_PATH/build/lingodb-release/sql /db/tpch-1 < $BASE_PATH/resources/sql/tpch/initialize.sql
+          mkdir -p /db/tpcds-1
+          cd /datasets/tpcds-1
+          $BASE_PATH/build/lingodb-release/sql /db/tpcds-1 < $BASE_PATH/resources/sql/tpcds/initialize.sql
+          mkdir -p /db/job
+          cd /datasets/job
+          $BASE_PATH/build/lingodb-release/sql /db/job < $BASE_PATH/resources/sql/job/initialize.sql
+          cd $BASE_PATH
+      - name: Test
+        run: |
+          ./build/lingodb-release/sqlite-tester test/sqlite-datasets/tpchSf1.test /db/tpch-1
+          ./build/lingodb-release/sqlite-tester test/sqlite-datasets/tpcdsSf1.test /db/tpcds-1
+          ./build/lingodb-release/sqlite-tester test/sqlite-datasets/job.test /db/job
+          
+
   build_lingodb_python:
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-py-dev:1c7ad317756b6ce7a36f868ae14f0d064187d238 
+    container: ghcr.io/lingo-db/lingodb-py-dev:1c7ad317756b6ce7a36f868ae14f0d064187d238
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -139,7 +190,7 @@ jobs:
             python3 tools/python/test/mlir-construction.py
   coverage:
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059  
+    container: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059
     steps:
       - name: Checkout
         uses: actions/checkout@v2
