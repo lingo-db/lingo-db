@@ -5,10 +5,9 @@
 #include <optional>
 #include <unordered_set>
 
-#include "Session.h"
-
-#include <lingodb/scheduler/Scheduler.h>
 #include "ConcurrentMap.h"
+#include "Session.h"
+#include <lingodb/scheduler/Scheduler.h>
 namespace lingodb::runtime {
 class Database;
 //some state required for query processing;

@@ -8,7 +8,6 @@
 #include <fstream>
 #include <iostream>
 #include <string>
-#include <lingodb/utility/Tracer.h>
 
 namespace {
 utility::GlobalSetting<bool> eagerLoading("system.eager_loading", false);

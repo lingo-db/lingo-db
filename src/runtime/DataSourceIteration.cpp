@@ -67,7 +67,7 @@ class ScanBatchesTask : public lingodb::scheduler::Task {
          return;
       }
       auto& batch = batches[localStartIndex];
-      auto batchInfo = batchInfos[lingodb::scheduler::currentWorkerId()];
+      auto* batchInfo = batchInfos[lingodb::scheduler::currentWorkerId()];
       utility::Tracer::Trace trace(processMorsel);
       access(colIds, batchInfo, batch);
       cb(batchInfo);

@@ -278,7 +278,7 @@ class DefaultQueryExecuter : public QueryExecuter {
          snapshotImportantStep("qopt", moduleOp, serializationState);
       }
 
-      bool parallelismEnabled = scheduler::getNumWorkers() != 1;
+      bool parallelismEnabled = scheduler::getNumWorkers() != 1 && queryExecutionConfig->parallel;
       if (!frontend.isParallelismAllowed() || !parallelismEnabled) {
          moduleOp->setAttr("subop.sequential", mlir::UnitAttr::get(moduleOp->getContext()));
          //numThreads = 1;

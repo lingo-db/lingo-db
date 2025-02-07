@@ -15,7 +15,7 @@
 namespace lingodb::scheduler {
 class Worker;
 
-class TaskWrapper;
+struct TaskWrapper;
 
 class Fiber {
    static constexpr size_t stackSize = 1 << 20;
@@ -107,7 +107,8 @@ struct TaskWrapper {
    std::atomic<int64_t> yieldedFibers = 0;
    std::atomic<int64_t> nonCompletedFibers = 0;
    std::atomic<int64_t> deployedOnWorkers = 0;
-   std::unique_ptr<Fiber> waitingOnTaskCompletion;
+   std::unique_ptr<Fiber> waitingOnTaskCompletion = nullptr;
+   std::function<void()> beforeDestroyFn = nullptr;
 
    void finalize();
 
@@ -144,6 +145,7 @@ class SchedulerImpl : public Scheduler {
    std::vector<std::thread> workerThreads;
    Worker* idleWorkers = nullptr;
    std::mutex taskQueueMutex;
+   std::mutex taskReturnMutex;
    TaskWrapper* taskHead = nullptr;
    TaskWrapper* taskTail = nullptr;
 
@@ -183,28 +185,30 @@ class SchedulerImpl : public Scheduler {
    void dequeueTaskLocked(TaskWrapper* task) {
       if (task->prev) {
          task->prev->next = task->next;
+         task->prev = nullptr;
       } else {
          taskHead = task->next;
       }
       if (task->next) {
          task->next->prev = task->prev;
+         task->next = nullptr;
       } else {
          taskTail = task->prev;
       }
    }
 
    TaskWrapper* getTask() {
-      std::lock_guard lock(taskQueueMutex);
-      auto potentialTask = taskHead;
+      std::lock_guard<std::mutex> lock(taskQueueMutex);
+      auto* potentialTask = taskHead;
       size_t minYieldCount = std::numeric_limits<size_t>::max();
       TaskWrapper* minYieldTask = nullptr;
       while (potentialTask) {
          //if we see a task that has no work left, we move it to the cooling down queue
          if (!potentialTask->task->hasWork()) {
-            auto toCoolDown = potentialTask;
+            auto* toCoolDown = potentialTask;
             potentialTask = potentialTask->next;
             dequeueTaskLocked(toCoolDown);
-            std::lock_guard lock1(coolingDownMutex);
+            std::lock_guard<std::mutex> lock1(coolingDownMutex);
             if (coolingDownTail) {
                coolingDownTail->next = toCoolDown;
                toCoolDown->prev = coolingDownTail;
@@ -221,7 +225,7 @@ class SchedulerImpl : public Scheduler {
             potentialTask->deployedOnWorkers++;
             return potentialTask;
          } else {
-            if (yieldedFibers < minYieldCount) {
+            if (yieldedFibers < 0 || size_t(yieldedFibers) < minYieldCount) {
                minYieldCount = yieldedFibers;
                minYieldTask = potentialTask;
             }
@@ -235,9 +239,15 @@ class SchedulerImpl : public Scheduler {
    }
 
    void returnTask(TaskWrapper* task) {
-      task->deployedOnWorkers--;
+      // Multiple worker may call here concurrently. Avoid one worker already called `delete task` 
+      // but another worker is still at `task->finalized`
+      std::lock_guard<std::mutex> lock(taskReturnMutex);
+      auto deployedNum = task->deployedOnWorkers.fetch_sub(1);
       if (task->finalized) {
-         if (task->deployedOnWorkers.load() == 0) {
+         if (deployedNum == 1) {
+            if (task->beforeDestroyFn) {
+               task->beforeDestroyFn();
+            }
             delete task;
          }
       }
@@ -247,7 +257,7 @@ class SchedulerImpl : public Scheduler {
       if (task->coolingDown) {
          //simple case: already in cooling down queue
          // -> only need to lock cooling down queue
-         std::lock_guard lock(coolingDownMutex);
+         std::lock_guard<std::mutex> lock(coolingDownMutex);
          if (task->prev) {
             task->prev->next = task->next;
          } else {
@@ -263,7 +273,7 @@ class SchedulerImpl : public Scheduler {
          // -> need to lock both task queue and cooling down queue
          bool alreadyCoolingDown;
          {
-            std::lock_guard lock(taskQueueMutex);
+            std::lock_guard<std::mutex> lock(taskQueueMutex);
             alreadyCoolingDown = task->coolingDown;
             if (!alreadyCoolingDown) {
                dequeueTaskLocked(task);
@@ -272,7 +282,7 @@ class SchedulerImpl : public Scheduler {
          // - If alreadyCoolingDown is true, last attempt to dequeue task is failed. task is appedn to coolingDown queue. need to remove it.
          // - If alreadyCoolingDown is false, last attempt to dequeue task is ok. task is not inserted to coolingDown queue. no need to remove it.
          if (alreadyCoolingDown) {
-            std::lock_guard lock(coolingDownMutex);
+            std::lock_guard<std::mutex> lock(coolingDownMutex);
             if (task->prev) {
                task->prev->next = task->next;
             } else {
@@ -289,8 +299,6 @@ class SchedulerImpl : public Scheduler {
       task->finalized = true;
    }
 };
-
-SchedulerImpl* scheduler;
 
 class Worker {
    class FiberAllocator {
@@ -317,7 +325,7 @@ class Worker {
          } else {
             auto fiber = std::move(allocatedAndAvailableFibers.back());
             allocatedAndAvailableFibers.pop_back();
-            return std::move(fiber);
+            return fiber;
          }
       }
 
@@ -355,11 +363,11 @@ class Worker {
 
    void wakeupFiber(std::unique_ptr<Fiber>&& fiber) {
       {
-         std::lock_guard fiberQueueLock(fiberMutex);
+         std::lock_guard<std::mutex> fiberQueueLock(fiberMutex);
          runnableFibers.push_back(std::move(fiber));
       }
       {
-         std::unique_lock lock(mutex);
+         std::unique_lock<std::mutex> lock(mutex);
          allowedToSleep = false;
          cv.notify_one();
       }
@@ -377,7 +385,7 @@ class Worker {
    void work() {
       while (!scheduler.isShutdown()) {
          {
-            std::lock_guard lock(fiberMutex);
+            std::lock_guard<std::mutex> lock(fiberMutex);
 
             if (!runnableFibers.empty()) {
                currentFiber = std::move(runnableFibers.front());
@@ -385,7 +393,7 @@ class Worker {
             }
          }
          auto handleFiberComplete = [&]() {
-            auto task = currentFiber->getTask();
+            auto* task = currentFiber->getTask();
             if (task) {
                if (task->finishFiber()) {
                   scheduler.finalizeTask(task);
@@ -399,14 +407,16 @@ class Worker {
                if (currentFiber->getTask()) {
                   currentFiber->getTask()->unYieldFiber();
                }
+               auto* resumeTask = currentFiber->getTask();
                handleFiberComplete();
+               scheduler.returnTask(resumeTask);
             }
             assert(!currentFiber);
          }
          if (fiberAllocator.canAllocate()) {
             TaskWrapper* currTask = nullptr;
             {
-               std::unique_lock lock(mutex);
+               std::unique_lock<std::mutex> lock(mutex);
                if (this->currentTask) {
                   currTask = this->currentTask;
                   this->currentTask = nullptr;
@@ -421,7 +431,12 @@ class Worker {
                currTask = scheduler.getTask();
             }
 
-            if (currTask && currTask->startFiber()) {
+            if (currTask) {
+               if (!currTask->startFiber()) {
+                  scheduler.returnTask(currTask);
+                  continue;
+               }
+            // if (currTask && currTask->startFiber()) {
                //work on (part of) (new) task
                currentFiber = fiberAllocator.allocate();
                assert(currentFiber);
@@ -432,9 +447,11 @@ class Worker {
                   handleFiberComplete();
                } else {
                   currTask->yieldFiber();
+                  // yielded fiber does't finished. continue and not execute following cleanup logic.
+                  continue;
                }
                if (currTask->task->hasWork()) {
-                  std::lock_guard lock(mutex);
+                  std::lock_guard<std::mutex> lock(mutex);
                   this->currentTask = currTask;
                } else {
                   scheduler.returnTask(currTask);
@@ -454,7 +471,10 @@ class Worker {
    }
 };
 
-static thread_local Worker* currentWorker;
+namespace {
+   SchedulerImpl* scheduler;
+   static thread_local Worker* currentWorker;
+} // end namespace
 
 void SchedulerImpl::start() {
    scheduler = this;
@@ -470,11 +490,11 @@ void SchedulerImpl::start() {
 
 void SchedulerImpl::stop() {
    shutdown.store(true);
-   std::unique_lock lock(taskQueueMutex);
+   std::unique_lock<std::mutex> lock(taskQueueMutex);
    size_t cntr = 0;
    while (idleWorkers) {
       assert(cntr++ < numWorkers);
-      auto currWorker = idleWorkers;
+      auto* currWorker = idleWorkers;
       currWorker->isInIdleList = false;
       idleWorkers = currWorker->nextIdleWorker;
       currWorker->cv.notify_one();
@@ -483,7 +503,7 @@ void SchedulerImpl::stop() {
 
 void SchedulerImpl::enqueueTask(TaskWrapper* wrapper) {
    {
-      std::lock_guard lock(taskQueueMutex);
+      std::lock_guard<std::mutex> lock(taskQueueMutex);
       if (taskTail) {
          taskTail->next = wrapper;
          wrapper->prev = taskTail;
@@ -493,12 +513,12 @@ void SchedulerImpl::enqueueTask(TaskWrapper* wrapper) {
          taskTail = wrapper;
       }
    }
-   std::lock_guard lock(taskQueueMutex);
+   std::lock_guard<std::mutex> lock(taskQueueMutex);
    size_t cntr = 0;
    while (idleWorkers) {
       assert(cntr++ < numWorkers);
       Worker* currWorker = idleWorkers;
-      std::unique_lock workerLock(currWorker->mutex);
+      std::unique_lock<std::mutex> workerLock(currWorker->mutex);
       currWorker->isInIdleList = false;
       idleWorkers = idleWorkers->nextIdleWorker;
 
@@ -510,8 +530,8 @@ void SchedulerImpl::putWorkerToSleep(Worker* worker) {
    if (isShutdown()) {
       return;
    }
-   std::unique_lock lock(taskQueueMutex);
-   std::unique_lock workerLock(worker->mutex);
+   std::unique_lock<std::mutex> lock(taskQueueMutex);
+   std::unique_lock<std::mutex> workerLock(worker->mutex);
    if (worker->allowedToSleep) {
       //std::cout << "Putting worker to sleep " << worker->workerId << std::endl;
       if (!worker->isInIdleList) {
@@ -530,20 +550,22 @@ void SchedulerImpl::putWorkerToSleep(Worker* worker) {
 void TaskWrapper::finalize() {
    if (waitingOnTaskCompletion) {
       //std::cout << "Finalizing Task on Worker " << currentWorker->workerId << std::endl;
-      auto worker = waitingOnTaskCompletion->getWorker();
+      auto* worker = waitingOnTaskCompletion->getWorker();
       assert(worker);
       worker->wakeupFiber(std::move(waitingOnTaskCompletion));
    }
 }
 
-void awaitEntryTask(std::unique_ptr<EntryTask> task, std::function<void()> beforeDestroyFn) {
+void awaitEntryTask(std::unique_ptr<Task> task) {
    TaskWrapper* taskWrapper = new TaskWrapper{std::move(task)};
+   std::condition_variable finished;
+   std::mutex mutex;
+   taskWrapper->beforeDestroyFn = [&]() {
+      finished.notify_one();
+   };
    scheduler->enqueueTask(taskWrapper);
-   (static_cast<EntryTask*>(taskWrapper->task.get()))->await();
-   if (beforeDestroyFn != nullptr) {
-      beforeDestroyFn();
-   }
-   scheduler->returnTask(taskWrapper);
+   std::unique_lock<std::mutex> lk(mutex);
+   finished.wait(lk);
 }
 void awaitChildTask(std::unique_ptr<Task> task) {
    currentWorker->awaitChildTask(std::move(task));
