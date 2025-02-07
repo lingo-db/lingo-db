@@ -1,6 +1,5 @@
 #ifndef LINGODB_EXECUTION_EXECUTION_H
 #define LINGODB_EXECUTION_EXECUTION_H
-#include <condition_variable>
 #include "Backend.h"
 #include "Error.h"
 #include "Frontend.h"
@@ -8,6 +7,7 @@
 #include "ResultProcessing.h"
 #include "Timing.h"
 #include "lingodb/scheduler/Scheduler.h"
+#include <functional>
 namespace mlir {
 class ModuleOp;
 } // namespace mlir
@@ -124,25 +124,21 @@ class QueryExecuter {
    static std::unique_ptr<QueryExecuter> createDefaultExecuter(std::unique_ptr<QueryExecutionConfig> queryExecutionConfig, runtime::Session& session);
    virtual ~QueryExecuter() {}
 };
-class QueryExecutionTask : public lingodb::scheduler::EntryTask {
+class QueryExecutionTask : public lingodb::scheduler::Task {
    std::unique_ptr<QueryExecuter> queryExecutor;
-   std::condition_variable finished;
-   std::mutex mutex;
 
    public:
+   std::function<void()> beforeDestroyFn;
    QueryExecutionTask(std::unique_ptr<QueryExecuter> queryExecutor) : queryExecutor(std::move(queryExecutor)) {}
    void run() override {
       if (workExhausted.exchange(true)) {
          return;
       }
       queryExecutor->execute();
-      finished.notify_one();
+      if (beforeDestroyFn != nullptr) {
+         beforeDestroyFn();
+      }
    }
-
-   void await() override {
-      std::unique_lock lk(mutex);
-      finished.wait(lk);
-   };
 };
 
 } // namespace lingodb::execution

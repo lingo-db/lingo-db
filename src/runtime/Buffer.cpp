@@ -10,7 +10,7 @@ class FlexibleBufferWorkerLocalState {
    public:
    std::mutex mutex;
    bool hasMore{false};
-   int unitId{0};
+   size_t unitId{0};
    size_t unitAmount;
    size_t bufferId;
    // workerId steal task from
@@ -59,14 +59,14 @@ class FlexibleBufferIteratorTask : public lingodb::scheduler::Task {
    }
 
    void run() override {
-      auto state = workerLocalStates[lingodb::scheduler::currentWorkerId()].get();
-      if (state->hasMore) {
-         unitRun(state->bufferId, state->fetchAndNext());
-         return;
-      }
       // quick check for exhaust. workExhausted is true if there is no more buffer or no more 
       // work unit in own local state or steal from other workers.
       if (workExhausted.load()) {
+         return;
+      }
+      auto* state = workerLocalStates[lingodb::scheduler::currentWorkerId()].get();
+      if (state->hasMore) {
+         unitRun(state->bufferId, state->fetchAndNext());
          return;
       }
 
@@ -80,7 +80,7 @@ class FlexibleBufferIteratorTask : public lingodb::scheduler::Task {
                auto unitAmount = (buffer.numElements + splitSize - 1) / splitSize;
                {
                   // reset local state
-                  std::lock_guard resetLock(state->mutex);
+                  std::lock_guard<std::mutex> resetLock(state->mutex);
                   state->hasMore = true;
                   state->unitId = 1;
                   state->bufferId = localStartIndex;
@@ -93,7 +93,7 @@ class FlexibleBufferIteratorTask : public lingodb::scheduler::Task {
       }
 
       if (state->stealWorkerId != std::numeric_limits<size_t>::max()) {
-         auto other = workerLocalStates[state->stealWorkerId].get();
+         auto* other = workerLocalStates[state->stealWorkerId].get();
          if (other->hasMore) {
             unitRun(other->bufferId, other->fetchAndNext());
             return;
@@ -104,7 +104,7 @@ class FlexibleBufferIteratorTask : public lingodb::scheduler::Task {
       for (size_t i = 1; i < workerLocalStates.size(); i ++) {
          // make sure index of worker to steal never exceed worker number limits
          auto idx = (lingodb::scheduler::currentWorkerId() + i) % workerLocalStates.size();
-         auto other = workerLocalStates[idx].get();
+         auto* other = workerLocalStates[idx].get();
          if (other->hasMore) {
             // only current worker can modify its onw stealWorkerId. no need to lock
             state->stealWorkerId = idx;
@@ -206,7 +206,6 @@ void lingodb::runtime::BufferIterator::iterate(lingodb::runtime::BufferIterator*
 }
 
 void lingodb::runtime::Buffer::iterate(bool parallel, lingodb::runtime::Buffer buffer, size_t typeSize, void (*forEachChunk)(lingodb::runtime::Buffer, size_t, size_t, void*), void* contextPtr) {
-   size_t len = buffer.numElements / typeSize;
    if (parallel) {
       // TODO: this is never triggered. parallel is set to false for window function
       lingodb::scheduler::awaitChildTask(std::make_unique<BufferIteratorTask>(buffer, typeSize, contextPtr, forEachChunk));

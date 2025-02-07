@@ -14,10 +14,5 @@ class Task {
    virtual void run() = 0;
    virtual ~Task() {}
 };
-
-class EntryTask : public Task{
-   public:
-   virtual void await() = 0;
-};
 } // namespace lingodb::scheduler
 #endif //LINGODB_SCHEDULER_TASK_H
