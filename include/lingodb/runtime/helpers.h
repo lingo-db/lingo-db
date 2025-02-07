@@ -42,6 +42,11 @@ static bool cachelineRemains8(const uint8_t* p) {
 }
 static uint64_t read8PadZero(const uint8_t* p, uint32_t len) {
    if (len == 0) return 0; //do not dereference!
+#if defined(ASAN_ACTIVE)
+   uint64_t x=0;
+   memcpy(&x,p,len);
+   return x;
+#else
    if (len >= 8) return unalignedLoad64(p); //best case
    /*uint64_t x;
    memcpy(&x,p,len);
@@ -55,6 +60,7 @@ static uint64_t read8PadZero(const uint8_t* p, uint32_t len) {
       return ret;
    }
    return unalignedLoad64(p + len - 8) >> (64 - len * 8);
+#endif
 }
 
 class VarLen32 {

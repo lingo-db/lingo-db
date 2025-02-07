@@ -6,6 +6,25 @@ project(lingodb LANGUAGES CXX C)
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 set(CMAKE_CXX_STANDARD 20 CACHE STRING "C++ standard to conform to")
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g -DTRACER")
+
+
+
+# Define ASAN build type if not already set
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build." FORCE)
+endif()
+
+# Add custom ASAN build type
+set(CMAKE_CXX_FLAGS_ASAN "-fsanitize=address -fno-omit-frame-pointer -g -O1 -DASAN_ACTIVE")
+set(CMAKE_C_FLAGS_ASAN "-fsanitize=address -fno-omit-frame-pointer -g -O1 -DASAN_ACTIVE")
+set(CMAKE_EXE_LINKER_FLAGS_ASAN "-fsanitize=address")
+# Apply the flags if the build type is ASAN
+if(CMAKE_BUILD_TYPE STREQUAL "ASAN")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_ASAN}")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_ASAN}")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${CMAKE_EXE_LINKER_FLAGS_ASAN}")
+endif()
+
 include(FindZLIB)
 message("Using ZLIB: ${ZLIB_INCLUDE_DIRS}")
 message("Using Python3: ${Python3_EXECUTABLE}")
@@ -71,7 +90,7 @@ set(LLVM_LINK_COMPONENTS
         nativecodegen
         OrcJIT
         X86
-        )
+)
 
 
 add_custom_target(build_includes)
@@ -154,7 +173,7 @@ set(LIBS
         MLIRTransforms
         MLIRMathTransforms
         MLIRExecutionEngine
-        )
+)
 set(PRECOMPILED_CC_PATH "${CMAKE_CURRENT_BINARY_DIR}/precompiled_bitcode.cc")
 add_subdirectory(src/runtime)
 add_subdirectory(src/execution)

@@ -141,6 +141,7 @@ class GlobalOptPass : public mlir::PassWrapper<GlobalOptPass, mlir::OperationPas
             scanOpsByState[stateCreationOp].push_back(op);
          }
       });
+      std::unordered_set<mlir::Operation*> toDelete;
       for (auto t : scanOpsByState) {
          auto first = t.second[0];
          std::unordered_map<std::string, mlir::Attribute> mapping;
@@ -169,8 +170,8 @@ class GlobalOptPass : public mlir::PassWrapper<GlobalOptPass, mlir::OperationPas
                   newScan = mapOp.getResult();
                }
                other.getRes().replaceAllUsesWith(newScan);
-               other->erase();
                subOpDependencyAnalysis.addToRoot(first, other);
+               toDelete.insert(other.getOperation());
             }
          }
          std::vector<mlir::NamedAttribute> newMapping;
@@ -178,6 +179,9 @@ class GlobalOptPass : public mlir::PassWrapper<GlobalOptPass, mlir::OperationPas
             newMapping.push_back(builder.getNamedAttr(m.first, m.second));
          }
          first.setMappingAttr(builder.getDictionaryAttr(newMapping));
+      }
+      for(auto* op : toDelete) {
+         op->erase();
       }
       std::unordered_map<std::string, std::unordered_set<mlir::Operation*>> writtenToMember;
       getOperation().walk([&](subop::SubOperator op) {

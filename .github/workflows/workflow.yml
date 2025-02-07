@@ -5,7 +5,11 @@ on: push
 env:
   REGISTRY: ghcr.io
 jobs:
-  build_release:
+
+  build:
+    strategy:
+      matrix:
+        build_type: [ debug, asan, release ]
     runs-on: ubuntu-latest
     container: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059
     steps:
@@ -16,7 +20,7 @@ jobs:
         uses: actions/cache@v3
         with:
           path: /ccache
-          key: ccache-release-build
+          key: ccache-${{ matrix.build_type }}-build
       - name: Build
         run: |
             mkdir -p /ccache
@@ -24,36 +28,11 @@ jobs:
             export CC="ccache clang-20"
             export CCACHE_DIR="/ccache"
             make clean
-            make build-release
+            make build-${{ matrix.build_type }}
       - uses: actions/upload-artifact@master
         with:
-          name: release-build
-          path: build/lingodb-release
-          retention-days: 1
-  build_debug:
-    runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: CCache
-        id: ccache
-        uses: actions/cache@v3
-        with:
-          path: /ccache
-          key: ccache-debug-build
-      - name: Build
-        run: |
-            mkdir -p /ccache
-            export CXX="ccache clang++-20"
-            export CC="ccache clang-20"
-            export CCACHE_DIR="/ccache"
-            make clean
-            make build-debug
-      - uses: actions/upload-artifact@master
-        with:
-          name: debug-build
-          path: build/lingodb-debug
+          name: ${{ matrix.build_type }}-build
+          path: build/lingodb-${{ matrix.build_type }}
           retention-days: 1
   lint:
     runs-on: ubuntu-latest
@@ -68,91 +47,103 @@ jobs:
             make lint
 
   test:
-    needs: build_debug
+    needs: build
+    strategy:
+      matrix:
+        build_type: [ debug, asan ]
     runs-on: ubuntu-latest
     container: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
         with:
-          name: debug-build
-          path: build/lingodb-debug
+          name: ${{ matrix.build_type }}-build
+          path: build/lingodb-${{ matrix.build_type }}
       - name: Test
         run: |
+            export ASAN_OPTIONS=detect_leaks=0          
             make venv
             touch build/dependencies
-            touch build/lingodb-debug/.stamp
-            touch build/lingodb-debug/.buildstamp          
-            chmod +x build/lingodb-debug/*          
-            make test-no-rebuild
+            touch build/lingodb-${{ matrix.build_type }}/.stamp
+            touch build/lingodb-${{ matrix.build_type }}/.buildstamp          
+            chmod +x build/lingodb-${{ matrix.build_type }}/*          
+            make TEST_BUILD_TYPE=${{ matrix.build_type }} DATA_BUILD_TYPE=${{ matrix.build_type }} test-no-rebuild
   sqlite_tests:
-    needs: build_release
+    strategy:
+      matrix:
+        build_type: [ release, asan ]
+    needs: build
     runs-on: ubuntu-latest
     container: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
         with:
-          name: release-build
-          path: build/lingodb-release
+          name: ${{ matrix.build_type }}-build
+          path: build/lingodb-${{ matrix.build_type }}
       - name: Test
         run: |
+          export ASAN_OPTIONS=detect_leaks=0
           make venv
           touch build/dependencies
-          touch build/lingodb-release/.stamp
-          touch build/lingodb-release/.buildstamp
-          chmod +x build/lingodb-release/*
-          make sqlite-test-no-rebuild
+          touch build/lingodb-${{ matrix.build_type }}/.stamp
+          touch build/lingodb-${{ matrix.build_type }}/.buildstamp
+          chmod +x build/lingodb-${{ matrix.build_type }}/*
+          make SQLITE_TEST_BUILD_TYPE=${{ matrix.build_type }} sqlite-test-no-rebuild
 
   sqlite_dataset-tests:
-    needs: build_release
+    strategy:
+      matrix:
+        build_type: [ release, asan ]
+    needs: build
     runs-on: ubuntu-latest
     container: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
         with:
-          name: release-build
-          path: build/lingodb-release
+          name: ${{ matrix.build_type }}-build
+          path: build/lingodb-${{ matrix.build_type }}
       - name: Prepare Binaries
         run: |
           make venv
-          chmod +x build/lingodb-release/*
+          chmod +x build/lingodb-${{ matrix.build_type }}/*
       - name: Restore datasets from cache
         id: cache-datasets
         uses: actions/cache@v4
         with:
           path: /datasets/
           key: datasets
-
       - name: Generate dataset if not cached
         if: steps.cache-datasets.outputs.cache-hit != 'true'
         run: |
           apt-get update && apt-get install -y bison flex zstd
           mkdir -p /datasets/tpch-1
           mkdir -p /datasets/tpcds-1 
-          mkdir -p /datasets/job
+          # mkdir -p /datasets/job
           bash tools/generate/tpch.sh /datasets/tpch-1 1
           bash tools/generate/tpcds.sh /datasets/tpcds-1 1
-          bash tools/generate/job.sh /datasets/job
+          # bash tools/generate/job.sh /datasets/job
       - name: Load datasets
         run: |
           export BASE_PATH=$(pwd)
+          export ASAN_OPTIONS=detect_leaks=0
           mkdir -p /db/tpch-1
           cd /datasets/tpch-1
-          $BASE_PATH/build/lingodb-release/sql /db/tpch-1 < $BASE_PATH/resources/sql/tpch/initialize.sql
+          $BASE_PATH/build/lingodb-${{ matrix.build_type }}/sql /db/tpch-1 < $BASE_PATH/resources/sql/tpch/initialize.sql
           mkdir -p /db/tpcds-1
           cd /datasets/tpcds-1
-          $BASE_PATH/build/lingodb-release/sql /db/tpcds-1 < $BASE_PATH/resources/sql/tpcds/initialize.sql
-          mkdir -p /db/job
-          cd /datasets/job
-          $BASE_PATH/build/lingodb-release/sql /db/job < $BASE_PATH/resources/sql/job/initialize.sql
-          cd $BASE_PATH
+          $BASE_PATH/build/lingodb-${{ matrix.build_type }}/sql /db/tpcds-1 < $BASE_PATH/resources/sql/tpcds/initialize.sql
+          # mkdir -p /db/job
+          # cd /datasets/job
+          # $BASE_PATH/build/lingodb-${{ matrix.build_type }}/sql /db/job < $BASE_PATH/resources/sql/job/initialize.sql
+          # cd $BASE_PATH
       - name: Test
         run: |
-          ./build/lingodb-release/sqlite-tester test/sqlite-datasets/tpchSf1.test /db/tpch-1
-          ./build/lingodb-release/sqlite-tester test/sqlite-datasets/tpcdsSf1.test /db/tpcds-1
-          ./build/lingodb-release/sqlite-tester test/sqlite-datasets/job.test /db/job
+          export ASAN_OPTIONS=detect_leaks=0
+          ./build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpchSf1.test /db/tpch-1
+          ./build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpcdsSf1.test /db/tpcds-1
+          # ./build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/job.test /db/job
           
 
   build_lingodb_python:

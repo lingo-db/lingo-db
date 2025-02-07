@@ -3,6 +3,11 @@ NPROCS := $(shell echo $$(nproc))
 LLVM_LIT_BINARY := lit
 #LLVM_BIN_DIR := $(shell venv/bin/python3 -c "import lingodbllvm; print(lingodbllvm.get_bin_dir())")
 PYTHON_BINARY := python3
+DATA_BUILD_TYPE ?= debug
+TEST_BUILD_TYPE ?= debug
+SQLITE_TEST_BUILD_TYPE ?= release
+
+
 build:
 	mkdir -p $@
 venv:
@@ -27,11 +32,11 @@ resources/data/%/.rawdata:
 
 
 
-resources/data/%/.stamp: resources/data/%/.rawdata build/lingodb-debug/.buildstamp
+resources/data/%/.stamp: resources/data/%/.rawdata build/lingodb-$(DATA_BUILD_TYPE)/.buildstamp
 	@dir_name=$(shell dirname $@) && \
 	base_name=$$(basename $$dir_name) && \
 	dataset_name=$$(echo $$base_name | sed -E 's/-[0-9]+$$//') && \
-	cd $(dir $@)/.rawdata && $(ROOT_DIR)/build/lingodb-debug/sql ../ < $(ROOT_DIR)/resources/sql/$$dataset_name/initialize.sql
+	cd $(dir $@)/.rawdata && $(ROOT_DIR)/build/lingodb-$(DATA_BUILD_TYPE)/sql ../ < $(ROOT_DIR)/resources/sql/$$dataset_name/initialize.sql
 	touch $@
 	rm -rf resources/data/$*/.rawdata
 
@@ -61,6 +66,14 @@ build/lingodb-release/.stamp: build/dependencies
 	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS) -DCMAKE_BUILD_TYPE=Release
 	touch $@
 
+build/lingodb-asan/.buildstamp: build/lingodb-asan/.stamp
+	cmake --build $(dir $@) -- -j${NPROCS}
+	touch $@
+
+build/lingodb-asan/.stamp: build/dependencies
+	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS) -DCMAKE_BUILD_TYPE=ASAN
+	touch $@
+
 build/lingodb-relwithdebinfo/.buildstamp: build/lingodb-relwithdebinfo/.stamp
 	cmake --build $(dir $@) -- -j${NPROCS}
 	touch $@
@@ -73,16 +86,16 @@ build/lingodb-debug-coverage/.stamp: build/dependencies
 	touch $@
 
 .PHONY: run-test
-run-test: build/lingodb-debug/.stamp
+run-test: build/lingodb-$(TEST_BUILD_TYPE)/.stamp
 	cmake --build $(dir $<) --target mlir-db-opt run-mlir run-sql sql-to-mlir sqlite-tester -- -j${NPROCS}
 	$(MAKE) test-no-rebuild
 
-test-no-rebuild: build/lingodb-debug/.buildstamp resources/data/test/.stamp resources/data/uni/.stamp
-	${LLVM_LIT_BINARY} -v build/lingodb-debug/test/lit -j 1
-	find ./test/sqlite-small/ -maxdepth 1 -type f -name '*.test' | xargs -L 1 -P ${NPROCS} ./build/lingodb-debug/sqlite-tester
+test-no-rebuild: build/lingodb-$(TEST_BUILD_TYPE)/.buildstamp resources/data/test/.stamp resources/data/uni/.stamp
+	${LLVM_LIT_BINARY} -v build/lingodb-$(TEST_BUILD_TYPE)/test/lit -j 1
+	find ./test/sqlite-small/ -maxdepth 1 -type f -name '*.test' | xargs -L 1 -P ${NPROCS} ./build/lingodb-$(TEST_BUILD_TYPE)/sqlite-tester
 
-sqlite-test-no-rebuild: build/lingodb-release/.buildstamp
-	find ./test/sqlite/ -maxdepth 1 -type f -name '*.test' | xargs -L 1 -P ${NPROCS} ./build/lingodb-release/sqlite-tester
+sqlite-test-no-rebuild: build/lingodb-$(SQLITE_TEST_BUILD_TYPE)/.buildstamp
+	find ./test/sqlite/ -maxdepth 1 -type f -name '*.test' | xargs -L 1 -P ${NPROCS} ./build/lingodb-$(SQLITE_TEST_BUILD_TYPE)/sqlite-tester
 
 .PHONY: test-coverage
 test-coverage: build/lingodb-debug-coverage/.stamp resources/data/test/.stamp resources/data/uni/.stamp
@@ -121,6 +134,7 @@ build-docker:
 
 build-release: build/lingodb-release/.buildstamp
 build-debug: build/lingodb-debug/.buildstamp
+build-asan: build/lingodb-asan/.buildstamp
 
 .repr-docker-built:
 	$(MAKE) build-repr-docker
