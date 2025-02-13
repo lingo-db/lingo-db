@@ -322,6 +322,12 @@ std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(execution::Exec
    config->loweringSteps.emplace_back(std::make_unique<RelAlgLoweringStep>());
    config->loweringSteps.emplace_back(std::make_unique<SubOpLoweringStep>());
    config->loweringSteps.emplace_back(std::make_unique<DefaultImperativeLowering>());
+#if defined(ASAN_ACTIVE)
+   if(runMode == ExecutionMode::DEBUGGING) {
+      std::cerr << "ASAN is not supported in DEBUGGING mode. Switching to C mode" << std::endl;
+      runMode = ExecutionMode::C;
+   }
+#endif
    if (runMode == ExecutionMode::DEBUGGING) {
       config->executionBackend = createLLVMDebugBackend();
    } else if (runMode == ExecutionMode::C) {
