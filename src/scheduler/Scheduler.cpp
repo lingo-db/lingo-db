@@ -474,6 +474,13 @@ class Worker {
 namespace {
 SchedulerImpl* scheduler;
 static thread_local Worker* currentWorker;
+static std::atomic<size_t> numSchedulerUsers = 0;
+
+void stopCurrentScheduler() {
+   if (scheduler) {
+      scheduler->stop();
+   }
+}
 } // end namespace
 
 void SchedulerImpl::start() {
@@ -593,11 +600,6 @@ std::unique_ptr<SchedulerHandle> startScheduler(size_t numWorkers) {
    }
    return std::make_unique<SchedulerHandle>();
 }
-void stopCurrentScheduler() {
-   if (scheduler) {
-      scheduler->stop();
-   }
-}
 
 size_t getNumWorkers() {
    if (scheduler == nullptr) {
@@ -615,7 +617,6 @@ size_t currentWorkerId() {
 }
 } // namespace lingodb::scheduler
 
-static std::atomic<size_t> numSchedulerUsers = 0;
 lingodb::scheduler::SchedulerHandle::SchedulerHandle() {
    numSchedulerUsers++;
 }
