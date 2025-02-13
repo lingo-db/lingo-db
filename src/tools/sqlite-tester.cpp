@@ -384,8 +384,7 @@ int main(int argc, char** argv) {
    } else {
       session = runtime::Session::createSession();
    }
-   auto scheduler = scheduler::createScheduler();
-   scheduler->start();
+   auto scheduler = scheduler::startScheduler();
    auto lines = filterLines(readTestFile(argv[1]));
    size_t line = 0;
    while (line < lines.size()) {
@@ -404,8 +403,6 @@ int main(int argc, char** argv) {
          line += 2;
       }
    }
-   lingodb::scheduler::stopCurrentScheduler();
-   scheduler->join();
 
    return 0;
 }

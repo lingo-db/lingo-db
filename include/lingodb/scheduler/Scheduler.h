@@ -23,11 +23,14 @@ class Scheduler {
    }
 };
 
-std::unique_ptr<Scheduler> createScheduler(size_t numWorkers = 0);
-void stopCurrentScheduler();
+class SchedulerHandle {
+   public:
+   SchedulerHandle();
+   ~SchedulerHandle();
+};
+std::unique_ptr<SchedulerHandle> startScheduler(size_t numWorkers = 0);
 void awaitEntryTask(std::unique_ptr<Task> task);
 void awaitChildTask(std::unique_ptr<Task> task);
-
 
 size_t getNumWorkers();
 size_t currentWorkerId();
