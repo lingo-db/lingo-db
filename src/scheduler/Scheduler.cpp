@@ -239,7 +239,7 @@ class SchedulerImpl : public Scheduler {
    }
 
    void returnTask(TaskWrapper* task) {
-      // Multiple worker may call here concurrently. Avoid one worker already called `delete task` 
+      // Multiple worker may call here concurrently. Avoid one worker already called `delete task`
       // but another worker is still at `task->finalized`
       std::lock_guard<std::mutex> lock(taskReturnMutex);
       auto deployedNum = task->deployedOnWorkers.fetch_sub(1);
@@ -436,7 +436,7 @@ class Worker {
                   scheduler.returnTask(currTask);
                   continue;
                }
-            // if (currTask && currTask->startFiber()) {
+               // if (currTask && currTask->startFiber()) {
                //work on (part of) (new) task
                currentFiber = fiberAllocator.allocate();
                assert(currentFiber);
@@ -472,8 +472,8 @@ class Worker {
 };
 
 namespace {
-   SchedulerImpl* scheduler;
-   static thread_local Worker* currentWorker;
+SchedulerImpl* scheduler;
+static thread_local Worker* currentWorker;
 } // end namespace
 
 void SchedulerImpl::start() {
@@ -570,24 +570,28 @@ void awaitEntryTask(std::unique_ptr<Task> task) {
 void awaitChildTask(std::unique_ptr<Task> task) {
    currentWorker->awaitChildTask(std::move(task));
 }
-std::unique_ptr<Scheduler> createScheduler(size_t numWorkers) {
-   // two ways of setting number of workers.
-   // - if provided actual param for createScheduler, this will override LINGODB_PARALLELISM system var
-   // - if no actual param provided, LINGODB_PARALLELISM is used
-   // - if no actual param and no LINGODB_PARALLELISM provided, hardware_concurrency() is used
-   if (numWorkers == 0) {
-      // LINGODB_PARALLELISM is one of ["OFF", positive integer]
-      numWorkers = std::thread::hardware_concurrency();
-      if (const char* mode = std::getenv("LINGODB_PARALLELISM")) {
-         if (std::string(mode) == "OFF") {
-            numWorkers = 1;
-         } else if (std::stol(mode) > 0) {
-            numWorkers = std::stol(mode);
+
+std::unique_ptr<SchedulerHandle> startScheduler(size_t numWorkers) {
+   if (!scheduler) {
+      // two ways of setting number of workers.
+      // - if provided actual param for createScheduler, this will override LINGODB_PARALLELISM system var
+      // - if no actual param provided, LINGODB_PARALLELISM is used
+      // - if no actual param and no LINGODB_PARALLELISM provided, hardware_concurrency() is used
+      if (numWorkers == 0) {
+         // LINGODB_PARALLELISM is one of ["OFF", positive integer]
+         numWorkers = std::thread::hardware_concurrency();
+         if (const char* mode = std::getenv("LINGODB_PARALLELISM")) {
+            if (std::string(mode) == "OFF") {
+               numWorkers = 1;
+            } else if (std::stol(mode) > 0) {
+               numWorkers = std::stol(mode);
+            }
          }
       }
+      scheduler = new SchedulerImpl(numWorkers);
+      scheduler->start();
    }
-   auto s = std::make_unique<SchedulerImpl>(numWorkers);
-   return std::move(s);
+   return std::make_unique<SchedulerHandle>();
 }
 void stopCurrentScheduler() {
    if (scheduler) {
@@ -610,6 +614,19 @@ size_t currentWorkerId() {
    return std::numeric_limits<size_t>::max();
 }
 } // namespace lingodb::scheduler
+
+static std::atomic<size_t> numSchedulerUsers = 0;
+lingodb::scheduler::SchedulerHandle::SchedulerHandle() {
+   numSchedulerUsers++;
+}
+lingodb::scheduler::SchedulerHandle::~SchedulerHandle() {
+   if (numSchedulerUsers.fetch_sub(1) == 1) {
+      lingodb::scheduler::stopCurrentScheduler();
+      scheduler->join();
+      delete scheduler;
+      scheduler = nullptr;
+   }
+}
 
 /*
 int main() {

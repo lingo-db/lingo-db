@@ -54,8 +54,7 @@ int main(int argc, char** argv) {
    auto session = runtime::Session::createSession(std::string(argv[1]), true);
 
    lingodb::compiler::support::eval::init();
-   auto scheduler = scheduler::createScheduler();
-   scheduler->start();
+   auto scheduler = scheduler::startScheduler();
    while (true) {
       //print prompt
       if (prompt){
@@ -78,8 +77,6 @@ int main(int argc, char** argv) {
       }
       handleQuery(*session, query.str(), reportTimes);
    }
-   lingodb::scheduler::stopCurrentScheduler();
-   scheduler->join();
 
    return 0;
 }

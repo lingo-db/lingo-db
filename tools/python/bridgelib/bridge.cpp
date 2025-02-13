@@ -23,13 +23,17 @@ class TimingCollector : public execution::TimingProcessor {
    virtual ~TimingCollector() {}
 };
 } // namespace
+
 namespace bridge {
 class Connection {
    std::shared_ptr<runtime::Session> session;
    std::unordered_map<std::string, double> times;
+   std::unique_ptr<scheduler::SchedulerHandle> scheduler;
 
    public:
-   Connection(std::shared_ptr<runtime::Session> session) : session(session) {}
+   Connection(std::shared_ptr<runtime::Session> session) : session(session) {
+      scheduler = lingodb::scheduler::startScheduler();
+   }
    runtime::Session& getSession() {
       return *session;
    }
@@ -52,7 +56,7 @@ bool bridge::run(Connection* connection, const char* module, ArrowArrayStream* r
    queryExecutionConfig->timingProcessor = std::make_unique<TimingCollector>(connection->getTimes());
    auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), connection->getSession());
    executer->fromData(module);
-   executer->execute();
+   scheduler::awaitEntryTask(std::make_unique<execution::QueryExecutionTask>(std::move(executer)));
    if (result) {
       auto batchReader = std::make_shared<arrow::TableBatchReader>(*result);
       if (!arrow::ExportRecordBatchReader(batchReader, res).ok()) {
@@ -70,7 +74,7 @@ bool bridge::runSQL(Connection* connection, const char* query, ArrowArrayStream*
    queryExecutionConfig->timingProcessor = std::make_unique<TimingCollector>(connection->getTimes());
    auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), connection->getSession());
    executer->fromData(query);
-   executer->execute();
+   scheduler::awaitEntryTask(std::make_unique<execution::QueryExecutionTask>(std::move(executer)));
    if (result) {
       auto batchReader = std::make_shared<arrow::TableBatchReader>(*result);
       if (!arrow::ExportRecordBatchReader(batchReader, res).ok()) {

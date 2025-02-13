@@ -660,13 +660,10 @@ void execute(std::string inputFileName, std::string databasePath, std::unordered
    queryExecutionConfig->timingProcessor = {};
    queryExecutionConfig->queryOptimizer = {};
    queryExecutionConfig->resultProcessor = std::make_unique<TupleCountResultProcessor>(tupleCounts);
-   auto scheduler = lingodb::scheduler::createScheduler();
-   scheduler->start();
+   auto scheduler = lingodb::scheduler::startScheduler();
    auto executer = lingodb::execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), *session);
    executer->fromFile(inputFileName);
    lingodb::scheduler::awaitEntryTask(std::make_unique<lingodb::execution::QueryExecutionTask>(std::move(executer)));
-   lingodb::scheduler::stopCurrentScheduler();
-   scheduler->join();
 }
 } // namespace
 

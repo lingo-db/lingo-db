@@ -34,12 +34,9 @@ int main(int argc, char** argv) {
    }
    queryExecutionConfig->timingProcessor = std::make_unique<execution::TimingPrinter>(inputFileName);
 
-   auto scheduler = scheduler::createScheduler();
-   scheduler->start();
+   auto scheduler = scheduler::startScheduler();
    auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), *session);
    executer->fromFile(inputFileName);
    scheduler::awaitEntryTask(std::make_unique<execution::QueryExecutionTask>(std::move(executer)));
-   lingodb::scheduler::stopCurrentScheduler();
-   scheduler->join();
    return 0;
 }
