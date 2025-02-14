@@ -45,7 +45,6 @@ jobs:
       - name: Build
         run: |
             make clean
-            make venv
             make lint
 
   test:
@@ -64,7 +63,6 @@ jobs:
       - name: Test
         run: |
             export ASAN_OPTIONS=detect_leaks=0          
-            make venv
             touch build/dependencies
             touch build/lingodb-${{ matrix.build_type }}/.stamp
             touch build/lingodb-${{ matrix.build_type }}/.buildstamp          
@@ -86,7 +84,6 @@ jobs:
       - name: Test
         run: |
           export ASAN_OPTIONS=detect_leaks=0
-          make venv
           touch build/dependencies
           touch build/lingodb-${{ matrix.build_type }}/.stamp
           touch build/lingodb-${{ matrix.build_type }}/.buildstamp
@@ -108,7 +105,6 @@ jobs:
           path: build/lingodb-${{ matrix.build_type }}
       - name: Prepare Binaries
         run: |
-          make venv
           chmod +x build/lingodb-${{ matrix.build_type }}/*
       - name: Restore datasets from cache
         id: cache-datasets
@@ -190,10 +186,9 @@ jobs:
       - name: Build
         run: |
             make clean
-            make venv
             make test-coverage
             mkdir -p /coverage
-            llvm-cov-20 show ./build/lingodb-debug-coverage/run-mlir -object ./build/lingodb-debug-coverage/mlir-db-opt -object ./build/lingodb-debug-coverage/run-sql  -instr-profile=build/lingodb-debug-coverage/coverage.profdata --ignore-filename-regex="venv" --ignore-filename-regex="vendored" --ignore-filename-regex="build/lingodb-debug-coverage" > /coverage/coverage.txt
+            llvm-cov-20 show ./build/lingodb-debug-coverage/run-mlir -object ./build/lingodb-debug-coverage/mlir-db-opt -object ./build/lingodb-debug-coverage/run-sql  -instr-profile=build/lingodb-debug-coverage/coverage.profdata  --ignore-filename-regex="vendored" --ignore-filename-regex="build/lingodb-debug-coverage" > /coverage/coverage.txt
       - uses: actions/checkout@master
       - uses: codecov/codecov-action@v3
         with:

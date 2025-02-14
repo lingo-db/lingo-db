@@ -1,6 +1,6 @@
 set -e
 ls -la
-make PYTHON_BINARY="/opt/python/$1/bin/python3" venv
+/opt/python/$1/bin/python3 -m venv venv
 venv/bin/python3 -m pip install build pyarrow===19.0.0
 venv/bin/python3 -c "import pyarrow; pyarrow.create_library_symlinks()"
 ARROW_LIB_DIR=$(venv/bin/python3 -c "import pyarrow as pa; print(':'.join(pa.get_library_dirs()))")

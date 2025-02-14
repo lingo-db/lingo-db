@@ -44,7 +44,6 @@ lint:
   image: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059  
   script:
     - make clean
-    - make venv
     - make lint
   tags:
     - "umbra-builder"
@@ -55,7 +54,6 @@ test:
     - build-debug
   script:
     - make clean
-    - make venv
     - tar -xvzf lingodb_debug.tar.gz
     - touch build/dependencies
     - touch build/lingodb-debug/.stamp
@@ -70,7 +68,6 @@ sqlite-tests:
     - build-release
   script:
     - make clean
-    - make venv
     - tar -xvzf lingodb_release.tar.gz
     - touch build/dependencies
     - touch build/lingodb-release/.stamp
@@ -86,7 +83,6 @@ sqlite-dataset-tests:
   script:
     - export BASE_PATH=$(pwd)
     - make clean
-    - make venv
     - tar -xvzf lingodb_release.tar.gz
     - touch build/dependencies
     - touch build/lingodb-release/.stamp
@@ -145,7 +141,6 @@ test_pylingodb:
 coverage:
   image: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059  
   script:
-    - make venv
     - make coverage
   coverage: '/coverage: \d+.?\d*\%/'
   artifacts:
