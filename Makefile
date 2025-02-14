@@ -1,8 +1,7 @@
 ROOT_DIR := $(dir $(abspath $(firstword $(MAKEFILE_LIST))))
 NPROCS := $(shell echo $$(nproc))
 LLVM_LIT_BINARY := lit
-#LLVM_BIN_DIR := $(shell venv/bin/python3 -c "import lingodbllvm; print(lingodbllvm.get_bin_dir())")
-PYTHON_BINARY := python3
+
 DATA_BUILD_TYPE ?= debug
 TEST_BUILD_TYPE ?= debug
 SQLITE_TEST_BUILD_TYPE ?= release
@@ -10,9 +9,6 @@ SQLITE_TEST_BUILD_TYPE ?= release
 
 build:
 	mkdir -p $@
-venv:
-	$(PYTHON_BINARY) -m venv venv
-	venv/bin/pip install -r requirements.txt
 
 
 resources/data/%/.rawdata:
@@ -42,14 +38,10 @@ resources/data/%/.stamp: resources/data/%/.rawdata build/lingodb-$(DATA_BUILD_TY
 
 
 
-LDB_ARGS= -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-		 -DPython3_EXECUTABLE="${ROOT_DIR}/venv/bin/python3" \
+LDB_ARGS= -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  \
 	   	 -DCMAKE_BUILD_TYPE=Debug
 
-build/dependencies: venv build
-	touch $@
-
-build/lingodb-debug/.stamp: build/dependencies
+build/lingodb-debug/.stamp: build
 	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS)
 	touch $@
 
@@ -62,7 +54,7 @@ build/lingodb-release/.buildstamp: build/lingodb-release/.stamp
 	cmake --build $(dir $@) -- -j${NPROCS}
 	touch $@
 
-build/lingodb-release/.stamp: build/dependencies
+build/lingodb-release/.stamp: build
 	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS) -DCMAKE_BUILD_TYPE=Release
 	touch $@
 
@@ -70,7 +62,7 @@ build/lingodb-asan/.buildstamp: build/lingodb-asan/.stamp
 	cmake --build $(dir $@) -- -j${NPROCS}
 	touch $@
 
-build/lingodb-asan/.stamp: build/dependencies
+build/lingodb-asan/.stamp: build
 	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS) -DCMAKE_BUILD_TYPE=ASAN
 	touch $@
 
@@ -78,10 +70,10 @@ build/lingodb-relwithdebinfo/.buildstamp: build/lingodb-relwithdebinfo/.stamp
 	cmake --build $(dir $@) -- -j${NPROCS}
 	touch $@
 
-build/lingodb-relwithdebinfo/.stamp: build/dependencies
+build/lingodb-relwithdebinfo/.stamp: build
 	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS) -DCMAKE_BUILD_TYPE=RelWithDebInfo
 	touch $@
-build/lingodb-debug-coverage/.stamp: build/dependencies
+build/lingodb-debug-coverage/.stamp: build
 	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS) -DCMAKE_CXX_FLAGS="-O0 -fprofile-instr-generate -fcoverage-mapping" -DCMAKE_C_FLAGS="-O0 -fprofile-instr-generate -fcoverage-mapping" -DCMAKE_CXX_COMPILER=clang++-20 -DCMAKE_C_COMPILER=clang-20
 	touch $@
 
@@ -107,7 +99,7 @@ test-coverage: build/lingodb-debug-coverage/.stamp resources/data/test/.stamp re
 coverage: build/lingodb-debug-coverage/.stamp
 	$(MAKE) test-coverage
 	mkdir -p build/coverage-report
-	llvmcov2html --exclude-dir=$(dir $<),venv,vendored build/coverage-report $(dir $<)/run-mlir ./build/lingodb-debug-coverage/run-sql $(dir $<)/mlir-db-opt $(dir $<)/sql-to-mlir $(dir $<)/coverage.profdata
+	llvmcov2html --exclude-dir=$(dir $<),vendored build/coverage-report $(dir $<)/run-mlir ./build/lingodb-debug-coverage/run-sql $(dir $<)/mlir-db-opt $(dir $<)/sql-to-mlir $(dir $<)/coverage.profdata
 
 
 .PHONY: run-benchmark
@@ -147,4 +139,4 @@ clean:
 lint: build/lingodb-debug/.stamp
 	cmake --build build/lingodb-debug --target build_includes
 	sed -i 's/-fno-lifetime-dse//g' build/lingodb-debug/compile_commands.json
-	venv/bin/python3 tools/scripts/run-clang-tidy.py -p $(dir $<) -quiet -header-filter="$(shell pwd)/include/.*" -exclude="arrow|vendored" -clang-tidy-binary=clang-tidy-20
+	python3 tools/scripts/run-clang-tidy.py -p $(dir $<) -quiet -header-filter="$(shell pwd)/include/.*" -exclude="arrow|vendored" -clang-tidy-binary=clang-tidy-20
