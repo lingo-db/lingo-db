@@ -16,7 +16,7 @@ uint8_t* lingodb::runtime::SimpleState::create(lingodb::runtime::ExecutionContex
 uint8_t* lingodb::runtime::SimpleState::merge(lingodb::runtime::ThreadLocal* threadLocal, void (*merge)(uint8_t*, uint8_t*)) {
    utility::Tracer::Trace trace(mergeEvent);
    uint8_t* first = nullptr;
-   for (auto* ptr : threadLocal->getTls<uint8_t>()) {
+   for (auto* ptr : threadLocal->getThreadLocalValues<uint8_t>()) {
       if(!ptr) continue;
       auto* current = ptr;
       if (!first) {

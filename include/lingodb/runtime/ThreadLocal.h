@@ -19,7 +19,7 @@ class ThreadLocal {
    uint8_t* getLocal();
    static ThreadLocal* create(uint8_t* (*initFn)(uint8_t*), uint8_t*);
    template <class T>
-   std::span<T*> getTls() {
+   std::span<T*> getThreadLocalValues() {
       for (size_t i = 0; i < lingodb::scheduler::getNumWorkers(); i++) {
          if (values[i]) break;
          if (i == lingodb::scheduler::getNumWorkers() - 1) {

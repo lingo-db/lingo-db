@@ -357,8 +357,7 @@ void runQuery(runtime::Session& session, const std::vector<std::string>& lines, 
 
    auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), session);
    executer->fromData(query);
-   auto task = std::make_unique<execution::QueryExecutionTask>(std::move(executer));
-   task->beforeDestroyFn = [&]() {
+   auto task = std::make_unique<execution::QueryExecutionTask>(std::move(executer), [&]() {
       std::string result = std::to_string(resultHasherRef.numValues) + " values hashing to " + resultHasherRef.hash + "\n";
       auto resultLines = std::regex_replace(resultHasherRef.lines, std::regex("\\s+\n"), "\n");
       if (result != expectedResult && !compareFuzzy(expectedResult, resultLines)) {
@@ -368,7 +367,7 @@ void runQuery(runtime::Session& session, const std::vector<std::string>& lines, 
          std::cerr << "LINES: \"" << resultHasherRef.lines << "\"" << std::endl;
          exit(1);
       }
-   };
+   });
    scheduler::awaitEntryTask(std::move(task));
 }
 } // namespace

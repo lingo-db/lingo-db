@@ -19,7 +19,7 @@ lingodb::runtime::ThreadLocal* lingodb::runtime::ThreadLocal::create(uint8_t* (*
 uint8_t* lingodb::runtime::ThreadLocal::merge(void (*mergeFn)(uint8_t*, uint8_t*)) {
    utility::Tracer::Trace trace(mergeEvent);
    uint8_t* first = nullptr;
-   for (auto* ptr : getTls<uint8_t>()) {
+   for (auto* ptr : getThreadLocalValues<uint8_t>()) {
       if(ptr) {
          auto* current = ptr;
          if (!first) {

@@ -67,7 +67,7 @@ lingodb::runtime::PreAggregationHashtable* lingodb::runtime::PreAggregationHasht
    using Entry = lingodb::runtime::PreAggregationHashtableFragment::Entry;
    constexpr size_t numPartitions = lingodb::runtime::PreAggregationHashtableFragment::numOutputs;
    std::vector<FlexibleBuffer*> outputs[numPartitions];
-   for (auto* fragment : threadLocal->getTls<PreAggregationHashtableFragment>()) {
+   for (auto* fragment : threadLocal->getThreadLocalValues<PreAggregationHashtableFragment>()) {
       if (!fragment) {
          continue;
       }
