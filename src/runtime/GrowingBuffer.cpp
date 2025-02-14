@@ -54,6 +54,7 @@ size_t lingodb::runtime::GrowingBuffer::getTypeSize() const {
    return values.getTypeSize();
 }
 lingodb::runtime::Buffer lingodb::runtime::GrowingBuffer::sort(lingodb::runtime::ExecutionContext* executionContext, bool (*compareFn)(uint8_t*, uint8_t*)) {
+   //todo: make sorting parallel again
    utility::Tracer::Trace trace(sortEvent);
    std::vector<uint8_t*> toSort;
    values.iterate([&](uint8_t* entryRawPtr) {
@@ -62,7 +63,6 @@ lingodb::runtime::Buffer lingodb::runtime::GrowingBuffer::sort(lingodb::runtime:
    size_t typeSize = values.getTypeSize();
    size_t len = values.getLen();
    utility::Tracer::Trace trace2(rawSortEvent);
-   //todo: scheduler (implement parallel sorting)
    std::sort(toSort.begin(), toSort.end(), compareFn);
    trace2.stop();
    uint8_t* sorted = new uint8_t[typeSize * len];
@@ -97,7 +97,7 @@ void lingodb::runtime::GrowingBuffer::destroy(GrowingBuffer* vec) {
 lingodb::runtime::GrowingBuffer* lingodb::runtime::GrowingBuffer::merge(lingodb::runtime::ThreadLocal* threadLocal) {
    utility::Tracer::Trace trace(mergeEvent);
    GrowingBuffer* first = nullptr;
-   for (auto* current : threadLocal->getTls<GrowingBuffer>()) {
+   for (auto* current : threadLocal->getThreadLocalValues<GrowingBuffer>()) {
       if(!current) continue;
       if (!first) {
          first = current;

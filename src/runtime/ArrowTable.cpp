@@ -22,7 +22,7 @@ ArrowTable* ArrowTable::addColumn(VarLen32 name, ArrowColumn* column) {
 ArrowTable* ArrowTable::merge(ThreadLocal* threadLocal) {
    utility::Tracer::Trace trace(tableMerge);
    std::vector<std::shared_ptr<arrow::Table>> tables;
-   for (auto* ptr : threadLocal->getTls<ArrowTable>()) {
+   for (auto* ptr : threadLocal->getThreadLocalValues<ArrowTable>()) {
       if(!ptr) continue;
       auto* current = ptr;
       tables.push_back(current->get());

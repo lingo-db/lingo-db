@@ -126,10 +126,9 @@ class QueryExecuter {
 };
 class QueryExecutionTask : public lingodb::scheduler::Task {
    std::unique_ptr<QueryExecuter> queryExecutor;
-
-   public:
    std::function<void()> beforeDestroyFn;
-   QueryExecutionTask(std::unique_ptr<QueryExecuter> queryExecutor) : queryExecutor(std::move(queryExecutor)) {}
+   public:
+   QueryExecutionTask(std::unique_ptr<QueryExecuter> queryExecutor, std::function<void()> beforeDestroyFn = nullptr) : queryExecutor(std::move(queryExecutor)), beforeDestroyFn(beforeDestroyFn) {}
    void run() override {
       if (workExhausted.exchange(true)) {
          return;

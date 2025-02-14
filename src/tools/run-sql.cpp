@@ -4,7 +4,6 @@
 #include "lingodb/scheduler/Scheduler.h"
 #include "lingodb/utility/Setting.h"
 
-#include <csignal>
 #include <fstream>
 #include <iostream>
 #include <string>

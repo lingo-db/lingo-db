@@ -4,9 +4,7 @@
 #include <condition_variable>
 #include <csignal>
 #include <deque>
-#include <iostream>
 #include <memory>
-#include <syncstream>
 #include <thread>
 
 #include "lingodb/scheduler/Scheduler.h"
@@ -93,7 +91,6 @@ class Fiber {
 
    ~Fiber() {
       assert(done);
-      //todo: maybe cleanup
    }
 };
 
@@ -140,7 +137,9 @@ struct TaskWrapper {
    }
 };
 
-class SchedulerImpl : public Scheduler {
+class Scheduler {
+   size_t numWorkers;
+
    std::atomic<bool> shutdown{false};
    std::vector<std::thread> workerThreads;
    Worker* idleWorkers = nullptr;
@@ -155,16 +154,19 @@ class SchedulerImpl : public Scheduler {
    TaskWrapper* coolingDownTail = nullptr;
 
    public:
-   SchedulerImpl(size_t numWorkers = std::thread::hardware_concurrency()) : Scheduler(numWorkers) {
+   Scheduler(size_t numWorkers = std::thread::hardware_concurrency()) : numWorkers(numWorkers) {
+   }
+   size_t getNumWorkers() {
+      return numWorkers;
    }
 
    void putWorkerToSleep(Worker* worker);
 
-   virtual void start() override;
+   void start();
 
    void stop();
 
-   virtual void join() override {
+   void join() {
       for (auto& workerThread : workerThreads) {
          workerThread.join();
       }
@@ -177,7 +179,7 @@ class SchedulerImpl : public Scheduler {
    //insert task into "active task queue"
    void enqueueTask(TaskWrapper* wrapper);
 
-   virtual void enqueueTask(std::unique_ptr<Task>&& task) override {
+   void enqueueTask(std::unique_ptr<Task>&& task) {
       enqueueTask(new TaskWrapper{std::move(task)});
    }
 
@@ -334,7 +336,7 @@ class Worker {
       }
    };
 
-   SchedulerImpl& scheduler;
+   Scheduler& scheduler;
 
    //for managing a pool of fibers/stacks
    FiberAllocator fiberAllocator;
@@ -345,7 +347,6 @@ class Worker {
 
    std::unique_ptr<Fiber> currentFiber;
 
-   //todo: local task
    TaskWrapper* currentTask = nullptr;
 
    public:
@@ -358,7 +359,7 @@ class Worker {
    size_t workerId;
    bool allowedToSleep = true;
 
-   Worker(SchedulerImpl& scheduler, size_t id) : scheduler(scheduler), fiberAllocator(64), workerId(id) {
+   Worker(Scheduler& scheduler, size_t id) : scheduler(scheduler), fiberAllocator(64), workerId(id) {
    }
 
    void wakeupFiber(std::unique_ptr<Fiber>&& fiber) {
@@ -472,7 +473,7 @@ class Worker {
 };
 
 namespace {
-SchedulerImpl* scheduler;
+Scheduler* scheduler;
 static thread_local Worker* currentWorker;
 static std::atomic<size_t> numSchedulerUsers = 0;
 
@@ -483,7 +484,7 @@ void stopCurrentScheduler() {
 }
 } // end namespace
 
-void SchedulerImpl::start() {
+void Scheduler::start() {
    scheduler = this;
    for (size_t i = 0; i < numWorkers; i++) {
       workerThreads.emplace_back([this, i] {
@@ -495,7 +496,7 @@ void SchedulerImpl::start() {
    }
 }
 
-void SchedulerImpl::stop() {
+void Scheduler::stop() {
    shutdown.store(true);
    std::unique_lock<std::mutex> lock(taskQueueMutex);
    size_t cntr = 0;
@@ -508,7 +509,7 @@ void SchedulerImpl::stop() {
    }
 }
 
-void SchedulerImpl::enqueueTask(TaskWrapper* wrapper) {
+void Scheduler::enqueueTask(TaskWrapper* wrapper) {
    {
       std::lock_guard<std::mutex> lock(taskQueueMutex);
       if (taskTail) {
@@ -533,14 +534,13 @@ void SchedulerImpl::enqueueTask(TaskWrapper* wrapper) {
    }
 }
 
-void SchedulerImpl::putWorkerToSleep(Worker* worker) {
+void Scheduler::putWorkerToSleep(Worker* worker) {
    if (isShutdown()) {
       return;
    }
    std::unique_lock<std::mutex> lock(taskQueueMutex);
    std::unique_lock<std::mutex> workerLock(worker->mutex);
    if (worker->allowedToSleep) {
-      //std::cout << "Putting worker to sleep " << worker->workerId << std::endl;
       if (!worker->isInIdleList) {
          worker->nextIdleWorker = idleWorkers;
          idleWorkers = worker;
@@ -551,12 +551,10 @@ void SchedulerImpl::putWorkerToSleep(Worker* worker) {
    } else {
       worker->allowedToSleep = true;
    }
-   //std::cout << "Waking up worker " << worker->workerId << std::endl;
 }
 
 void TaskWrapper::finalize() {
    if (waitingOnTaskCompletion) {
-      //std::cout << "Finalizing Task on Worker " << currentWorker->workerId << std::endl;
       auto* worker = waitingOnTaskCompletion->getWorker();
       assert(worker);
       worker->wakeupFiber(std::move(waitingOnTaskCompletion));
@@ -595,7 +593,7 @@ std::unique_ptr<SchedulerHandle> startScheduler(size_t numWorkers) {
             }
          }
       }
-      scheduler = new SchedulerImpl(numWorkers);
+      scheduler = new Scheduler(numWorkers);
       scheduler->start();
    }
    return std::make_unique<SchedulerHandle>();
@@ -628,16 +626,3 @@ lingodb::scheduler::SchedulerHandle::~SchedulerHandle() {
       scheduler = nullptr;
    }
 }
-
-/*
-int main() {
-   std::signal(SIGINT, signalHandler);
-   std::signal(SIGTERM, signalHandler);
-   Scheduler scheduler(8);
-   scheduler.start();
-   scheduler.enqueueTask(std::make_unique<QueryExecutionTask>());
-   scheduler.join();
-   utility::Tracer::dump();
-
-   return 0;
-}*/
