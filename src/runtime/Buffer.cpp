@@ -78,7 +78,9 @@ class FlexibleBufferIteratorTask : public lingodb::scheduler::Task {
             auto& buffer = buffers[localStartIndex];
             if (buffer.numElements < splitSize) {
                //case 1: only a small task: execute directly
+               utility::Tracer::Trace trace(iterateEvent);
                cb(buffer);
+               trace.stop();
             } else {
                //case 2: only run the first part, put the rest into local state
                auto unitAmount = (buffer.numElements + splitSize - 1) / splitSize;
