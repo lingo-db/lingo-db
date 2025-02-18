@@ -6,13 +6,14 @@ namespace {
 static utility::Tracer::Event iterateEvent("FlexibleBuffer", "iterateParallel");
 static utility::Tracer::Event bufferIteratorEvent("BufferIterator", "iterate");
 
-class FlexibleBufferWorkerLocalState {
-   public:
+class FlexibleBufferWorkerResvState {
+public:
+   size_t bufferId;
    std::mutex mutex;
    bool hasMore{false};
-   size_t unitId{0};
+   size_t resvCursor{0};
+   size_t resvId{0};
    size_t unitAmount;
-   size_t bufferId;
    // workerId steal task from
    size_t stealWorkerId{std::numeric_limits<size_t>::max()};
 
@@ -20,9 +21,9 @@ class FlexibleBufferWorkerLocalState {
       size_t cur;
       {
          std::lock_guard<std::mutex> stateLock(this->mutex);
-         cur = unitId;
-         unitId++;
-         hasMore = unitId < unitAmount;
+         cur = resvCursor;
+         resvCursor++;
+         hasMore = resvCursor < unitAmount;
       }
       if (cur >= unitAmount) {
          return -1;
@@ -37,12 +38,12 @@ class FlexibleBufferIteratorTask : public lingodb::scheduler::Task {
    const std::function<void(lingodb::runtime::Buffer)> cb;
    std::atomic<size_t> startIndex{0};
    size_t splitSize{20000};
-   std::vector<std::unique_ptr<FlexibleBufferWorkerLocalState>> workerLocalStates;
+   std::vector<std::unique_ptr<FlexibleBufferWorkerResvState>> workerResvs;
 
    public:
    FlexibleBufferIteratorTask(std::vector<lingodb::runtime::Buffer>& buffers, size_t typeSize, const std::function<void(lingodb::runtime::Buffer)> cb) : buffers(buffers), typeSize(typeSize), cb(cb) {
       for (size_t i = 0; i < lingodb::scheduler::getNumWorkers(); i++) {
-         workerLocalStates.emplace_back(std::make_unique<FlexibleBufferWorkerLocalState>());
+         workerResvs.emplace_back(std::make_unique<FlexibleBufferWorkerResvState>());
       }
    }
    void unitRun(size_t bufferId, int unitId) {
@@ -58,66 +59,76 @@ class FlexibleBufferIteratorTask : public lingodb::scheduler::Task {
       trace.stop();
    }
 
-   void run() override {
+   bool reserveWork() override {
       // quick check for exhaust. workExhausted is true if there is no more buffer or no more
       // work unit in own local state or steal from other workers.
       if (workExhausted.load()) {
-         return;
+         return false;
       }
+
       //1. if the current worker has more work locally, do it
-      auto* state = workerLocalStates[lingodb::scheduler::currentWorkerId()].get();
-      if (state->hasMore) {
-         unitRun(state->bufferId, state->fetchAndNext());
-         return;
+      auto* state = workerResvs[lingodb::scheduler::currentWorkerId()].get();
+      auto id = state->fetchAndNext();
+      if (id != -1) {
+         state->resvId = id;
+         return true;
       }
 
       //2. if the current worker has no more work locally, try to allocate new work
-      if (startIndex < buffers.size()) {
-         size_t localStartIndex = startIndex.fetch_add(1);
-         if (localStartIndex < buffers.size()) {
-            auto& buffer = buffers[localStartIndex];
-            if (buffer.numElements < splitSize) {
-               //case 1: only a small task: execute directly
-               cb(buffer);
-            } else {
-               //case 2: only run the first part, put the rest into local state
-               auto unitAmount = (buffer.numElements + splitSize - 1) / splitSize;
-               {
-                  // reset local state
-                  std::lock_guard<std::mutex> resetLock(state->mutex);
-                  state->hasMore = true;
-                  state->unitId = 1;
-                  state->bufferId = localStartIndex;
-                  state->unitAmount = unitAmount;
-               }
-               unitRun(state->bufferId, 0);
-            }
-            return;
+      size_t localStartIndex = startIndex.fetch_add(1);
+      if (localStartIndex < buffers.size()) {
+         auto& buffer = buffers[localStartIndex];
+         auto unitAmount = (buffer.numElements + splitSize - 1) / splitSize;
+         {
+            // reset local state
+            std::lock_guard<std::mutex> resetLock(state->mutex);
+            state->hasMore = true;
+            state->resvCursor = 1;
+            state->resvId = 0;
+            state->bufferId = localStartIndex;
+            state->unitAmount = unitAmount;
          }
+         return true;  
       }
       //3. if the current worker has no more work locally and no more work globally, try to steal work from the worker we stole from last time
       if (state->stealWorkerId != std::numeric_limits<size_t>::max()) {
-         auto* other = workerLocalStates[state->stealWorkerId].get();
+         auto* other = workerResvs[state->stealWorkerId].get();
          if (other->hasMore) {
-            unitRun(other->bufferId, other->fetchAndNext());
-            return;
+            auto id = other->fetchAndNext();
+            if (id != -1) {
+               state->resvId = id;
+               return true;
+            }
          }
          state->stealWorkerId = std::numeric_limits<size_t>::max();
       }
       //4. if the current worker has no more work locally and no more work globally, try to steal work from other workers
-      for (size_t i = 1; i < workerLocalStates.size(); i++) {
+      for (size_t i = 1; i < workerResvs.size(); i++) {
          // make sure index of worker to steal never exceed worker number limits
-         auto idx = (lingodb::scheduler::currentWorkerId() + i) % workerLocalStates.size();
-         auto* other = workerLocalStates[idx].get();
+         auto idx = (lingodb::scheduler::currentWorkerId() + i) % workerResvs.size();
+         auto* other = workerResvs[idx].get();
          if (other->hasMore) {
-            // only current worker can modify its onw stealWorkerId. no need to lock
-            state->stealWorkerId = idx;
-            unitRun(other->bufferId, other->fetchAndNext());
-            return;
+            auto id = other->fetchAndNext();
+            if (id != -1) {
+               // only current worker can modify its onw stealWorkerId. no need to lock
+               state->stealWorkerId = idx;
+               state->resvId = id;
+               return true;
+            }
          }
       }
 
       workExhausted.store(true);
+      return false;
+   }
+   void consumeWork() override {
+      auto* state = workerResvs[lingodb::scheduler::currentWorkerId()].get();
+      if (state->stealWorkerId != std::numeric_limits<size_t>::max()) {
+         auto* other = workerResvs[state->stealWorkerId].get();
+         unitRun(other->bufferId, state->resvId);
+         return;
+      }
+      unitRun(state->bufferId, state->resvId);
    }
 };
 
@@ -128,15 +139,25 @@ class BufferIteratorTask : public lingodb::scheduler::Task {
    const std::function<void(lingodb::runtime::Buffer, size_t, size_t, void*)> cb;
    size_t splitSize{20000};
    std::atomic<size_t> startIndex{0};
+   std::vector<size_t> workerResvs;
 
    public:
-   BufferIteratorTask(lingodb::runtime::Buffer& buffer, size_t typeSize, void* contextPtr, const std::function<void(lingodb::runtime::Buffer, size_t, size_t, void*)> cb) : buffer(buffer), bufferLen(buffer.numElements / typeSize), contextPtr(contextPtr), cb(cb) {}
-   void run() override {
+   BufferIteratorTask(lingodb::runtime::Buffer& buffer, size_t typeSize, void* contextPtr, const std::function<void(lingodb::runtime::Buffer, size_t, size_t, void*)> cb) : buffer(buffer), bufferLen(buffer.numElements / typeSize), contextPtr(contextPtr), cb(cb) {
+      for (size_t i = 0; i < lingodb::scheduler::getNumWorkers(); i++) {
+         workerResvs.push_back(0);
+      }
+   }
+   bool reserveWork() override {
       size_t localStartIndex = startIndex.fetch_add(1);
       if (localStartIndex * splitSize >= bufferLen) {
          workExhausted.store(true);
-         return;
+         return false;
       }
+      workerResvs.push_back(localStartIndex);
+      return true;
+   }
+   void consumeWork() override {
+      auto localStartIndex = workerResvs[lingodb::scheduler::currentWorkerId()];
       auto begin = localStartIndex * splitSize;
       auto end = (localStartIndex + 1) * splitSize;
       if (end > bufferLen) {
