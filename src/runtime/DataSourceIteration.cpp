@@ -56,6 +56,9 @@ class ScanBatchesTask : public lingodb::scheduler::Task {
 
    public:
    ScanBatchesTask(std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, std::vector<size_t> colIds, const std::function<void(lingodb::runtime::RecordBatchInfo*)>& cb) : batches(batches), colIds(colIds), cb(cb) {
+      if (batches.size() == 1) {
+         singleRun = true;
+      }
       for (size_t i = 0; i < lingodb::scheduler::getNumWorkers(); i++) {
          batchInfos.push_back(reinterpret_cast<lingodb::runtime::RecordBatchInfo*>(malloc(sizeof(lingodb::runtime::RecordBatchInfo) + sizeof(lingodb::runtime::ColumnInfo) * colIds.size())));
       }

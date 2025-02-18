@@ -4,9 +4,13 @@
 namespace lingodb::scheduler {
 class Task {
    protected:
+   bool singleRun{false};
    std::atomic<bool> workExhausted{false};
 
    public:
+   bool onlySingleRun() {
+      return singleRun;
+   }
    bool hasWork() {
       return !workExhausted.load();
    }

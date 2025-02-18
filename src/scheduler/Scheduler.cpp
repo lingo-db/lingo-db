@@ -139,6 +139,8 @@ struct TaskWrapper {
 
 class Scheduler {
    size_t numWorkers;
+   // after microseconds of debounce duration, worker are put into sleep
+   double debounceWorkerSleep;
 
    std::atomic<bool> shutdown{false};
    std::vector<std::thread> workerThreads;
@@ -154,7 +156,7 @@ class Scheduler {
    TaskWrapper* coolingDownTail = nullptr;
 
    public:
-   Scheduler(size_t numWorkers = std::thread::hardware_concurrency()) : numWorkers(numWorkers) {
+   Scheduler(size_t numWorkers = std::thread::hardware_concurrency(), double debounceWorkerSleep = 100) : numWorkers(numWorkers), debounceWorkerSleep(debounceWorkerSleep) {
    }
    size_t getNumWorkers() {
       return numWorkers;
@@ -174,6 +176,10 @@ class Scheduler {
 
    bool isShutdown() {
       return shutdown.load();
+   }
+
+   double getDebounceWorkerSleep() {
+      return debounceWorkerSleep;
    }
 
    //insert task into "active task queue"
@@ -349,6 +355,9 @@ class Worker {
 
    TaskWrapper* currentTask = nullptr;
 
+   using TimePoint = std::chrono::time_point<std::chrono::system_clock>;
+   TimePoint startWait = TimePoint::min();
+
    public:
    //for cheaply collecting idle workers
    Worker* nextIdleWorker = nullptr;
@@ -375,6 +384,11 @@ class Worker {
    }
 
    void awaitChildTask(std::unique_ptr<Task> task) {
+      if (task->onlySingleRun()) {
+         task->run();
+         return;
+      }
+
       TaskWrapper* taskWrapper = new TaskWrapper{std::move(task)};
       Fiber& fiber = *currentFiber;
       taskWrapper->waitingOnTaskCompletion = std::move(currentFiber);
@@ -445,6 +459,7 @@ class Worker {
                   currTask->task->run();
                });
                if (fiberDone) {
+                  this->startWait = TimePoint::min();
                   handleFiberComplete();
                } else {
                   currTask->yieldFiber();
@@ -461,7 +476,15 @@ class Worker {
 
                continue;
             } else {
-               scheduler.putWorkerToSleep(this);
+               if (this->startWait == TimePoint::min()) {
+                  this->startWait = std::chrono::high_resolution_clock::now();
+               }
+               auto endWait = std::chrono::high_resolution_clock::now();
+               auto dur = std::chrono::duration_cast<std::chrono::microseconds>(endWait - this->startWait).count() / 1000.0;
+               if (dur > scheduler.getDebounceWorkerSleep()) {
+                  this->startWait = TimePoint::min();
+                  scheduler.putWorkerToSleep(this);
+               }
             }
 
          } else {
@@ -593,7 +616,11 @@ std::unique_ptr<SchedulerHandle> startScheduler(size_t numWorkers) {
             }
          }
       }
-      scheduler = new Scheduler(numWorkers);
+      double sleepDebounce = 100;
+      if (const char* debounce = std::getenv("LINGODB_WORKER_SLEEP_DEBOUNCE")) {
+         sleepDebounce = std::stod(debounce);
+      }
+      scheduler = new Scheduler(numWorkers, sleepDebounce);
       scheduler->start();
    }
    return std::make_unique<SchedulerHandle>();
