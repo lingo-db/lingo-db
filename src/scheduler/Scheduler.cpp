@@ -139,6 +139,8 @@ struct TaskWrapper {
 
 class Scheduler {
    size_t numWorkers;
+   // after microseconds of debounce duration, worker are put into sleep
+   double debounceWorkerSleep;
 
    std::atomic<bool> shutdown{false};
    std::vector<std::thread> workerThreads;
@@ -154,7 +156,7 @@ class Scheduler {
    TaskWrapper* coolingDownTail = nullptr;
 
    public:
-   Scheduler(size_t numWorkers = std::thread::hardware_concurrency()) : numWorkers(numWorkers) {
+   Scheduler(size_t numWorkers = std::thread::hardware_concurrency(), double debounceWorkerSleep = 100) : numWorkers(numWorkers), debounceWorkerSleep(debounceWorkerSleep) {
    }
    size_t getNumWorkers() {
       return numWorkers;
@@ -174,6 +176,10 @@ class Scheduler {
 
    bool isShutdown() {
       return shutdown.load();
+   }
+
+   double getDebounceWorkerSleep() {
+      return debounceWorkerSleep;
    }
 
    //insert task into "active task queue"
@@ -310,6 +316,10 @@ class Worker {
 
       public:
       explicit FiberAllocator(size_t maxFibers) : numAllocated(0), maxFibers(maxFibers) {
+#ifdef TRACER
+         allocatedAndAvailableFibers.push_back(std::make_unique<Fiber>());
+         allocatedAndAvailableFibers.push_back(std::make_unique<Fiber>());
+#endif
       }
 
       bool canAllocate() {
@@ -349,6 +359,9 @@ class Worker {
 
    TaskWrapper* currentTask = nullptr;
 
+   using TimePoint = std::chrono::time_point<std::chrono::system_clock>;
+   TimePoint startWait = TimePoint::min();
+
    public:
    //for cheaply collecting idle workers
    Worker* nextIdleWorker = nullptr;
@@ -375,6 +388,14 @@ class Worker {
    }
 
    void awaitChildTask(std::unique_ptr<Task> task) {
+      if (task->workAmount() == 0) {
+         return;
+      } else if (task->workAmount() == 1) {
+         task->reserveWork();
+         task->consumeWork();
+         return;
+      }
+
       TaskWrapper* taskWrapper = new TaskWrapper{std::move(task)};
       Fiber& fiber = *currentFiber;
       taskWrapper->waitingOnTaskCompletion = std::move(currentFiber);
@@ -433,18 +454,41 @@ class Worker {
             }
 
             if (currTask) {
+               // Step 1. try startFiber. it's possible task is already exhausted. Task should be
+               // return if exhausted.
                if (!currTask->startFiber()) {
                   scheduler.returnTask(currTask);
                   continue;
                }
-               // if (currTask && currTask->startFiber()) {
+               // Step 2. try reserve a piece of work.
+               if (!currTask->task->reserveWork()) {
+                  // reserveWork false and finishFiber true means no possible for new run and all
+                  // runs are done. Then it is safe to finalize a task.
+                  // ## An extra reserveWork call is necessary:
+                  // Imagine a task of 2 unit and 1 thread. [reserveWork, consumeWork,
+                  //                                         reserveWork, consumeWork] called sequentially
+                  // After the second consumeWork, finishFiber in `handleFiberComplete` still return 
+                  // true Althought it has no more work. A third reserveWork will set work to exhausted.
+                  // ## `finalizeTask` is called only once:
+                  // - scenario 1: 1 worker inside this if, other workers are before startFiber. Because
+                  //     work is already exhausted, all other workers will have startFiber return false.
+                  // - scenario 2: there are few workers inside this if or after startFiber(nonCompletedFibers>0)
+                  //     Only last worker end up with finishFiber return true.
+                  if (currTask->finishFiber()) {
+                     scheduler.finalizeTask(currTask);
+                  }
+                  scheduler.returnTask(currTask);
+                  continue;
+               }
                //work on (part of) (new) task
                currentFiber = fiberAllocator.allocate();
                assert(currentFiber);
+               // Step 3. consume reserved work
                auto fiberDone = currentFiber->run(this, currTask, [&] {
-                  currTask->task->run();
+                  currTask->task->consumeWork();
                });
                if (fiberDone) {
+                  this->startWait = TimePoint::min();
                   handleFiberComplete();
                } else {
                   currTask->yieldFiber();
@@ -461,7 +505,15 @@ class Worker {
 
                continue;
             } else {
-               scheduler.putWorkerToSleep(this);
+               if (this->startWait == TimePoint::min()) {
+                  this->startWait = std::chrono::high_resolution_clock::now();
+               }
+               auto endWait = std::chrono::high_resolution_clock::now();
+               auto dur = std::chrono::duration_cast<std::chrono::microseconds>(endWait - this->startWait).count() / 1000.0;
+               if (dur > scheduler.getDebounceWorkerSleep()) {
+                  this->startWait = TimePoint::min();
+                  scheduler.putWorkerToSleep(this);
+               }
             }
 
          } else {
@@ -593,7 +645,11 @@ std::unique_ptr<SchedulerHandle> startScheduler(size_t numWorkers) {
             }
          }
       }
-      scheduler = new Scheduler(numWorkers);
+      double sleepDebounce = 100;
+      if (const char* debounce = std::getenv("LINGODB_WORKER_SLEEP_DEBOUNCE")) {
+         sleepDebounce = std::stod(debounce);
+      }
+      scheduler = new Scheduler(numWorkers, sleepDebounce);
       scheduler->start();
    }
    return std::make_unique<SchedulerHandle>();
