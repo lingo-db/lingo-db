@@ -1,0 +1,24 @@
+name: build release binaries
+
+on: 
+  push:
+  pull_request:
+
+env:
+  REGISTRY: ghcr.io
+jobs:
+  release-build:
+    runs-on: ubuntu-latest
+    container: ghcr.io/lingo-db/lingodb-py-dev:e2d2a1f4f4b36b2ed1deeb3dfa67540ab002179d
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Build
+        run: |
+            mkdir build
+            cmake -G Ninja . -B build -DCMAKE_BUILD_TYPE=Release -DClang_DIR=/built-llvm/lib/cmake/clang
+            cmake --build build --target sql
+      - uses: actions/upload-artifact@master
+        with:
+          name: lingodb-release-build
+          path: build/sql
