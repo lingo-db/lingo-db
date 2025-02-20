@@ -16,7 +16,7 @@ jobs:
       - name: Build
         run: |
             mkdir build
-            cmake -G Ninja . -B build -DCMAKE_BUILD_TYPE=Release -DClang_DIR=/built-llvm/lib/cmake/clang
+            cmake -G Ninja . -B build -DCMAKE_BUILD_TYPE=Release -DClang_DIR=/built-llvm/lib/cmake/clang -DArrow_DIR=/built-arrow/lib64/cmake/Arrow
             cmake --build build --target sql
       - uses: actions/upload-artifact@master
         with:

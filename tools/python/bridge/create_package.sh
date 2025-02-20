@@ -4,9 +4,7 @@ ls -la
 venv/bin/python3 -m pip install build pyarrow===19.0.0
 venv/bin/python3 -c "import pyarrow; pyarrow.create_library_symlinks()"
 ARROW_LIB_DIR=$(venv/bin/python3 -c "import pyarrow as pa; print(':'.join(pa.get_library_dirs()))")
-export LD_LIBRARY_PATH=$ARROW_LIB_DIR:$LD_LIBRARY_PATH
-#MLIR_INCLUDE_DIR=$(venv/bin/python3 -c "import lingodbllvm; print(lingodbllvm.get_bin_dir()+'/../include/')")
-cmake -G Ninja . -B build/lingodb-release/ -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DPython3_EXECUTABLE="$(pwd)/venv/bin/python3" -DCMAKE_BUILD_TYPE=Release -DClang_DIR=/built-llvm/lib/cmake/clang
+cmake -G Ninja . -B build/lingodb-release/ -DCMAKE_BUILD_TYPE=Release -DClang_DIR=/built-llvm/lib/cmake/clang -DArrow_DIR=/built-arrow/lib64/cmake/Arrow
 
 cmake --build build/lingodb-release --target pybridge -j$(nproc)
 cp -r tools/python/bridge build/pylingodb
