@@ -9,7 +9,7 @@ env:
 jobs:
   release-build:
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-py-dev:c6088f9e5624fcfea2dc50c1137b45ea721bf6e7
+    container: ghcr.io/lingo-db/lingodb-py-dev:582aab679a335b3261b601a2fac4e8f289cf020b
     steps:
       - name: Checkout
         uses: actions/checkout@v2
