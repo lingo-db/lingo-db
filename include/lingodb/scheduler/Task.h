@@ -12,9 +12,8 @@ class Task {
       return !workExhausted.load();
    }
 
-   virtual size_t workAmount() { return std::numeric_limits<size_t>::max(); }
-   virtual bool reserveWork() = 0;
-   virtual void consumeWork() = 0;
+   virtual bool allocateWork() = 0;
+   virtual void performWork() = 0;
    virtual ~Task() {}
 };
 } // namespace lingodb::scheduler

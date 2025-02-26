@@ -74,6 +74,7 @@ void Tracer::ensureThreadLocalTraceRecordList() {
       pthread_getname_np(pthread_self(), name, 16);
       tracer->traceRecordLists.emplace_back(std::make_unique<TraceRecordList>(tracer->traceRecordLists.size(), std::string(name)));
       threadLocalTraceRecordList = tracer->traceRecordLists[threadId].get();
+      threadLocalTraceRecordList->preallocate();
    }
 }
 const std::chrono::steady_clock::time_point initial = std::chrono::steady_clock::now();

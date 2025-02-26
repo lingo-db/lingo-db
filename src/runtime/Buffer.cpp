@@ -59,7 +59,7 @@ class FlexibleBufferIteratorTask : public lingodb::scheduler::Task {
       trace.stop();
    }
 
-   bool reserveWork() override {
+   bool allocateWork() override {
       // quick check for exhaust. workExhausted is true if there is no more buffer or no more
       // work unit in own local state or steal from other workers.
       if (workExhausted.load()) {
@@ -121,7 +121,7 @@ class FlexibleBufferIteratorTask : public lingodb::scheduler::Task {
       workExhausted.store(true);
       return false;
    }
-   void consumeWork() override {
+   void performWork() override {
       auto* state = workerResvs[lingodb::scheduler::currentWorkerId()].get();
       if (state->stealWorkerId != std::numeric_limits<size_t>::max()) {
          auto* other = workerResvs[state->stealWorkerId].get();
@@ -147,16 +147,16 @@ class BufferIteratorTask : public lingodb::scheduler::Task {
          workerResvs.push_back(0);
       }
    }
-   bool reserveWork() override {
+   bool allocateWork() override {
       size_t localStartIndex = startIndex.fetch_add(1);
       if (localStartIndex * splitSize >= bufferLen) {
          workExhausted.store(true);
          return false;
       }
-      workerResvs.push_back(localStartIndex);
+      workerResvs[lingodb::scheduler::currentWorkerId()] = localStartIndex;
       return true;
    }
-   void consumeWork() override {
+   void performWork() override {
       auto localStartIndex = workerResvs[lingodb::scheduler::currentWorkerId()];
       auto begin = localStartIndex * splitSize;
       auto end = (localStartIndex + 1) * splitSize;

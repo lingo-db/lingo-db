@@ -11,7 +11,9 @@ class SchedulerHandle {
    ~SchedulerHandle();
 };
 
-//starts a scheduler with a given number of workers. If numWorkers is 0, the number of workers is determined by the LINGODB_PARALLELISM environment variable or std::thread::hardware_concurrency()
+//starts a scheduler with a given number of workers. 
+//If numWorkers is 0, the number of workers is determined by the LINGODB_PARALLELISM environment variable or std::thread::hardware_concurrency()
+//If initialFiberAllocs is not 0, than number of initialFiberAllocs fiber will be allocated initially.
 //if a scheduler is already running, a handle to this scheduler is returned (the number of workers is ignored)
 std::unique_ptr<SchedulerHandle> startScheduler(size_t numWorkers = 0);
 //waits for the scheduler to finish the current task (this is a blocking call, designed for calling from a non-worker thread)

@@ -23,7 +23,7 @@ class FragmentOutputsTask : public lingodb::scheduler::Task {
          workerResvs.push_back(0);
       }
    }
-   bool reserveWork() override {
+   bool allocateWork() override {
       constexpr size_t numPartitions = lingodb::runtime::PreAggregationHashtableFragment::numOutputs;
       size_t localStartIndex = startIndex.fetch_add(1);
       if (localStartIndex >= numPartitions) {
@@ -33,7 +33,7 @@ class FragmentOutputsTask : public lingodb::scheduler::Task {
       workerResvs[lingodb::scheduler::currentWorkerId()] = localStartIndex;
       return true;
    }
-   void consumeWork() override {
+   void performWork() override {
       auto& batch = outputs[workerResvs[lingodb::scheduler::currentWorkerId()]];
       cb(batch);
    }

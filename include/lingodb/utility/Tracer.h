@@ -57,7 +57,19 @@ class Tracer {
       public:
       explicit TraceRecordList(unsigned threadId, std::string threadName) : threadId(threadId), threadName(threadName) {}
       ~TraceRecordList();
-
+      void preallocate() {
+         if (currentPos == Chunk::size) {
+            auto* nextChunk = new Chunk();
+            nextChunk->next = nullptr;
+            if (last) {
+               last->next = nextChunk;
+            } else {
+               first = nextChunk;
+            }
+            last = nextChunk;
+            currentPos = 0;
+         }
+      }
       TraceRecord* createRecord() {
          if (currentPos == Chunk::size) {
             auto* nextChunk = new Chunk();
@@ -85,10 +97,10 @@ class Tracer {
    void dumpInternal();
 
    static unsigned registerEvent(Event* event);
-   static void ensureThreadLocalTraceRecordList();
    static void recordTrace(unsigned eventId, std::chrono::steady_clock::time_point begin, std::chrono::steady_clock::time_point end, uint64_t metaData);
 
    public:
+   static void ensureThreadLocalTraceRecordList();
    Tracer() {}
    ~Tracer() {}
 

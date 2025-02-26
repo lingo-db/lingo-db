@@ -62,10 +62,8 @@ class ScanBatchesTask : public lingodb::scheduler::Task {
          workerResvs.push_back(0);
       }
    }
-   size_t workAmount() override {
-      return batches.size();
-   }
-   bool reserveWork() override {
+
+   bool allocateWork() override {
       size_t localStartIndex = startIndex.fetch_add(1);
       if (localStartIndex >= batches.size()) {
          workExhausted.store(true);
@@ -74,7 +72,7 @@ class ScanBatchesTask : public lingodb::scheduler::Task {
       workerResvs[lingodb::scheduler::currentWorkerId()] = localStartIndex;
       return true;
    }
-   void consumeWork() override {
+   void performWork() override {
       auto& batch = batches[workerResvs[lingodb::scheduler::currentWorkerId()]];
       auto* batchInfo = batchInfos[lingodb::scheduler::currentWorkerId()];
       utility::Tracer::Trace trace(processMorsel);
