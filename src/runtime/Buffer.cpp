@@ -153,7 +153,7 @@ class BufferIteratorTask : public lingodb::scheduler::Task {
          workExhausted.store(true);
          return false;
       }
-      workerResvs.push_back(localStartIndex);
+      workerResvs[lingodb::scheduler::currentWorkerId()] = localStartIndex;
       return true;
    }
    void consumeWork() override {

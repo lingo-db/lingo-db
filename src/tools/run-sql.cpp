@@ -32,7 +32,12 @@ int main(int argc, char** argv) {
    unsetenv("PERF_BUILDID_DIR");
    queryExecutionConfig->timingProcessor = std::make_unique<execution::TimingPrinter>(inputFileName);
 
-   auto scheduler = scheduler::startScheduler();
+   size_t initialFiberAllocs = 0;
+   // SPEED mode allocate serveral fiber before executor run
+   if (runMode == execution::ExecutionMode::SPEED) {
+      initialFiberAllocs = 4;
+   }
+   auto scheduler = scheduler::startScheduler(initialFiberAllocs);
    auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), *session);
    executer->fromFile(inputFileName);
    scheduler::awaitEntryTask(std::make_unique<execution::QueryExecutionTask>(std::move(executer)));

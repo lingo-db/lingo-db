@@ -156,7 +156,7 @@ class Scheduler {
    TaskWrapper* coolingDownTail = nullptr;
 
    public:
-   Scheduler(size_t numWorkers = std::thread::hardware_concurrency(), double debounceWorkerSleep = 100) : numWorkers(numWorkers), debounceWorkerSleep(debounceWorkerSleep) {
+   Scheduler(size_t numWorkers = std::thread::hardware_concurrency(), double debounceWorkerSleep = 0) : numWorkers(numWorkers), debounceWorkerSleep(debounceWorkerSleep) {
    }
    size_t getNumWorkers() {
       return numWorkers;
@@ -164,7 +164,7 @@ class Scheduler {
 
    void putWorkerToSleep(Worker* worker);
 
-   void start();
+   void start(size_t initialFiberAllocs);
 
    void stop();
 
@@ -315,11 +315,10 @@ class Worker {
       std::deque<std::unique_ptr<Fiber>> allocatedAndAvailableFibers;
 
       public:
-      explicit FiberAllocator(size_t maxFibers) : numAllocated(0), maxFibers(maxFibers) {
-#ifdef TRACER
-         allocatedAndAvailableFibers.push_back(std::make_unique<Fiber>());
-         allocatedAndAvailableFibers.push_back(std::make_unique<Fiber>());
-#endif
+      explicit FiberAllocator(size_t maxFibers, size_t initialFiberAllocs) : numAllocated(initialFiberAllocs), maxFibers(maxFibers) {
+         for (size_t i = 0; i < initialFiberAllocs; i ++) {
+            allocatedAndAvailableFibers.push_back(std::make_unique<Fiber>());
+         }
       }
 
       bool canAllocate() {
@@ -360,7 +359,8 @@ class Worker {
    TaskWrapper* currentTask = nullptr;
 
    using TimePoint = std::chrono::time_point<std::chrono::system_clock>;
-   TimePoint startWait = TimePoint::min();
+   TimePoint startWaitTime = TimePoint::min();
+   bool hasYieldedFiber{false};
 
    public:
    //for cheaply collecting idle workers
@@ -372,7 +372,7 @@ class Worker {
    size_t workerId;
    bool allowedToSleep = true;
 
-   Worker(Scheduler& scheduler, size_t id) : scheduler(scheduler), fiberAllocator(64), workerId(id) {
+   Worker(Scheduler& scheduler, size_t id, size_t initialFiberAllocs) : scheduler(scheduler), fiberAllocator(64, initialFiberAllocs), workerId(id) {
    }
 
    void wakeupFiber(std::unique_ptr<Fiber>&& fiber) {
@@ -401,7 +401,9 @@ class Worker {
       taskWrapper->waitingOnTaskCompletion = std::move(currentFiber);
       scheduler.enqueueTask(taskWrapper);
 
+      hasYieldedFiber = true;
       fiber.yield();
+      hasYieldedFiber = false;
    }
 
    void work() {
@@ -488,7 +490,7 @@ class Worker {
                   currTask->task->consumeWork();
                });
                if (fiberDone) {
-                  this->startWait = TimePoint::min();
+                  this->startWaitTime = TimePoint::min();
                   handleFiberComplete();
                } else {
                   currTask->yieldFiber();
@@ -505,14 +507,20 @@ class Worker {
 
                continue;
             } else {
-               if (this->startWait == TimePoint::min()) {
-                  this->startWait = std::chrono::high_resolution_clock::now();
-               }
-               auto endWait = std::chrono::high_resolution_clock::now();
-               auto dur = std::chrono::duration_cast<std::chrono::microseconds>(endWait - this->startWait).count() / 1000.0;
-               if (dur > scheduler.getDebounceWorkerSleep()) {
-                  this->startWait = TimePoint::min();
+               if (scheduler.getDebounceWorkerSleep() == 0) {
                   scheduler.putWorkerToSleep(this);
+               } else if (!hasYieldedFiber) {
+                  // `!hasYieldedFiber` prevent worker from sleep if it has yielded fiber to quick wakeup if child task finished.
+                  // make worker busy waiting for a period of time
+                  if (this->startWaitTime == TimePoint::min()) {
+                     this->startWaitTime = std::chrono::high_resolution_clock::now();
+                  }
+                  auto endWait = std::chrono::high_resolution_clock::now();
+                  auto dur = std::chrono::duration_cast<std::chrono::microseconds>(endWait - this->startWaitTime).count() / 1000.0;
+                  if (dur > scheduler.getDebounceWorkerSleep()) {
+                     this->startWaitTime = TimePoint::min();
+                     scheduler.putWorkerToSleep(this);
+                  }
                }
             }
 
@@ -536,11 +544,11 @@ void stopCurrentScheduler() {
 }
 } // end namespace
 
-void Scheduler::start() {
+void Scheduler::start(size_t initialFiberAllocs) {
    scheduler = this;
    for (size_t i = 0; i < numWorkers; i++) {
-      workerThreads.emplace_back([this, i] {
-         Worker worker(*this, i);
+      workerThreads.emplace_back([this, i, initialFiberAllocs] {
+         Worker worker(*this, i, initialFiberAllocs);
          currentWorker = &worker;
          worker.work();
          currentWorker = nullptr;
@@ -628,7 +636,7 @@ void awaitChildTask(std::unique_ptr<Task> task) {
    currentWorker->awaitChildTask(std::move(task));
 }
 
-std::unique_ptr<SchedulerHandle> startScheduler(size_t numWorkers) {
+std::unique_ptr<SchedulerHandle> startScheduler(size_t initialFiberAllocs, size_t numWorkers) {
    if (!scheduler) {
       // two ways of setting number of workers.
       // - if provided actual param for createScheduler, this will override LINGODB_PARALLELISM system var
@@ -650,7 +658,7 @@ std::unique_ptr<SchedulerHandle> startScheduler(size_t numWorkers) {
          sleepDebounce = std::stod(debounce);
       }
       scheduler = new Scheduler(numWorkers, sleepDebounce);
-      scheduler->start();
+      scheduler->start(initialFiberAllocs);
    }
    return std::make_unique<SchedulerHandle>();
 }
