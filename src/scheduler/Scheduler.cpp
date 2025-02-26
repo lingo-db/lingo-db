@@ -4,6 +4,7 @@
 #include <condition_variable>
 #include <csignal>
 #include <deque>
+#include <iostream>
 #include <memory>
 #include <thread>
 
@@ -40,7 +41,7 @@ class Fiber {
 
    alignas(64) std::byte stackSpace[stackSize];
    bool stackAllocated = false;
-   bool isRunning = false;
+   std::atomic<bool> isRunning = false;
    bool done = true;
    boost::context::fiber fiber;
    boost::context::fiber sink;
@@ -86,6 +87,9 @@ class Fiber {
       isRunning = false;
       sink = std::move(sink).resume();
    }
+   bool isYielded() {
+      return !isRunning;
+   };
 
    Fiber() = default;
 
@@ -104,8 +108,8 @@ struct TaskWrapper {
    std::atomic<int64_t> yieldedFibers = 0;
    std::atomic<int64_t> nonCompletedFibers = 0;
    std::atomic<int64_t> deployedOnWorkers = 0;
-   std::unique_ptr<Fiber> waitingOnTaskCompletion = nullptr;
-   std::function<void()> beforeDestroyFn = nullptr;
+   std::function<void()> onFinalize = nullptr;
+   std::mutex finalizeMutex={};
 
    void finalize();
 
@@ -139,8 +143,6 @@ struct TaskWrapper {
 
 class Scheduler {
    size_t numWorkers;
-   // after microseconds of debounce duration, worker are put into sleep
-   double debounceWorkerSleep;
 
    std::atomic<bool> shutdown{false};
    std::vector<std::thread> workerThreads;
@@ -156,7 +158,7 @@ class Scheduler {
    TaskWrapper* coolingDownTail = nullptr;
 
    public:
-   Scheduler(size_t numWorkers = std::thread::hardware_concurrency(), double debounceWorkerSleep = 100) : numWorkers(numWorkers), debounceWorkerSleep(debounceWorkerSleep) {
+   Scheduler(size_t numWorkers = std::thread::hardware_concurrency()) : numWorkers(numWorkers) {
    }
    size_t getNumWorkers() {
       return numWorkers;
@@ -176,10 +178,6 @@ class Scheduler {
 
    bool isShutdown() {
       return shutdown.load();
-   }
-
-   double getDebounceWorkerSleep() {
-      return debounceWorkerSleep;
    }
 
    //insert task into "active task queue"
@@ -246,19 +244,18 @@ class Scheduler {
       return minYieldTask;
    }
 
-   void returnTask(TaskWrapper* task) {
+   bool returnTask(TaskWrapper* task) {
       // Multiple worker may call here concurrently. Avoid one worker already called `delete task`
       // but another worker is still at `task->finalized`
       std::lock_guard<std::mutex> lock(taskReturnMutex);
       auto deployedNum = task->deployedOnWorkers.fetch_sub(1);
       if (task->finalized) {
          if (deployedNum == 1) {
-            if (task->beforeDestroyFn) {
-               task->beforeDestroyFn();
-            }
             delete task;
+            return true;
          }
       }
+      return false;
    }
 
    void finalizeTask(TaskWrapper* task) {
@@ -304,22 +301,21 @@ class Scheduler {
          }
       }
       task->finalize();
-      task->finalized = true;
    }
 };
 
 class Worker {
    class FiberAllocator {
+      static constexpr size_t initiallyAllocated = 2;
       size_t numAllocated;
       size_t maxFibers;
       std::deque<std::unique_ptr<Fiber>> allocatedAndAvailableFibers;
 
       public:
-      explicit FiberAllocator(size_t maxFibers) : numAllocated(0), maxFibers(maxFibers) {
-#ifdef TRACER
-         allocatedAndAvailableFibers.push_back(std::make_unique<Fiber>());
-         allocatedAndAvailableFibers.push_back(std::make_unique<Fiber>());
-#endif
+      explicit FiberAllocator(size_t maxFibers) : numAllocated(initiallyAllocated), maxFibers(maxFibers) {
+         for (size_t i = 0; i < initiallyAllocated; i++) {
+            allocatedAndAvailableFibers.push_back(std::make_unique<Fiber>());
+         }
       }
 
       bool canAllocate() {
@@ -357,10 +353,13 @@ class Worker {
 
    std::unique_ptr<Fiber> currentFiber;
 
+   std::unordered_map<TaskWrapper*, std::unique_ptr<Fiber>> waitingOnTasks;
+   std::atomic<size_t> numWaitingFibers = 0;
+
    TaskWrapper* currentTask = nullptr;
 
    using TimePoint = std::chrono::time_point<std::chrono::system_clock>;
-   TimePoint startWait = TimePoint::min();
+   TimePoint startWaitTime = TimePoint::min();
 
    public:
    //for cheaply collecting idle workers
@@ -375,11 +374,7 @@ class Worker {
    Worker(Scheduler& scheduler, size_t id) : scheduler(scheduler), fiberAllocator(64), workerId(id) {
    }
 
-   void wakeupFiber(std::unique_ptr<Fiber>&& fiber) {
-      {
-         std::lock_guard<std::mutex> fiberQueueLock(fiberMutex);
-         runnableFibers.push_back(std::move(fiber));
-      }
+   void wakeupWorker() {
       {
          std::unique_lock<std::mutex> lock(mutex);
          allowedToSleep = false;
@@ -388,20 +383,59 @@ class Worker {
    }
 
    void awaitChildTask(std::unique_ptr<Task> task) {
-      if (task->workAmount() == 0) {
-         return;
-      } else if (task->workAmount() == 1) {
-         task->reserveWork();
-         task->consumeWork();
+      bool allocatedWork = task->allocateWork();
+      if (!allocatedWork && !task->hasWork()) {
          return;
       }
+      Task& taskRef = *task;
+      TaskWrapper* taskWrapper = nullptr;
+      if (task->hasWork()) {
+         taskWrapper = new TaskWrapper{std::move(task)};
+         taskWrapper->nonCompletedFibers++;
+         taskWrapper->deployedOnWorkers++;
+         scheduler.enqueueTask(taskWrapper);
+      }
 
-      TaskWrapper* taskWrapper = new TaskWrapper{std::move(task)};
-      Fiber& fiber = *currentFiber;
-      taskWrapper->waitingOnTaskCompletion = std::move(currentFiber);
-      scheduler.enqueueTask(taskWrapper);
-
-      fiber.yield();
+      taskRef.performWork();
+      if (!taskWrapper) {
+         return;
+      }
+      if (taskWrapper->finishFiber()) {
+         scheduler.finalizeTask(taskWrapper);
+         scheduler.returnTask(taskWrapper);
+         return;
+      }
+      {
+         Fiber* toYield;
+         {
+            std::unique_lock<std::mutex> finalizeLock(taskWrapper->finalizeMutex);
+            auto finalized = taskWrapper->finalized;
+            scheduler.returnTask(taskWrapper);
+            if (finalized) {
+               return;
+            }
+            {
+               std::unique_lock<std::mutex> fiberLock(fiberMutex);
+               assert(currentFiber);
+               waitingOnTasks[taskWrapper] = std::move(currentFiber);
+               numWaitingFibers++;
+               toYield = waitingOnTasks[taskWrapper].get();
+               taskWrapper->onFinalize = [&] {
+                  {
+                     std::unique_lock<std::mutex> fiberLock2(fiberMutex);
+                     assert(waitingOnTasks.contains(taskWrapper));
+                     assert(waitingOnTasks[taskWrapper]);
+                     while (!waitingOnTasks[taskWrapper]->isYielded()) {}
+                     runnableFibers.push_back(std::move(waitingOnTasks[taskWrapper]));
+                     waitingOnTasks.erase(taskWrapper);
+                     numWaitingFibers--;
+                  }
+                  wakeupWorker();
+               };
+            }
+         }
+         toYield->yield();
+      }
    }
 
    void work() {
@@ -461,13 +495,13 @@ class Worker {
                   continue;
                }
                // Step 2. try reserve a piece of work.
-               if (!currTask->task->reserveWork()) {
+               if (!currTask->task->allocateWork()) {
                   // reserveWork false and finishFiber true means no possible for new run and all
                   // runs are done. Then it is safe to finalize a task.
                   // ## An extra reserveWork call is necessary:
                   // Imagine a task of 2 unit and 1 thread. [reserveWork, consumeWork,
                   //                                         reserveWork, consumeWork] called sequentially
-                  // After the second consumeWork, finishFiber in `handleFiberComplete` still return 
+                  // After the second consumeWork, finishFiber in `handleFiberComplete` still return
                   // true Althought it has no more work. A third reserveWork will set work to exhausted.
                   // ## `finalizeTask` is called only once:
                   // - scenario 1: 1 worker inside this if, other workers are before startFiber. Because
@@ -485,10 +519,10 @@ class Worker {
                assert(currentFiber);
                // Step 3. consume reserved work
                auto fiberDone = currentFiber->run(this, currTask, [&] {
-                  currTask->task->consumeWork();
+                  currTask->task->performWork();
                });
                if (fiberDone) {
-                  this->startWait = TimePoint::min();
+                  this->startWaitTime = TimePoint::min();
                   handleFiberComplete();
                } else {
                   currTask->yieldFiber();
@@ -505,15 +539,7 @@ class Worker {
 
                continue;
             } else {
-               if (this->startWait == TimePoint::min()) {
-                  this->startWait = std::chrono::high_resolution_clock::now();
-               }
-               auto endWait = std::chrono::high_resolution_clock::now();
-               auto dur = std::chrono::duration_cast<std::chrono::microseconds>(endWait - this->startWait).count() / 1000.0;
-               if (dur > scheduler.getDebounceWorkerSleep()) {
-                  this->startWait = TimePoint::min();
-                  scheduler.putWorkerToSleep(this);
-               }
+               scheduler.putWorkerToSleep(this);
             }
 
          } else {
@@ -540,6 +566,9 @@ void Scheduler::start() {
    scheduler = this;
    for (size_t i = 0; i < numWorkers; i++) {
       workerThreads.emplace_back([this, i] {
+#ifdef TRACER
+         utility::Tracer::ensureThreadLocalTraceRecordList();
+#endif
          Worker worker(*this, i);
          currentWorker = &worker;
          worker.work();
@@ -606,10 +635,12 @@ void Scheduler::putWorkerToSleep(Worker* worker) {
 }
 
 void TaskWrapper::finalize() {
-   if (waitingOnTaskCompletion) {
-      auto* worker = waitingOnTaskCompletion->getWorker();
-      assert(worker);
-      worker->wakeupFiber(std::move(waitingOnTaskCompletion));
+   std::unique_lock<std::mutex> lock(finalizeMutex);
+   if (!finalized) { //this check is important! In case finalize is called multiple times which can happen in edge cases
+      if (onFinalize) {
+         onFinalize();
+      }
+      finalized = true;
    }
 }
 
@@ -617,7 +648,7 @@ void awaitEntryTask(std::unique_ptr<Task> task) {
    TaskWrapper* taskWrapper = new TaskWrapper{std::move(task)};
    std::condition_variable finished;
    std::mutex mutex;
-   taskWrapper->beforeDestroyFn = [&]() {
+   taskWrapper->onFinalize = [&]() {
       finished.notify_one();
    };
    scheduler->enqueueTask(taskWrapper);
@@ -645,11 +676,7 @@ std::unique_ptr<SchedulerHandle> startScheduler(size_t numWorkers) {
             }
          }
       }
-      double sleepDebounce = 100;
-      if (const char* debounce = std::getenv("LINGODB_WORKER_SLEEP_DEBOUNCE")) {
-         sleepDebounce = std::stod(debounce);
-      }
-      scheduler = new Scheduler(numWorkers, sleepDebounce);
+      scheduler = new Scheduler(numWorkers);
       scheduler->start();
    }
    return std::make_unique<SchedulerHandle>();
