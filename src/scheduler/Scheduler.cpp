@@ -193,16 +193,16 @@ class Scheduler {
    void dequeueTaskLocked(TaskWrapper* task) {
       if (task->prev) {
          task->prev->next = task->next;
-         task->prev = nullptr;
       } else {
          taskHead = task->next;
       }
       if (task->next) {
          task->next->prev = task->prev;
-         task->next = nullptr;
       } else {
          taskTail = task->prev;
       }
+      task->prev = nullptr;
+      task->next = nullptr;
    }
 
    TaskWrapper* getTask() {
@@ -360,7 +360,7 @@ class Worker {
 
    using TimePoint = std::chrono::time_point<std::chrono::system_clock>;
    TimePoint startWaitTime = TimePoint::min();
-   bool hasYieldedFiber{false};
+   size_t yieldedFiberCnt{0};
 
    public:
    //for cheaply collecting idle workers
@@ -401,9 +401,9 @@ class Worker {
       taskWrapper->waitingOnTaskCompletion = std::move(currentFiber);
       scheduler.enqueueTask(taskWrapper);
 
-      hasYieldedFiber = true;
+      yieldedFiberCnt++;
       fiber.yield();
-      hasYieldedFiber = false;
+      yieldedFiberCnt--;
    }
 
    void work() {
@@ -509,7 +509,7 @@ class Worker {
             } else {
                if (scheduler.getDebounceWorkerSleep() == 0) {
                   scheduler.putWorkerToSleep(this);
-               } else if (!hasYieldedFiber) {
+               } else if (yieldedFiberCnt == 0) {
                   // `!hasYieldedFiber` prevent worker from sleep if it has yielded fiber to quick wakeup if child task finished.
                   // make worker busy waiting for a period of time
                   if (this->startWaitTime == TimePoint::min()) {
