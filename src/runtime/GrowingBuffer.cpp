@@ -1,4 +1,5 @@
 #include "lingodb/runtime/GrowingBuffer.h"
+#include "lingodb/runtime/Sorting.h"
 #include "lingodb/runtime/helpers.h"
 #include "lingodb/utility/Tracer.h"
 #include <algorithm>
@@ -8,7 +9,6 @@ namespace {
 static utility::Tracer::Event createEvent("GrowingBuffer", "create");
 static utility::Tracer::Event mergeEvent("GrowingBuffer", "merge");
 static utility::Tracer::Event sortEvent("GrowingBuffer", "sort");
-static utility::Tracer::Event rawSortEvent("GrowingBuffer", "rawSort");
 
 class DefaultAllocator : public lingodb::runtime::GrowingBufferAllocator {
    public:
@@ -55,8 +55,12 @@ size_t lingodb::runtime::GrowingBuffer::getTypeSize() const {
    return values.getTypeSize();
 }
 lingodb::runtime::Buffer lingodb::runtime::GrowingBuffer::sort(bool (*compareFn)(uint8_t*, uint8_t*)) {
-   //todo: make sorting parallel again
    utility::Tracer::Trace trace(sortEvent);
+   if (canParallelSort(values.getLen())) {
+      lingodb::runtime::Buffer result = parallelSort(values, compareFn);
+      trace.stop();
+      return result;
+   }
    auto* executionContext= runtime::getCurrentExecutionContext();
    std::vector<uint8_t*> toSort;
    values.iterate([&](uint8_t* entryRawPtr) {
@@ -64,9 +68,8 @@ lingodb::runtime::Buffer lingodb::runtime::GrowingBuffer::sort(bool (*compareFn)
    });
    size_t typeSize = values.getTypeSize();
    size_t len = values.getLen();
-   utility::Tracer::Trace trace2(rawSortEvent);
    std::sort(toSort.begin(), toSort.end(), compareFn);
-   trace2.stop();
+   trace.stop();
    uint8_t* sorted = new uint8_t[typeSize * len];
    executionContext->registerState({sorted, [](void* ptr) { delete[] reinterpret_cast<uint8_t*>(ptr); }});
    for (size_t i = 0; i < len; i++) {

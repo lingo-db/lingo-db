@@ -7,6 +7,7 @@ add_library(runtime OBJECT
         Heap.cpp
         DumpRuntime.cpp
         DataSourceIteration.cpp
+        Sorting.cpp
         GrowingBuffer.cpp
         Buffer.cpp
         SimpleState.cpp
