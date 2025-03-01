@@ -1,9 +1,10 @@
 name: build release binaries
 
-on: 
+# only run when tag is pushed
+on:
   push:
-  pull_request:
-
+    tags:
+      - 'v*'
 env:
   REGISTRY: ghcr.io
 jobs:
