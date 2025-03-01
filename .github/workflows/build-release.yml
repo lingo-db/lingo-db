@@ -17,8 +17,16 @@ jobs:
         run: |
             mkdir build
             cmake -G Ninja . -B build -DCMAKE_BUILD_TYPE=Release -DClang_DIR=/built-llvm/lib/cmake/clang -DArrow_DIR=/built-arrow/lib64/cmake/Arrow
-            cmake --build build --target sql
+            cmake --build build --target sql run-sql run-mlir mlir-db-opt sql-to-mlir
       - uses: actions/upload-artifact@master
         with:
-          name: lingodb-release-build
+          name: lingodb-cli-linux-amd64
           path: build/sql
+      - uses: actions/upload-artifact@master
+        with:
+          name: lingodb-tools-linux-amd64
+          path: |
+            build/run-sql
+            build/run-mlir
+            build/mlir-db-opt
+            build/sql-to-mlir
