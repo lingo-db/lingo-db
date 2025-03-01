@@ -1,0 +1,33 @@
+name: build release binaries
+
+# only run when tag is pushed
+on:
+  push:
+    tags:
+      - 'v*'
+env:
+  REGISTRY: ghcr.io
+jobs:
+  release-build:
+    runs-on: ubuntu-latest
+    container: ghcr.io/lingo-db/lingodb-py-dev:313ae67dd4c39b7af54aae98b8d97ed1d6a452fc
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Build
+        run: |
+            mkdir build
+            cmake -G Ninja . -B build -DCMAKE_BUILD_TYPE=Release -DClang_DIR=/built-llvm/lib/cmake/clang -DArrow_DIR=/built-arrow/lib64/cmake/Arrow
+            cmake --build build --target sql run-sql run-mlir mlir-db-opt sql-to-mlir
+      - uses: actions/upload-artifact@master
+        with:
+          name: lingodb-cli-linux-amd64
+          path: build/sql
+      - uses: actions/upload-artifact@master
+        with:
+          name: lingodb-tools-linux-amd64
+          path: |
+            build/run-sql
+            build/run-mlir
+            build/mlir-db-opt
+            build/sql-to-mlir

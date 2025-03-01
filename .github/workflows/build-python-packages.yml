@@ -9,7 +9,7 @@ on:
 jobs:
   build_python_10:
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-py-dev:1c7ad317756b6ce7a36f868ae14f0d064187d238 
+    container: ghcr.io/lingo-db/lingodb-py-dev:313ae67dd4c39b7af54aae98b8d97ed1d6a452fc 
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -27,7 +27,7 @@ jobs:
           path: /built-packages
   build_python_11:
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-py-dev:1c7ad317756b6ce7a36f868ae14f0d064187d238 
+    container: ghcr.io/lingo-db/lingodb-py-dev:313ae67dd4c39b7af54aae98b8d97ed1d6a452fc 
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -45,7 +45,7 @@ jobs:
           path: /built-packages
   build_python_12:
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-py-dev:1c7ad317756b6ce7a36f868ae14f0d064187d238 
+    container: ghcr.io/lingo-db/lingodb-py-dev:313ae67dd4c39b7af54aae98b8d97ed1d6a452fc 
     steps:
       - name: Checkout
         uses: actions/checkout@v2

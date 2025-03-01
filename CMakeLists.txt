@@ -59,6 +59,7 @@ include(AddMLIR)
 include(AddClang)
 include(HandleLLVMOptions)
 set("CLANG_VERSION" ${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}.${LLVM_VERSION_PATCH})
+include_directories(${ARROW_INCLUDE_DIR})
 
 include_directories(${LLVM_INCLUDE_DIRS})
 include_directories(${MLIR_INCLUDE_DIRS})

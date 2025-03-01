@@ -105,7 +105,7 @@ sqlite-dataset-tests:
     - "umbra-integration"
 
 build_pylingodb:
-  image: ghcr.io/lingo-db/lingodb-py-dev:1c7ad317756b6ce7a36f868ae14f0d064187d238  
+  image: ghcr.io/lingo-db/lingodb-py-dev:313ae67dd4c39b7af54aae98b8d97ed1d6a452fc  
   script:
     - rm -rf /built-packages
     - mkdir -p /built-packages

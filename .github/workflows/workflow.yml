@@ -146,7 +146,7 @@ jobs:
 
   build_lingodb_python:
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-py-dev:e2d2a1f4f4b36b2ed1deeb3dfa67540ab002179d
+    container: ghcr.io/lingo-db/lingodb-py-dev:313ae67dd4c39b7af54aae98b8d97ed1d6a452fc
     steps:
       - name: Checkout
         uses: actions/checkout@v2
