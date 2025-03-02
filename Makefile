@@ -29,6 +29,9 @@ resources/data/%/.rawdata:
 
 
 resources/data/%/.stamp: resources/data/%/.rawdata build/lingodb-$(DATA_BUILD_TYPE)/.buildstamp
+	rm -f resources/data/$*/*.arrow
+	rm -f resources/data/$*/*.arrow.sample
+	rm -f resources/data/$*/*.json
 	@dir_name=$(shell dirname $@) && \
 	base_name=$$(basename $$dir_name) && \
 	dataset_name=$$(echo $$base_name | sed -E 's/-[0-9]+$$//') && \
@@ -117,20 +120,11 @@ build-docker-dev:
 
 build-docker-py-dev:
 	DOCKER_BUILDKIT=1 docker build -f "tools/python/bridge/Dockerfile" -t lingodb-py-dev --target devimg "."
-build-py-bridge:
-	DOCKER_BUILDKIT=1 docker build -f "tools/python/bridge/Dockerfile" -t lingodb-py-dev-build --target build "."
-	docker run --rm  -v "${ROOT_DIR}:/built-packages" lingodb-py-dev-build create_package.sh cp$(PY_VERSION)-cp$(PY_VERSION)
 
-build-docker:
-	DOCKER_BUILDKIT=1 docker build -f "tools/docker/Dockerfile" -t lingo-db:latest --target lingodb  "."
 
 build-release: build/lingodb-release/.buildstamp
 build-debug: build/lingodb-debug/.buildstamp
 build-asan: build/lingodb-asan/.buildstamp
-
-.repr-docker-built:
-	$(MAKE) build-repr-docker
-	touch .repr-docker-built
 
 .PHONY: clean
 clean:
