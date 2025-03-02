@@ -15,17 +15,26 @@ class FragmentOutputsTask : public lingodb::scheduler::Task {
    std::vector<lingodb::runtime::FlexibleBuffer*> *outputs;
    std::function<void(std::vector<lingodb::runtime::FlexibleBuffer*>&)> cb;
    std::atomic<size_t> startIndex{0};
+   std::vector<size_t> workerResvs;
 
    public:
-   FragmentOutputsTask(std::vector<lingodb::runtime::FlexibleBuffer*> *outputs, std::function<void(std::vector<lingodb::runtime::FlexibleBuffer*>&)> cb) : outputs(outputs), cb(cb) {}
-   void run() override {
+   FragmentOutputsTask(std::vector<lingodb::runtime::FlexibleBuffer*> *outputs, std::function<void(std::vector<lingodb::runtime::FlexibleBuffer*>&)> cb) : outputs(outputs), cb(cb) {
+      for (size_t i = 0; i < lingodb::scheduler::getNumWorkers(); i++) {
+         workerResvs.push_back(0);
+      }
+   }
+   bool reserveWork() override {
       constexpr size_t numPartitions = lingodb::runtime::PreAggregationHashtableFragment::numOutputs;
       size_t localStartIndex = startIndex.fetch_add(1);
       if (localStartIndex >= numPartitions) {
          workExhausted.store(true);
-         return;
+         return false;
       }
-      auto& batch = outputs[localStartIndex];
+      workerResvs[lingodb::scheduler::currentWorkerId()] = localStartIndex;
+      return true;
+   }
+   void consumeWork() override {
+      auto& batch = outputs[workerResvs[lingodb::scheduler::currentWorkerId()]];
       cb(batch);
    }
 };
