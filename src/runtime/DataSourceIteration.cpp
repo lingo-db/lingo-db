@@ -53,20 +53,29 @@ class ScanBatchesTask : public lingodb::scheduler::Task {
    std::function<void(lingodb::runtime::RecordBatchInfo*)> cb;
    std::atomic<size_t> startIndex{0};
    std::vector<lingodb::runtime::RecordBatchInfo*> batchInfos;
+   std::vector<size_t> workerResvs;
 
    public:
    ScanBatchesTask(std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, std::vector<size_t> colIds, const std::function<void(lingodb::runtime::RecordBatchInfo*)>& cb) : batches(batches), colIds(colIds), cb(cb) {
       for (size_t i = 0; i < lingodb::scheduler::getNumWorkers(); i++) {
          batchInfos.push_back(reinterpret_cast<lingodb::runtime::RecordBatchInfo*>(malloc(sizeof(lingodb::runtime::RecordBatchInfo) + sizeof(lingodb::runtime::ColumnInfo) * colIds.size())));
+         workerResvs.push_back(0);
       }
    }
-   void run() override {
+   size_t workAmount() override {
+      return batches.size();
+   }
+   bool reserveWork() override {
       size_t localStartIndex = startIndex.fetch_add(1);
       if (localStartIndex >= batches.size()) {
          workExhausted.store(true);
-         return;
+         return false;
       }
-      auto& batch = batches[localStartIndex];
+      workerResvs[lingodb::scheduler::currentWorkerId()] = localStartIndex;
+      return true;
+   }
+   void consumeWork() override {
+      auto& batch = batches[workerResvs[lingodb::scheduler::currentWorkerId()]];
       auto* batchInfo = batchInfos[lingodb::scheduler::currentWorkerId()];
       utility::Tracer::Trace trace(processMorsel);
       access(colIds, batchInfo, batch);
