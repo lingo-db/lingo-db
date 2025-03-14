@@ -1,4 +1,6 @@
 #include "lingodb/runtime/DataSourceIteration.h"
+#include "lingodb/scheduler/Tasks.h"
+
 #include "json.h"
 #include <iterator>
 
@@ -47,7 +49,7 @@ static void access(std::vector<size_t> colIds, lingodb::runtime::RecordBatchInfo
    }
    info->numRows = currChunk->num_rows();
 }
-class ScanBatchesTask : public lingodb::scheduler::Task {
+class ScanBatchesTask : public lingodb::scheduler::TaskWithImplicitContext {
    std::vector<std::shared_ptr<arrow::RecordBatch>>& batches;
    std::vector<size_t> colIds;
    std::function<void(lingodb::runtime::RecordBatchInfo*)> cb;
@@ -162,7 +164,8 @@ lingodb::runtime::DataSourceIteration* lingodb::runtime::DataSourceIteration::in
 lingodb::runtime::DataSourceIteration::DataSourceIteration(DataSource* dataSource, const std::vector<size_t>& colIds) : dataSource(dataSource), colIds(colIds) {
 }
 
-lingodb::runtime::DataSource* lingodb::runtime::DataSource::get(lingodb::runtime::ExecutionContext* executionContext, lingodb::runtime::VarLen32 description) {
+lingodb::runtime::DataSource* lingodb::runtime::DataSource::get(lingodb::runtime::VarLen32 description) {
+   lingodb::runtime::ExecutionContext* executionContext =lingodb::runtime::getCurrentExecutionContext();
    nlohmann::json descr = nlohmann::json::parse(description.str());
    std::string tableName = descr["table"];
    auto& session = executionContext->getSession();

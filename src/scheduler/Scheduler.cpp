@@ -109,7 +109,7 @@ struct TaskWrapper {
    std::atomic<int64_t> nonCompletedFibers = 0;
    std::atomic<int64_t> deployedOnWorkers = 0;
    std::function<void()> onFinalize = nullptr;
-   std::mutex finalizeMutex={};
+   std::mutex finalizeMutex = {};
 
    void finalize();
 
@@ -383,6 +383,7 @@ class Worker {
    }
 
    void awaitChildTask(std::unique_ptr<Task> task) {
+      auto *parentTask=currentFiber->getTask();
       bool allocatedWork = task->allocateWork();
       if (!allocatedWork && !task->hasWork()) {
          return;
@@ -395,8 +396,11 @@ class Worker {
          taskWrapper->deployedOnWorkers++;
          scheduler.enqueueTask(taskWrapper);
       }
-
+      parentTask->task->teardown();
+      taskRef.setup();
       taskRef.performWork();
+      taskRef.teardown();
+      parentTask->task->setup();
       if (!taskWrapper) {
          return;
       }
@@ -458,7 +462,10 @@ class Worker {
             fiberAllocator.deallocate(std::move(currentFiber));
          };
          if (currentFiber) {
+            auto *relatedTask= currentFiber->getTask();
+            relatedTask->task->setup();
             if (currentFiber->resume()) {
+               relatedTask->task->teardown();
                //unyield because it was previously registered as yielded
                if (currentFiber->getTask()) {
                   currentFiber->getTask()->unYieldFiber();
@@ -466,6 +473,8 @@ class Worker {
                auto* resumeTask = currentFiber->getTask();
                handleFiberComplete();
                scheduler.returnTask(resumeTask);
+            }else {
+               relatedTask->task->teardown();
             }
             assert(!currentFiber);
          }
@@ -518,9 +527,11 @@ class Worker {
                currentFiber = fiberAllocator.allocate();
                assert(currentFiber);
                // Step 3. consume reserved work
+               currTask->task->setup();
                auto fiberDone = currentFiber->run(this, currTask, [&] {
                   currTask->task->performWork();
                });
+               currTask->task->teardown();
                if (fiberDone) {
                   this->startWaitTime = TimePoint::min();
                   handleFiberComplete();

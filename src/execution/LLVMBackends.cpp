@@ -425,31 +425,7 @@ static bool lowerToLLVMDialect(mlir::ModuleOp& moduleOp, std::shared_ptr<executi
       return true;
    }
 }
-static void addLLVMExecutionContextFuncs(mlir::ModuleOp& moduleOp) {
-   mlir::OpBuilder builder(moduleOp->getContext());
-   builder.setInsertionPointToStart(moduleOp.getBody());
-   auto pointerType = mlir::LLVM::LLVMPointerType::get(moduleOp->getContext());
-   auto globalOp = builder.create<mlir::LLVM::GlobalOp>(builder.getUnknownLoc(), builder.getI64Type(), false, mlir::LLVM::Linkage::Private, "execution_context", builder.getI64IntegerAttr(0));
-   auto setExecContextFn = builder.create<mlir::LLVM::LLVMFuncOp>(moduleOp.getLoc(), "rt_set_execution_context", mlir::LLVM::LLVMFunctionType::get(mlir::LLVM::LLVMVoidType::get(builder.getContext()), builder.getI64Type()), mlir::LLVM::Linkage::External);
-   {
-      mlir::OpBuilder::InsertionGuard guard(builder);
-      auto* block = setExecContextFn.addEntryBlock(builder);
-      auto execContext = block->getArgument(0);
-      builder.setInsertionPointToStart(block);
-      auto ptr = builder.create<mlir::LLVM::AddressOfOp>(builder.getUnknownLoc(), globalOp);
-      builder.create<mlir::LLVM::StoreOp>(builder.getUnknownLoc(), execContext, ptr);
-      builder.create<mlir::LLVM::ReturnOp>(builder.getUnknownLoc(), mlir::ValueRange{});
-   }
-   if (auto getExecContextFn = mlir::dyn_cast_or_null<mlir::LLVM::LLVMFuncOp>(moduleOp.lookupSymbol("rt_get_execution_context"))) {
-      mlir::OpBuilder::InsertionGuard guard(builder);
-      auto* block = getExecContextFn.addEntryBlock(builder);
-      builder.setInsertionPointToStart(block);
-      auto ptr = builder.create<mlir::LLVM::AddressOfOp>(builder.getUnknownLoc(), globalOp);
-      auto execContext = builder.create<mlir::LLVM::LoadOp>(builder.getUnknownLoc(), builder.getI64Type(), ptr);
-      auto execContextAsPtr = builder.create<mlir::LLVM::IntToPtrOp>(builder.getUnknownLoc(), pointerType, execContext);
-      builder.create<mlir::LLVM::ReturnOp>(builder.getUnknownLoc(), mlir::ValueRange{execContextAsPtr});
-   }
-}
+
 
 static llvm::Error performDefaultLLVMPasses(llvm::Module* module) {
    utility::Tracer::Trace trace(llvmOpt);
@@ -469,7 +445,7 @@ static llvm::Error performDefaultLLVMPasses(llvm::Module* module) {
    return llvm::Error::success();
 }
 
-static void linkStatic(LLVMBackend* engine, execution::Error& error, execution::mainFnType& mainFunc, execution::setExecutionContextFnType& setExecutionContextFn) {
+static void linkStatic(LLVMBackend* engine, execution::Error& error, execution::mainFnType& mainFunc) {
    auto currPath = std::filesystem::current_path();
    std::ofstream symbolfile("symbolfile");
    util::FunctionHelper::visitAllFunctions([&](std::string s, void* ptr) {
@@ -509,13 +485,6 @@ static void linkStatic(LLVMBackend* engine, execution::Error& error, execution::
    if (dlsymError) {
       dlclose(handle);
       error.emit() << "Could not load symbol for main function: " << std::string(dlsymError);
-      return;
-   }
-   setExecutionContextFn = reinterpret_cast<execution::setExecutionContextFnType>(dlsym(handle, "rt_set_execution_context"));
-   dlsymError = dlerror();
-   if (dlsymError) {
-      dlclose(handle);
-      error.emit() << "Could not load symbol for rt_set_execution_context function: " << std::string(dlsymError);
       return;
    }
    return;
@@ -601,7 +570,6 @@ class GPULLVMBackend : public execution::ExecutionBackend {
          error.emit() << "Could not lower module to llvm dialect";
          return;
       }
-      addLLVMExecutionContextFuncs(moduleOp);
       auto endLowerToLLVM = std::chrono::high_resolution_clock::now();
       timing["lowerToLLVM"] = std::chrono::duration_cast<std::chrono::microseconds>(endLowerToLLVM - startLowerToLLVM).count() / 1000.0;
       double translateToLLVMIRTime;
@@ -647,15 +615,9 @@ class GPULLVMBackend : public execution::ExecutionBackend {
          error.emit() << "Could not lookup main function";
          return;
       }
-      auto setExecutionContextLookup = engine->lookup("rt_set_execution_context");
-      if (!setExecutionContextLookup) {
-         error.emit() << "Could not lookup function for setting the execution context";
-         return;
-      }
+
       auto mainFunc = reinterpret_cast<execution::mainFnType>(mainFnLookupResult.get());
-      auto setExecutionContextFunc = reinterpret_cast<execution::setExecutionContextFnType>(setExecutionContextLookup.get());
       auto endJIT = std::chrono::high_resolution_clock::now();
-      setExecutionContextFunc(executionContext);
       auto totalJITTime = std::chrono::duration_cast<std::chrono::microseconds>(endJIT - startJIT).count() / 1000.0;
       totalJITTime -= translateToLLVMIRTime;
       totalJITTime -= llvmPassesTime;
@@ -689,7 +651,6 @@ class DefaultCPULLVMBackend : public execution::ExecutionBackend {
          error.emit() << "Could not lower module to llvm dialect";
          return;
       }
-      addLLVMExecutionContextFuncs(moduleOp);
       auto endLowerToLLVM = std::chrono::high_resolution_clock::now();
       timing["lowerToLLVM"] = std::chrono::duration_cast<std::chrono::microseconds>(endLowerToLLVM - startLowerToLLVM).count() / 1000.0;
       double translateToLLVMIRTime;
@@ -724,16 +685,10 @@ class DefaultCPULLVMBackend : public execution::ExecutionBackend {
          error.emit() << "Could not lookup main function";
          return;
       }
-      auto setExecutionContextLookup = engine->lookup("rt_set_execution_context");
-      if (!setExecutionContextLookup) {
-         error.emit() << "Could not lookup function for setting the execution context";
-         return;
-      }
+
       auto mainFunc = reinterpret_cast<execution::mainFnType>(mainFnLookupResult.get());
-      auto setExecutionContextFunc = reinterpret_cast<execution::setExecutionContextFnType>(setExecutionContextLookup.get());
       traceCodeGen.stop();
       auto endJIT = std::chrono::high_resolution_clock::now();
-      setExecutionContextFunc(executionContext);
       auto totalJITTime = std::chrono::duration_cast<std::chrono::microseconds>(endJIT - startJIT).count() / 1000.0;
       totalJITTime -= translateToLLVMIRTime;
       totalJITTime -= llvmPassesTime;
@@ -783,7 +738,6 @@ class CPULLVMDebugBackend : public execution::ExecutionBackend {
          error.emit() << "Could not lower module to llvm dialect";
          return;
       }
-      addLLVMExecutionContextFuncs(moduleOp);
       auto endLowerToLLVM = std::chrono::high_resolution_clock::now();
       if (auto moduleFileLineLoc = mlir::dyn_cast_or_null<mlir::FileLineColLoc>(moduleOp.getLoc())) {
          addDebugInfo(moduleOp, moduleFileLineLoc.getFilename().str());
@@ -806,18 +760,12 @@ class CPULLVMDebugBackend : public execution::ExecutionBackend {
          error.emit() << "Could not lookup main function";
          return;
       }
-      auto setExecutionContextLookup = engine->lookup("rt_set_execution_context");
-      if (!setExecutionContextLookup) {
-         error.emit() << "Could not lookup function for setting the execution context";
-         return;
-      }
+
       execution::mainFnType mainFunc;
-      execution::setExecutionContextFnType setExecutionContextFunc;
-      linkStatic(engine.get(), error, mainFunc, setExecutionContextFunc);
+      linkStatic(engine.get(), error, mainFunc);
       if (error) {
          return;
       }
-      setExecutionContextFunc(executionContext);
 
       std::vector<double> measuredTimes;
       for (size_t i = 0; i < numRepetitions; i++) {
@@ -866,7 +814,6 @@ class CPULLVMProfilingBackend : public execution::ExecutionBackend {
          error.emit() << "Could not lower module to llvm dialect";
          return;
       }
-      addLLVMExecutionContextFuncs(moduleOp);
       auto endLowerToLLVM = std::chrono::high_resolution_clock::now();
       timing["lowerToLLVM"] = std::chrono::duration_cast<std::chrono::microseconds>(endLowerToLLVM - startLowerToLLVM).count() / 1000.0;
       if (auto moduleFileLineLoc = mlir::dyn_cast_or_null<mlir::FileLineColLoc>(moduleOp.getLoc())) {
@@ -902,19 +849,13 @@ class CPULLVMProfilingBackend : public execution::ExecutionBackend {
          error.emit() << "Could not lookup main function";
          return;
       }
-      auto setExecutionContextLookup = engine->lookup("rt_set_execution_context");
-      if (!setExecutionContextLookup) {
-         error.emit() << "Could not lookup function for setting the execution context";
-         return;
-      }
+
       execution::mainFnType mainFunc;
-      execution::setExecutionContextFnType setExecutionContextFunc;
-      linkStatic(engine.get(), error, mainFunc, setExecutionContextFunc);
+      linkStatic(engine.get(), error, mainFunc);
       if (error) {
          return;
       }
       auto endJIT = std::chrono::high_resolution_clock::now();
-      setExecutionContextFunc(executionContext);
       auto totalJITTime = std::chrono::duration_cast<std::chrono::microseconds>(endJIT - startJIT).count() / 1000.0;
       totalJITTime -= translateToLLVMIRTime;
       totalJITTime -= llvmPassesTime;

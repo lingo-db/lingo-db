@@ -34,7 +34,7 @@ class SegmentTreeView {
    size_t stateCntr=0;
    public:
    void lookup(uint8_t* result, size_t from, size_t to);
-   static SegmentTreeView* build(runtime::ExecutionContext* executionContext, Buffer buffer, size_t typeSize, void (*createInitialStateFn)(unsigned char*, unsigned char*), void (*combineStatesFn)(unsigned char*, unsigned char*, unsigned char*), size_t stateTypeSize);
+   static SegmentTreeView* build(Buffer buffer, size_t typeSize, void (*createInitialStateFn)(unsigned char*, unsigned char*), void (*combineStatesFn)(unsigned char*, unsigned char*, unsigned char*), size_t stateTypeSize);
    ~SegmentTreeView();
 };
 } // namespace lingodb::runtime

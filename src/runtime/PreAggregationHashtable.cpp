@@ -1,5 +1,6 @@
 #include "lingodb/runtime/PreAggregationHashtable.h"
 #include "lingodb/runtime/helpers.h"
+#include "lingodb/scheduler/Tasks.h"
 #include "lingodb/utility/Tracer.h"
 #include <iostream>
 
@@ -10,15 +11,14 @@ static utility::Tracer::Event mergePartitionEvent("Oht", "mergePartition");
 static utility::Tracer::Event mergeAllocate("Oht", "mergeAlloc");
 static utility::Tracer::Event mergeDeallocate("Oht", "mergeDealloc");
 
-
-class FragmentOutputsTask : public lingodb::scheduler::Task {
-   std::vector<lingodb::runtime::FlexibleBuffer*> *outputs;
+class FragmentOutputsTask : public lingodb::scheduler::TaskWithImplicitContext {
+   std::vector<lingodb::runtime::FlexibleBuffer*>* outputs;
    std::function<void(std::vector<lingodb::runtime::FlexibleBuffer*>&)> cb;
    std::atomic<size_t> startIndex{0};
    std::vector<size_t> workerResvs;
 
    public:
-   FragmentOutputsTask(std::vector<lingodb::runtime::FlexibleBuffer*> *outputs, std::function<void(std::vector<lingodb::runtime::FlexibleBuffer*>&)> cb) : outputs(outputs), cb(cb) {
+   FragmentOutputsTask(std::vector<lingodb::runtime::FlexibleBuffer*>* outputs, std::function<void(std::vector<lingodb::runtime::FlexibleBuffer*>&)> cb) : outputs(outputs), cb(cb) {
       for (size_t i = 0; i < lingodb::scheduler::getNumWorkers(); i++) {
          workerResvs.push_back(0);
       }
@@ -55,8 +55,9 @@ lingodb::runtime::PreAggregationHashtableFragment::Entry* lingodb::runtime::PreA
    return newEntry;
 }
 
-lingodb::runtime::PreAggregationHashtableFragment* lingodb::runtime::PreAggregationHashtableFragment::create(lingodb::runtime::ExecutionContext* context, size_t typeSize) {
+lingodb::runtime::PreAggregationHashtableFragment* lingodb::runtime::PreAggregationHashtableFragment::create(size_t typeSize) {
    utility::Tracer::Trace trace(createEvent);
+   auto* context = runtime::getCurrentExecutionContext();
    auto* fragment = new PreAggregationHashtableFragment(typeSize);
    context->registerState({fragment, [](void* ptr) { delete reinterpret_cast<PreAggregationHashtableFragment*>(ptr); }});
    return fragment;
@@ -68,8 +69,9 @@ lingodb::runtime::PreAggregationHashtableFragment::~PreAggregationHashtableFragm
       }
    }
 }
-lingodb::runtime::PreAggregationHashtable* lingodb::runtime::PreAggregationHashtable::merge(lingodb::runtime::ExecutionContext* context, lingodb::runtime::ThreadLocal* threadLocal, bool (*eq)(uint8_t*, uint8_t*), void (*combine)(uint8_t*, uint8_t*)) {
+lingodb::runtime::PreAggregationHashtable* lingodb::runtime::PreAggregationHashtable::merge(lingodb::runtime::ThreadLocal* threadLocal, bool (*eq)(uint8_t*, uint8_t*), void (*combine)(uint8_t*, uint8_t*)) {
    utility::Tracer::Trace trace(mergeEvent);
+   auto* context = runtime::getCurrentExecutionContext();
    constexpr size_t htShift = 6; //2^6=64
 
    std::mutex mutex;

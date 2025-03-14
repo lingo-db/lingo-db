@@ -45,9 +45,9 @@ class ExecutionContext {
    const std::unordered_map<uint32_t, int64_t>& getTupleCounts() const {
       return tupleCounts;
    }
-   void setResult(uint32_t id, uint8_t* ptr);
-   void clearResult(uint32_t id);
-   void setTupleCount(uint32_t id, int64_t tupleCount);
+   static void setResult(uint32_t id, uint8_t* ptr);
+   static void clearResult(uint32_t id);
+   static void setTupleCount(uint32_t id, int64_t tupleCount);
    void registerState(const State& s) {
       states.insert(s.ptr, s);
    }
@@ -57,6 +57,9 @@ class ExecutionContext {
    void reset();
    ~ExecutionContext();
 };
+
+void setCurrentExecutionContext(ExecutionContext* context);
+ExecutionContext* getCurrentExecutionContext();
 } // end namespace lingodb::runtime
 
 #endif // LINGODB_RUNTIME_EXECUTIONCONTEXT_H

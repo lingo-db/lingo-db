@@ -2,6 +2,7 @@
 #define LINGODB_SCHEDULER_TASK_H
 #include <atomic>
 #include <limits>
+
 namespace lingodb::scheduler {
 class Task {
    protected:
@@ -14,6 +15,9 @@ class Task {
 
    virtual bool allocateWork() = 0;
    virtual void performWork() = 0;
+   //e.g., to prepare environment
+   virtual void setup() {}
+   virtual void teardown() {}
    virtual ~Task() {}
 };
 } // namespace lingodb::scheduler

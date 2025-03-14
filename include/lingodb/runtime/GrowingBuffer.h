@@ -10,7 +10,7 @@ class GrowingBufferAllocator {
    public:
    virtual GrowingBuffer* create(ExecutionContext* executionContext,size_t sizeOfType, size_t initialCapacity) = 0;
    static GrowingBufferAllocator* getDefaultAllocator();
-   static GrowingBufferAllocator* getGroupAllocator(ExecutionContext* executionContext, size_t groupId);
+   static GrowingBufferAllocator* getGroupAllocator( size_t groupId);
    virtual ~GrowingBufferAllocator(){}
 };
 class GrowingBuffer {
@@ -19,11 +19,11 @@ class GrowingBuffer {
    public:
    GrowingBuffer(size_t cap, size_t typeSize) : values(cap, typeSize) {}
    uint8_t* insert();
-   static GrowingBuffer* create(GrowingBufferAllocator* allocator, ExecutionContext* executionContext, size_t sizeOfType, size_t initialCapacity);
+   static GrowingBuffer* create(GrowingBufferAllocator* allocator, size_t sizeOfType, size_t initialCapacity);
    size_t getLen() const;
    size_t getTypeSize() const;
-   runtime::Buffer sort(runtime::ExecutionContext*, bool (*compareFn)(uint8_t*, uint8_t*));
-   runtime::Buffer asContinuous(ExecutionContext* executionContext);
+   runtime::Buffer sort(bool (*compareFn)(uint8_t*, uint8_t*));
+   runtime::Buffer asContinuous();
    static void destroy(GrowingBuffer* vec);
    BufferIterator* createIterator();
    runtime::FlexibleBuffer& getValues() { return values; }

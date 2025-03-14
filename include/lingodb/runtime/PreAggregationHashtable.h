@@ -20,7 +20,7 @@ class PreAggregationHashtableFragment {
    size_t len;
    runtime::FlexibleBuffer* outputs[numOutputs];
    PreAggregationHashtableFragment(size_t typeSize) : ht(), typeSize(typeSize), len(0), outputs() {}
-   static PreAggregationHashtableFragment* create(runtime::ExecutionContext* context, size_t typeSize);
+   static PreAggregationHashtableFragment* create(size_t typeSize);
    Entry* insert(size_t hash);
    ~PreAggregationHashtableFragment();
 };
@@ -37,7 +37,7 @@ class PreAggregationHashtable {
    }
 
    public:
-   static runtime::PreAggregationHashtable* merge(runtime::ExecutionContext* context,ThreadLocal*, bool (*eq)(uint8_t*, uint8_t*), void (*combine)(uint8_t*, uint8_t*));
+   static runtime::PreAggregationHashtable* merge(ThreadLocal*, bool (*eq)(uint8_t*, uint8_t*), void (*combine)(uint8_t*, uint8_t*));
    Entry* lookup(size_t hash);
    static void lock(Entry* entry,size_t subtract);
    static void unlock(Entry* entry,size_t subtract);

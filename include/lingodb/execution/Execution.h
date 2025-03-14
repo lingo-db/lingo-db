@@ -7,6 +7,7 @@
 #include "ResultProcessing.h"
 #include "Timing.h"
 #include "lingodb/scheduler/Scheduler.h"
+#include "lingodb/scheduler/Tasks.h"
 #include <functional>
 namespace mlir {
 class ModuleOp;
@@ -123,12 +124,16 @@ class QueryExecuter {
    QueryExecutionConfig& getConfig() { return *queryExecutionConfig; }
    static std::unique_ptr<QueryExecuter> createDefaultExecuter(std::unique_ptr<QueryExecutionConfig> queryExecutionConfig, runtime::Session& session);
    virtual ~QueryExecuter() {}
+   runtime::ExecutionContext* getExecutionContext() {
+      return executionContext.get();
+   }
 };
-class QueryExecutionTask : public lingodb::scheduler::Task {
+class QueryExecutionTask : public lingodb::scheduler::TaskWithContext {
    std::unique_ptr<QueryExecuter> queryExecutor;
    std::function<void()> beforeDestroyFn;
+
    public:
-   QueryExecutionTask(std::unique_ptr<QueryExecuter> queryExecutor, std::function<void()> beforeDestroyFn = nullptr) : queryExecutor(std::move(queryExecutor)), beforeDestroyFn(beforeDestroyFn) {}
+   QueryExecutionTask(std::unique_ptr<QueryExecuter> queryExecutor, std::function<void()> beforeDestroyFn = nullptr) : TaskWithContext(queryExecutor->getExecutionContext()), queryExecutor(std::move(queryExecutor)), beforeDestroyFn(beforeDestroyFn) {}
    bool allocateWork() override {
       if (workExhausted.exchange(true)) {
          return false;

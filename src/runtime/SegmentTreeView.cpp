@@ -74,8 +74,9 @@ void SegmentTreeView::lookupRecursively(lingodb::runtime::SegmentTreeView::TreeN
       lookupRecursively(t->right, result, from, to, first);
    }
 }
-SegmentTreeView* SegmentTreeView::build(lingodb::runtime::ExecutionContext* executionContext, Buffer buffer, size_t typeSize, void (*createInitialStateFn)(unsigned char*, unsigned char*), void (*combineStatesFn)(unsigned char*, unsigned char*, unsigned char*), size_t stateTypeSize) {
+SegmentTreeView* SegmentTreeView::build(Buffer buffer, size_t typeSize, void (*createInitialStateFn)(unsigned char*, unsigned char*), void (*combineStatesFn)(unsigned char*, unsigned char*, unsigned char*), size_t stateTypeSize) {
    utility::Tracer::Trace trace(buildEvent);
+   auto* executionContext= runtime::getCurrentExecutionContext();
    std::vector<uint8_t*> entryPointers;
    auto numElements = buffer.numElements / typeSize;
    for (size_t i = 0; i < numElements; i++) {
