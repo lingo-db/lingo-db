@@ -13,7 +13,7 @@ jobs:
       matrix:
         build_type: [ debug, asan, release ]
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059
+    container: ghcr.io/lingo-db/lingodb-dev:e62ea236a788af041758bc8008ac07a44c64fe78
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -38,7 +38,7 @@ jobs:
           retention-days: 1
   lint:
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059
+    container: ghcr.io/lingo-db/lingodb-dev:e62ea236a788af041758bc8008ac07a44c64fe78
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -53,7 +53,7 @@ jobs:
       matrix:
         build_type: [ debug, asan ]
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059
+    container: ghcr.io/lingo-db/lingodb-dev:e62ea236a788af041758bc8008ac07a44c64fe78
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
@@ -74,7 +74,7 @@ jobs:
         build_type: [ release, asan ]
     needs: build
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059
+    container: ghcr.io/lingo-db/lingodb-dev:e62ea236a788af041758bc8008ac07a44c64fe78
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
@@ -96,7 +96,7 @@ jobs:
         build_type: [ release, asan ]
     needs: build
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059
+    container: ghcr.io/lingo-db/lingodb-dev:e62ea236a788af041758bc8008ac07a44c64fe78
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
@@ -179,7 +179,7 @@ jobs:
             python3 tools/python/test/mlir-construction.py
   coverage:
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-dev:999de4e4508110da7d4729daaaf3a32371f40059
+    container: ghcr.io/lingo-db/lingodb-dev:e62ea236a788af041758bc8008ac07a44c64fe78
     steps:
       - name: Checkout
         uses: actions/checkout@v2
