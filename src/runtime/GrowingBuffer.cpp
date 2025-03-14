@@ -1,6 +1,7 @@
 #include "lingodb/runtime/GrowingBuffer.h"
 #include "lingodb/runtime/helpers.h"
 #include "lingodb/utility/Tracer.h"
+#include "lingodb/scheduler/Tasks.h"
 #include <algorithm>
 #include <cstring>
 #include <iostream>
@@ -36,7 +37,7 @@ struct SortContext {
 };
 typedef struct SortContext SortContext;
 
-class SortCopyTask : public lingodb::scheduler::Task {
+class SortCopyTask : public lingodb::scheduler::TaskWithImplicitContext {
    const std::vector<lingodb::runtime::Buffer>& buffers;
    std::vector<uint8_t*>& copy;
    size_t typeSize;
@@ -54,7 +55,7 @@ public:
          cnt += buffers[i].numElements;
       }
    }
-   bool reserveWork() override {
+   bool allocateWork() override {
       size_t localStartIndex = startIndex.fetch_add(1);
       if (localStartIndex >= buffers.size()) {
          workExhausted.store(true);
@@ -63,7 +64,7 @@ public:
       workerResvs[lingodb::scheduler::currentWorkerId()] = localStartIndex;
       return true;
    }
-   void consumeWork() override {
+   void performWork() override {
       utility::Tracer::Trace trace(sortCopyEvent);
       auto localStartIndex = workerResvs[lingodb::scheduler::currentWorkerId()];
       const lingodb::runtime::Buffer& buffer = buffers[localStartIndex];
@@ -76,7 +77,7 @@ public:
 };
 
 
-class SortLocalTask : public lingodb::scheduler::Task {
+class SortLocalTask : public lingodb::scheduler::TaskWithImplicitContext {
    SortContext& sctx;
    size_t splitSize;
    std::atomic<size_t> startIndex{0};
@@ -94,7 +95,7 @@ class SortLocalTask : public lingodb::scheduler::Task {
          sctx.localStates.push_back(SortSplitState(0,0,sepVec));
       }
    }
-   bool reserveWork() override {
+   bool allocateWork() override {
       size_t localStartIndex = startIndex.fetch_add(1);
       if (localStartIndex >= sctx.splitCnt) {
          workExhausted.store(true);
@@ -103,7 +104,7 @@ class SortLocalTask : public lingodb::scheduler::Task {
       workerResvs[lingodb::scheduler::currentWorkerId()] = localStartIndex;
       return true;
    }
-   void consumeWork() override {
+   void performWork() override {
       utility::Tracer::Trace trace1(sortLocalEvent);
       auto localStartIndex = workerResvs[lingodb::scheduler::currentWorkerId()];
       auto begin = localStartIndex * splitSize;
@@ -135,7 +136,7 @@ class SortLocalTask : public lingodb::scheduler::Task {
    }
 };
 
-class SortSepSearchTask : public lingodb::scheduler::Task {
+class SortSepSearchTask : public lingodb::scheduler::TaskWithImplicitContext {
    SortContext& sctx;
    std::atomic<size_t> startIndex{0};
    std::vector<size_t> workerResvs;
@@ -148,7 +149,7 @@ public:
          sctx.localStates[i].globalSeperators = std::vector<size_t>(sctx.seperatorCnt);
       }
    }
-   bool reserveWork() override {
+   bool allocateWork() override {
       size_t localStartIndex = startIndex.fetch_add(1);
       if (localStartIndex >= sctx.seperatorCnt) {
          workExhausted.store(true);
@@ -157,7 +158,7 @@ public:
       workerResvs[lingodb::scheduler::currentWorkerId()] = localStartIndex;
       return true;
    }
-   void consumeWork() override {
+   void performWork() override {
       utility::Tracer::Trace trace3(sortSepSearchEvent);
       auto localStartIndex = workerResvs[lingodb::scheduler::currentWorkerId()];
       auto splitCnt = sctx.splitCnt;
@@ -181,7 +182,7 @@ public:
    }
 };
 
-class SortMergeTask : public lingodb::scheduler::Task {
+class SortMergeTask : public lingodb::scheduler::TaskWithImplicitContext {
    SortContext& sctx;
    uint8_t* output;
    std::vector<size_t>& outputRanges;
@@ -216,7 +217,7 @@ public:
          workerResvs.push_back(0);
       }
    }
-   bool reserveWork() override {
+   bool allocateWork() override {
       size_t localStartIndex = startIndex.fetch_add(1);
       if (localStartIndex > sctx.seperatorCnt) {
          workExhausted.store(true);
@@ -226,7 +227,7 @@ public:
       return true;
    }
 
-   void consumeWork() override {
+   void performWork() override {
       utility::Tracer::Trace trace5(sortMergeEvent);
       auto localStartIndex = workerResvs[lingodb::scheduler::currentWorkerId()];
       std::vector<MergeSource> srcs;
@@ -364,7 +365,7 @@ size_t lingodb::runtime::GrowingBuffer::getTypeSize() const {
 }
 lingodb::runtime::Buffer lingodb::runtime::GrowingBuffer::sort(bool (*compareFn)(uint8_t*, uint8_t*)) {
    if (values.getLen() > minSplitSize) {
-      return parallelSort(executionContext, compareFn);
+      return parallelSort(compareFn);
    }
    utility::Tracer::Trace trace(sortEvent);
    auto* executionContext= runtime::getCurrentExecutionContext();
@@ -385,7 +386,7 @@ lingodb::runtime::Buffer lingodb::runtime::GrowingBuffer::sort(bool (*compareFn)
    return Buffer{typeSize * len, sorted};
 }
 
-lingodb::runtime::Buffer lingodb::runtime::GrowingBuffer::parallelSort(lingodb::runtime::ExecutionContext* executionContext, bool (*compareFn)(uint8_t*, uint8_t*)) {
+lingodb::runtime::Buffer lingodb::runtime::GrowingBuffer::parallelSort(bool (*compareFn)(uint8_t*, uint8_t*)) {
    utility::Tracer::Trace trace(sortEvent);
    utility::Tracer::Trace trace1(sortAllocEvent);
    std::vector<uint8_t*> toSort = std::vector<uint8_t*>(values.getLen());
@@ -432,6 +433,7 @@ lingodb::runtime::Buffer lingodb::runtime::GrowingBuffer::parallelSort(lingodb::
    size_t len = values.getLen();
    uint8_t* sorted = new uint8_t[typeSize * len];
    trace4.stop();
+   auto* executionContext= runtime::getCurrentExecutionContext();
    executionContext->registerState({sorted, [](void* ptr) { delete[] reinterpret_cast<uint8_t*>(ptr); }});
    lingodb::scheduler::awaitChildTask(std::make_unique<SortMergeTask>(sctx, sorted, outputRanges));
 
