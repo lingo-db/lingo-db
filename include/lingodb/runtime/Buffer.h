@@ -15,7 +15,7 @@ struct BufferIterator;
 struct Buffer {
    size_t numElements;
    uint8_t* ptr;
-   static Buffer createZeroed(runtime::ExecutionContext* executionContext, size_t bytes);
+   static Buffer createZeroed(size_t bytes);
    static void iterate(bool parallel, Buffer, size_t typeSize, void (*forEachChunk)(Buffer, size_t, size_t, void*), void* contextPtr);
 };
 struct BufferIterator {

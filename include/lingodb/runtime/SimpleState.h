@@ -6,7 +6,7 @@
 namespace lingodb::runtime {
 class SimpleState {
    public:
-   static uint8_t* create(runtime::ExecutionContext* executionContext, size_t sizeOfType);
+   static uint8_t* create(size_t sizeOfType);
    static uint8_t* merge(ThreadLocal* threadLocal, void (*merge)(uint8_t* dest, uint8_t* src));
 };
 } //end namespace lingodb::runtime

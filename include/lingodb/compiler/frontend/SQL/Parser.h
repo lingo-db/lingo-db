@@ -232,16 +232,6 @@ struct Parser {
    bool parallelismAllowed;
    Parser(std::string sql, lingodb::runtime::Catalog& catalog, mlir::ModuleOp moduleOp);
 
-   mlir::Value getExecutionContextValue(mlir::OpBuilder& builder) {
-      mlir::func::FuncOp funcOp = moduleOp.lookupSymbol<mlir::func::FuncOp>("rt_get_execution_context");
-      if (!funcOp) {
-         mlir::OpBuilder::InsertionGuard guard(builder);
-         builder.setInsertionPointToStart(moduleOp.getBody());
-         funcOp = builder.create<mlir::func::FuncOp>(builder.getUnknownLoc(), "rt_get_execution_context", builder.getFunctionType({}, {dialect::util::RefType::get(builder.getContext(), builder.getI8Type())}), builder.getStringAttr("private"), mlir::ArrayAttr{}, mlir::ArrayAttr{});
-      }
-
-      return builder.create<mlir::func::CallOp>(builder.getUnknownLoc(), funcOp, mlir::ValueRange{}).getResult(0);
-   }
    mlir::Value createStringValue(mlir::OpBuilder& builder, std::string str) {
       return builder.create<dialect::util::CreateConstVarLen>(builder.getUnknownLoc(), dialect::util::VarLen32Type::get(builder.getContext()), builder.getStringAttr(str));
    }

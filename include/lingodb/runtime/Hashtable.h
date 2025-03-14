@@ -23,7 +23,7 @@ class Hashtable {
    Entry* insert(size_t hash);
    static void lock(Entry* entry,size_t subtract);
    static void unlock(Entry* entry,size_t subtract);
-   static Hashtable* create(runtime::ExecutionContext* executionContext, size_t typeSize, size_t initialCapacity);
+   static Hashtable* create( size_t typeSize, size_t initialCapacity);
    static void destroy(Hashtable*);
    void mergeEntries(bool (*isEq)(uint8_t*, uint8_t*), void (*merge)(uint8_t*, uint8_t*), Hashtable* other);
    static runtime::Hashtable* merge(ThreadLocal*, bool (*eq)(uint8_t*, uint8_t*), void (*combine)(uint8_t*, uint8_t*));

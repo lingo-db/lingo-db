@@ -90,7 +90,7 @@ void HashIndex::computeHashes() {
 
       auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), *tmpSession);
       executer->fromData(query);
-      executer->execute();
+      scheduler::awaitChildTask(std::make_unique<execution::QueryExecutionTask>(std::move(executer)));
       result = result->CombineChunks().ValueOrDie();
       hashData = result->column(0)->chunk(0);
    }

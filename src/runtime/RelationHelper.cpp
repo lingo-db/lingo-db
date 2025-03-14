@@ -8,12 +8,14 @@
 #include <arrow/csv/api.h>
 #include <arrow/io/api.h>
 namespace lingodb::runtime {
-void RelationHelper::createTable(lingodb::runtime::ExecutionContext* context, lingodb::runtime::VarLen32 name, lingodb::runtime::VarLen32 meta) {
+void RelationHelper::createTable(lingodb::runtime::VarLen32 name, lingodb::runtime::VarLen32 meta) {
+   auto *context = getCurrentExecutionContext();
    auto& session = context->getSession();
    auto catalog = session.getCatalog();
    catalog->addTable(name.str(), lingodb::runtime::TableMetaData::deserialize(meta.str()));
 }
-void RelationHelper::appendTableFromResult(lingodb::runtime::VarLen32 tableName, lingodb::runtime::ExecutionContext* context, size_t resultId) {
+void RelationHelper::appendTableFromResult(lingodb::runtime::VarLen32 tableName, size_t resultId) {
+   auto *context = getCurrentExecutionContext();
    {
       auto resultTable = context->getResultOfType<lingodb::runtime::ArrowTable>(resultId);
       if (!resultTable) {
@@ -28,7 +30,8 @@ void RelationHelper::appendTableFromResult(lingodb::runtime::VarLen32 tableName,
       }
    }
 }
-void RelationHelper::copyFromIntoTable(lingodb::runtime::ExecutionContext* context, lingodb::runtime::VarLen32 tableName, lingodb::runtime::VarLen32 fileName, lingodb::runtime::VarLen32 delimiter, lingodb::runtime::VarLen32 escape) {
+void RelationHelper::copyFromIntoTable(lingodb::runtime::VarLen32 tableName, lingodb::runtime::VarLen32 fileName, lingodb::runtime::VarLen32 delimiter, lingodb::runtime::VarLen32 escape) {
+   auto *context = getCurrentExecutionContext();
    auto& session = context->getSession();
    auto catalog = session.getCatalog();
    if (auto relation = catalog->findRelation(tableName)) {
@@ -78,12 +81,14 @@ void RelationHelper::copyFromIntoTable(lingodb::runtime::ExecutionContext* conte
       throw std::runtime_error("copy failed: no such table");
    }
 }
-void RelationHelper::setPersist(lingodb::runtime::ExecutionContext* context, bool value) {
+void RelationHelper::setPersist(bool value) {
+   auto *context = getCurrentExecutionContext();
    auto& session = context->getSession();
    auto catalog = session.getCatalog();
    catalog->setPersist(value);
 }
-HashIndexAccess* RelationHelper::getIndex(lingodb::runtime::ExecutionContext* context, lingodb::runtime::VarLen32 description) {
+HashIndexAccess* RelationHelper::getIndex(lingodb::runtime::VarLen32 description) {
+   auto* context= runtime::getCurrentExecutionContext();
    auto json = nlohmann::json::parse(description.str());
    std::string relationName = json["relation"];
    std::string index = json["index"];

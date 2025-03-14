@@ -39,7 +39,8 @@ void lingodb::runtime::Heap::insert(uint8_t* currData) {
       bubbleDown(1, currElements);
    }
 }
-lingodb::runtime::Heap* lingodb::runtime::Heap::create(lingodb::runtime::ExecutionContext* executionContext, size_t maxElements, size_t typeSize, bool (*cmpFn)(unsigned char*, unsigned char*)) {
+lingodb::runtime::Heap* lingodb::runtime::Heap::create(size_t maxElements, size_t typeSize, bool (*cmpFn)(unsigned char*, unsigned char*)) {
+   auto* executionContext= runtime::getCurrentExecutionContext();
    auto* heap = new Heap(maxElements, typeSize, cmpFn);
    executionContext->registerState({heap, [](void* ptr) { delete reinterpret_cast<Heap*>(ptr); }});
    return heap;

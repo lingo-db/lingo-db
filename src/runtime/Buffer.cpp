@@ -1,4 +1,5 @@
 #include "lingodb/runtime/Buffer.h"
+#include "lingodb/scheduler/Tasks.h"
 #include "lingodb/utility/Tracer.h"
 #include <iostream>
 #include <mutex>
@@ -7,7 +8,7 @@ static utility::Tracer::Event iterateEvent("FlexibleBuffer", "iterateParallel");
 static utility::Tracer::Event bufferIteratorEvent("BufferIterator", "iterate");
 
 class FlexibleBufferWorkerResvState {
-public:
+   public:
    size_t bufferId;
    std::mutex mutex;
    bool hasMore{false};
@@ -32,7 +33,7 @@ public:
    }
 };
 
-class FlexibleBufferIteratorTask : public lingodb::scheduler::Task {
+class FlexibleBufferIteratorTask : public lingodb::scheduler::TaskWithImplicitContext {
    std::vector<lingodb::runtime::Buffer>& buffers;
    size_t typeSize;
    const std::function<void(lingodb::runtime::Buffer)> cb;
@@ -88,7 +89,7 @@ class FlexibleBufferIteratorTask : public lingodb::scheduler::Task {
             state->bufferId = localStartIndex;
             state->unitAmount = unitAmount;
          }
-         return true;  
+         return true;
       }
       //3. if the current worker has no more work locally and no more work globally, try to steal work from the worker we stole from last time
       if (state->stealWorkerId != std::numeric_limits<size_t>::max()) {
@@ -132,7 +133,7 @@ class FlexibleBufferIteratorTask : public lingodb::scheduler::Task {
    }
 };
 
-class BufferIteratorTask : public lingodb::scheduler::Task {
+class BufferIteratorTask : public lingodb::scheduler::TaskWithImplicitContext {
    lingodb::runtime::Buffer& buffer;
    size_t bufferLen;
    void* contextPtr;

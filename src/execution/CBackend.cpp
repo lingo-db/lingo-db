@@ -24,9 +24,6 @@ namespace {
 
 class DefaultCBackend : public lingodb::execution::ExecutionBackend {
    void execute(mlir::ModuleOp& moduleOp, lingodb::runtime::ExecutionContext* executionContext) override {
-      if (auto getExecContextFn = mlir::dyn_cast_or_null<mlir::func::FuncOp>(moduleOp.lookupSymbol("rt_get_execution_context"))) {
-         getExecContextFn.erase();
-      }
 
       std::string translatedModule;
       llvm::raw_string_ostream sstream(translatedModule);
@@ -52,13 +49,6 @@ class DefaultCBackend : public lingodb::execution::ExecutionBackend {
                     "struct make_unsigned<__int128> {\n"
                     "   typedef __uint128_t type;\n"
                     "};\n"
-                    "}"
-                    "int8_t* executionContext;\n"
-                    "extern \"C\" int8_t* rt_get_execution_context(){\n"
-                    "\treturn executionContext;\t\n"
-                    "}\n"
-                    "extern \"C\" void rt_set_execution_context(int8_t* c){\n"
-                    "\texecutionContext=c;\n"
                     "}"
                     "size_t hash_64(size_t val){\n"
                     "\tsize_t p1=11400714819323198549ull;\n"
@@ -104,14 +94,7 @@ class DefaultCBackend : public lingodb::execution::ExecutionBackend {
          error.emit() << "Could not load symbol for main function: " << std::string(dlsymError);
          return;
       }
-      auto setExecutionContextFn = reinterpret_cast<lingodb::execution::setExecutionContextFnType>(dlsym(handle, "rt_set_execution_context"));
-      dlsymError = dlerror();
-      if (dlsymError) {
-         dlclose(handle);
-         error.emit() << "Could not load symbol for rt_set_execution_context function: " << std::string(dlsymError);
-         return;
-      }
-      setExecutionContextFn(executionContext);
+
       std::vector<size_t> measuredTimes;
       for (size_t i = 0; i < numRepetitions; i++) {
          auto executionStart = std::chrono::high_resolution_clock::now();

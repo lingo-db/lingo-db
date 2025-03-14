@@ -1152,7 +1152,7 @@ void frontend::sql::Parser::translateCreateStatement(mlir::OpBuilder& builder, C
    auto tableMetaData = translateTableMetaData(statement->table_elts_);
    auto tableNameValue = createStringValue(builder, tableName);
    auto descriptionValue = createStringValue(builder, tableMetaData->serialize());
-   rt::RelationHelper::createTable(builder, builder.getUnknownLoc())(mlir::ValueRange({getExecutionContextValue(builder), tableNameValue, descriptionValue}));
+   rt::RelationHelper::createTable(builder, builder.getUnknownLoc())(mlir::ValueRange({tableNameValue, descriptionValue}));
 }
 mlir::Value frontend::sql::Parser::translateSubSelect(mlir::OpBuilder& builder, SelectStmt* stmt, std::string alias, std::vector<std::string> colAlias, TranslationContext& context, TranslationContext::ResolverScope& scope) {
    mlir::Value subQuery;
@@ -1241,7 +1241,7 @@ void frontend::sql::Parser::translateCopyStatement(mlir::OpBuilder& builder, Cop
    auto fileNameValue = createStringValue(builder, fileName);
    auto delimiterValue = createStringValue(builder, delimiter);
    auto escapeValue = createStringValue(builder, escape);
-   rt::RelationHelper::copyFromIntoTable(builder, builder.getUnknownLoc())(mlir::ValueRange{getExecutionContextValue(builder), tableNameValue, fileNameValue, delimiterValue, escapeValue});
+   rt::RelationHelper::copyFromIntoTable(builder, builder.getUnknownLoc())(mlir::ValueRange{tableNameValue, fileNameValue, delimiterValue, escapeValue});
 }
 void frontend::sql::Parser::translateVariableSetStatement(mlir::OpBuilder& builder, VariableSetStmt* variableSetStatement) {
    std::string varName = variableSetStatement->name_;
@@ -1254,7 +1254,7 @@ void frontend::sql::Parser::translateVariableSetStatement(mlir::OpBuilder& build
       auto* constNode = reinterpret_cast<A_Const*>(paramNode);
       assert(constNode->val_.type_ == T_Integer);
       auto persistValue = builder.create<mlir::arith::ConstantIntOp>(builder.getUnknownLoc(), constNode->val_.val_.ival_, 1);
-      rt::RelationHelper::setPersist(builder, builder.getUnknownLoc())({getExecutionContextValue(builder), persistValue});
+      rt::RelationHelper::setPersist(builder, builder.getUnknownLoc())({persistValue});
    }
 }
 std::optional<mlir::Value> frontend::sql::Parser::translate(mlir::OpBuilder& builder) {
@@ -1567,13 +1567,12 @@ void frontend::sql::Parser::translateInsertStmt(mlir::OpBuilder& builder, Insert
    relalg::QueryOp queryOp = builder.create<relalg::QueryOp>(builder.getUnknownLoc(), mlir::TypeRange{localTableType}, mlir::ValueRange{});
    queryOp.getQueryOps().getBlocks().clear();
    queryOp.getQueryOps().push_back(block);
-   auto executionContextValue = getExecutionContextValue(builder);
    auto tableNameValue = createStringValue(builder, tableName);
    auto resultIdValue = builder.create<mlir::arith::ConstantIntOp>(builder.getUnknownLoc(), 0, builder.getI32Type());
    builder.create<subop::SetResultOp>(builder.getUnknownLoc(), 0, queryOp.getResults()[0]);
 
-   rt::RelationHelper::appendTableFromResult(builder, builder.getUnknownLoc())(mlir::ValueRange{tableNameValue, executionContextValue, resultIdValue});
-   rt::ExecutionContext::clearResult(builder, builder.getUnknownLoc())({executionContextValue, resultIdValue});
+   rt::RelationHelper::appendTableFromResult(builder, builder.getUnknownLoc())(mlir::ValueRange{tableNameValue, resultIdValue});
+   rt::ExecutionContext::clearResult(builder, builder.getUnknownLoc())({resultIdValue});
    // TODO: find more elegant solution
    // disable unwanted output by overwriting the result
    //auto emptyTableType = subop::LocalTableType::get(builder.getContext(), subop::StateMembersAttr::get(builder.getContext(), builder.getArrayAttr({}), builder.getArrayAttr({})),builder.getArrayAttr({}));

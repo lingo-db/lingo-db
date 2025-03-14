@@ -26,7 +26,7 @@ class HashIndexedView {
    }
 
    public:
-   static HashIndexedView* build(runtime::ExecutionContext* executionContext,GrowingBuffer* buffer);
+   static HashIndexedView* build(GrowingBuffer* buffer);
    static void destroy(HashIndexedView*);
    ~HashIndexedView();
 };

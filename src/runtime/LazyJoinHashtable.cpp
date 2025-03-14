@@ -8,8 +8,9 @@
 namespace {
 static utility::Tracer::Event buildEvent("HashIndexedView", "build");
 } // end namespace
-lingodb::runtime::HashIndexedView* lingodb::runtime::HashIndexedView::build(lingodb::runtime::ExecutionContext* executionContext, lingodb::runtime::GrowingBuffer* buffer) {
+lingodb::runtime::HashIndexedView* lingodb::runtime::HashIndexedView::build(lingodb::runtime::GrowingBuffer* buffer) {
    utility::Tracer::Trace trace(buildEvent);
+   auto* executionContext= runtime::getCurrentExecutionContext();
    auto& values = buffer->getValues();
    size_t htSize = std::max(nextPow2(values.getLen() * 1.25), 1ul);
    size_t htMask = htSize - 1;

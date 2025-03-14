@@ -4,7 +4,8 @@
 namespace {
 static utility::Tracer::Event mergeEvent("Hashtable", "merge");
 } // end namespace
-lingodb::runtime::Hashtable* lingodb::runtime::Hashtable::create(lingodb::runtime::ExecutionContext* executionContext, size_t typeSize, size_t initialCapacity) {
+lingodb::runtime::Hashtable* lingodb::runtime::Hashtable::create(size_t typeSize, size_t initialCapacity) {
+   lingodb::runtime::ExecutionContext* executionContext = runtime::getCurrentExecutionContext();
    auto* ht = new Hashtable(initialCapacity, typeSize);
    executionContext->registerState({ht, [](void* ptr) { delete reinterpret_cast<lingodb::runtime::Hashtable*>(ptr); }});
    return ht;
@@ -46,7 +47,7 @@ lingodb::runtime::Hashtable* lingodb::runtime::Hashtable::merge(lingodb::runtime
    utility::Tracer::Trace mergeHt(mergeEvent);
    lingodb::runtime::Hashtable* first = nullptr;
    for (auto* current : threadLocal->getThreadLocalValues<lingodb::runtime::Hashtable>()) {
-      if(!current) continue;
+      if (!current) continue;
       if (!first) {
          first = current;
       } else {
@@ -97,5 +98,4 @@ void lingodb::runtime::Hashtable::unlock(lingodb::runtime::Hashtable::Entry* ent
    uintptr_t& nextPtr = reinterpret_cast<uintptr_t&>(entry->next);
    std::atomic_ref<uintptr_t> l(nextPtr);
    l.store(nextPtr & ~0xffff000000000000);
-
 }

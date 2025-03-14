@@ -33,17 +33,8 @@ class SetResultOpLowering : public OpConversionPattern<dsa::SetResultOp> {
    using OpConversionPattern<dsa::SetResultOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(dsa::SetResultOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       std::vector<Type> types;
-      auto parentModule = op->getParentOfType<ModuleOp>();
-      mlir::func::FuncOp funcOp = parentModule.lookupSymbol<mlir::func::FuncOp>("rt_get_execution_context");
-      if (!funcOp) {
-         mlir::OpBuilder::InsertionGuard guard(rewriter);
-         rewriter.setInsertionPointToStart(parentModule.getBody());
-         funcOp = rewriter.create<mlir::func::FuncOp>(op->getLoc(), "rt_get_execution_context", rewriter.getFunctionType({}, {util::RefType::get(getContext(), rewriter.getI8Type())}), rewriter.getStringAttr("private"), mlir::ArrayAttr{}, mlir::ArrayAttr{});
-      }
-
-      mlir::Value executionContext = rewriter.create<mlir::func::CallOp>(op->getLoc(), funcOp, mlir::ValueRange{}).getResult(0);
       auto resultId = rewriter.create<mlir::arith::ConstantIntOp>(op->getLoc(), op.getResultId(), rewriter.getI32Type());
-      lingodb::compiler::runtime::ExecutionContext::setResult(rewriter, op->getLoc())({executionContext, resultId, adaptor.getState()});
+      lingodb::compiler::runtime::ExecutionContext::setResult(rewriter, op->getLoc())({resultId, adaptor.getState()});
       rewriter.eraseOp(op);
       return success();
    }
