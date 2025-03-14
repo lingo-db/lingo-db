@@ -15,6 +15,7 @@ class GrowingBufferAllocator {
 };
 class GrowingBuffer {
    runtime::FlexibleBuffer values;
+   runtime::Buffer parallelSort(bool (*compareFn)(uint8_t*, uint8_t*));
 
    public:
    GrowingBuffer(size_t cap, size_t typeSize) : values(cap, typeSize) {}
