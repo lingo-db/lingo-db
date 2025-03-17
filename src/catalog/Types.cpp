@@ -1,7 +1,46 @@
 #include "lingodb/catalog/Types.h"
+#include "lingodb/compiler/frontend/LogicalTypes.h"
 #include "lingodb/utility/Serialization.h"
 
 namespace lingodb::catalog {
+Type::Type(lingodb::catalog::LogicalTypeId id, std::shared_ptr<TypeInfo> info) : id(id), info(std::move(info)) {
+   switch (id) {
+      case LogicalTypeId::INVALID:
+         break;
+      case LogicalTypeId::SQLNULL:
+         break;
+      case LogicalTypeId::BOOLEAN:
+         mlirTypeCreator = lingodb::compiler::frontend::createBoolTypeCreator();
+         break;
+      case LogicalTypeId::INT:
+         mlirTypeCreator = lingodb::compiler::frontend::createIntTypeCreator(std::dynamic_pointer_cast<IntTypeInfo>(info));
+         break;
+      case LogicalTypeId::FLOAT:
+         mlirTypeCreator = lingodb::compiler::frontend::createFloatTypeCreator();
+         break;
+      case LogicalTypeId::DOUBLE:
+         mlirTypeCreator = lingodb::compiler::frontend::createDoubleTypeCreator();
+         break;
+      case LogicalTypeId::DECIMAL:
+         mlirTypeCreator = lingodb::compiler::frontend::createDecimalTypeCreator(std::dynamic_pointer_cast<DecimalTypeInfo>(info));
+         break;
+      case LogicalTypeId::DATE:
+         mlirTypeCreator = lingodb::compiler::frontend::createDateTypeCreator(std::dynamic_pointer_cast<DateTypeInfo>(info));
+         break;
+      case LogicalTypeId::TIMESTAMP:
+         mlirTypeCreator = lingodb::compiler::frontend::createTimestampTypeCreator(std::dynamic_pointer_cast<TimestampTypeInfo>(info));
+         break;
+      case LogicalTypeId::INTERVAL:
+         mlirTypeCreator = lingodb::compiler::frontend::createIntervalTypeCreator(std::dynamic_pointer_cast<IntervalTypeInfo>(info));
+         break;
+      case LogicalTypeId::CHAR:
+         mlirTypeCreator = lingodb::compiler::frontend::createCharTypeCreator(std::dynamic_pointer_cast<CharTypeInfo>(info));
+         break;
+      case LogicalTypeId::STRING:
+         mlirTypeCreator = lingodb::compiler::frontend::createStringTypeCreator(std::dynamic_pointer_cast<StringTypeInfo>(info));
+         break;
+   }
+}
 void Type::serialize(utility::Serializer& serializer) const {
    serializer.writeProperty<LogicalTypeId>(0, id);
    serializer.writeProperty<std::shared_ptr<TypeInfo>>(1, info);
@@ -26,6 +65,8 @@ std::shared_ptr<TypeInfo> TypeInfo::deserialize(utility::Deserializer& deseriali
          return StringTypeInfo::deserialize(deserializer);
       case TypeInfoType::TimestampInfo:
          return TimestampTypeInfo::deserialize(deserializer);
+      case TypeInfoType::CharInfo:
+         return CharTypeInfo::deserialize(deserializer);
       default:
          throw std::runtime_error("not implemented");
    }
@@ -83,15 +124,13 @@ std::string Type::toString() const {
       case LogicalTypeId::DECIMAL:
          return std::dynamic_pointer_cast<DecimalTypeInfo>(info)->toString();
       case LogicalTypeId::DATE:
-         return "date";
+         return std::dynamic_pointer_cast<DateTypeInfo>(info)->toString();
       case LogicalTypeId::TIMESTAMP:
          return std::dynamic_pointer_cast<TimestampTypeInfo>(info)->toString();
       case LogicalTypeId::INTERVAL:
-         return "interval";
-      case LogicalTypeId::DURATION:
-         return "duration";
+         return std::dynamic_pointer_cast<IntervalTypeInfo>(info)->toString();
       case LogicalTypeId::CHAR:
-         return "char";
+         return std::dynamic_pointer_cast<CharTypeInfo>(info)->toString();
       case LogicalTypeId::STRING:
          return std::dynamic_pointer_cast<StringTypeInfo>(info)->toString();
    }
@@ -132,6 +171,56 @@ std::string TimestampTypeInfo::toString() {
          break;
       case TimestampUnit::SECONDS:
          res += "s";
+         break;
+   }
+   res += ">";
+   return res;
+}
+std::string CharTypeInfo::toString() {
+   return "char(" + std::to_string(length) + ")";
+}
+std::shared_ptr<CharTypeInfo> CharTypeInfo::deserialize(utility::Deserializer& deserializer) {
+   auto length = deserializer.readProperty<size_t>(0);
+   return std::make_shared<CharTypeInfo>(length);
+}
+void CharTypeInfo::serializeConcrete(utility::Serializer& serializer) const {
+   serializer.writeProperty(0, length);
+}
+std::shared_ptr<DateTypeInfo> DateTypeInfo::deserialize(utility::Deserializer& deserializer) {
+   auto unit = deserializer.readProperty<DateTypeInfo::DateUnit>(0);
+   return std::make_shared<DateTypeInfo>(unit);
+}
+void DateTypeInfo::serializeConcrete(utility::Serializer& serializer) const {
+   serializer.writeProperty(0, unit);
+}
+std::string DateTypeInfo::toString() {
+   std::string res = "date<";
+   switch (unit) {
+      case DateUnit::DAY:
+         res += "day";
+         break;
+      case DateUnit::MILLIS:
+         res += "ms";
+         break;
+   }
+   res += ">";
+   return res;
+}
+std::shared_ptr<IntervalTypeInfo> IntervalTypeInfo::deserialize(utility::Deserializer& deserializer) {
+   auto unit = deserializer.readProperty<IntervalTypeInfo::IntervalUnit>(0);
+   return std::make_shared<IntervalTypeInfo>(unit);
+}
+void IntervalTypeInfo::serializeConcrete(utility::Serializer& serializer) const {
+   serializer.writeProperty(0, unit);
+}
+std::string IntervalTypeInfo::toString() {
+   std::string res = "interval<";
+   switch (unit) {
+      case IntervalUnit::MONTH:
+         res += "month";
+         break;
+      case IntervalUnit::DAYTIME:
+         res += "daytime";
          break;
    }
    res += ">";

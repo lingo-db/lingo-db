@@ -3,6 +3,9 @@
 
 #include <memory>
 #include <optional>
+namespace lingodb::compiler::frontend {
+class MLIRTypeCreator;
+} //end namespace lingodb::compiler
 namespace lingodb::utility {
 class Serializer;
 class Deserializer;
@@ -19,9 +22,8 @@ enum class LogicalTypeId : uint8_t {
    DATE = 7,
    TIMESTAMP = 8,
    INTERVAL = 9,
-   DURATION = 10,
-   CHAR = 11,
-   STRING = 12,
+   CHAR = 10,
+   STRING = 11,
 };
 class TypeInfo {
    protected:
@@ -30,6 +32,9 @@ class TypeInfo {
       DecimalInfo = 1,
       StringInfo = 2,
       TimestampInfo = 3,
+      CharInfo = 4,
+      DateInfo = 5,
+      IntervalInfo = 6,
    };
    TypeInfoType infoType;
    TypeInfo(TypeInfoType infoType) : infoType(infoType) {}
@@ -43,15 +48,17 @@ class TypeInfo {
 class Type {
    LogicalTypeId id;
    std::shared_ptr<TypeInfo> info;
+   std::shared_ptr<compiler::frontend::MLIRTypeCreator> mlirTypeCreator;
 
    public:
-   Type(LogicalTypeId id, std::shared_ptr<TypeInfo> info) : id(id), info(std::move(info)) {}
+   Type(LogicalTypeId id, std::shared_ptr<TypeInfo> info);
    std::string toString() const;
    LogicalTypeId getTypeId() { return id; }
    template <class T>
    std::shared_ptr<T> getInfo() {
       return std::dynamic_pointer_cast<T>(info);
    }
+   std::shared_ptr<compiler::frontend::MLIRTypeCreator> getMLIRTypeCreator() { return mlirTypeCreator; }
    void serialize(utility::Serializer& serializer) const;
    static Type deserialize(utility::Deserializer& deserializer);
    static Type makeIntType(size_t width, bool isSigned);
@@ -69,6 +76,8 @@ class IntTypeInfo : public TypeInfo {
    void serializeConcrete(utility::Serializer& serializer) const override;
    static std::shared_ptr<IntTypeInfo> deserialize(utility::Deserializer& deserializer);
    std::string toString();
+   bool getIsSigned() { return isSigned; }
+   size_t getBitWidth() { return bitWidth; }
 };
 class DecimalTypeInfo : public TypeInfo {
    size_t precision;
@@ -79,6 +88,18 @@ class DecimalTypeInfo : public TypeInfo {
    void serializeConcrete(utility::Serializer& serializer) const override;
    static std::shared_ptr<DecimalTypeInfo> deserialize(utility::Deserializer& deserializer);
    std::string toString();
+   size_t getPrecision() { return precision; }
+   size_t getScale() { return scale; }
+};
+class CharTypeInfo : public TypeInfo {
+   size_t length;
+
+   public:
+   CharTypeInfo(size_t length) : TypeInfo(TypeInfoType::CharInfo), length(length) {}
+   void serializeConcrete(utility::Serializer& serializer) const override;
+   static std::shared_ptr<CharTypeInfo> deserialize(utility::Deserializer& deserializer);
+   std::string toString();
+        size_t getLength() { return length; }
 };
 class StringTypeInfo : public TypeInfo {
    std::string collation;
@@ -105,6 +126,37 @@ class TimestampTypeInfo : public TypeInfo {
    void serializeConcrete(utility::Serializer& serializer) const override;
    static std::shared_ptr<TimestampTypeInfo> deserialize(utility::Deserializer& deserializer);
    std::string toString();
+   auto getTimezone() { return timezone; }
+   auto getUnit() { return unit; }
+};
+
+class DateTypeInfo : public TypeInfo {
+   enum class DateUnit : uint8_t {
+      DAY = 0,
+      MILLIS = 1,
+   };
+   DateUnit unit;
+
+   public:
+   DateTypeInfo(DateUnit unit) : TypeInfo(TypeInfoType::DateInfo), unit(unit) {}
+   void serializeConcrete(utility::Serializer& serializer) const override;
+   static std::shared_ptr<DateTypeInfo> deserialize(utility::Deserializer& deserializer);
+   std::string toString();
+   auto getUnit() { return unit; }
+};
+class IntervalTypeInfo : public TypeInfo {
+   enum class IntervalUnit : uint8_t {
+      MONTH = 0,
+      DAYTIME = 1,
+   };
+   IntervalUnit unit;
+
+   public:
+   IntervalTypeInfo(IntervalUnit unit) : TypeInfo(TypeInfoType::IntervalInfo), unit(unit) {}
+   void serializeConcrete(utility::Serializer& serializer) const override;
+   static std::shared_ptr<IntervalTypeInfo> deserialize(utility::Deserializer& deserializer);
+   std::string toString();
+   auto getUnit() { return unit; }
 };
 } //end namespace lingodb::catalog
 #endif //LINGODB_CATALOG_TYPES_H

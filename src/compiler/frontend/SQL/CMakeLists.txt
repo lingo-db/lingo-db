@@ -1,6 +1,7 @@
 
 add_library(MLIRSQLFrontend
         Parser.cpp
+        LogicalTypes.cpp
 )
 add_dependencies(MLIRSQLFrontend ec-rt-defs)
 target_link_libraries(MLIRSQLFrontend PUBLIC ${dialect_libs}
