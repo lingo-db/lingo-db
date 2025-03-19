@@ -178,12 +178,12 @@ public:
       // Step 3. take each split as input and do binary search `globalSepVal`.
       for (size_t i = 0; i < splitCnt; i ++) {
          auto &localState = sctx.localStates[i];
-         auto segment = std::vector(input.begin() + localState.begin, input.begin() + localState.end);
          // binary search for lower bound if not exactly matched
-         auto it = std::lower_bound(segment.begin(), segment.end(), globalSepVal, sctx.compareFn);
+         auto begin = input.begin() + localState.begin;
+         auto it = std::lower_bound(begin, input.begin() + localState.end, globalSepVal, sctx.compareFn);
          // every `localState.globalSeperators[localStartIndex]` in `localStates` would be aligned. 
          // `localState.globalSeperators[localStartIndex]` then could be input for next merge phase.
-         localState.globalSeperators[localStartIndex] = std::distance(segment.begin(), it) + localState.begin;
+         localState.globalSeperators[localStartIndex] = std::distance(begin, it) + localState.begin;
       }
       trace3.stop();
    }
@@ -306,7 +306,13 @@ void calcSplitSeperator(size_t inputSize, size_t workerNum, size_t& splitCnt, si
    } else if (sizePerWorker > 32768 * 4) {
       // a fixed relative small number should help local sorter operate sort algorithm entirely on cache,
       // resulting in good performance.
-      size_t splitSize = 32768;
+      // size_t splitSize = 32768 * 16;
+      size_t splitSize = 32768 * 2;
+      // even if sizePerWorker is huge, we limit splitSize not to big. because a large split 
+      // seems have poor performance on local sort and binary search of seperator sync phase.
+      if (sizePerWorker > 32768 * 16) {
+         splitSize = 32768 * 4;
+      }
       splitCnt = inputSize / splitSize;
       // we are more conservative about give splitCnt a big number. increase seperators number will 
       // increase memory to store those seperators and time spending on find median seperators.
