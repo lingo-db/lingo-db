@@ -15,17 +15,17 @@ class ModuleOp;
 namespace lingodb::execution {
 class QueryOptimizer {
    protected:
-   runtime::Catalog* catalog;
+   catalog::Catalog* catalog;
    std::unordered_map<std::string, double> timing;
    Error error;
    bool verify = true;
    std::shared_ptr<SnapshotState> serializationState;
 
    public:
-   runtime::Catalog* getDatabase() const {
+   catalog::Catalog* getDatabase() const {
       return catalog;
    }
-   void setCatalog(runtime::Catalog* catalog) {
+   void setCatalog(catalog::Catalog* catalog) {
       QueryOptimizer::catalog = catalog;
    }
    void setSerializationState(std::shared_ptr<SnapshotState> serializationState) {
@@ -48,7 +48,7 @@ class QueryOptimizer {
 };
 class LoweringStep {
    protected:
-   runtime::Catalog* catalog;
+   catalog::Catalog* catalog;
    std::unordered_map<std::string, double> timing;
    Error error;
    bool verify = true;
@@ -56,13 +56,13 @@ class LoweringStep {
 
    public:
    virtual std::string getShortName() const = 0;
-   runtime::Catalog* getCatalog() const {
+   catalog::Catalog* getCatalog() const {
       return catalog;
    }
    const std::unordered_map<std::string, double>& getTiming() const {
       return timing;
    }
-   void setCatalog(runtime::Catalog* catalog) {
+   void setCatalog(catalog::Catalog* catalog) {
       LoweringStep::catalog = catalog;
    }
    void setSerializationState(std::shared_ptr<SnapshotState> serializationState) {

@@ -5,11 +5,11 @@
 #include <iostream>
 
 namespace {
-static utility::Tracer::Event createEvent("OHtFragment", "create");
-static utility::Tracer::Event mergeEvent("Oht", "merge");
-static utility::Tracer::Event mergePartitionEvent("Oht", "mergePartition");
-static utility::Tracer::Event mergeAllocate("Oht", "mergeAlloc");
-static utility::Tracer::Event mergeDeallocate("Oht", "mergeDealloc");
+static lingodb::utility::Tracer::Event createEvent("OHtFragment", "create");
+static lingodb::utility::Tracer::Event mergeEvent("Oht", "merge");
+static lingodb::utility::Tracer::Event mergePartitionEvent("Oht", "mergePartition");
+static lingodb::utility::Tracer::Event mergeAllocate("Oht", "mergeAlloc");
+static lingodb::utility::Tracer::Event mergeDeallocate("Oht", "mergeDealloc");
 
 class FragmentOutputsTask : public lingodb::scheduler::TaskWithImplicitContext {
    std::vector<lingodb::runtime::FlexibleBuffer*>* outputs;

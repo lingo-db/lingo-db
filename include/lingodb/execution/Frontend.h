@@ -1,7 +1,7 @@
 #ifndef LINGODB_EXECUTION_FRONTEND_H
 #define LINGODB_EXECUTION_FRONTEND_H
 #include "Error.h"
-#include "lingodb/runtime/Catalog.h"
+#include "lingodb/catalog/Catalog.h"
 namespace mlir {
 class ModuleOp;
 class MLIRContext;
@@ -9,16 +9,16 @@ class MLIRContext;
 namespace lingodb::execution {
 class Frontend {
    protected:
-   runtime::Catalog* catalog;
+   catalog::Catalog* catalog;
    Error error;
 
    std::unordered_map<std::string, double> timing;
 
    public:
-   runtime::Catalog* getCatalog() const {
+   catalog::Catalog* getCatalog() const {
       return catalog;
    }
-   void setCatalog(runtime::Catalog* catalog) {
+   void setCatalog(catalog::Catalog* catalog) {
       Frontend::catalog = catalog;
    }
    const std::unordered_map<std::string, double>& getTiming() const {

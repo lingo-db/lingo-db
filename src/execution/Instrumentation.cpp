@@ -13,7 +13,7 @@
 #include "json.h"
 
 #include <fstream>
-
+namespace utility = lingodb::utility;
 namespace {
 utility::GlobalSetting<bool> snapshotSetting("system.snapshot_passes", false);
 
@@ -51,22 +51,20 @@ class SnapshotAfterEachPass : public mlir::PassInstrumentation {
          if (module) {
             llvm::DenseMap<mlir::Operation*, relalg::TableMetaDataAttr> cached;
             module.walk([&](relalg::BaseTableOp tableOp) {
-               if (auto tableMetaData = tableOp.getMetaAttr()) {
-                  if (tableMetaData.getMeta()->isPresent()) {
-                     cached[tableOp] = tableMetaData;
-                     tableOp.setMetaAttr(relalg::TableMetaDataAttr::get(module.getContext(), std::make_shared<lingodb::runtime::TableMetaData>()));
-                  }
+               if (tableOp->hasAttr("meta")) {
+                  cached[tableOp] = tableOp->getAttrOfType<relalg::TableMetaDataAttr>("meta");
+                  tableOp->removeAttr("meta");
                }
             });
             mlir::PassManager pm(module->getContext());
             auto fileName = snapshotDir.getValue() + "/detailed-snapshot-" + std::to_string(id) + ".mlir";
-            pm.addPass(mlir::createLocationSnapshot(mlir::LocationSnapshotOptions{.fileName=fileName,.tag={},.enableDebugInfo=true,.printGenericOpForm=false,.printPrettyDebugInfo=false}));
+            pm.addPass(mlir::createLocationSnapshot(mlir::LocationSnapshotOptions{.fileName = fileName, .tag = {}, .enableDebugInfo = true, .printGenericOpForm = false, .printPrettyDebugInfo = false}));
             serializationState->passes.push_back({fileName, pass->getName().str(), pass->getDescription().str(), pass->getArgument().str()});
             if (pm.run(module).failed()) {
                llvm::dbgs() << "Failed to run location snapshot pass\n";
             }
             for (auto [op, attr] : cached) {
-               mlir::cast<relalg::BaseTableOp>(op).setMetaAttr(attr);
+               mlir::cast<relalg::BaseTableOp>(op)->setAttr("meta", attr);
             }
             std::ofstream file(snapshotDir.getValue() + "/detailed-snapshot-info.json");
             nlohmann::json j;
@@ -109,22 +107,20 @@ void lingodb::execution::snapshotImportantStep(std::string shortName, mlir::Modu
    if (snapshotSetting.getValue() && snapshotLevel.getValue() == "important") {
       llvm::DenseMap<mlir::Operation*, relalg::TableMetaDataAttr> cached;
       moduleOp.walk([&](relalg::BaseTableOp tableOp) {
-         if (auto tableMetaData = tableOp.getMetaAttr()) {
-            if (tableMetaData.getMeta()->isPresent()) {
-               cached[tableOp] = tableMetaData;
-               tableOp.setMetaAttr(relalg::TableMetaDataAttr::get(moduleOp.getContext(), std::make_shared<runtime::TableMetaData>()));
-            }
+         if (tableOp->hasAttr("meta")) {
+            cached[tableOp] = tableOp->getAttrOfType<relalg::TableMetaDataAttr>("meta");
+            tableOp->removeAttr("meta");
          }
       });
       mlir::PassManager pm(moduleOp->getContext());
       auto fileName = snapshotDir.getValue() + "/important-snapshot-" + shortName + ".mlir";
-      pm.addPass(mlir::createLocationSnapshot(mlir::LocationSnapshotOptions{.fileName=fileName,.tag={},.enableDebugInfo=true,.printGenericOpForm=false,.printPrettyDebugInfo=false}));
+      pm.addPass(mlir::createLocationSnapshot(mlir::LocationSnapshotOptions{.fileName = fileName, .tag = {}, .enableDebugInfo = true, .printGenericOpForm = false, .printPrettyDebugInfo = false}));
       serializationState->passes.push_back({fileName, "", "", ""});
       if (pm.run(moduleOp).failed()) {
          llvm::dbgs() << "Failed to run location snapshot pass\n";
       }
       for (auto [op, attr] : cached) {
-         mlir::cast<relalg::BaseTableOp>(op).setMetaAttr(attr);
+         mlir::cast<relalg::BaseTableOp>(op)->setAttr("meta", attr);
       }
       std::ofstream file(snapshotDir.getValue() + "/important-snapshot-info.json");
       nlohmann::json j;

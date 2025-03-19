@@ -1,8 +1,8 @@
 #include "lingodb/runtime/Hashtable.h"
 #include "lingodb/utility/Tracer.h"
-#include <iostream>
+#include <cstring>
 namespace {
-static utility::Tracer::Event mergeEvent("Hashtable", "merge");
+static lingodb::utility::Tracer::Event mergeEvent("Hashtable", "merge");
 } // end namespace
 lingodb::runtime::Hashtable* lingodb::runtime::Hashtable::create(size_t typeSize, size_t initialCapacity) {
    lingodb::runtime::ExecutionContext* executionContext = runtime::getCurrentExecutionContext();

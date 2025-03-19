@@ -1,9 +1,9 @@
 #include "lingodb/catalog/Types.h"
-#include "lingodb/compiler/frontend/LogicalTypes.h"
+#include "lingodb/catalog/MLIRTypes.h"
 #include "lingodb/utility/Serialization.h"
 
 namespace lingodb::catalog {
-Type::Type(lingodb::catalog::LogicalTypeId id, std::shared_ptr<TypeInfo> info) : id(id), info(std::move(info)) {
+Type::Type(lingodb::catalog::LogicalTypeId id, std::shared_ptr<TypeInfo> infoInput) : id(id), info(std::move(infoInput)) {
    switch (id) {
       case LogicalTypeId::INVALID:
          break;
@@ -227,6 +227,17 @@ std::string IntervalTypeInfo::toString() {
    return res;
 }
 Type Type::makeIntType(size_t width, bool isSigned) {
-   return Type(LogicalTypeId::INT, std::make_shared<IntTypeInfo>(width, isSigned));
+   return Type(LogicalTypeId::INT, std::make_shared<IntTypeInfo>(isSigned, width));
 }
+
+Type Type::decimal(size_t precision, size_t scale) {
+   return Type(LogicalTypeId::DECIMAL, std::make_shared<DecimalTypeInfo>(precision, scale));
+}
+Type Type::charType(size_t length) {
+   return Type(LogicalTypeId::CHAR, std::make_shared<CharTypeInfo>(length));
+}
+Type Type::stringType() {
+   return Type(LogicalTypeId::STRING, std::make_shared<StringTypeInfo>("", std::nullopt));
+}
+
 } //end namespace lingodb::catalog

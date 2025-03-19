@@ -1,6 +1,7 @@
 #ifndef LINGODB_UTILITY_SERIALIZATION_H
 #define LINGODB_UTILITY_SERIALIZATION_H
 #include <cstddef>
+#include <fstream>
 #include <memory>
 #include <optional>
 #include <type_traits>
@@ -241,7 +242,7 @@ class Deserializer {
       }
       startObject();
 
-      auto res= T::element_type::deserialize(*this);
+      auto res = T::element_type::deserialize(*this);
       endObject();
       return res;
    }
@@ -307,16 +308,11 @@ class Deserializer {
       return res;
    }
 
-   void startObject() {
-      if (read<marker_t>() != objectStart) {
-         throw std::runtime_error("Expected object start marker");
-      }
-   }
-   void endObject() {
-      if (read<marker_t>() != objectEnd) {
-         throw std::runtime_error("Expected object end marker");
-      }
-   }
+   void startObject();
+   void endObject();
+
+   void startProperty(marker_t propertyId);
+   void endProperty(marker_t propertyId);
    template <class T>
       requires requires(Deserializer& self) { T::deserialize(self); }
    T read() {
@@ -329,14 +325,9 @@ class Deserializer {
    public:
    template <class T>
    T readProperty(marker_t propertyId) {
-      auto startMarker = read<marker_t>();
-      if (startMarker != propertyId) {
-         throw std::runtime_error("Expected property start marker");
-      }
+      startProperty(propertyId);
       T t = read<T>();
-      if (read<marker_t>() != propertyId) {
-         throw std::runtime_error("Expected property end marker");
-      }
+      endProperty(propertyId);
       return t;
    }
 };
@@ -360,15 +351,50 @@ class SimpleByteReader : public ByteReader {
 
    public:
    SimpleByteReader(const std::byte* buffer, size_t size) : buffer(buffer), size(size) {}
-   void read(std::byte* data, size_t size) override {
-      if (size > this->size) {
-         throw std::runtime_error("Read past end of buffer");
-      }
-      std::copy(buffer, buffer + size, data);
-      buffer += size;
-      this->size -= size;
-   }
+   void read(std::byte* data, size_t size) override;
 };
+class FileByteWriter : public ByteWriter {
+   std::ofstream ostream;
+
+   public:
+   FileByteWriter(std::string filename);
+   void write(const std::byte* data, size_t size) override;
+   ~FileByteWriter() = default;
+};
+class FileByteReader : public ByteReader {
+   std::ifstream istream;
+
+   public:
+   FileByteReader(std::string filename);
+   void read(std::byte* data, size_t size) override;
+   ~FileByteReader() = default;
+};
+
+template <class T>
+T deserializeFromHexString(std::string_view hexString) {
+   std::vector<std::byte> bytes;
+   bytes.reserve(hexString.size() / 2);
+   for (size_t i = 0; i < hexString.size(); i += 2) {
+      std::string_view byteString = hexString.substr(i, 2);
+      bytes.push_back(static_cast<std::byte>(std::stoi(std::string(byteString), nullptr, 16)));
+   }
+   SimpleByteReader reader(bytes.data(), bytes.size());
+   Deserializer deserializer(reader);
+   return deserializer.readProperty<T>(0);
+}
+
+template <class T>
+std::string serializeToHexString(const T& t) {
+   SimpleByteWriter writer;
+   Serializer serializer(writer);
+   serializer.writeProperty(0, t);
+   std::string hexString;
+   for (size_t i = 0; i < writer.size(); i++) {
+      hexString += "0123456789ABCDEF"[static_cast<uint8_t>(writer.data()[i]) >> 4];
+      hexString += "0123456789ABCDEF"[static_cast<uint8_t>(writer.data()[i]) & 0xF];
+   }
+   return hexString;
+}
 
 } //end namespace lingodb::utility
 #endif //LINGODB_UTILITY_SERIALIZATION_H

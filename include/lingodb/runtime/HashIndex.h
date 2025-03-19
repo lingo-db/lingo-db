@@ -5,6 +5,7 @@
 #include "lingodb/runtime/RecordBatchInfo.h"
 #include <arrow/type_fwd.h>
 namespace lingodb::runtime {
+/*
 class HashIndexIteration;
 class HashIndexAccess;
 class HashIndex : public Index {
@@ -56,6 +57,6 @@ class HashIndexIteration {
    void consumeRecordBatch(RecordBatchInfo*);
    static void close(HashIndexIteration* iteration);
 };
-
+*/
 } //end namespace lingodb::runtime
 #endif //LINGODB_RUNTIME_HASHINDEX_H

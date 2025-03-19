@@ -1,8 +1,8 @@
-#include "llvm/ADT/TypeSwitch.h"
 #include "lingodb/compiler/Dialect/DB/IR/DBOps.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
+#include "llvm/ADT/TypeSwitch.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/OpImplementation.h"
 #include <functional>
@@ -393,7 +393,7 @@ ColumnSet SingleJoinOp::getUsedColumns() {
    auto used = relalg::detail::getUsedColumns(getOperation());
    for (mlir::Attribute attr : mlir::cast<mlir::ArrayAttr>(this->getOperation()->getAttr("mapping"))) {
       auto relationDefAttr = mlir::dyn_cast_or_null<ColumnDefAttr>(attr);
-      auto fromExisting =  mlir::cast<mlir::ArrayAttr>(relationDefAttr.getFromExisting());
+      auto fromExisting = mlir::cast<mlir::ArrayAttr>(relationDefAttr.getFromExisting());
       used.insert(ColumnSet::fromArrayAttr(fromExisting));
    }
    return used;
@@ -403,7 +403,7 @@ ColumnSet SingleJoinOp::getAvailableColumns() {
 
    for (mlir::Attribute attr : getMapping()) {
       auto relationDefAttr = mlir::dyn_cast_or_null<ColumnDefAttr>(attr);
-      auto fromExisting =  mlir::cast<mlir::ArrayAttr>(relationDefAttr.getFromExisting());
+      auto fromExisting = mlir::cast<mlir::ArrayAttr>(relationDefAttr.getFromExisting());
       renamed.insert(ColumnSet::fromArrayAttr(fromExisting));
    }
    auto availablePreviously = mlir::cast<Operator>(getLeft().getDefiningOp()).getAvailableColumns();
@@ -454,11 +454,12 @@ ColumnSet BaseTableOp::getCreatedColumns() {
 }
 relalg::FunctionalDependencies BaseTableOp::getFDs() {
    FunctionalDependencies dependencies;
-   auto metaData = getMeta().getMeta();
-   if (!metaData->isPresent()) return dependencies;
-   if (metaData->getPrimaryKey().empty()) return dependencies;
+   auto metaData = mlir::dyn_cast_or_null<relalg::TableMetaDataAttr>(getOperation()->getAttr("meta"));
+   if (!metaData) return dependencies;
+   if (metaData.getMeta()->getPrimaryKey().empty()) return dependencies;
    auto right = getAvailableColumns();
-   std::unordered_set<std::string> pks(metaData->getPrimaryKey().begin(), metaData->getPrimaryKey().end());
+   auto primaryKey = metaData.getMeta()->getPrimaryKey();
+   std::unordered_set<std::string> pks(primaryKey.begin(), primaryKey.end());
    ColumnSet pk;
    for (auto mapping : getColumns()) {
       auto attr = mapping.getValue();
@@ -641,7 +642,7 @@ void relalg::detail::inlineOpIntoBlock(mlir::Operation* vop, mlir::Operation* in
 }
 void relalg::detail::moveSubTreeBefore(mlir::Operation* op, mlir::Operation* before) {
    auto tree = mlir::dyn_cast_or_null<Operator>(op);
-   if(tree->isBeforeInBlock(before)){
+   if (tree->isBeforeInBlock(before)) {
       return;
    }
    tree->moveBefore(before);

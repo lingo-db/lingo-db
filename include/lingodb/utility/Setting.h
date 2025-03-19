@@ -3,7 +3,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
-namespace utility {
+namespace lingodb::utility {
 
 class Setting {
    protected:

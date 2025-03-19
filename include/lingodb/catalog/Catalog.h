@@ -1,5 +1,6 @@
 #ifndef LINGODB_CATALOG_CATALOG_H
 #define LINGODB_CATALOG_CATALOG_H
+#include <array>
 #include <memory>
 #include <optional>
 #include <unordered_map>
@@ -8,12 +9,12 @@ class Serializer;
 class Deserializer;
 } // namespace lingodb::utility
 namespace lingodb::catalog {
-
+class Catalog;
 class CatalogEntry {
    public:
    enum class CatalogEntryType : uint8_t {
       INVALID_ENTRY = 0,
-      TABLE_ENTRY = 1,
+      LINGODB_TABLE_ENTRY = 1,
    };
 
    protected:
@@ -22,32 +23,69 @@ class CatalogEntry {
 
    public:
    CatalogEntryType getEntryType() { return entryType; }
+   virtual void setDBDir(std::string dbDir) {}
    virtual std::string getName() = 0;
    void serialize(lingodb::utility::Serializer& serializer) const;
-   static std::unique_ptr<CatalogEntry> deserialize(lingodb::utility::Deserializer& deSerializer);
+   static std::shared_ptr<CatalogEntry> deserialize(lingodb::utility::Deserializer& deSerializer);
    virtual void serializeEntry(lingodb::utility::Serializer& serializer) const = 0;
+   virtual void flush() {}
+   virtual void setShouldPersist(bool shouldPersist) {}
+   virtual void ensureFullyLoaded() {}
    virtual ~CatalogEntry() = default;
 };
 
 class Catalog {
-   public:
-   void serialize(lingodb::utility::Serializer& serializer) const;
-   static std::unique_ptr<Catalog> deserialize(lingodb::utility::Deserializer& deSerializer);
+   bool shouldPersist;
+   std::string dbDir;
 
-   std::optional<CatalogEntry*> getEntry(std::string name) {
+   public:
+   Catalog() : shouldPersist(false) {}
+   std::string getDbDir() const { return dbDir; }
+   void serialize(lingodb::utility::Serializer& serializer) const;
+   static Catalog deserialize(lingodb::utility::Deserializer& deSerializer);
+
+   std::optional<std::shared_ptr<CatalogEntry>> getEntry(std::string name) {
       if (entries.contains(name)) {
-         return entries.at(name).get();
+         return entries.at(name);
       } else {
          return std::nullopt;
       }
    }
+   template <class T>
+   std::optional<std::shared_ptr<T>> getTypedEntry(std::string name) {
+      if (entries.contains(name)) {
+         auto entry = entries.at(name);
+         for (auto x : T::entryTypes) {
+            if (entry->getEntryType() == x) {
+               return std::static_pointer_cast<T>(entry);
+            }
+         }
+         return std::nullopt;
+      } else {
+         return std::nullopt;
+      }
+   }
+   void persist();
+   void setShouldPersist(bool shouldPersist) {
+      this->shouldPersist = shouldPersist;
+      for (auto& entry : entries) {
+         entry.second->setShouldPersist(shouldPersist);
+      }
+   }
 
-   void insertEntry(std::unique_ptr<CatalogEntry> entry) {
+   void insertEntry(std::shared_ptr<CatalogEntry> entry) {
+      entry->setDBDir(dbDir);
+      entry->setShouldPersist(shouldPersist);
       entries.insert({entry->getName(), std::move(entry)});
+   }
+   static std::shared_ptr<Catalog> create(std::string dbDir, bool eagerLoading);
+   static std::shared_ptr<Catalog> createEmpty();
+   ~Catalog() {
+      persist();
    }
 
    private:
-   std::unordered_map<std::string, std::unique_ptr<CatalogEntry>> entries;
+   std::unordered_map<std::string, std::shared_ptr<CatalogEntry>> entries;
 };
 
 } // namespace lingodb::catalog

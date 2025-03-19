@@ -1,18 +1,21 @@
 #include "lingodb/catalog/Catalog.h"
 #include "lingodb/catalog/TableCatalogEntry.h"
 #include "lingodb/catalog/Types.h"
+#include "lingodb/runtime/storage/LingoDBTable.h"
 #include "lingodb/utility/Serialization.h"
 #include <arrow/buffer.h>
 #include <arrow/type.h>
 
 #include <arrow/ipc/api.h>
 
+#include <filesystem>
 #include <arrow/io/api.h>
+#include <lingodb/catalog/Defs.h>
 
 namespace lingodb::catalog {
-std::unique_ptr<Catalog> Catalog::deserialize(lingodb::utility::Deserializer& deSerializer) {
-   auto res = std::make_unique<Catalog>();
-   res->entries = deSerializer.readProperty<std::unordered_map<std::string, std::unique_ptr<CatalogEntry>>>(1);
+Catalog Catalog::deserialize(lingodb::utility::Deserializer& deSerializer) {
+   Catalog res;
+   res.entries = deSerializer.readProperty<std::unordered_map<std::string, std::shared_ptr<CatalogEntry>>>(1);
    return res;
 }
 void Catalog::serialize(lingodb::utility::Serializer& serializer) const {
@@ -23,49 +26,58 @@ void CatalogEntry::serialize(lingodb::utility::Serializer& serializer) const {
    serializer.writeProperty(1, entryType);
    serializeEntry(serializer);
 }
-std::unique_ptr<CatalogEntry> CatalogEntry::deserialize(lingodb::utility::Deserializer& deserializer) {
+std::shared_ptr<CatalogEntry> CatalogEntry::deserialize(lingodb::utility::Deserializer& deserializer) {
    auto entryType = deserializer.readProperty<CatalogEntryType>(1);
    switch (entryType) {
       case CatalogEntryType::INVALID_ENTRY:
          return nullptr;
-      case CatalogEntryType::TABLE_ENTRY:
-         return TableCatalogEntry::deserialize(deserializer);
+      case CatalogEntryType::LINGODB_TABLE_ENTRY:
+         return LingoDBTableCatalogEntry::deserialize(deserializer);
    }
 }
-void TableCatalogEntry::serializeEntry(lingodb::utility::Serializer& serializer) const {
+LingoDBTableCatalogEntry::LingoDBTableCatalogEntry(std::string name, std::vector<Column> columns, std::vector<std::string> primaryKey, std::unique_ptr<runtime::LingoDBTable> impl) : TableCatalogEntry(CatalogEntryType::LINGODB_TABLE_ENTRY, name, columns, primaryKey), impl(std::move(impl)) {}
+
+void LingoDBTableCatalogEntry::serializeEntry(lingodb::utility::Serializer& serializer) const {
    serializer.writeProperty(2, name);
    serializer.writeProperty(3, columns.size());
    arrow::FieldVector fields;
    for (const auto& column : columns) {
-      serializer.writeProperty(4, column.getColumnName());
-      serializer.writeProperty(5, column.getLogicalType());
-      serializer.writeProperty(6, column.getIsNullable());
-      fields.push_back(arrow::field(column.getColumnName(), column.getArrowType()));
+      serializer.writeProperty(4, column);
    }
-   arrow::Schema s(fields);
-   auto res = arrow::ipc::SerializeSchema(s).ValueOrDie();
-   serializer.writeProperty(7, std::string_view((char*) res->data(), res->size()));
    serializer.writeProperty(8, primaryKey);
+   serializer.writeProperty(9, impl);
 }
-std::unique_ptr<TableCatalogEntry> TableCatalogEntry::deserialize(lingodb::utility::Deserializer& deserializer) {
+std::shared_ptr<LingoDBTableCatalogEntry> LingoDBTableCatalogEntry::deserialize(lingodb::utility::Deserializer& deserializer) {
    auto name = deserializer.readProperty<std::string>(2);
    auto numColumns = deserializer.readProperty<size_t>(3);
    std::vector<Column> columns;
    for (size_t i = 0; i < numColumns; i++) {
-      auto columnName = deserializer.readProperty<std::string>(4);
-      auto logicalType = deserializer.readProperty<Type>(5);
-      auto isNullable = deserializer.readProperty<bool>(6);
-      columns.push_back(Column(columnName, logicalType, isNullable, {}));
-   }
-   auto schemaData = deserializer.readProperty<std::string>(7);
-   arrow::ipc::DictionaryMemo dictMemo;
-   auto bufferReader = arrow::io::BufferReader::FromString(schemaData);
-   auto schema = arrow::ipc::ReadSchema(bufferReader.get(), &dictMemo).ValueOrDie();
-   for (size_t i = 0; i < columns.size(); i++) {
-      columns[i].setArrowType(schema->field(i)->type());
+      auto column = deserializer.readProperty<Column>(4);
+      columns.push_back(column);
    }
    auto primaryKey = deserializer.readProperty<std::vector<std::string>>(8);
-   return std::make_unique<TableCatalogEntry>(name, columns, primaryKey);
+   auto rawTable = deserializer.readProperty<std::unique_ptr<lingodb::runtime::LingoDBTable>>(9);
+   return std::make_shared<LingoDBTableCatalogEntry>(name, columns, primaryKey, std::move(rawTable));
+}
+
+runtime::TableStorage& LingoDBTableCatalogEntry::getTableStorage() {
+   return *impl;
+}
+
+std::shared_ptr<LingoDBTableCatalogEntry> LingoDBTableCatalogEntry::createFromCreateTable(const CreateTableDef& def) {
+   auto impl = runtime::LingoDBTable::create(def);
+   auto res = std::make_shared<LingoDBTableCatalogEntry>(def.name, def.columns, def.primaryKey, std::move(impl));
+   return res;
+}
+
+const ColumnStatistics& LingoDBTableCatalogEntry::getColumnStatistics(std::string column) const {
+   return impl->getColumnStatistics(column);
+}
+size_t LingoDBTableCatalogEntry::getNumRows() const {
+   return impl->getNumRows();
+}
+const Sample& LingoDBTableCatalogEntry::getSample() const {
+   return impl->getSample();
 }
 
 void Sample::serialize(utility::Serializer& serializer) const {
@@ -79,7 +91,7 @@ void Sample::serialize(utility::Serializer& serializer) const {
    auto resBuffer = bufferOutputStream->Finish().ValueOrDie();
    serializer.writeProperty(1, std::string_view(*resBuffer));
 }
-std::unique_ptr<Sample> Sample::deserialize(utility::Deserializer& deserializer) {
+Sample Sample::deserialize(utility::Deserializer& deserializer) {
    auto data = deserializer.readProperty<std::string>(1);
    auto bufferReader = arrow::io::BufferReader::FromString(data);
    auto recordBatchReader = arrow::ipc::RecordBatchStreamReader::Open(bufferReader.get()).ValueOrDie();
@@ -87,11 +99,15 @@ std::unique_ptr<Sample> Sample::deserialize(utility::Deserializer& deserializer)
    if (!recordBatchReader->ReadNext(&batch).ok()) {
       throw std::runtime_error("Failed to deserialize sample");
    }
-   return std::make_unique<Sample>(batch);
+   return {batch};
 }
-std::unique_ptr<ColumnStatistics> ColumnStatistics::deserialize(utility::Deserializer& deserializer) {
+Sample::Sample(std::shared_ptr<arrow::Schema> schema) {
+   sampleData = arrow::RecordBatch::MakeEmpty(schema).ValueOrDie();
+}
+
+ColumnStatistics ColumnStatistics::deserialize(utility::Deserializer& deserializer) {
    auto numDistinctValues = deserializer.readProperty<std::optional<size_t>>(1);
-   return std::make_unique<ColumnStatistics>(numDistinctValues);
+   return {numDistinctValues};
 }
 void ColumnStatistics::serialize(utility::Serializer& serializer) const {
    serializer.writeProperty(1, numDistinctValues);
@@ -116,7 +132,7 @@ class StoredTableMetaData : public TableMetaDataProvider {
    size_t numRows;
 
    public:
-   StoredTableMetaData(std::unique_ptr<Sample> sample, size_t numRows, std::vector<std::string> primaryKey, std::vector<std::string> columnNames, std::vector<std::unique_ptr<ColumnStatistics>> columnStatistics) : sample(std::move(sample)), numRows(numRows), primaryKey(std::move(primaryKey)), columnNames(std::move(columnNames)), columnStatistics(std::move(columnStatistics)) {}
+   StoredTableMetaData(std::unique_ptr<Sample> sample, size_t numRows, std::vector<std::string> primaryKey, std::vector<std::string> columnNames, std::vector<std::unique_ptr<ColumnStatistics>> columnStatistics) : sample(std::move(sample)), primaryKey(std::move(primaryKey)), columnNames(std::move(columnNames)), columnStatistics(std::move(columnStatistics)), numRows(numRows) {}
    Sample& getSample() const override { return *sample; }
    size_t getNumRows() const override { return numRows; }
    std::vector<std::string> getPrimaryKey() const override { return primaryKey; }
@@ -129,9 +145,10 @@ class StoredTableMetaData : public TableMetaDataProvider {
       }
       throw std::runtime_error("MetaData: Column not found");
    }
+   ~StoredTableMetaData() override = default;
 };
 
-std::unique_ptr<TableMetaDataProvider> TableMetaDataProvider::deserialize(utility::Deserializer& deserializer) {
+std::shared_ptr<TableMetaDataProvider> TableMetaDataProvider::deserialize(utility::Deserializer& deserializer) {
    auto sample = deserializer.readProperty<std::unique_ptr<Sample>>(1);
    auto numRows = deserializer.readProperty<size_t>(2);
    auto primaryKey = deserializer.readProperty<std::vector<std::string>>(3);
@@ -142,7 +159,71 @@ std::unique_ptr<TableMetaDataProvider> TableMetaDataProvider::deserialize(utilit
       columnNames.push_back(deserializer.readProperty<std::string>(5));
       columnStatistics.push_back(deserializer.readProperty<std::unique_ptr<ColumnStatistics>>(6));
    }
-   return std::make_unique<StoredTableMetaData>(std::move(sample), numRows, std::move(primaryKey), std::move(columnNames), std::move(columnStatistics));
+   return std::make_shared<StoredTableMetaData>(std::move(sample), numRows, std::move(primaryKey), std::move(columnNames), std::move(columnStatistics));
+}
+void Column::serialize(utility::Serializer& serializer) const {
+   serializer.writeProperty(1, columnName);
+   serializer.writeProperty(2, logicalType);
+   serializer.writeProperty(3, isNullable);
+}
+Column Column::deserialize(utility::Deserializer& deserializer) {
+   auto columnName = deserializer.readProperty<std::string>(1);
+   auto logicalType = deserializer.readProperty<Type>(2);
+   auto isNullable = deserializer.readProperty<bool>(3);
+   return Column(columnName, logicalType, isNullable);
+}
+void Catalog::persist() {
+   if (shouldPersist) {
+      if (!std::filesystem::exists(dbDir)) {
+         throw std::runtime_error("Catalog: dbDir does not exist");
+      }
+      for (auto& entry : entries) {
+         entry.second->flush();
+      }
+      lingodb::utility::FileByteWriter reader(dbDir + "/db.lingodb");
+      lingodb::utility::Serializer serializer(reader);
+      serializer.writeProperty(0, *this);
+   }
+}
+std::shared_ptr<Catalog> Catalog::create(std::string dbDir, bool eagerLoading) {
+   if (!std::filesystem::exists(dbDir)) {
+      std::filesystem::create_directories(dbDir);
+   }
+   if (!std::filesystem::exists(dbDir + "/db.lingodb")) {
+      auto res = std::make_shared<Catalog>();
+      res->dbDir = dbDir;
+      return res;
+   } else {
+      lingodb::utility::FileByteReader reader(dbDir + "/db.lingodb");
+      lingodb::utility::Deserializer deserializer(reader);
+      auto res = std::make_shared<Catalog>(deserializer.readProperty<Catalog>(0));
+      res->dbDir = dbDir;
+      for (auto& entry : res->entries) {
+         entry.second->setDBDir(dbDir);
+      }
+      if (eagerLoading) {
+         for (auto& entry : res->entries) {
+            entry.second->ensureFullyLoaded();
+         }
+      }
+      return res;
+   }
+}
+std::shared_ptr<Catalog> Catalog::createEmpty() {
+   return std::make_shared<Catalog>();
+}
+
+void LingoDBTableCatalogEntry::flush() {
+   impl->flush();
+}
+void LingoDBTableCatalogEntry::setShouldPersist(bool shouldPersist) {
+   impl->setPersist(shouldPersist);
+}
+void LingoDBTableCatalogEntry::setDBDir(std::string dbDir) {
+   impl->setDBDir(dbDir);
+}
+void LingoDBTableCatalogEntry::ensureFullyLoaded() {
+   impl->ensureLoaded();
 }
 
 } // namespace lingodb::catalog

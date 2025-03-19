@@ -1,6 +1,6 @@
-#include "lingodb/compiler/frontend/LogicalTypes.h"
-#include "lingodb/catalog/Types.h"
-#include "lingodb/compiler/Dialect/DB/IR/DBTypes.h"
+#include "lingodb/catalog/MLIRTypes.h"
+#include "../../include/lingodb/catalog/Types.h"
+#include "../../include/lingodb/compiler/Dialect/DB/IR/DBTypes.h"
 namespace {
 class BoolTypeCreator : public lingodb::compiler::frontend::MLIRTypeCreator {
    public:

@@ -169,7 +169,7 @@ bool mlirAttributeIsARelalgSortSpecAttribute(MlirAttribute attribute) {
 }
 
 MlirAttribute mlirRelalgTableMetaDataAttrGetEmpty(MlirContext context) {
-   return wrap(relalg::TableMetaDataAttr::get(unwrap(context), std::make_shared<lingodb::runtime::TableMetaData>()));
+   return wrap(relalg::TableMetaDataAttr::get(unwrap(context), nullptr));
 }
 bool mlirAttributeIsARelalgTableMetaDataAttr(MlirAttribute attribute) {
    return llvm::isa<relalg::TableMetaDataAttr>(unwrap(attribute));

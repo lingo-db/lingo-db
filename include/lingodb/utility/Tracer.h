@@ -8,7 +8,7 @@
 #include <thread>
 #include <unordered_map>
 #include <vector>
-namespace utility {
+namespace lingodb::utility {
 
 class Tracer {
    public:

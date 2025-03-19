@@ -12,6 +12,7 @@
 
 #include <stack>
 #include <unordered_set>
+#include <arrow/record_batch.h>
 
 namespace {
 using namespace lingodb::compiler::dialect;
@@ -153,8 +154,11 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
 
       // Initialize map to verify presence of all primary key attributes
       std::unordered_map<std::string, bool> primaryKeyFound;
-      for (auto primaryKeyAttribute : baseTable.getMeta().getMeta()->getPrimaryKey()) {
-         primaryKeyFound[primaryKeyAttribute] = false;
+      auto meta = mlir::dyn_cast_or_null<relalg::TableMetaDataAttr>(baseTableOp->getAttr("meta"));
+      if(meta) {
+         for (auto primaryKeyAttribute : meta.getMeta()->getPrimaryKey()) {
+            primaryKeyFound[primaryKeyAttribute] = false;
+         }
       }
 
       // Verify all cmp operations
@@ -372,18 +376,19 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                   for (auto c : baseTableOp.getColumns()) {
                      mapping[&mlir::cast<tuples::ColumnDefAttr>(c.getValue()).getColumn()] = c.getName().str();
                   }
-                  auto meta = baseTableOp.getMeta().getMeta();
-                  auto sample = meta->getSample();
-                  if (sample) {
-                     for (auto selOp : selections) {
-                        auto v = mlir::cast<tuples::ReturnOp>(selOp.getPredicateBlock().getTerminator()).getResults()[0];
-                        auto expr = relalg::buildEvalExpr(v, mapping);
-                        auto optionalCount = lingodb::compiler::support::eval::countResults(sample, std::move(expr));
-                        if (optionalCount) {
-                           auto count = optionalCount.value();
-                           if (count == 0) count = 1;
-                           double selectivity = static_cast<double>(count) / static_cast<double>(sample->num_rows());
-                           selOp->setAttr("selectivity", mlir::FloatAttr::get(mlir::Float64Type::get(&getContext()), selectivity));
+                  if(auto meta = mlir::dyn_cast_or_null<relalg::TableMetaDataAttr>(baseTableOp->getAttr("meta"))) {
+                     auto sample = meta.getMeta()->getSample();
+                     if (sample) {
+                        for (auto selOp : selections) {
+                           auto v = mlir::cast<tuples::ReturnOp>(selOp.getPredicateBlock().getTerminator()).getResults()[0];
+                           auto expr = relalg::buildEvalExpr(v, mapping);
+                           auto optionalCount = lingodb::compiler::support::eval::countResults(sample.getSampleData(), std::move(expr));
+                           if (optionalCount) {
+                              auto count = optionalCount.value();
+                              if (count == 0) count = 1;
+                              double selectivity = static_cast<double>(count) / static_cast<double>(sample.getSampleData()->num_rows());
+                              selOp->setAttr("selectivity", mlir::FloatAttr::get(mlir::Float64Type::get(&getContext()), selectivity));
+                           }
                         }
                      }
                   }
@@ -449,13 +454,16 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
 
                   // Select possible build side to the left
                   if (isInnerJoin && (leftCanUsePrimaryKeyIndex || rightCanUsePrimaryKeyIndex)) {
-                     if (leftCanUsePrimaryKeyIndex && rightCanUsePrimaryKeyIndex) {
+
+                     auto leftBaseTable = mlir::cast<relalg::BaseTableOp>(leftPath.top());
+                     auto rightBaseTable = mlir::cast<relalg::BaseTableOp>(rightPath.top());
+                     auto leftBaseMeta= mlir::dyn_cast_or_null<relalg::TableMetaDataAttr>(leftBaseTable->getAttr("meta"));
+                     auto rightBaseMeta= mlir::dyn_cast_or_null<relalg::TableMetaDataAttr>(rightBaseTable->getAttr("meta"));
+                     if (leftCanUsePrimaryKeyIndex && rightCanUsePrimaryKeyIndex&&leftBaseMeta&&rightBaseMeta) {
                         // Compute heuristic of which base table the index is more beneficial
                         // Used heuristic: prefer bigger ratio of |buildSide| / |probeSide|
-                        auto leftBaseTable = mlir::cast<relalg::BaseTableOp>(leftPath.top());
-                        auto rightBaseTable = mlir::cast<relalg::BaseTableOp>(rightPath.top());
-                        int numBaseRowsLeft = leftBaseTable.getMeta().getMeta()->getNumRows() + 1;
-                        int numBaseRowsRight = rightBaseTable.getMeta().getMeta()->getNumRows() + 1;
+                        int numBaseRowsLeft = leftBaseMeta.getMeta()->getNumRows() + 1;
+                        int numBaseRowsRight = leftBaseMeta.getMeta()->getNumRows() + 1;
                         int numNonBaseRowsLeft = left->hasAttr("rows") ? mlir::dyn_cast_or_null<mlir::FloatAttr>(left->getAttr("rows")).getValueAsDouble() + 1 : 1;
                         int numNonBaseRowsRight = right->hasAttr("rows") ? mlir::dyn_cast_or_null<mlir::FloatAttr>(right->getAttr("rows")).getValueAsDouble() + 1 : 1;
                         // Exchange left and right side if deemed beneficial by heuristic

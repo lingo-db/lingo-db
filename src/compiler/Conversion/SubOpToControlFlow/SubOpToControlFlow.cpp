@@ -2070,7 +2070,7 @@ class ScanListLowering : public SubOpConversionPattern<subop::ScanListOp> {
       return success();
    }
 };
-class ScanExternalHashIndexListLowering : public SubOpConversionPattern<subop::ScanListOp> {
+/*class ScanExternalHashIndexListLowering : public SubOpConversionPattern<subop::ScanListOp> {
    public:
    using SubOpConversionPattern<subop::ScanListOp>::SubOpConversionPattern;
 
@@ -2148,7 +2148,7 @@ class ScanExternalHashIndexListLowering : public SubOpConversionPattern<subop::S
       rt::HashIndexIteration::close(rewriter, loc)({adaptor.getList()});
       return success();
    }
-};
+};*/
 class ScanMultiMapListLowering : public SubOpConversionPattern<subop::ScanListOp> {
    public:
    using SubOpConversionPattern<subop::ScanListOp>::SubOpConversionPattern;
@@ -3017,6 +3017,7 @@ class LookupHashMapLowering : public SubOpTupleStreamConsumerConversionPattern<s
       return mlir::success();
    }
 };
+/*
 class LookupExternalHashIndexLowering : public SubOpTupleStreamConsumerConversionPattern<subop::LookupOp> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::LookupOp>::SubOpTupleStreamConsumerConversionPattern;
@@ -3034,7 +3035,7 @@ class LookupExternalHashIndexLowering : public SubOpTupleStreamConsumerConversio
       return mlir::success();
    }
 };
-
+*/
 class DefaultGatherOpLowering : public SubOpTupleStreamConsumerConversionPattern<subop::GatherOp> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::GatherOp>::SubOpTupleStreamConsumerConversionPattern;
@@ -3604,7 +3605,7 @@ class UnwrapOptionalPreAggregationHtRefLowering : public SubOpTupleStreamConsume
       return mlir::success();
    }
 };
-
+/*
 class GetExternalHashIndexLowering : public SubOpConversionPattern<subop::GetExternalOp> {
    public:
    using SubOpConversionPattern<subop::GetExternalOp>::SubOpConversionPattern;
@@ -3617,7 +3618,7 @@ class GetExternalHashIndexLowering : public SubOpConversionPattern<subop::GetExt
       return mlir::success();
    }
 };
-
+*/
 class CreateSimpleStateLowering : public SubOpConversionPattern<subop::CreateSimpleStateOp> {
    public:
    using SubOpConversionPattern<subop::CreateSimpleStateOp>::SubOpConversionPattern;
@@ -3881,7 +3882,7 @@ void handleExecutionStepCPU(subop::ExecutionStepOp step, subop::ExecutionGroupOp
    rewriter.insertPattern<RenameLowering>(typeConverter, ctxt);
    //external
    rewriter.insertPattern<GetExternalTableLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<GetExternalHashIndexLowering>(typeConverter, ctxt);
+   //rewriter.insertPattern<GetExternalHashIndexLowering>(typeConverter, ctxt);
    //ResultTable
    rewriter.insertPattern<CreateTableLowering>(typeConverter, ctxt);
    rewriter.insertPattern<MaterializeTableLowering>(typeConverter, ctxt);
@@ -3918,8 +3919,8 @@ void handleExecutionStepCPU(subop::ExecutionStepOp step, subop::ExecutionGroupOp
    rewriter.insertPattern<HashMultiMapScatterOp>(typeConverter, ctxt);
 
    // ExternalHashIndex
-   rewriter.insertPattern<ScanExternalHashIndexListLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<LookupExternalHashIndexLowering>(typeConverter, ctxt);
+   //rewriter.insertPattern<ScanExternalHashIndexListLowering>(typeConverter, ctxt);
+   //rewriter.insertPattern<LookupExternalHashIndexLowering>(typeConverter, ctxt);
    rewriter.insertPattern<ExternalHashIndexRefGatherOpLowering>(typeConverter, ctxt);
 
    //SortedView

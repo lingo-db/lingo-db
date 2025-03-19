@@ -5,7 +5,7 @@
 #include <cstring>
 #include <iostream>
 namespace {
-utility::Tracer::Event buildEvent("SegmentTree", "build");
+lingodb::utility::Tracer::Event buildEvent("SegmentTree", "build");
 } // end namespace
 namespace lingodb::runtime {
 SegmentTreeView::TreeNode* SegmentTreeView::allocate() {

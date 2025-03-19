@@ -8,7 +8,7 @@
 #include <mutex>
 #include <queue>
 #include <unistd.h>
-
+namespace utility=lingodb::utility;
 namespace {
 utility::GlobalSetting<std::string> traceOutputDir("system.trace_dir", ".");
 
@@ -27,7 +27,7 @@ utility::Tracer* getTracer() {
    return tracer;
 }
 } // end namespace
-namespace utility {
+namespace lingodb::utility {
 #ifdef TRACER
 void Tracer::Event::writeOut(utility::Tracer::TraceRecord* record, nlohmann::json& j) {
    j["tid"] = record->threadId;

@@ -1,4 +1,5 @@
 #include "lingodb/runtime/ExecutionContext.h"
+#include <cassert>
 
 void lingodb::runtime::ExecutionContext::setResult(uint32_t id, uint8_t* ptr) {
    auto* context = getCurrentExecutionContext();

@@ -4,18 +4,26 @@
 
 #include "json.h"
 
+#include "lingodb/catalog/TableCatalogEntry.h"
 #include "lingodb/runtime/ArrowTable.h"
+#include "lingodb/runtime/storage/TableStorage.h"
+#include "lingodb/utility/Serialization.h"
 #include <arrow/csv/api.h>
 #include <arrow/io/api.h>
+#include <lingodb/catalog/Defs.h>
+
+#include <lingodb/runtime/storage/LingoDBTable.h>
 namespace lingodb::runtime {
-void RelationHelper::createTable(lingodb::runtime::VarLen32 name, lingodb::runtime::VarLen32 meta) {
-   auto *context = getCurrentExecutionContext();
+void RelationHelper::createTable(lingodb::runtime::VarLen32 meta) {
+   auto* context = getCurrentExecutionContext();
    auto& session = context->getSession();
    auto catalog = session.getCatalog();
-   catalog->addTable(name.str(), lingodb::runtime::TableMetaData::deserialize(meta.str()));
+   auto def = utility::deserializeFromHexString<lingodb::catalog::CreateTableDef>(meta.str());
+   catalog->insertEntry(lingodb::catalog::LingoDBTableCatalogEntry::createFromCreateTable(def));
+   catalog->persist();
 }
 void RelationHelper::appendTableFromResult(lingodb::runtime::VarLen32 tableName, size_t resultId) {
-   auto *context = getCurrentExecutionContext();
+   auto* context = getCurrentExecutionContext();
    {
       auto resultTable = context->getResultOfType<lingodb::runtime::ArrowTable>(resultId);
       if (!resultTable) {
@@ -23,18 +31,19 @@ void RelationHelper::appendTableFromResult(lingodb::runtime::VarLen32 tableName,
       }
       auto& session = context->getSession();
       auto catalog = session.getCatalog();
-      if (auto relation = catalog->findRelation(tableName)) {
-         relation->append(resultTable.value()->get());
+      if (auto relation = catalog->getTypedEntry<catalog::TableCatalogEntry>(tableName)) {
+         relation.value()->getTableStorage().append(resultTable.value()->get());
+         catalog->persist();
       } else {
          throw std::runtime_error("appending result table failed: no such table");
       }
    }
 }
 void RelationHelper::copyFromIntoTable(lingodb::runtime::VarLen32 tableName, lingodb::runtime::VarLen32 fileName, lingodb::runtime::VarLen32 delimiter, lingodb::runtime::VarLen32 escape) {
-   auto *context = getCurrentExecutionContext();
+   auto* context = getCurrentExecutionContext();
    auto& session = context->getSession();
    auto catalog = session.getCatalog();
-   if (auto relation = catalog->findRelation(tableName)) {
+   if (auto relation = catalog->getTypedEntry<lingodb::catalog::TableCatalogEntry>(tableName)) {
       arrow::io::IOContext ioContext = arrow::io::default_io_context();
       auto inputFile = arrow::io::ReadableFile::Open(fileName.str()).ValueOrDie();
       std::shared_ptr<arrow::io::InputStream> input = inputFile;
@@ -49,13 +58,12 @@ void RelationHelper::copyFromIntoTable(lingodb::runtime::VarLen32 tableName, lin
       }
       parseOptions.newlines_in_values = true;
       auto convertOptions = arrow::csv::ConvertOptions::Defaults();
-      auto schema = relation->getArrowSchema();
       convertOptions.null_values.push_back("");
       convertOptions.strings_can_be_null = true;
-      for (auto f : schema->fields()) {
-         if (f->name().find("primaryKeyHashValue") != std::string::npos) continue;
-         readOptions.column_names.push_back(f->name());
-         convertOptions.column_types.insert({f->name(), f->type()});
+      auto& storage = relation.value()->getTableStorage();
+      for (auto n : relation.value()->getColumnNames()) {
+         readOptions.column_names.push_back(n);
+         convertOptions.column_types.insert({n, storage.getColumnStorageType(n)});
       }
 
       // Instantiate TableReader from input stream and options
@@ -76,25 +84,26 @@ void RelationHelper::copyFromIntoTable(lingodb::runtime::VarLen32 tableName, lin
          // (for example a CSV syntax error or failed type conversion)
       }
       std::shared_ptr<arrow::Table> table = *maybeTable;
-      relation->append(table);
+      storage.append(table);
+      catalog->persist();
    } else {
       throw std::runtime_error("copy failed: no such table");
    }
 }
 void RelationHelper::setPersist(bool value) {
-   auto *context = getCurrentExecutionContext();
+   auto* context = getCurrentExecutionContext();
    auto& session = context->getSession();
    auto catalog = session.getCatalog();
-   catalog->setPersist(value);
+   catalog->setShouldPersist(value);
 }
-HashIndexAccess* RelationHelper::getIndex(lingodb::runtime::VarLen32 description) {
+/*HashIndexAccess* RelationHelper::getIndex(lingodb::runtime::VarLen32 description) {
    auto* context= runtime::getCurrentExecutionContext();
    auto json = nlohmann::json::parse(description.str());
    std::string relationName = json["relation"];
    std::string index = json["index"];
    auto& session = context->getSession();
    auto catalog = session.getCatalog();
-   if (auto relation = catalog->findRelation(relationName)) {
+   if (auto relation = catalog->getEntry(relationName)) {
       auto* hashIndex = static_cast<HashIndex*>(relation->getIndex(index).get());
       std::vector<std::string> cols;
       for (auto m : json["mapping"].get<nlohmann::json::object_t>()) {
@@ -104,5 +113,7 @@ HashIndexAccess* RelationHelper::getIndex(lingodb::runtime::VarLen32 description
    } else {
       throw std::runtime_error("no such table");
    }
-}
+
+   throw std::runtime_error("index unsupported for now");
+}*/
 } // end namespace lingodb::runtime

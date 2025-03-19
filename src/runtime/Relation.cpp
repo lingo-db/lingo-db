@@ -1,4 +1,3 @@
-#include "lingodb/runtime/Relation.h"
 #include "lingodb/runtime/HashIndex.h"
 
 #include <arrow/api.h>
@@ -14,64 +13,12 @@
 #include <random>
 #include <ranges>
 namespace {
-/*
- * Create sample from arrow table
- */
 
-template <typename I>
-class BoxedIntegerIterator {
-   I i;
-
-   public:
-   typedef I difference_type;
-   typedef I value_type;
-   typedef I pointer;
-   typedef I reference;
-   typedef std::random_access_iterator_tag iterator_category;
-
-   BoxedIntegerIterator(I i) : i{i} {}
-
-   bool operator==(BoxedIntegerIterator<I>& other) { return i == other.i; }
-   I operator-(BoxedIntegerIterator<I>& other) { return i - other.i; }
-   I operator++() { return i++; }
-   I operator*() { return i; }
-};
-std::shared_ptr<arrow::RecordBatch> createSample(std::shared_ptr<arrow::Table> table) {
-   if (table->num_rows() == 0) {
-      return std::shared_ptr<arrow::RecordBatch>();
-   }
-   std::vector<int> result;
-   arrow::NumericBuilder<arrow::Int32Type> numericBuilder;
-
-   auto rng = std::mt19937{std::random_device{}()};
-
-   // sample five values without replacement from [1, 100]
-   std::sample(
-      BoxedIntegerIterator<long>{0l}, BoxedIntegerIterator<long>{table->num_rows() - 1},
-      std::back_inserter(result), std::min(table->num_rows(), 1024l), rng);
-   for (auto i : result) {
-      if(!numericBuilder.Append(i).ok()){
-         throw std::runtime_error("could not create sample");
-      }
-   }
-   auto indices = numericBuilder.Finish().ValueOrDie();
-   std::vector<arrow::Datum> args({table, indices});
-
-   auto res = arrow::compute::CallFunction("take", args).ValueOrDie();
-   return res.table()->CombineChunksToBatch().ValueOrDie();
-}
 
 /*
  * Count distinct number of values in column
  */
-std::optional<size_t> countDistinctValues(std::shared_ptr<arrow::ChunkedArray> column) {
-   //todo: replace with approximate count in the future
-   auto res = arrow::compute::CallFunction("count_distinct", {column});
-   if (res.ok()) {
-      return res.ValueOrDie().scalar_as<arrow::Int64Scalar>().value;
-   }
-   return {};
-}
+
 //loading table
 std::shared_ptr<arrow::Table> loadTable(std::string name) {
    auto inputFile = arrow::io::ReadableFile::Open(name).ValueOrDie();
@@ -82,22 +29,7 @@ std::shared_ptr<arrow::Table> loadTable(std::string name) {
    }
    return arrow::Table::FromRecordBatches(batchReader->schema(), batches).ValueOrDie();
 }
-//splitting table into "good-sized chunks"
-std::vector<std::shared_ptr<arrow::RecordBatch>> toRecordBatches(std::shared_ptr<arrow::Table> table) {
-   std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
-   arrow::TableBatchReader reader(table);
-   reader.set_chunksize(20000);
-   std::shared_ptr<arrow::RecordBatch> nextChunk;
-   while (reader.ReadNext(&nextChunk) == arrow::Status::OK()) {
-      if (nextChunk) {
-         batches.push_back(nextChunk);
-      } else {
-         break;
-      }
-      nextChunk.reset();
-   }
-   return batches;
-}
+
 //load sample:
 std::shared_ptr<arrow::RecordBatch> loadSample(std::string name) {
    auto inputFile = arrow::io::ReadableFile::Open(name).ValueOrDie();
@@ -115,7 +47,7 @@ size_t asInt(std::variant<size_t, std::string> intOrStr) {
    }
 }
 
-std::shared_ptr<arrow::DataType> createDataType(const lingodb::runtime::ColumnType& columnType) {
+/*std::shared_ptr<arrow::DataType> createDataType(const lingodb::runtime::ColumnType& columnType) {
    if (columnType.base == "bool") return arrow::boolean();
    if (columnType.base == "int") {
       switch (asInt(columnType.modifiers.at(0))) {
@@ -153,7 +85,7 @@ std::shared_ptr<arrow::Schema> createSchema(std::shared_ptr<lingodb::runtime::Ta
       fields.push_back(std::make_shared<arrow::Field>(c, createDataType(columnMetaData->getColumnType())));
    }
    return std::make_shared<arrow::Schema>(fields);
-}
+}*/
 
 //storing tables
 void storeTable(std::string file, std::shared_ptr<arrow::Table> table) {
@@ -171,7 +103,7 @@ void storeSample(std::string file, std::shared_ptr<arrow::RecordBatch> batch) {
    }
 }
 } // end namespace
-
+/*
 namespace lingodb::runtime {
 class DBRelation : public Relation {
    std::shared_ptr<arrow::Table> table;
@@ -364,4 +296,6 @@ std::shared_ptr<Relation> Relation::createLocalRelation(std::string name, std::s
    return std::make_shared<LocalRelation>(metaData);
 }
 
+
 } // end namespace lingodb::runtime
+*/

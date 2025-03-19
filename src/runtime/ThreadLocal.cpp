@@ -1,8 +1,8 @@
 #include "lingodb/runtime/ThreadLocal.h"
 #include "lingodb/utility/Tracer.h"
 namespace {
-static utility::Tracer::Event getLocalEvent("ThreadLocal", "getLocal");
-static utility::Tracer::Event mergeEvent("ThreadLocal", ",merge");
+static lingodb::utility::Tracer::Event getLocalEvent("ThreadLocal", "getLocal");
+static lingodb::utility::Tracer::Event mergeEvent("ThreadLocal", ",merge");
 } // end namespace
 uint8_t* lingodb::runtime::ThreadLocal::getLocal() {
    utility::Tracer::Trace trace(getLocalEvent);

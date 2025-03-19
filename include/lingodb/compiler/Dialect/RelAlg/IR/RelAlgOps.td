@@ -37,7 +37,7 @@ class RelAlg_Attr<string name> : AttrDef<RelAlg_Dialect, name>;
 
 def TableMetaDataAttr : RelAlg_Attr<"TableMetaData"> {
     let mnemonic = "table_metadata";
-    let parameters = (ins "std::shared_ptr<runtime::TableMetaData>":$meta);
+    let parameters = (ins "std::shared_ptr<catalog::TableMetaDataProvider>":$meta);
     let hasCustomAssemblyFormat = 1;
 }
 
@@ -120,7 +120,7 @@ def ConstRelationOp : RelAlg_Op<"const_relation", [Pure,Operator]> {
 def BaseTableOp : RelAlg_Op<"basetable",[Pure,Operator]> {
     let summary = "base table operation";
 
-    let arguments = (ins StrAttr: $table_identifier, TableMetaDataAttr: $meta, DictionaryAttr: $columns);
+    let arguments = (ins StrAttr: $table_identifier, DictionaryAttr: $columns);
     let results = (outs TupleStream:$result);
 
     let extraClassDeclaration = [{

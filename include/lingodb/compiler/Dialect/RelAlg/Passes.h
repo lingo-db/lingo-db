@@ -28,14 +28,14 @@ std::unique_ptr<mlir::Pass> createReduceGroupByKeysPass();
 std::unique_ptr<mlir::Pass> createExpandTransitiveEqualities();
 
 std::unique_ptr<mlir::Pass> createSimplifyAggregationsPass();
-std::unique_ptr<mlir::Pass> createAttachMetaDataPass(runtime::Catalog& db);
+std::unique_ptr<mlir::Pass> createAttachMetaDataPass(catalog::Catalog& db);
 std::unique_ptr<mlir::Pass> createDetachMetaDataPass();
 
 std::unique_ptr<mlir::Pass> createTrackTuplesPass();
 
 void registerQueryOptimizationPasses();
-void setStaticCatalog(std::shared_ptr<runtime::Catalog> catalog);
-void createQueryOptPipeline(mlir::OpPassManager& pm, runtime::Catalog* catalog);
+void setStaticCatalog(std::shared_ptr<catalog::Catalog> catalog);
+void createQueryOptPipeline(mlir::OpPassManager& pm, catalog::Catalog* catalog);
 
 } // namespace relalg
 } // end namespace lingodb::compiler::dialect

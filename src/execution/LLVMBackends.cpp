@@ -47,6 +47,7 @@
 #include <unistd.h>
 
 namespace {
+namespace utility = lingodb::utility;
 utility::Tracer::Event execution("Execution", "run");
 
 utility::Tracer::Event llvmCodeGen("Compilation", "LLVMCodeGen");

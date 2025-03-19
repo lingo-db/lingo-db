@@ -1,6 +1,7 @@
 #ifndef LINGODB_EXECUTION_RESULTPROCESSING_H
 #define LINGODB_EXECUTION_RESULTPROCESSING_H
 #include "lingodb/runtime/ExecutionContext.h"
+#include <arrow/type_fwd.h>
 namespace lingodb::execution {
 class ResultProcessor {
    public:

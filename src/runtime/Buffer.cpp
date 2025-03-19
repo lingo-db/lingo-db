@@ -4,8 +4,8 @@
 #include <iostream>
 #include <mutex>
 namespace {
-static utility::Tracer::Event iterateEvent("FlexibleBuffer", "iterateParallel");
-static utility::Tracer::Event bufferIteratorEvent("BufferIterator", "iterate");
+static lingodb::utility::Tracer::Event iterateEvent("FlexibleBuffer", "iterateParallel");
+static lingodb::utility::Tracer::Event bufferIteratorEvent("BufferIterator", "iterate");
 
 class FlexibleBufferWorkerResvState {
    public:
@@ -52,7 +52,7 @@ class FlexibleBufferIteratorTask : public lingodb::scheduler::TaskWithImplicitCo
       if (unitId < 0) {
          return;
       }
-      utility::Tracer::Trace trace(iterateEvent);
+      lingodb::utility::Tracer::Trace trace(iterateEvent);
       size_t begin = splitSize * unitId;
       size_t len = std::min(begin + splitSize, buffer.numElements) - begin;
       auto buf = lingodb::runtime::Buffer{len, buffer.ptr + begin * std::max(1ul, typeSize)};
@@ -164,7 +164,7 @@ class BufferIteratorTask : public lingodb::scheduler::TaskWithImplicitContext {
       if (end > bufferLen) {
          end = bufferLen;
       }
-      utility::Tracer::Trace trace(iterateEvent);
+      lingodb::utility::Tracer::Trace trace(iterateEvent);
       cb(buffer, begin, end, contextPtr);
       trace.stop();
    }

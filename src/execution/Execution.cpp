@@ -20,8 +20,11 @@
 #include <chrono>
 #include <sstream>
 #include <unordered_set>
+#include <lingodb/catalog/TableCatalogEntry.h>
+#include <lingodb/runtime/storage/TableStorage.h>
 
 namespace {
+namespace utility = lingodb::utility;
 utility::GlobalSetting<std::string> executionModeSetting("system.execution_mode", "DEFAULT");
 utility::GlobalSetting<std::string> subopOptPassesSetting("system.subop.opt", "GlobalOpt,ReuseLocal,Specialize,PullGatherUp,Compression");
 utility::Tracer::Event queryOptimizationEvent("Compilation", "Query Opt.");
@@ -81,11 +84,12 @@ class RelAlgLoweringStep : public LoweringStep {
                tableName = json["relation"];
             }
             // Load table
-            if (auto relation = catalog->findRelation(tableName)) {
-               relation->loadData();
-               if (addIndex) {
+            if (auto relation = catalog->getTypedEntry<lingodb::catalog::TableCatalogEntry>(tableName)) {
+               relation.value()->ensureFullyLoaded();
+               //todo: fix
+               /*if (addIndex) {
                   relation->getIndex(json["index"])->ensureLoaded();
-               }
+               }*/
             }
          }
       });
@@ -323,7 +327,7 @@ std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(execution::Exec
    config->loweringSteps.emplace_back(std::make_unique<SubOpLoweringStep>());
    config->loweringSteps.emplace_back(std::make_unique<DefaultImperativeLowering>());
 #if defined(ASAN_ACTIVE)
-   if(runMode == ExecutionMode::DEBUGGING) {
+   if (runMode == ExecutionMode::DEBUGGING) {
       std::cerr << "ASAN is not supported in DEBUGGING mode. Switching to C mode" << std::endl;
       runMode = ExecutionMode::C;
    }
