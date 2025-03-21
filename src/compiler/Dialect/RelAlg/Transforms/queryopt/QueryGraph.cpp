@@ -4,6 +4,7 @@
 #include "lingodb/compiler/mlir-support/parsing.h"
 
 #include <iostream>
+
 #include <arrow/record_batch.h>
 
 using namespace lingodb::compiler::dialect;

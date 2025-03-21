@@ -2,9 +2,12 @@
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
+
 #include "llvm/ADT/TypeSwitch.h"
+
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/OpImplementation.h"
+
 #include <functional>
 #include <unordered_set>
 

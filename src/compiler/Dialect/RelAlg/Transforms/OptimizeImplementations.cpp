@@ -12,6 +12,7 @@
 
 #include <stack>
 #include <unordered_set>
+
 #include <arrow/record_batch.h>
 
 namespace {
@@ -155,7 +156,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
       // Initialize map to verify presence of all primary key attributes
       std::unordered_map<std::string, bool> primaryKeyFound;
       auto meta = mlir::dyn_cast_or_null<relalg::TableMetaDataAttr>(baseTableOp->getAttr("meta"));
-      if(meta) {
+      if (meta) {
          for (auto primaryKeyAttribute : meta.getMeta()->getPrimaryKey()) {
             primaryKeyFound[primaryKeyAttribute] = false;
          }
@@ -376,7 +377,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                   for (auto c : baseTableOp.getColumns()) {
                      mapping[&mlir::cast<tuples::ColumnDefAttr>(c.getValue()).getColumn()] = c.getName().str();
                   }
-                  if(auto meta = mlir::dyn_cast_or_null<relalg::TableMetaDataAttr>(baseTableOp->getAttr("meta"))) {
+                  if (auto meta = mlir::dyn_cast_or_null<relalg::TableMetaDataAttr>(baseTableOp->getAttr("meta"))) {
                      auto sample = meta.getMeta()->getSample();
                      if (sample) {
                         for (auto selOp : selections) {
@@ -454,12 +455,11 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
 
                   // Select possible build side to the left
                   if (isInnerJoin && (leftCanUsePrimaryKeyIndex || rightCanUsePrimaryKeyIndex)) {
-
                      auto leftBaseTable = mlir::cast<relalg::BaseTableOp>(leftPath.top());
                      auto rightBaseTable = mlir::cast<relalg::BaseTableOp>(rightPath.top());
-                     auto leftBaseMeta= mlir::dyn_cast_or_null<relalg::TableMetaDataAttr>(leftBaseTable->getAttr("meta"));
-                     auto rightBaseMeta= mlir::dyn_cast_or_null<relalg::TableMetaDataAttr>(rightBaseTable->getAttr("meta"));
-                     if (leftCanUsePrimaryKeyIndex && rightCanUsePrimaryKeyIndex&&leftBaseMeta&&rightBaseMeta) {
+                     auto leftBaseMeta = mlir::dyn_cast_or_null<relalg::TableMetaDataAttr>(leftBaseTable->getAttr("meta"));
+                     auto rightBaseMeta = mlir::dyn_cast_or_null<relalg::TableMetaDataAttr>(rightBaseTable->getAttr("meta"));
+                     if (leftCanUsePrimaryKeyIndex && rightCanUsePrimaryKeyIndex && leftBaseMeta && rightBaseMeta) {
                         // Compute heuristic of which base table the index is more beneficial
                         // Used heuristic: prefer bigger ratio of |buildSide| / |probeSide|
                         int numBaseRowsLeft = leftBaseMeta.getMeta()->getNumRows() + 1;

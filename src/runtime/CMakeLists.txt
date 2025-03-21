@@ -30,7 +30,6 @@ add_library(runtime OBJECT
         #MetaDataOnlyDatabase.cpp
         #ExternalHashIndex.cpp
         HashIndex.cpp
-        Relation.cpp
         Session.cpp
         storage/LingoDBTable.cpp
 )

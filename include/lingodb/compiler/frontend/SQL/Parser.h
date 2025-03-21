@@ -4,10 +4,13 @@
 #include "libpg_query/pg_query.h"
 #include "parsenodes.h"
 
+#include "lingodb/catalog/Catalog.h"
+#include "lingodb/catalog/Defs.h"
+#include "lingodb/catalog/TableCatalogEntry.h"
+#include "lingodb/catalog/Types.h"
 #include "lingodb/compiler/Dialect/DB/IR/DBOps.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "lingodb/compiler/Dialect/util/UtilOps.h"
-#include "lingodb/catalog/Catalog.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -25,9 +28,6 @@
 #include <iostream>
 #include <limits>
 #include <unordered_set>
-#include <lingodb/catalog/Defs.h>
-#include <lingodb/catalog/TableCatalogEntry.h>
-#include <lingodb/catalog/Types.h>
 
 namespace {
 struct TranslationContext;

@@ -2,82 +2,77 @@
 #include "../../include/lingodb/catalog/Types.h"
 #include "../../include/lingodb/compiler/Dialect/DB/IR/DBTypes.h"
 namespace {
-class BoolTypeCreator : public lingodb::compiler::frontend::MLIRTypeCreator {
+class BoolTypeCreator : public lingodb::catalog::MLIRTypeCreator {
    public:
    mlir::Type createType(mlir::MLIRContext* context) override {
       return mlir::IntegerType::get(context, 1);
    }
+
 };
-class IntTypeCreator : public lingodb::compiler::frontend::MLIRTypeCreator {
+class IntTypeCreator : public lingodb::catalog::MLIRTypeCreator {
    public:
    explicit IntTypeCreator(std::shared_ptr<lingodb::catalog::IntTypeInfo> info) : info(info) {}
    mlir::Type createType(mlir::MLIRContext* context) override {
       return mlir::IntegerType::get(context, info->getBitWidth()); //todo: sign
    }
-
    private:
    std::shared_ptr<lingodb::catalog::IntTypeInfo> info;
 };
 template <class T>
-class GenericTypeCreator : public lingodb::compiler::frontend::MLIRTypeCreator {
+class GenericTypeCreator : public lingodb::catalog::MLIRTypeCreator {
    public:
    mlir::Type createType(mlir::MLIRContext* context) override {
       return T::get(context);
    }
 };
-class DecimalTypeCreator : public lingodb::compiler::frontend::MLIRTypeCreator {
+class DecimalTypeCreator : public lingodb::catalog::MLIRTypeCreator {
    public:
    explicit DecimalTypeCreator(std::shared_ptr<lingodb::catalog::DecimalTypeInfo> info) : info(info) {}
    mlir::Type createType(mlir::MLIRContext* context) override {
       return lingodb::compiler::dialect::db::DecimalType::get(context, info->getPrecision(), info->getScale());
    }
-
    private:
    std::shared_ptr<lingodb::catalog::DecimalTypeInfo> info;
 };
-class TimestampTypeCreator : public lingodb::compiler::frontend::MLIRTypeCreator {
+class TimestampTypeCreator : public lingodb::catalog::MLIRTypeCreator {
    public:
    explicit TimestampTypeCreator(std::shared_ptr<lingodb::catalog::TimestampTypeInfo> info) : info(info) {}
    mlir::Type createType(mlir::MLIRContext* context) override {
       return lingodb::compiler::dialect::db::TimestampType::get(context, lingodb::compiler::dialect::db::symbolizeTimeUnitAttr(static_cast<size_t>(info->getUnit())).value());
    }
-
    private:
    std::shared_ptr<lingodb::catalog::TimestampTypeInfo> info;
 };
-class DateTypeCreator : public lingodb::compiler::frontend::MLIRTypeCreator {
+class DateTypeCreator : public lingodb::catalog::MLIRTypeCreator {
    public:
    DateTypeCreator(std::shared_ptr<lingodb::catalog::DateTypeInfo> info) : info(info) {}
    mlir::Type createType(mlir::MLIRContext* context) override {
       return lingodb::compiler::dialect::db::DateType::get(context, lingodb::compiler::dialect::db::symbolizeDateUnitAttr(static_cast<size_t>(info->getUnit())).value());
    }
-
    private:
    std::shared_ptr<lingodb::catalog::DateTypeInfo> info;
 };
 
-class IntervalTypeCreator : public lingodb::compiler::frontend::MLIRTypeCreator {
+class IntervalTypeCreator : public lingodb::catalog::MLIRTypeCreator {
    public:
    explicit IntervalTypeCreator(std::shared_ptr<lingodb::catalog::IntervalTypeInfo> info) : info(info) {}
    mlir::Type createType(mlir::MLIRContext* context) override {
       return lingodb::compiler::dialect::db::IntervalType::get(context, lingodb::compiler::dialect::db::symbolizeIntervalUnitAttr(static_cast<size_t>(info->getUnit())).value());
    }
-
    private:
    std::shared_ptr<lingodb::catalog::IntervalTypeInfo> info;
 };
-class CharTypeCreator : public lingodb::compiler::frontend::MLIRTypeCreator {
+class CharTypeCreator : public lingodb::catalog::MLIRTypeCreator {
    public:
    explicit CharTypeCreator(std::shared_ptr<lingodb::catalog::CharTypeInfo> info) : info(info) {}
    mlir::Type createType(mlir::MLIRContext* context) override {
       return lingodb::compiler::dialect::db::CharType::get(context, info->getLength());
    }
-
    private:
    std::shared_ptr<lingodb::catalog::CharTypeInfo> info;
 };
 } // namespace
-namespace lingodb::compiler::frontend {
+namespace lingodb::catalog {
 std::shared_ptr<MLIRTypeCreator> createBoolTypeCreator() {
    return std::make_shared<BoolTypeCreator>();
 }
@@ -108,4 +103,4 @@ std::shared_ptr<MLIRTypeCreator> createCharTypeCreator(std::shared_ptr<catalog::
 std::shared_ptr<MLIRTypeCreator> createStringTypeCreator(std::shared_ptr<catalog::StringTypeInfo> info) {
    return std::make_shared<GenericTypeCreator<lingodb::compiler::dialect::db::StringType>>();
 }
-} // namespace lingodb::compiler::frontend
+} // namespace lingodb::catalog

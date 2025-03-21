@@ -10,34 +10,34 @@ Type::Type(lingodb::catalog::LogicalTypeId id, std::shared_ptr<TypeInfo> infoInp
       case LogicalTypeId::SQLNULL:
          break;
       case LogicalTypeId::BOOLEAN:
-         mlirTypeCreator = lingodb::compiler::frontend::createBoolTypeCreator();
+         mlirTypeCreator = lingodb::catalog::createBoolTypeCreator();
          break;
       case LogicalTypeId::INT:
-         mlirTypeCreator = lingodb::compiler::frontend::createIntTypeCreator(std::dynamic_pointer_cast<IntTypeInfo>(info));
+         mlirTypeCreator = lingodb::catalog::createIntTypeCreator(std::dynamic_pointer_cast<IntTypeInfo>(info));
          break;
       case LogicalTypeId::FLOAT:
-         mlirTypeCreator = lingodb::compiler::frontend::createFloatTypeCreator();
+         mlirTypeCreator = lingodb::catalog::createFloatTypeCreator();
          break;
       case LogicalTypeId::DOUBLE:
-         mlirTypeCreator = lingodb::compiler::frontend::createDoubleTypeCreator();
+         mlirTypeCreator = lingodb::catalog::createDoubleTypeCreator();
          break;
       case LogicalTypeId::DECIMAL:
-         mlirTypeCreator = lingodb::compiler::frontend::createDecimalTypeCreator(std::dynamic_pointer_cast<DecimalTypeInfo>(info));
+         mlirTypeCreator = lingodb::catalog::createDecimalTypeCreator(std::dynamic_pointer_cast<DecimalTypeInfo>(info));
          break;
       case LogicalTypeId::DATE:
-         mlirTypeCreator = lingodb::compiler::frontend::createDateTypeCreator(std::dynamic_pointer_cast<DateTypeInfo>(info));
+         mlirTypeCreator = lingodb::catalog::createDateTypeCreator(std::dynamic_pointer_cast<DateTypeInfo>(info));
          break;
       case LogicalTypeId::TIMESTAMP:
-         mlirTypeCreator = lingodb::compiler::frontend::createTimestampTypeCreator(std::dynamic_pointer_cast<TimestampTypeInfo>(info));
+         mlirTypeCreator = lingodb::catalog::createTimestampTypeCreator(std::dynamic_pointer_cast<TimestampTypeInfo>(info));
          break;
       case LogicalTypeId::INTERVAL:
-         mlirTypeCreator = lingodb::compiler::frontend::createIntervalTypeCreator(std::dynamic_pointer_cast<IntervalTypeInfo>(info));
+         mlirTypeCreator = lingodb::catalog::createIntervalTypeCreator(std::dynamic_pointer_cast<IntervalTypeInfo>(info));
          break;
       case LogicalTypeId::CHAR:
-         mlirTypeCreator = lingodb::compiler::frontend::createCharTypeCreator(std::dynamic_pointer_cast<CharTypeInfo>(info));
+         mlirTypeCreator = lingodb::catalog::createCharTypeCreator(std::dynamic_pointer_cast<CharTypeInfo>(info));
          break;
       case LogicalTypeId::STRING:
-         mlirTypeCreator = lingodb::compiler::frontend::createStringTypeCreator(std::dynamic_pointer_cast<StringTypeInfo>(info));
+         mlirTypeCreator = lingodb::catalog::createStringTypeCreator(std::dynamic_pointer_cast<StringTypeInfo>(info));
          break;
    }
 }
@@ -67,6 +67,10 @@ std::shared_ptr<TypeInfo> TypeInfo::deserialize(utility::Deserializer& deseriali
          return TimestampTypeInfo::deserialize(deserializer);
       case TypeInfoType::CharInfo:
          return CharTypeInfo::deserialize(deserializer);
+      case TypeInfoType::DateInfo:
+         return DateTypeInfo::deserialize(deserializer);
+      case TypeInfoType::IntervalInfo:
+         return IntervalTypeInfo::deserialize(deserializer);
       default:
          throw std::runtime_error("not implemented");
    }
@@ -238,6 +242,9 @@ Type Type::charType(size_t length) {
 }
 Type Type::stringType() {
    return Type(LogicalTypeId::STRING, std::make_shared<StringTypeInfo>("", std::nullopt));
+}
+Type Type::timestamp() {
+   return Type(LogicalTypeId::TIMESTAMP, std::make_shared<TimestampTypeInfo>(std::nullopt, TimestampTypeInfo::TimestampUnit::NANOS));
 }
 
 } //end namespace lingodb::catalog

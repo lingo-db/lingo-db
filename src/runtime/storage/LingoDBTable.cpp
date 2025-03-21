@@ -1,18 +1,21 @@
 #include "lingodb/runtime/storage/LingoDBTable.h"
+#include "lingodb/catalog/Defs.h"
+#include "lingodb/runtime/RecordBatchInfo.h"
 #include "lingodb/scheduler/Tasks.h"
+#include "lingodb/utility/Serialization.h"
 #include "lingodb/utility/Tracer.h"
-#include <filesystem>
-#include <iostream>
-#include <random>
-#include <ranges>
+
 #include <arrow/builder.h>
 #include <arrow/compute/api.h>
 #include <arrow/io/api.h>
 #include <arrow/ipc/api.h>
 #include <arrow/table.h>
-#include <lingodb/catalog/Defs.h>
-#include <lingodb/runtime/RecordBatchInfo.h>
-#include <lingodb/utility/Serialization.h>
+
+#include <filesystem>
+#include <iostream>
+#include <random>
+#include <ranges>
+
 namespace {
 namespace utility = lingodb::utility;
 static utility::Tracer::Event processMorsel("DataSourceIteration", "processMorsel");
@@ -196,6 +199,40 @@ std::optional<size_t> countDistinctValues(std::shared_ptr<arrow::ChunkedArray> c
    }
    return {};
 }
+
+uint8_t* getBuffer(std::shared_ptr<arrow::ArrayData> arrayData, size_t bufferId) {
+   static uint8_t alternative = 0b11111111;
+   if (arrayData->buffers.size() > bufferId && arrayData->buffers[bufferId]) {
+      auto* buffer = arrayData->buffers[bufferId].get();
+      return (uint8_t*) buffer->address();
+   } else {
+      return &alternative; //always return valid pointer to at least one byte filled with ones
+   }
+}
+void access(std::vector<size_t> colIds, lingodb::runtime::RecordBatchInfo* info, const std::shared_ptr<arrow::RecordBatch>& currChunk) {
+   for (size_t i = 0; i < colIds.size(); i++) {
+      auto colId = colIds[i];
+      lingodb::runtime::ColumnInfo& colInfo = info->columnInfo[i];
+      size_t off = currChunk->column_data(colId)->offset;
+      colInfo.offset = off;
+      colInfo.validMultiplier = currChunk->column_data(colId)->buffers[0] ? 1 : 0;
+      colInfo.validBuffer = lingodb::runtime::RecordBatchInfo::getBuffer(currChunk.get(), colId, 0);
+      colInfo.dataBuffer = lingodb::runtime::RecordBatchInfo::getBuffer(currChunk.get(), colId, 1);
+      colInfo.varLenBuffer = lingodb::runtime::RecordBatchInfo::getBuffer(currChunk.get(), colId, 2);
+      if (currChunk->column(colId)->type()->id() == arrow::Type::LIST) {
+         auto childData = currChunk->column_data(colId)->child_data[0];
+         colInfo.childInfo = new lingodb::runtime::ColumnInfo; //todo: fix
+         colInfo.childInfo->offset = childData->offset;
+         colInfo.childInfo->validMultiplier = childData->buffers[0] ? 1 : 0;
+         colInfo.childInfo->validBuffer = getBuffer(childData, 0);
+         colInfo.childInfo->dataBuffer = getBuffer(childData, 1);
+         colInfo.childInfo->varLenBuffer = getBuffer(childData, 2);
+      } else {
+         colInfo.childInfo = nullptr;
+      }
+   }
+   info->numRows = currChunk->num_rows();
+}
 } // namespace
 
 namespace lingodb::runtime {
@@ -234,6 +271,8 @@ void LingoDBTable::append(const std::vector<std::shared_ptr<arrow::RecordBatch>>
          tableData.push_back(batch);
          numRows += batch->num_rows();
       } else {
+         std::cout << "schema to add: " << batch->schema()->ToString() << std::endl;
+         std::cout << "schema of table: " << schema->ToString() << std::endl;
          throw std::runtime_error("schema mismatch");
       }
    }
@@ -279,7 +318,7 @@ void LingoDBTable::serialize(lingodb::utility::Serializer& serializer) const {
    serializer.writeProperty(1, fileName);
    serializer.writeProperty(2, sample);
    auto res = arrow::ipc::SerializeSchema(*schema).ValueOrDie();
-   serializer.writeProperty(3, std::string_view((char*) res->data(), res->size()));
+   serializer.writeProperty(3, std::string_view((const char*) res->data(), res->size()));
    serializer.writeProperty(4, columnStatistics);
    serializer.writeProperty(5, numRows);
 }
@@ -295,39 +334,6 @@ std::unique_ptr<LingoDBTable> LingoDBTable::deserialize(lingodb::utility::Deseri
    return std::make_unique<LingoDBTable>(fileName, schema, numRows, sample, columnStatistics);
 }
 
-static uint8_t* getBuffer(std::shared_ptr<arrow::ArrayData> arrayData, size_t bufferId) {
-   static uint8_t alternative = 0b11111111;
-   if (arrayData->buffers.size() > bufferId && arrayData->buffers[bufferId]) {
-      auto* buffer = arrayData->buffers[bufferId].get();
-      return (uint8_t*) buffer->address();
-   } else {
-      return &alternative; //always return valid pointer to at least one byte filled with ones
-   }
-}
-static void access(std::vector<size_t> colIds, lingodb::runtime::RecordBatchInfo* info, const std::shared_ptr<arrow::RecordBatch>& currChunk) {
-   for (size_t i = 0; i < colIds.size(); i++) {
-      auto colId = colIds[i];
-      lingodb::runtime::ColumnInfo& colInfo = info->columnInfo[i];
-      size_t off = currChunk->column_data(colId)->offset;
-      colInfo.offset = off;
-      colInfo.validMultiplier = currChunk->column_data(colId)->buffers[0] ? 1 : 0;
-      colInfo.validBuffer = lingodb::runtime::RecordBatchInfo::getBuffer(currChunk.get(), colId, 0);
-      colInfo.dataBuffer = lingodb::runtime::RecordBatchInfo::getBuffer(currChunk.get(), colId, 1);
-      colInfo.varLenBuffer = lingodb::runtime::RecordBatchInfo::getBuffer(currChunk.get(), colId, 2);
-      if (currChunk->column(colId)->type()->id() == arrow::Type::LIST) {
-         auto childData = currChunk->column_data(colId)->child_data[0];
-         colInfo.childInfo = new lingodb::runtime::ColumnInfo; //todo: fix
-         colInfo.childInfo->offset = childData->offset;
-         colInfo.childInfo->validMultiplier = childData->buffers[0] ? 1 : 0;
-         colInfo.childInfo->validBuffer = getBuffer(childData, 0);
-         colInfo.childInfo->dataBuffer = getBuffer(childData, 1);
-         colInfo.childInfo->varLenBuffer = getBuffer(childData, 2);
-      } else {
-         colInfo.childInfo = nullptr;
-      }
-   }
-   info->numRows = currChunk->num_rows();
-}
 class ScanBatchesTask : public lingodb::scheduler::TaskWithImplicitContext {
    std::vector<std::shared_ptr<arrow::RecordBatch>>& batches;
    std::vector<size_t> colIds;

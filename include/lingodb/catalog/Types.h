@@ -3,14 +3,13 @@
 
 #include <memory>
 #include <optional>
-namespace lingodb::compiler::frontend {
-class MLIRTypeCreator;
-} //end namespace lingodb::compiler::frontend
 namespace lingodb::utility {
 class Serializer;
 class Deserializer;
 } //end namespace lingodb::utility
 namespace lingodb::catalog {
+class MLIRTypeCreator;
+
 enum class LogicalTypeId : uint8_t {
    INVALID = 0,
    SQLNULL = 1,
@@ -48,7 +47,7 @@ class TypeInfo {
 class Type {
    LogicalTypeId id;
    std::shared_ptr<TypeInfo> info;
-   std::shared_ptr<compiler::frontend::MLIRTypeCreator> mlirTypeCreator;
+   std::shared_ptr<catalog::MLIRTypeCreator> mlirTypeCreator;
 
    public:
    Type(LogicalTypeId id, std::shared_ptr<TypeInfo> info);
@@ -58,19 +57,21 @@ class Type {
    std::shared_ptr<T> getInfo() {
       return std::dynamic_pointer_cast<T>(info);
    }
-   std::shared_ptr<compiler::frontend::MLIRTypeCreator> getMLIRTypeCreator() const { return mlirTypeCreator; }
+   std::shared_ptr<catalog::MLIRTypeCreator> getMLIRTypeCreator() const { return mlirTypeCreator; }
    void serialize(utility::Serializer& serializer) const;
    static Type deserialize(utility::Deserializer& deserializer);
    static Type makeIntType(size_t width, bool isSigned);
+   static Type boolean() { return Type(LogicalTypeId::BOOLEAN, nullptr); }
    static Type int8() { return makeIntType(8, true); }
    static Type int16() { return makeIntType(16, true); }
    static Type int32() { return makeIntType(32, true); }
    static Type int64() { return makeIntType(64, true); }
    static Type f32() { return Type(LogicalTypeId::FLOAT, nullptr); }
-    static Type f64() { return Type(LogicalTypeId::DOUBLE, nullptr); }
-    static Type decimal(size_t precision, size_t scale);
-    static Type charType(size_t length);
-    static Type stringType();
+   static Type f64() { return Type(LogicalTypeId::DOUBLE, nullptr); }
+   static Type decimal(size_t precision, size_t scale);
+   static Type charType(size_t length);
+   static Type stringType();
+   static Type timestamp();
 };
 class IntTypeInfo : public TypeInfo {
    bool isSigned;
@@ -104,7 +105,7 @@ class CharTypeInfo : public TypeInfo {
    void serializeConcrete(utility::Serializer& serializer) const override;
    static std::shared_ptr<CharTypeInfo> deserialize(utility::Deserializer& deserializer);
    std::string toString();
-        size_t getLength() { return length; }
+   size_t getLength() { return length; }
 };
 class StringTypeInfo : public TypeInfo {
    std::string collation;
@@ -117,13 +118,15 @@ class StringTypeInfo : public TypeInfo {
    std::string toString();
 };
 class TimestampTypeInfo : public TypeInfo {
-public:
+   public:
    enum class TimestampUnit : uint8_t {
-      NANOS = 0,
-      MICROS = 1,
-      MILLIS = 2,
-      SECONDS = 3,
+      SECONDS = 0,
+      MILLIS = 1,
+      MICROS = 2,
+      NANOS = 3,
+
    };
+
    private:
    std::optional<std::string> timezone;
    TimestampUnit unit;
@@ -138,11 +141,12 @@ public:
 };
 
 class DateTypeInfo : public TypeInfo {
-public:
+   public:
    enum class DateUnit : uint8_t {
       DAY = 0,
       MILLIS = 1,
    };
+
    private:
    DateUnit unit;
 
@@ -154,11 +158,12 @@ public:
    auto getUnit() { return unit; }
 };
 class IntervalTypeInfo : public TypeInfo {
-public:
+   public:
    enum class IntervalUnit : uint8_t {
       MONTH = 0,
       DAYTIME = 1,
    };
+
    private:
    IntervalUnit unit;
 

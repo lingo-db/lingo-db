@@ -128,4 +128,4 @@ void Tracer::dumpInternal() {
    fileContent["trace"] = result;
    out << to_string(fileContent) << std::endl;
 }
-} // end namespace utility
+} // end namespace lingodb::utility

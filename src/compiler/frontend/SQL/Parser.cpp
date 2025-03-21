@@ -1396,11 +1396,20 @@ lingodb::catalog::Type frontend::sql::Parser::createType(std::string datatypeNam
    if (datatypeName == "date") {
       return lingodb::catalog::Type(lingodb::catalog::LogicalTypeId::DATE, std::make_shared<lingodb::catalog::DateTypeInfo>(lingodb::catalog::DateTypeInfo::DateUnit::DAY));
    }
-   //todo: fix
-   /*if (datatypeName == "timestamp") {
-      datatypeName = "date";
-      typeModifiers.push_back("millisecond");
+   if (datatypeName == "string") {
+      return lingodb::catalog::Type::stringType();
    }
+   if (datatypeName == "decimal") {
+      return lingodb::catalog::Type::decimal(std::get<size_t>(typeModifiers[0]), std::get<size_t>(typeModifiers[1]));
+   }
+   if (datatypeName == "timestamp") {
+      return lingodb::catalog::Type::timestamp();
+   }
+   if (datatypeName == "bool") {
+      return lingodb::catalog::Type::boolean();
+   }
+
+   /*
    if (datatypeName == "interval") {
       if (typeModifiers.size() > 0 && std::holds_alternative<size_t>(typeModifiers[0])) {
          std::string unit = "";

@@ -164,5 +164,5 @@ class Tracer {
 
    static void dump();
 };
-} // end namespace utility
+} // end namespace lingodb::utility
 #endif // LINGODB_UTILITY_TRACER_H

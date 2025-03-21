@@ -1,18 +1,18 @@
-#ifndef LINODB_RUNTIME_STORAGE_TABLESTORAGE_H
-#define LINODB_RUNTIME_STORAGE_TABLESTORAGE_H
+#ifndef LINGODB_RUNTIME_STORAGE_TABLESTORAGE_H
+#define LINGODB_RUNTIME_STORAGE_TABLESTORAGE_H
+#include "lingodb/runtime/RecordBatchInfo.h"
 #include "lingodb/scheduler/Task.h"
 
 #include <functional>
 #include <memory>
+
 #include <arrow/type_fwd.h>
-#include <lingodb/runtime/RecordBatchInfo.h>
 
 namespace lingodb::runtime {
 struct ScanConfig {
    bool parallel;
    std::vector<std::string> columns;
    std::function<void(lingodb::runtime::RecordBatchInfo*)> cb;
-
 };
 class TableStorage {
    public:
@@ -23,4 +23,4 @@ class TableStorage {
    virtual ~TableStorage() = default;
 };
 } // namespace lingodb::runtime
-#endif //LINODB_RUNTIME_STORAGE_TABLESTORAGE_H
+#endif //LINGODB_RUNTIME_STORAGE_TABLESTORAGE_H

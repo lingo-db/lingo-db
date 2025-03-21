@@ -20,7 +20,7 @@ class LingoDBTable : public TableStorage {
 
    public:
    LingoDBTable(std::string fileName, std::shared_ptr<arrow::Schema> schema);
-   LingoDBTable(std::string fileName, std::shared_ptr<arrow::Schema> schema, size_t numRows, catalog::Sample sample, std::unordered_map<std::string, catalog::ColumnStatistics> columnStatistics) : persist(false), fileName(std::move(fileName)), schema(std::move(schema)), numRows(numRows), sample(std::move(sample)), columnStatistics(std::move(columnStatistics)) {}
+   LingoDBTable(std::string fileName, std::shared_ptr<arrow::Schema> schema, size_t numRows, catalog::Sample sample, std::unordered_map<std::string, catalog::ColumnStatistics> columnStatistics) : persist(false), fileName(std::move(fileName)), sample(std::move(sample)), schema(std::move(schema)), columnStatistics(std::move(columnStatistics)), numRows(numRows) {}
    void setPersist(bool persist) {
       this->persist = persist;
       if (persist) {

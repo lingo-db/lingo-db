@@ -9,6 +9,7 @@
 #include <arrow/array/array_primitive.h>
 #include <arrow/io/api.h>
 #include <arrow/ipc/api.h>
+/*
 namespace {
 uint64_t nextPow2(uint64_t v) {
    v--;
@@ -23,7 +24,7 @@ uint64_t nextPow2(uint64_t v) {
 }
 } //end namespace
 namespace lingodb::runtime {
-/*
+
 void HashIndex::build() {
    size_t numRows = table->num_rows();
    arrow::TableBatchReader reader(table);
@@ -190,5 +191,7 @@ std::shared_ptr<Index> Index::createHashIndex(lingodb::runtime::IndexMetaData& m
    res->name = metaData.name;
    return res;
 }
-*/
+
 } // end namespace lingodb::runtime
+
+ */

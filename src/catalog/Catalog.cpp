@@ -1,16 +1,16 @@
 #include "lingodb/catalog/Catalog.h"
+#include "lingodb/catalog/Defs.h"
 #include "lingodb/catalog/TableCatalogEntry.h"
 #include "lingodb/catalog/Types.h"
 #include "lingodb/runtime/storage/LingoDBTable.h"
 #include "lingodb/utility/Serialization.h"
+
 #include <arrow/buffer.h>
+#include <arrow/io/api.h>
+#include <arrow/ipc/api.h>
 #include <arrow/type.h>
 
-#include <arrow/ipc/api.h>
-
 #include <filesystem>
-#include <arrow/io/api.h>
-#include <lingodb/catalog/Defs.h>
 
 namespace lingodb::catalog {
 Catalog Catalog::deserialize(lingodb::utility::Deserializer& deSerializer) {

@@ -10,6 +10,6 @@ struct CreateTableDef {
    void serialize(utility::Serializer& serializer) const;
    static CreateTableDef deserialize(utility::Deserializer& deserializer);
 };
-}
+} // namespace lingodb::catalog
 
 #endif //LINGODB_CATALOG_DEFS_H

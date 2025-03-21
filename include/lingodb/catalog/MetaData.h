@@ -44,6 +44,6 @@ class TableMetaDataProvider {
    static std::shared_ptr<TableMetaDataProvider> deserialize(utility::Deserializer& deserializer);
    virtual ~TableMetaDataProvider() = default;
 };
-}
+} //end namespace lingodb::catalog
 
 #endif //LINGODB_CATALOG_METADATA_H

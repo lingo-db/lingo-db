@@ -18,7 +18,9 @@ struct StringRuntime {
    static double toFloat64(VarLen32 str);
    static __int128 toDecimal(VarLen32 str, int32_t reqScale);
    static int64_t toDate(VarLen32 str);
+   static int64_t toTimestamp(VarLen32 str);
    static VarLen32 fromDate(int64_t);
+   static VarLen32 fromTimestamp(int64_t);
    static VarLen32 fromBool(bool);
    static VarLen32 fromInt(int64_t);
    static VarLen32 fromFloat32(float);

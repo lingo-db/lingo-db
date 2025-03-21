@@ -1,5 +1,6 @@
 #include "lingodb/execution/Execution.h"
 
+#include "lingodb/catalog/TableCatalogEntry.h"
 #include "lingodb/compiler/Conversion/DBToStd/DBToStd.h"
 #include "lingodb/compiler/Conversion/DSAToStd/DSAToStd.h"
 #include "lingodb/compiler/Conversion/RelAlgToSubOp/RelAlgToSubOpPass.h"
@@ -9,6 +10,7 @@
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/Passes.h"
 #include "lingodb/execution/CBackend.h"
 #include "lingodb/execution/LLVMBackends.h"
+#include "lingodb/runtime/storage/TableStorage.h"
 #include "lingodb/utility/Setting.h"
 #include "lingodb/utility/Tracer.h"
 
@@ -20,8 +22,6 @@
 #include <chrono>
 #include <sstream>
 #include <unordered_set>
-#include <lingodb/catalog/TableCatalogEntry.h>
-#include <lingodb/runtime/storage/TableStorage.h>
 
 namespace {
 namespace utility = lingodb::utility;
