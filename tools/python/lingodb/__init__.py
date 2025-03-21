@@ -5,34 +5,30 @@ import pyarrow as pa
 
 
 def int_type(width=64, nullable=True):
-    return f"int{width / 8} {"" if nullable else "not null"}"
+    return f"int{width // 8}{"" if nullable else " not null"}"
 
 
 def string_type(nullable=True):
-    return f"string  {"" if nullable else "not null"}"
+    return f"string{"" if nullable else " not null"}"
 
 
 def float_type(width=64, nullable=True):
     assert width == 64 or width == 32
-    return f"{"float" if width == 32 else "double"} {"" if nullable else "not null"}"
-
-
-
-
+    return f"{"float" if width == 32 else "double"}{"" if nullable else " not null"}"
 def create_create_table_stmt(name, table: pa.Table):
     res = f" create table {name} ("
     schema = table.schema
     first = True
     for colname in schema.names:
         if not first:
-            res += ","
+            res += ", "
         else:
             first = False
         field = schema.field(colname)
         t = field.type
         lt = None
         if t == pa.int8() or t == pa.int16() or t == pa.int32() or t == pa.int64():
-            res += f" {colname} {int_type(t.bit_width, field.nullable)}"
+            res += f"{colname} {int_type(t.bit_width, field.nullable)}"
         elif t == pa.string() or t == pa.utf8():
             res += f"{colname} {string_type(field.nullable)}"
         elif t == pa.float16() or t == pa.float32() or t == pa.float64():
@@ -41,6 +37,7 @@ def create_create_table_stmt(name, table: pa.Table):
             raise "Unsupported Type"
     res += ");"
     return res
+
 
 
 class Connection:

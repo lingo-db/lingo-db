@@ -165,8 +165,6 @@ std::shared_ptr<arrow::DataType> toPhysicalType(lingodb::catalog::Type t) {
             case lingodb::catalog::TimestampTypeInfo::TimestampUnit::SECONDS:
                timeUnit = arrow::TimeUnit::SECOND;
                break;
-            default:
-               throw std::runtime_error("unsupported timestamp unit");
          }
          return arrow::timestamp(timeUnit);
       }
