@@ -455,26 +455,28 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
 
                   // Select possible build side to the left
                   if (isInnerJoin && (leftCanUsePrimaryKeyIndex || rightCanUsePrimaryKeyIndex)) {
-                     auto leftBaseTable = mlir::cast<relalg::BaseTableOp>(leftPath.top());
-                     auto rightBaseTable = mlir::cast<relalg::BaseTableOp>(rightPath.top());
-                     auto leftBaseMeta = mlir::dyn_cast_or_null<relalg::TableMetaDataAttr>(leftBaseTable->getAttr("meta"));
-                     auto rightBaseMeta = mlir::dyn_cast_or_null<relalg::TableMetaDataAttr>(rightBaseTable->getAttr("meta"));
-                     if (leftCanUsePrimaryKeyIndex && rightCanUsePrimaryKeyIndex && leftBaseMeta && rightBaseMeta) {
+                     if (leftCanUsePrimaryKeyIndex && rightCanUsePrimaryKeyIndex) {
                         // Compute heuristic of which base table the index is more beneficial
                         // Used heuristic: prefer bigger ratio of |buildSide| / |probeSide|
-                        int numBaseRowsLeft = leftBaseMeta.getMeta()->getNumRows() + 1;
-                        int numBaseRowsRight = leftBaseMeta.getMeta()->getNumRows() + 1;
-                        int numNonBaseRowsLeft = left->hasAttr("rows") ? mlir::dyn_cast_or_null<mlir::FloatAttr>(left->getAttr("rows")).getValueAsDouble() + 1 : 1;
-                        int numNonBaseRowsRight = right->hasAttr("rows") ? mlir::dyn_cast_or_null<mlir::FloatAttr>(right->getAttr("rows")).getValueAsDouble() + 1 : 1;
-                        // Exchange left and right side if deemed beneficial by heuristic
-                        if (numNonBaseRowsRight / numBaseRowsLeft < numNonBaseRowsLeft / numBaseRowsRight) {
-                           reversed = true;
-                           std::swap(left, right);
-                           std::swap(leftPath, rightPath);
-                           std::swap(leftIndexName, rightIndexName);
-                           mlir::Attribute tmp = predicateOperator->getAttr("rightHash");
-                           predicateOperator->setAttr("rightHash", predicateOperator->getAttr("leftHash"));
-                           predicateOperator->setAttr("leftHash", tmp);
+                        auto leftBaseTable = mlir::cast<relalg::BaseTableOp>(leftPath.top());
+                        auto rightBaseTable = mlir::cast<relalg::BaseTableOp>(rightPath.top());
+                        auto leftBaseMeta = mlir::dyn_cast_or_null<relalg::TableMetaDataAttr>(leftBaseTable->getAttr("meta"));
+                        auto rightBaseMeta = mlir::dyn_cast_or_null<relalg::TableMetaDataAttr>(rightBaseTable->getAttr("meta"));
+                        if (leftBaseMeta && rightBaseMeta) {
+                           int numBaseRowsLeft = leftBaseMeta.getMeta()->getNumRows() + 1;
+                           int numBaseRowsRight = leftBaseMeta.getMeta()->getNumRows() + 1;
+                           int numNonBaseRowsLeft = left->hasAttr("rows") ? mlir::dyn_cast_or_null<mlir::FloatAttr>(left->getAttr("rows")).getValueAsDouble() + 1 : 1;
+                           int numNonBaseRowsRight = right->hasAttr("rows") ? mlir::dyn_cast_or_null<mlir::FloatAttr>(right->getAttr("rows")).getValueAsDouble() + 1 : 1;
+                           // Exchange left and right side if deemed beneficial by heuristic
+                           if (numNonBaseRowsRight / numBaseRowsLeft < numNonBaseRowsLeft / numBaseRowsRight) {
+                              reversed = true;
+                              std::swap(left, right);
+                              std::swap(leftPath, rightPath);
+                              std::swap(leftIndexName, rightIndexName);
+                              mlir::Attribute tmp = predicateOperator->getAttr("rightHash");
+                              predicateOperator->setAttr("rightHash", predicateOperator->getAttr("leftHash"));
+                              predicateOperator->setAttr("leftHash", tmp);
+                           }
                         }
                      } else if (!leftCanUsePrimaryKeyIndex) {
                         // Exchange left and right side

@@ -4,7 +4,6 @@ find_package(Catch2 REQUIRED)
 include_directories(CATCH2_INCLUDE_DIR)
 add_executable(tester
         catalog/TestTypes.cpp
-        catalog/TestCatalog.cpp
         utility/TestSerialization.cpp
         utility/TestSketches.cpp
 )

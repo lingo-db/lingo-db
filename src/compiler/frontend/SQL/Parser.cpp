@@ -1409,27 +1409,22 @@ lingodb::catalog::Type frontend::sql::Parser::createType(std::string datatypeNam
       return lingodb::catalog::Type::boolean();
    }
 
-   /*
    if (datatypeName == "interval") {
       if (typeModifiers.size() > 0 && std::holds_alternative<size_t>(typeModifiers[0])) {
          std::string unit = "";
          if (std::get<size_t>(typeModifiers[0]) & 2) {
-            unit = "months";
+            return catalog::Type::intervalMonths();
          }
          if (std::get<size_t>(typeModifiers[0]) & 4) {
-            unit = "years";
+            throw std::runtime_error("not supported yet");
          }
          if (std::get<size_t>(typeModifiers[0]) & 8) {
-            unit = "daytime";
+            return catalog::Type::intervalDaytime();
          }
-         assert(!unit.empty() && "should not happen");
-         typeModifiers.clear();
-         typeModifiers.push_back(unit);
       } else {
-         typeModifiers.clear();
-         typeModifiers.push_back("daytime");
+         return catalog::Type::intervalDaytime();
       }
-   }*/
+   }
    throw std::runtime_error("unsupported type mod");
 }
 lingodb::catalog::Column frontend::sql::Parser::translateColumnDef(ColumnDef* columnDef) {

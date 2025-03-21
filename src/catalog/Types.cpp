@@ -246,5 +246,10 @@ Type Type::stringType() {
 Type Type::timestamp() {
    return Type(LogicalTypeId::TIMESTAMP, std::make_shared<TimestampTypeInfo>(std::nullopt, TimestampTypeInfo::TimestampUnit::NANOS));
 }
-
+Type Type::intervalDaytime() {
+   return Type(LogicalTypeId::INTERVAL, std::make_shared<IntervalTypeInfo>(IntervalTypeInfo::IntervalUnit::DAYTIME));
+}
+Type Type::intervalMonths() {
+   return Type(LogicalTypeId::INTERVAL, std::make_shared<IntervalTypeInfo>(IntervalTypeInfo::IntervalUnit::MONTH));
+}
 } //end namespace lingodb::catalog

@@ -72,6 +72,9 @@ class Type {
    static Type charType(size_t length);
    static Type stringType();
    static Type timestamp();
+   static Type intervalDaytime();
+   static Type intervalMonths();
+
 };
 class IntTypeInfo : public TypeInfo {
    bool isSigned;

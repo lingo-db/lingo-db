@@ -409,7 +409,6 @@ class ScanBatchesSingleThreadedTask : public lingodb::scheduler::TaskWithImplici
 
 std::unique_ptr<scheduler::Task> LingoDBTable::createScanTask(const ScanConfig& scanConfig) {
    ensureLoaded();
-   std::cout << "Schema:" << schema->ToString() << std::endl;
    std::vector<size_t> colIds;
    for (const auto& c : scanConfig.columns) {
       auto colId = schema->GetFieldIndex(c);

@@ -11,4 +11,4 @@ create table test(
     date64 timestamp,
     primary key(float64)
 );
-INSERT into test(str, float32, float64, decimal, int32, int64, bool, date32, date64) values ('str', 1.1, 1.1, 1.10, 1, 1, 1, '1996-01-02', '1996-01-02'), (null, null, null, null, null, null, null, null, null);
+INSERT into test(str, float32, float64, decimal, int32, int64, bool, date32, date64) values ('str', 1.1, 1.1, 1.10, 1, 1, 1, '1996-01-02', '1996-01-02 13:37'), (null, null, null, null, null, null, null, null, null);
