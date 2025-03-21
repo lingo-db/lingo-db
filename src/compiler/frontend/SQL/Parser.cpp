@@ -976,12 +976,12 @@ mlir::Value frontend::sql::Parser::translateExpression(mlir::OpBuilder& builder,
                auto toCast = translateExpression(builder, castNode->arg_, context);
                auto resType = createType(typeName, getTypeModList(castNode->type_name_->typmods_)).getMLIRTypeCreator()->createType(builder.getContext());
                if (auto constOp = mlir::dyn_cast_or_null<db::ConstantOp>(toCast.getDefiningOp())) {
-                  //todo: fix
-                  /*
                   if (auto intervalType = mlir::dyn_cast<db::IntervalType>(resType)) {
                      std::string unit = "";
                      auto stringRepresentation = mlir::cast<mlir::StringAttr>(constOp.getValue()).str();
-                     if (!columnType.modifiers.empty() && std::get<std::string>(columnType.modifiers[0]) == "years") {
+                     auto typeModList=getTypeModList(castNode->type_name_->typmods_);
+                     if(typeModList.size()>0&&std::get<size_t>(typeModList[0]) & 4){
+                        //interval in years
                         stringRepresentation = std::to_string(std::stol(stringRepresentation) * 12);
                      }
                      if (intervalType.getUnit() == db::IntervalUnitAttr::daytime && !stringRepresentation.ends_with("days")) {
@@ -989,7 +989,6 @@ mlir::Value frontend::sql::Parser::translateExpression(mlir::OpBuilder& builder,
                      }
                      constOp->setAttr("value", builder.getStringAttr(stringRepresentation));
                   }
-                  */
                   constOp.getResult().setType(resType);
                   return constOp;
                } else {
@@ -1412,11 +1411,8 @@ lingodb::catalog::Type frontend::sql::Parser::createType(std::string datatypeNam
    if (datatypeName == "interval") {
       if (typeModifiers.size() > 0 && std::holds_alternative<size_t>(typeModifiers[0])) {
          std::string unit = "";
-         if (std::get<size_t>(typeModifiers[0]) & 2) {
+         if (std::get<size_t>(typeModifiers[0]) & 2 || std::get<size_t>(typeModifiers[0]) & 4) {
             return catalog::Type::intervalMonths();
-         }
-         if (std::get<size_t>(typeModifiers[0]) & 4) {
-            throw std::runtime_error("not supported yet");
          }
          if (std::get<size_t>(typeModifiers[0]) & 8) {
             return catalog::Type::intervalDaytime();

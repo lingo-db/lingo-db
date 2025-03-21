@@ -450,7 +450,9 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                   bool rightCanUsePrimaryKeyIndex = isBaseRelationWithSelects(right, rightPath) && containsExactlyPrimaryKey(binOp.getContext(), rightPath.top(), &predicateOperator.getPredicateBlock(), rightIndexName);
                   bool isInnerJoin = mlir::isa<relalg::InnerJoinOp>(predicateOperator);
                   bool reversed = false;
-
+                  //todo: fix
+                  leftCanUsePrimaryKeyIndex=false;
+                  rightCanUsePrimaryKeyIndex=false;
                   prepareForHash(predicateOperator);
 
                   // Select possible build side to the left
