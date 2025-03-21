@@ -147,8 +147,6 @@ std::shared_ptr<arrow::DataType> toPhysicalType(lingodb::catalog::Type t) {
                return arrow::date32();
             case lingodb::catalog::DateTypeInfo::DateUnit::MILLIS:
                return arrow::date64();
-            default:
-               throw std::runtime_error("unsupported date unit");
          }
       }
       case TypeId::TIMESTAMP: {
@@ -179,8 +177,6 @@ std::shared_ptr<arrow::DataType> toPhysicalType(lingodb::catalog::Type t) {
                return arrow::day_time_interval();
             case lingodb::catalog::IntervalTypeInfo::IntervalUnit::MONTH:
                return arrow::month_interval();
-            default:
-               throw std::runtime_error("unsupported interval unit");
          }
       }
       case TypeId::CHAR:

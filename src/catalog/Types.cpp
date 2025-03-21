@@ -71,8 +71,6 @@ std::shared_ptr<TypeInfo> TypeInfo::deserialize(utility::Deserializer& deseriali
          return DateTypeInfo::deserialize(deserializer);
       case TypeInfoType::IntervalInfo:
          return IntervalTypeInfo::deserialize(deserializer);
-      default:
-         throw std::runtime_error("not implemented");
    }
 }
 void IntTypeInfo::serializeConcrete(utility::Serializer& serializer) const {
