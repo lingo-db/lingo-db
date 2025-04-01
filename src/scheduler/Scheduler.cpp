@@ -383,63 +383,28 @@ class Worker {
    }
 
    void awaitChildTask(std::unique_ptr<Task> task) {
-      auto *parentTask=currentFiber->getTask();
-      bool allocatedWork = task->allocateWork();
-      if (!allocatedWork && !task->hasWork()) {
-         return;
-      }
-      Task& taskRef = *task;
-      TaskWrapper* taskWrapper = nullptr;
-      if (task->hasWork()) {
-         taskWrapper = new TaskWrapper{std::move(task)};
-         taskWrapper->nonCompletedFibers++;
-         taskWrapper->deployedOnWorkers++;
+      TaskWrapper* taskWrapper = new TaskWrapper{std::move(task)};
+      Fiber* toYield;
+      {
+         std::unique_lock<std::mutex> fiberLock(fiberMutex);
+         waitingOnTasks[taskWrapper] = std::move(currentFiber);
+         numWaitingFibers++;
+         toYield = waitingOnTasks[taskWrapper].get();
+         taskWrapper->onFinalize = [&] {
+            {
+               std::unique_lock<std::mutex> fiberLock2(fiberMutex);
+               assert(waitingOnTasks.contains(taskWrapper));
+               assert(waitingOnTasks[taskWrapper]);
+               while (!waitingOnTasks[taskWrapper]->isYielded()) {}
+               runnableFibers.push_back(std::move(waitingOnTasks[taskWrapper]));
+               waitingOnTasks.erase(taskWrapper);
+               numWaitingFibers--;
+            }
+            wakeupWorker();
+         };
          scheduler.enqueueTask(taskWrapper);
       }
-      parentTask->task->teardown();
-      taskRef.setup();
-      taskRef.performWork();
-      taskRef.teardown();
-      parentTask->task->setup();
-      if (!taskWrapper) {
-         return;
-      }
-      if (taskWrapper->finishFiber()) {
-         scheduler.finalizeTask(taskWrapper);
-         scheduler.returnTask(taskWrapper);
-         return;
-      }
-      {
-         Fiber* toYield;
-         {
-            std::unique_lock<std::mutex> finalizeLock(taskWrapper->finalizeMutex);
-            auto finalized = taskWrapper->finalized;
-            scheduler.returnTask(taskWrapper);
-            if (finalized) {
-               return;
-            }
-            {
-               std::unique_lock<std::mutex> fiberLock(fiberMutex);
-               assert(currentFiber);
-               waitingOnTasks[taskWrapper] = std::move(currentFiber);
-               numWaitingFibers++;
-               toYield = waitingOnTasks[taskWrapper].get();
-               taskWrapper->onFinalize = [&] {
-                  {
-                     std::unique_lock<std::mutex> fiberLock2(fiberMutex);
-                     assert(waitingOnTasks.contains(taskWrapper));
-                     assert(waitingOnTasks[taskWrapper]);
-                     while (!waitingOnTasks[taskWrapper]->isYielded()) {}
-                     runnableFibers.push_back(std::move(waitingOnTasks[taskWrapper]));
-                     waitingOnTasks.erase(taskWrapper);
-                     numWaitingFibers--;
-                  }
-                  wakeupWorker();
-               };
-            }
-         }
-         toYield->yield();
-      }
+      toYield->yield();
    }
 
    void work() {
@@ -462,7 +427,7 @@ class Worker {
             fiberAllocator.deallocate(std::move(currentFiber));
          };
          if (currentFiber) {
-            auto *relatedTask= currentFiber->getTask();
+            auto* relatedTask = currentFiber->getTask();
             relatedTask->task->setup();
             if (currentFiber->resume()) {
                relatedTask->task->teardown();
@@ -473,7 +438,7 @@ class Worker {
                auto* resumeTask = currentFiber->getTask();
                handleFiberComplete();
                scheduler.returnTask(resumeTask);
-            }else {
+            } else {
                relatedTask->task->teardown();
             }
             assert(!currentFiber);
