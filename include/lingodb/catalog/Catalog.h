@@ -76,12 +76,7 @@ class Catalog {
       }
    }
 
-   void insertEntry(std::shared_ptr<CatalogEntry> entry) {
-      entry->setCatalog(this);
-      entry->setDBDir(dbDir);
-      entry->setShouldPersist(shouldPersist);
-      entries.insert({entry->getName(), std::move(entry)});
-   }
+   void insertEntry(std::shared_ptr<CatalogEntry> entry);
    static std::shared_ptr<Catalog> create(std::string dbDir, bool eagerLoading);
    static std::shared_ptr<Catalog> createEmpty();
    ~Catalog() {

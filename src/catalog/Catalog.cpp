@@ -185,6 +185,16 @@ Column Column::deserialize(utility::Deserializer& deserializer) {
    auto isNullable = deserializer.readProperty<bool>(3);
    return Column(columnName, logicalType, isNullable);
 }
+void Catalog::insertEntry(std::shared_ptr<CatalogEntry> entry) {
+   if (entries.contains(entry->getName())) {
+      throw std::runtime_error("catalog entry already exists");
+   }
+   entry->setCatalog(this);
+   entry->setDBDir(dbDir);
+   entry->setShouldPersist(shouldPersist);
+   entries.insert({entry->getName(), std::move(entry)});
+}
+
 void Catalog::persist() {
    if (shouldPersist) {
       if (!std::filesystem::exists(dbDir)) {
