@@ -24,7 +24,9 @@ class LingoDBTable : public TableStorage {
       const ColumnInfo& getColumnInfo(size_t colId) const {
          return columnInfo[colId];
       }
-
+      size_t getNumRows() {
+         return numRows;
+      }
       friend class LingoDBTable;
    };
 

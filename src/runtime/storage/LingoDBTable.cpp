@@ -197,14 +197,15 @@ std::optional<size_t> countDistinctValues(std::shared_ptr<arrow::ChunkedArray> c
    return {};
 }
 
-void access(std::vector<size_t> colIds, lingodb::runtime::RecordBatchInfo* info, const lingodb::runtime::LingoDBTable::TableChunk& chunk) {
+void access(std::vector<size_t> colIds, lingodb::runtime::RecordBatchInfo* info, const lingodb::runtime::LingoDBTable::TableChunk& chunk, size_t offset = 0, size_t numRows = std::numeric_limits<size_t>::max()) {
    auto currChunk = chunk.data();
    for (size_t i = 0; i < colIds.size(); i++) {
       auto colId = colIds[i];
       auto& colInfo = info->columnInfo[i];
       colInfo = chunk.getColumnInfo(colId);
+      colInfo.offset += offset;
    }
-   info->numRows = currChunk->num_rows();
+   info->numRows = std::min(currChunk->num_rows() - offset, numRows);
 }
 
 } // namespace
@@ -301,6 +302,145 @@ void LingoDBTable::serialize(lingodb::utility::Serializer& serializer) const {
    serializer.writeProperty(4, columnStatistics);
    serializer.writeProperty(5, numRows);
 }
+
+class BatchesWorkerResvState {
+   public:
+   size_t batchId;
+   std::mutex mutex;
+   bool hasMore{false};
+   size_t resvCursor{0};
+   size_t resvId{0};
+   size_t unitAmount;
+   // workerId steal task from
+   size_t stealWorkerId{std::numeric_limits<size_t>::max()};
+
+   int fetchAndNext() {
+      size_t cur;
+      {
+         std::lock_guard<std::mutex> stateLock(this->mutex);
+         cur = resvCursor;
+         resvCursor++;
+         hasMore = resvCursor < unitAmount;
+      }
+      if (cur >= unitAmount) {
+         return -1;
+      }
+      return cur;
+   }
+};
+
+class ScanBatchesTask : public lingodb::scheduler::TaskWithImplicitContext {
+   std::vector<lingodb::runtime::LingoDBTable::TableChunk>& batches;
+   std::vector<size_t> colIds;
+   std::function<void(lingodb::runtime::RecordBatchInfo*)> cb;
+   std::vector<lingodb::runtime::RecordBatchInfo*> batchInfos;
+   std::atomic<size_t> startIndex{0};
+   size_t splitSize{20000};
+   std::vector<std::unique_ptr<BatchesWorkerResvState>> workerResvs;
+
+   public:
+   ScanBatchesTask(std::vector<lingodb::runtime::LingoDBTable::TableChunk>& batches, std::vector<size_t> colIds, const std::function<void(lingodb::runtime::RecordBatchInfo*)>& cb) : batches(batches), colIds(colIds), cb(cb) {
+      for (size_t i = 0; i < lingodb::scheduler::getNumWorkers(); i++) {
+         batchInfos.push_back(reinterpret_cast<lingodb::runtime::RecordBatchInfo*>(malloc(sizeof(lingodb::runtime::RecordBatchInfo) + sizeof(lingodb::runtime::ColumnInfo) * colIds.size())));
+         workerResvs.emplace_back(std::make_unique<BatchesWorkerResvState>());
+      }
+   }
+   void unitRun(size_t batchId, int unitId) {
+      auto& chunk = batches[batchId];
+      if (unitId < 0) {
+         return;
+      }
+      size_t begin = splitSize * unitId;
+      size_t len = std::min(begin + splitSize, chunk.getNumRows()) - begin;
+
+      auto* batchInfo = batchInfos[lingodb::scheduler::currentWorkerId()];
+      utility::Tracer::Trace trace(processMorsel);
+      access(colIds, batchInfo, chunk, begin, len);
+      cb(batchInfo);
+      trace.stop();
+   }
+
+   bool allocateWork() override {
+      // quick check for exhaust. workExhausted is true if there is no more buffer or no more
+      // work unit in own local state or steal from other workers.
+      if (workExhausted.load()) {
+         return false;
+      }
+
+      //1. if the current worker has more work locally, do it
+      auto* state = workerResvs[lingodb::scheduler::currentWorkerId()].get();
+      auto id = state->fetchAndNext();
+      if (id != -1) {
+         state->resvId = id;
+         return true;
+      }
+
+      //2. if the current worker has no more work locally, try to allocate new work
+      size_t localStartIndex = startIndex.fetch_add(1);
+      if (localStartIndex < batches.size()) {
+         auto& buffer = batches[localStartIndex];
+         auto unitAmount = (buffer.getNumRows() + splitSize - 1) / splitSize;
+         {
+            // reset local state
+            std::lock_guard<std::mutex> resetLock(state->mutex);
+            state->hasMore = true;
+            state->resvCursor = 1;
+            state->resvId = 0;
+            state->batchId = localStartIndex;
+            state->unitAmount = unitAmount;
+         }
+         return true;
+      }
+      //3. if the current worker has no more work locally and no more work globally, try to steal work from the worker we stole from last time
+      if (state->stealWorkerId != std::numeric_limits<size_t>::max()) {
+         auto* other = workerResvs[state->stealWorkerId].get();
+         if (other->hasMore) {
+            auto id = other->fetchAndNext();
+            if (id != -1) {
+               state->resvId = id;
+               return true;
+            }
+         }
+         state->stealWorkerId = std::numeric_limits<size_t>::max();
+      }
+      //4. if the current worker has no more work locally and no more work globally, try to steal work from other workers
+      for (size_t i = 1; i < workerResvs.size(); i++) {
+         // make sure index of worker to steal never exceed worker number limits
+         auto idx = (lingodb::scheduler::currentWorkerId() + i) % workerResvs.size();
+         auto* other = workerResvs[idx].get();
+         if (other->hasMore) {
+            auto id = other->fetchAndNext();
+            if (id != -1) {
+               // only current worker can modify its onw stealWorkerId. no need to lock
+               state->stealWorkerId = idx;
+               state->resvId = id;
+               return true;
+            }
+         }
+      }
+
+      workExhausted.store(true);
+      return false;
+   }
+   void performWork() override {
+      auto* state = workerResvs[lingodb::scheduler::currentWorkerId()].get();
+      if (state->stealWorkerId != std::numeric_limits<size_t>::max()) {
+         auto* other = workerResvs[state->stealWorkerId].get();
+         unitRun(other->batchId, state->resvId);
+         return;
+      }
+      unitRun(state->batchId, state->resvId);
+   }
+   ~ScanBatchesTask() {
+      utility::Tracer::Trace cleanUpTrace(cleanupTLS);
+      for (auto* bI : batchInfos) {
+         if (bI) {
+            free(bI);
+         }
+      }
+      cleanUpTrace.stop();
+   }
+};
 std::unique_ptr<LingoDBTable> LingoDBTable::deserialize(lingodb::utility::Deserializer& deserializer) {
    auto fileName = deserializer.readProperty<std::string>(1);
    auto sample = deserializer.readProperty<catalog::Sample>(2);
@@ -313,49 +453,6 @@ std::unique_ptr<LingoDBTable> LingoDBTable::deserialize(lingodb::utility::Deseri
    return std::make_unique<LingoDBTable>(fileName, schema, numRows, sample, columnStatistics);
 }
 
-class ScanBatchesTask : public lingodb::scheduler::TaskWithImplicitContext {
-   std::vector<lingodb::runtime::LingoDBTable::TableChunk>& batches;
-   std::vector<size_t> colIds;
-   std::function<void(lingodb::runtime::RecordBatchInfo*)> cb;
-   std::atomic<size_t> startIndex{0};
-   std::vector<lingodb::runtime::RecordBatchInfo*> batchInfos;
-   std::vector<size_t> workerResvs;
-
-   public:
-   ScanBatchesTask(std::vector<lingodb::runtime::LingoDBTable::TableChunk>& batches, std::vector<size_t> colIds, const std::function<void(lingodb::runtime::RecordBatchInfo*)>& cb) : batches(batches), colIds(colIds), cb(cb) {
-      for (size_t i = 0; i < lingodb::scheduler::getNumWorkers(); i++) {
-         batchInfos.push_back(reinterpret_cast<lingodb::runtime::RecordBatchInfo*>(malloc(sizeof(lingodb::runtime::RecordBatchInfo) + sizeof(lingodb::runtime::ColumnInfo) * colIds.size())));
-         workerResvs.push_back(0);
-      }
-   }
-
-   bool allocateWork() override {
-      size_t localStartIndex = startIndex.fetch_add(1);
-      if (localStartIndex >= batches.size()) {
-         workExhausted.store(true);
-         return false;
-      }
-      workerResvs[lingodb::scheduler::currentWorkerId()] = localStartIndex;
-      return true;
-   }
-   void performWork() override {
-      auto& batch = batches[workerResvs[lingodb::scheduler::currentWorkerId()]];
-      auto* batchInfo = batchInfos[lingodb::scheduler::currentWorkerId()];
-      utility::Tracer::Trace trace(processMorsel);
-      access(colIds, batchInfo, batch);
-      cb(batchInfo);
-      trace.stop();
-   }
-   ~ScanBatchesTask() {
-      utility::Tracer::Trace cleanUpTrace(cleanupTLS);
-      for (auto* bI : batchInfos) {
-         if (bI) {
-            free(bI);
-         }
-      }
-      cleanUpTrace.stop();
-   }
-};
 class ScanBatchesSingleThreadedTask : public lingodb::scheduler::TaskWithImplicitContext {
    std::vector<lingodb::runtime::LingoDBTable::TableChunk>& batches;
    std::vector<size_t> colIds;
