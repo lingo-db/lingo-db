@@ -21,9 +21,6 @@ class TableStorage {
    virtual void append(const std::vector<std::shared_ptr<arrow::RecordBatch>>& toAppend) = 0;
    virtual size_t nextRowId() = 0;
    virtual void append(const std::shared_ptr<arrow::Table>& toAppend) = 0;
-   //todo: (optionally) implement access based on row id (maybe make it an own interface)
-   virtual std::pair<std::shared_ptr<arrow::RecordBatch>, size_t> getByRowId(size_t rowId) const = 0;
-
    virtual ~TableStorage() = default;
 };
 } // namespace lingodb::runtime

@@ -29,6 +29,7 @@ struct RecordBatchInfo {
 
    // Access buffers for record batch and handle case where valid buffer is omitted
    static uint8_t* getBuffer(arrow::RecordBatch* batch, size_t columnId, size_t bufferId);
+   static ColumnInfo getColumnInfo(size_t columnId, const std::shared_ptr<arrow::RecordBatch>& currChunk);
    static void access(std::vector<size_t> colIds, lingodb::runtime::RecordBatchInfo* info, const std::shared_ptr<arrow::RecordBatch>& currChunk);
 };
 

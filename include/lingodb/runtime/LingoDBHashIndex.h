@@ -29,6 +29,7 @@ class LingoDBHashIndex : public Index {
    std::string dbDir;
    bool persist;
    catalog::LingoDBTableCatalogEntry* table = nullptr;
+   LingoDBTable* tableStorage;
    std::vector<std::string> indexedColumns;
    bool loaded = false;
    //void build();
@@ -41,9 +42,7 @@ class LingoDBHashIndex : public Index {
       this->dbDir = dbDir;
    };
    LingoDBHashIndex(std::string filename, std::vector<std::string> indexedColumns) : buffer(16, sizeof(Entry)), filename(filename), indexedColumns(indexedColumns) {}
-   void setTable(catalog::LingoDBTableCatalogEntry* table) {
-      this->table = table;
-   }
+   void setTable(catalog::LingoDBTableCatalogEntry* table);
    void flush();
    void ensureLoaded() override;
    void appendRows(size_t startRowId, std::shared_ptr<arrow::RecordBatch> table) override;

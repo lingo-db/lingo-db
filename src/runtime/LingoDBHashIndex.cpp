@@ -146,13 +146,20 @@ bool HashIndexIteration::hasNext() {
    }
    return false;
 }
+void LingoDBHashIndex::setTable(catalog::LingoDBTableCatalogEntry* table) {
+   this->table = table;
+   tableStorage = dynamic_cast<LingoDBTable*>(&table->getTableStorage());
+}
+
 void HashIndexIteration::consumeRecordBatch(lingodb::runtime::RecordBatchInfo* info) {
    auto currRowId = current->rowId;
-   auto [currRecordBatch, offset] = access.hashIndex.table->getTableStorage().getByRowId(currRowId);
-   RecordBatchInfo::access(access.colIds, info, currRecordBatch);
+   auto [tableChunk, offset] = access.hashIndex.tableStorage->getByRowId(currRowId);
    info->numRows = 1;
    for (size_t i = 0; i != access.colIds.size(); ++i) {
-      info->columnInfo[i].offset += offset;
+      auto colId = access.colIds[i];
+      auto* colInfo = &info->columnInfo[i];
+      std::memcpy(colInfo, &tableChunk->getColumnInfo(colId), sizeof(ColumnInfo));
+      colInfo->offset += offset;
    }
    current = current->next;
 }
