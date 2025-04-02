@@ -11,11 +11,11 @@
 #include <arrow/ipc/api.h>
 #include <arrow/table.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <iostream>
 #include <random>
 #include <ranges>
-
 namespace {
 namespace utility = lingodb::utility;
 static utility::Tracer::Event processMorsel("DataSourceIteration", "processMorsel");
@@ -23,20 +23,23 @@ static utility::Tracer::Event processMorsel("DataSourceIteration", "processMorse
 static utility::Tracer::Event processMorselSingle("DataSourceIteration", "processMorselSingle");
 
 static utility::Tracer::Event cleanupTLS("DataSourceIteration", "cleanup");
-std::vector<std::shared_ptr<arrow::RecordBatch>> loadTable(std::string name) {
+std::vector<lingodb::runtime::LingoDBTable::TableChunk> loadTable(std::string name) {
    auto inputFile = arrow::io::ReadableFile::Open(name).ValueOrDie();
    auto batchReader = arrow::ipc::RecordBatchFileReader::Open(inputFile).ValueOrDie();
-   std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
+   std::vector<lingodb::runtime::LingoDBTable::TableChunk> batches;
+   size_t currRowId = 0;
    for (int i = 0; i < batchReader->num_record_batches(); i++) {
-      batches.push_back(batchReader->ReadRecordBatch(i).ValueOrDie());
+      auto batch = batchReader->ReadRecordBatch(i).ValueOrDie();
+      batches.push_back(lingodb::runtime::LingoDBTable::TableChunk(batch, currRowId));
+      currRowId += batch->num_rows();
    }
    return batches;
 }
-void storeTable(std::string file, std::shared_ptr<arrow::Schema> schema, const std::vector<std::shared_ptr<arrow::RecordBatch>>& data) {
+void storeTable(std::string file, std::shared_ptr<arrow::Schema> schema, const std::vector<lingodb::runtime::LingoDBTable::TableChunk>& data) {
    auto inputFile = arrow::io::FileOutputStream::Open(file).ValueOrDie();
    auto batchWriter = arrow::ipc::MakeFileWriter(inputFile, schema).ValueOrDie();
    for (auto& batch : data) {
-      if (!batchWriter->WriteRecordBatch(*batch).ok()) {
+      if (!batchWriter->WriteRecordBatch(*batch.data()).ok()) {
          throw std::runtime_error("could not store table");
       }
    }
@@ -70,10 +73,10 @@ class BoxedIntegerIterator {
    I operator++() { return i++; }
    I operator*() { return i; }
 };
-std::shared_ptr<arrow::RecordBatch> createSample(const std::vector<std::shared_ptr<arrow::RecordBatch>>& data) {
+std::shared_ptr<arrow::RecordBatch> createSample(const std::vector<lingodb::runtime::LingoDBTable::TableChunk>& data) {
    size_t numRows = 0;
    for (auto& batch : data) {
-      numRows += batch->num_rows();
+      numRows += batch.data()->num_rows();
    }
    if (numRows == 0) {
       return std::shared_ptr<arrow::RecordBatch>();
@@ -93,7 +96,7 @@ std::shared_ptr<arrow::RecordBatch> createSample(const std::vector<std::shared_p
    std::vector<std::shared_ptr<arrow::RecordBatch>> sampleData;
    while (currPos < result.size()) {
       std::vector<size_t> fromCurrentBatch;
-      while (currPos < result.size() && result[currPos] < batchStart + data[currBatch]->num_rows()) {
+      while (currPos < result.size() && result[currPos] < batchStart + data[currBatch].data()->num_rows()) {
          fromCurrentBatch.push_back(result[currPos] - batchStart);
          currPos++;
       }
@@ -105,11 +108,11 @@ std::shared_ptr<arrow::RecordBatch> createSample(const std::vector<std::shared_p
             }
          }
          auto indices = numericBuilder.Finish().ValueOrDie();
-         std::vector<arrow::Datum> args({data[currBatch], indices});
+         std::vector<arrow::Datum> args({data[currBatch].data(), indices});
          auto res = arrow::compute::CallFunction("take", args).ValueOrDie();
          sampleData.push_back(res.record_batch());
       }
-      batchStart += data[currBatch]->num_rows();
+      batchStart += data[currBatch].data()->num_rows();
       currBatch++;
    }
    return arrow::Table::FromRecordBatches(sampleData).ValueOrDie()->CombineChunksToBatch().ValueOrDie();
@@ -194,11 +197,24 @@ std::optional<size_t> countDistinctValues(std::shared_ptr<arrow::ChunkedArray> c
    return {};
 }
 
-
+void access(std::vector<size_t> colIds, lingodb::runtime::RecordBatchInfo* info, const lingodb::runtime::LingoDBTable::TableChunk& chunk) {
+   auto currChunk = chunk.data();
+   for (size_t i = 0; i < colIds.size(); i++) {
+      auto colId = colIds[i];
+      auto& colInfo = info->columnInfo[i];
+      colInfo = chunk.getColumnInfo(colId);
+   }
+   info->numRows = currChunk->num_rows();
+}
 
 } // namespace
 
 namespace lingodb::runtime {
+LingoDBTable::TableChunk::TableChunk(std::shared_ptr<arrow::RecordBatch> data, size_t startRowId) : internalData(data), startRowId(startRowId), numRows(data->num_rows()) {
+   for (auto colId = 0; colId < data->num_columns(); colId++) {
+      columnInfo.push_back(RecordBatchInfo::getColumnInfo(colId, data));
+   }
+}
 
 std::unique_ptr<LingoDBTable> LingoDBTable::create(const catalog::CreateTableDef& def) {
    arrow::FieldVector fields;
@@ -231,7 +247,7 @@ void LingoDBTable::append(const std::vector<std::shared_ptr<arrow::RecordBatch>>
    ensureLoaded();
    for (auto& batch : toAppend) {
       if (batch->schema()->Equals(*schema)) {
-         tableData.push_back(batch);
+         tableData.push_back(TableChunk{batch, numRows});
          numRows += batch->num_rows();
       } else {
          std::cout << "schema to add: " << batch->schema()->ToString() << std::endl;
@@ -298,7 +314,7 @@ std::unique_ptr<LingoDBTable> LingoDBTable::deserialize(lingodb::utility::Deseri
 }
 
 class ScanBatchesTask : public lingodb::scheduler::TaskWithImplicitContext {
-   std::vector<std::shared_ptr<arrow::RecordBatch>>& batches;
+   std::vector<lingodb::runtime::LingoDBTable::TableChunk>& batches;
    std::vector<size_t> colIds;
    std::function<void(lingodb::runtime::RecordBatchInfo*)> cb;
    std::atomic<size_t> startIndex{0};
@@ -306,7 +322,7 @@ class ScanBatchesTask : public lingodb::scheduler::TaskWithImplicitContext {
    std::vector<size_t> workerResvs;
 
    public:
-   ScanBatchesTask(std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, std::vector<size_t> colIds, const std::function<void(lingodb::runtime::RecordBatchInfo*)>& cb) : batches(batches), colIds(colIds), cb(cb) {
+   ScanBatchesTask(std::vector<lingodb::runtime::LingoDBTable::TableChunk>& batches, std::vector<size_t> colIds, const std::function<void(lingodb::runtime::RecordBatchInfo*)>& cb) : batches(batches), colIds(colIds), cb(cb) {
       for (size_t i = 0; i < lingodb::scheduler::getNumWorkers(); i++) {
          batchInfos.push_back(reinterpret_cast<lingodb::runtime::RecordBatchInfo*>(malloc(sizeof(lingodb::runtime::RecordBatchInfo) + sizeof(lingodb::runtime::ColumnInfo) * colIds.size())));
          workerResvs.push_back(0);
@@ -326,7 +342,7 @@ class ScanBatchesTask : public lingodb::scheduler::TaskWithImplicitContext {
       auto& batch = batches[workerResvs[lingodb::scheduler::currentWorkerId()]];
       auto* batchInfo = batchInfos[lingodb::scheduler::currentWorkerId()];
       utility::Tracer::Trace trace(processMorsel);
-      RecordBatchInfo::access(colIds, batchInfo, batch);
+      access(colIds, batchInfo, batch);
       cb(batchInfo);
       trace.stop();
    }
@@ -341,12 +357,12 @@ class ScanBatchesTask : public lingodb::scheduler::TaskWithImplicitContext {
    }
 };
 class ScanBatchesSingleThreadedTask : public lingodb::scheduler::TaskWithImplicitContext {
-   std::vector<std::shared_ptr<arrow::RecordBatch>>& batches;
+   std::vector<lingodb::runtime::LingoDBTable::TableChunk>& batches;
    std::vector<size_t> colIds;
    std::function<void(lingodb::runtime::RecordBatchInfo*)> cb;
 
    public:
-   ScanBatchesSingleThreadedTask(std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, std::vector<size_t> colIds, const std::function<void(lingodb::runtime::RecordBatchInfo*)>& cb) : batches(batches), colIds(colIds), cb(cb) {
+   ScanBatchesSingleThreadedTask(std::vector<lingodb::runtime::LingoDBTable::TableChunk>& batches, std::vector<size_t> colIds, const std::function<void(lingodb::runtime::RecordBatchInfo*)>& cb) : batches(batches), colIds(colIds), cb(cb) {
    }
 
    bool allocateWork() override {
@@ -360,7 +376,7 @@ class ScanBatchesSingleThreadedTask : public lingodb::scheduler::TaskWithImplici
 
       for (const auto& batch : batches) {
          utility::Tracer::Trace trace(processMorselSingle);
-         RecordBatchInfo::access(colIds, batchInfo, batch);
+         access(colIds, batchInfo, batch);
          cb(batchInfo);
          trace.stop();
       }
@@ -385,15 +401,13 @@ std::unique_ptr<scheduler::Task> LingoDBTable::createScanTask(const ScanConfig& 
    }
 }
 
-std::pair<std::shared_ptr<arrow::RecordBatch>, size_t> LingoDBTable::getByRowId(size_t rowId) const {
-   size_t currRow = 0;
-   for (const auto& batch : tableData) {
-      if (currRow + batch->num_rows() > rowId) {
-         return {batch, rowId - currRow};
-      }
-      currRow += batch->num_rows();
+std::pair<const LingoDBTable::TableChunk*, size_t> LingoDBTable::getByRowId(size_t rowId) const {
+   auto res = std::upper_bound(tableData.begin(), tableData.end(), rowId, [](size_t rowId, const TableChunk& chunk) { return rowId < chunk.startRowId + chunk.numRows; });
+   if (res == tableData.end()) {
+      throw std::runtime_error("row id out of bounds");
    }
-   throw std::runtime_error("row id out of bounds");
+   auto& chunk = *res;
+   return {&chunk, rowId - chunk.startRowId};
 }
 
 size_t LingoDBTable::getColIndex(std::string colName) {

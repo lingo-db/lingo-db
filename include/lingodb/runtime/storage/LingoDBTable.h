@@ -8,12 +8,33 @@
 namespace lingodb::runtime {
 
 class LingoDBTable : public TableStorage {
+   public:
+   class TableChunk {
+      std::shared_ptr<arrow::RecordBatch> internalData;
+      size_t startRowId;
+      size_t numRows;
+      std::vector<ColumnInfo> columnInfo;
+
+      public:
+      TableChunk(std::shared_ptr<arrow::RecordBatch> data, size_t startRowId);
+
+      const std::shared_ptr<arrow::RecordBatch>& data() const {
+         return internalData;
+      }
+      const ColumnInfo& getColumnInfo(size_t colId) const {
+         return columnInfo[colId];
+      }
+
+      friend class LingoDBTable;
+   };
+
+   private:
    bool persist;
    std::string fileName;
    std::string dbDir;
    catalog::Sample sample;
    std::shared_ptr<arrow::Schema> schema;
-   std::vector<std::shared_ptr<arrow::RecordBatch>> tableData;
+   std::vector<TableChunk> tableData;
    std::unordered_map<std::string, catalog::ColumnStatistics> columnStatistics;
    size_t numRows;
    bool loaded = false;
@@ -54,7 +75,7 @@ class LingoDBTable : public TableStorage {
    void append(const std::vector<std::shared_ptr<arrow::RecordBatch>>& toAppend) override;
    void append(const std::shared_ptr<arrow::Table>& toAppend) override;
    static std::unique_ptr<LingoDBTable> create(const catalog::CreateTableDef& def);
-   std::pair<std::shared_ptr<arrow::RecordBatch>, size_t> getByRowId(size_t rowId) const override;
+   std::pair<const TableChunk*, size_t> getByRowId(size_t rowId) const;
 
    std::shared_ptr<arrow::DataType> getColumnStorageType(const std::string& columnName) const override;
 };
