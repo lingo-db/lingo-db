@@ -1,12 +1,17 @@
 #include "lingodb/compiler/frontend/SQL/Parser.h"
+#include "lingodb/catalog/Defs.h"
+#include "lingodb/catalog/MLIRTypes.h"
+#include "lingodb/catalog/TableCatalogEntry.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorDialect.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
 #include "lingodb/compiler/Dialect/util/UtilDialect.h"
 #include "lingodb/compiler/runtime/ExecutionContext.h"
 #include "lingodb/compiler/runtime/RelationHelper.h"
+#include "lingodb/utility/Serialization.h"
 
 #include <regex>
+
 namespace {
 using namespace lingodb::compiler::dialect;
 namespace rt = lingodb::compiler::runtime;
@@ -132,7 +137,7 @@ const tuples::Column* frontend::sql::Parser::resolveColRef(Node* node, Translati
    assert(attr);
    return attr;
 }
-frontend::sql::Parser::Parser(std::string sql, lingodb::runtime::Catalog& catalog, mlir::ModuleOp moduleOp) : attrManager(moduleOp->getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager()), sql(sql), catalog(catalog), moduleOp(moduleOp), parallelismAllowed(false) {
+frontend::sql::Parser::Parser(std::string sql, lingodb::catalog::Catalog& catalog, mlir::ModuleOp moduleOp) : attrManager(moduleOp->getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager()), sql(sql), catalog(catalog), moduleOp(moduleOp), parallelismAllowed(false) {
    moduleOp.getContext()->getLoadedDialect<lingodb::compiler::dialect::util::UtilDialect>()->getFunctionHelper().setParentModule(moduleOp);
    pg_query_parse_init();
    result = pg_query_parse(sql.c_str());
@@ -516,8 +521,8 @@ mlir::Value frontend::sql::Parser::translateRangeVar(mlir::OpBuilder& builder, R
    if (stmt->alias_ && stmt->alias_->type_ == T_Alias && stmt->alias_->aliasname_) {
       alias = stmt->alias_->aliasname_;
    }
-   auto rel = catalog.findRelation(relation);
-   if (!rel) {
+   auto maybeRel = catalog.getTypedEntry<lingodb::catalog::TableCatalogEntry>(relation);
+   if (!maybeRel) {
       if (ctes.contains(relation)) {
          auto renamedScope = attrManager.getUniqueScope(relation);
          auto [tree, targetInfo] = ctes.at(relation);
@@ -535,19 +540,19 @@ mlir::Value frontend::sql::Parser::translateRangeVar(mlir::OpBuilder& builder, R
          throw std::runtime_error("unknown relation " + relation);
       }
    }
-   auto tableMetaData = rel->getMetaData();
+   auto rel = maybeRel.value();
    char lastCharacter = alias.back();
    std::string scopeName = attrManager.getUniqueScope(alias + (isdigit(lastCharacter) ? "_" : ""));
 
    std::vector<mlir::NamedAttribute> columns;
-   for (auto c : tableMetaData->getOrderedColumns()) {
-      auto attrDef = attrManager.createDef(scopeName, c);
-      attrDef.getColumn().type = createTypeFromColumnType(builder.getContext(), tableMetaData->getColumnMetaData(c)->getColumnType());
-      columns.push_back(builder.getNamedAttr(c, attrDef));
-      context.mapAttribute(scope, c, &attrDef.getColumn()); //todo check for existing and overwrite...
-      context.mapAttribute(scope, alias + "." + c, &attrDef.getColumn());
+   for (auto c : rel->getColumns()) {
+      auto attrDef = attrManager.createDef(scopeName, c.getColumnName());
+      attrDef.getColumn().type = createTypeForColumn(builder.getContext(), c);
+      columns.push_back(builder.getNamedAttr(c.getColumnName(), attrDef));
+      context.mapAttribute(scope, c.getColumnName(), &attrDef.getColumn()); //todo check for existing and overwrite...
+      context.mapAttribute(scope, alias + "." + c.getColumnName(), &attrDef.getColumn());
    }
-   return builder.create<relalg::BaseTableOp>(builder.getUnknownLoc(), tuples::TupleStreamType::get(builder.getContext()), relation, relalg::TableMetaDataAttr::get(builder.getContext(), std::make_shared<lingodb::runtime::TableMetaData>()), builder.getDictionaryAttr(columns));
+   return builder.create<relalg::BaseTableOp>(builder.getUnknownLoc(), tuples::TupleStreamType::get(builder.getContext()), relation, builder.getDictionaryAttr(columns));
 }
 std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser::translateClassicSelectStmt(mlir::OpBuilder& builder, SelectStmt* stmt, TranslationContext& context, TranslationContext::ResolverScope& scope) {
    // VALUES (...)
@@ -969,13 +974,14 @@ mlir::Value frontend::sql::Parser::translateExpression(mlir::OpBuilder& builder,
                auto* castNode = reinterpret_cast<TypeCast*>(node);
                auto* typeName = reinterpret_cast<value*>(castNode->type_name_->names_->tail->data.ptr_value)->val_.str_;
                auto toCast = translateExpression(builder, castNode->arg_, context);
-               auto columnType = createColumnType(typeName, false, getTypeModList(castNode->type_name_->typmods_));
-               auto resType = createTypeFromColumnType(builder.getContext(), columnType);
+               auto resType = createType(typeName, getTypeModList(castNode->type_name_->typmods_)).getMLIRTypeCreator()->createType(builder.getContext());
                if (auto constOp = mlir::dyn_cast_or_null<db::ConstantOp>(toCast.getDefiningOp())) {
                   if (auto intervalType = mlir::dyn_cast<db::IntervalType>(resType)) {
                      std::string unit = "";
                      auto stringRepresentation = mlir::cast<mlir::StringAttr>(constOp.getValue()).str();
-                     if (!columnType.modifiers.empty() && std::get<std::string>(columnType.modifiers[0]) == "years") {
+                     auto typeModList=getTypeModList(castNode->type_name_->typmods_);
+                     if(typeModList.size()>0&&std::get<size_t>(typeModList[0]) & 4){
+                        //interval in years
                         stringRepresentation = std::to_string(std::stol(stringRepresentation) * 12);
                      }
                      if (intervalType.getUnit() == db::IntervalUnitAttr::daytime && !stringRepresentation.ends_with("days")) {
@@ -1149,10 +1155,10 @@ mlir::Value frontend::sql::Parser::translateExpression(mlir::OpBuilder& builder,
 void frontend::sql::Parser::translateCreateStatement(mlir::OpBuilder& builder, CreateStmt* statement) {
    RangeVar* relation = statement->relation_;
    std::string tableName = relation->relname_ != nullptr ? relation->relname_ : "";
-   auto tableMetaData = translateTableMetaData(statement->table_elts_);
-   auto tableNameValue = createStringValue(builder, tableName);
-   auto descriptionValue = createStringValue(builder, tableMetaData->serialize());
-   rt::RelationHelper::createTable(builder, builder.getUnknownLoc())(mlir::ValueRange({tableNameValue, descriptionValue}));
+   auto createTableDef = translateTableMetaData(statement->table_elts_);
+   createTableDef.name = tableName;
+   auto descriptionValue = createStringValue(builder, utility::serializeToHexString(createTableDef));
+   rt::RelationHelper::createTable(builder, builder.getUnknownLoc())(mlir::ValueRange({descriptionValue}));
 }
 mlir::Value frontend::sql::Parser::translateSubSelect(mlir::OpBuilder& builder, SelectStmt* stmt, std::string alias, std::vector<std::string> colAlias, TranslationContext& context, TranslationContext::ResolverScope& scope) {
    mlir::Value subQuery;
@@ -1323,14 +1329,14 @@ std::optional<mlir::Value> frontend::sql::Parser::translate(mlir::OpBuilder& bui
 frontend::sql::Parser::~Parser() {
    pg_query_free_parse_result(result);
 }
-std::shared_ptr<lingodb::runtime::TableMetaData> frontend::sql::Parser::translateTableMetaData(List* metaData) {
-   auto tableMetaData = std::make_shared<lingodb::runtime::TableMetaData>();
+lingodb::catalog::CreateTableDef frontend::sql::Parser::translateTableMetaData(List* metaData) {
+   lingodb::catalog::CreateTableDef createDef;
    for (auto* cell = metaData->head; cell != nullptr; cell = cell->next) {
       auto* node = reinterpret_cast<Node*>(cell->data.ptr_value);
       switch (node->type) {
          case T_ColumnDef: {
             auto columnDef = translateColumnDef(reinterpret_cast<ColumnDef*>(node));
-            tableMetaData->addColumn(columnDef.first, columnDef.second);
+            createDef.columns.push_back(columnDef);
             break;
          }
          case T_Constraint: {
@@ -1341,7 +1347,7 @@ std::shared_ptr<lingodb::runtime::TableMetaData> frontend::sql::Parser::translat
                   for (auto* keyCell = constraint->keys_->head; keyCell != nullptr; keyCell = keyCell->next) {
                      primaryKey.push_back(reinterpret_cast<value*>(keyCell->data.ptr_value)->val_.str_);
                   }
-                  tableMetaData->setPrimaryKey(primaryKey);
+                  createDef.primaryKey = primaryKey;
                   break;
                }
                default: {
@@ -1355,10 +1361,9 @@ std::shared_ptr<lingodb::runtime::TableMetaData> frontend::sql::Parser::translat
          }
       }
    }
-   tableMetaData->setNumRows(0);
-   return tableMetaData;
+   return createDef;
 }
-lingodb::runtime::ColumnType frontend::sql::Parser::createColumnType(std::string datatypeName, bool isNull, std::vector<std::variant<size_t, std::string>> typeModifiers) {
+lingodb::catalog::Type frontend::sql::Parser::createType(std::string datatypeName, const std::vector<std::variant<size_t, std::string>>& typeModifiers) {
    datatypeName = llvm::StringSwitch<std::string>(datatypeName)
                      .Case("bpchar", "char")
                      .Case("varchar", "string")
@@ -1366,70 +1371,69 @@ lingodb::runtime::ColumnType frontend::sql::Parser::createColumnType(std::string
                      .Case("text", "string")
                      .Default(datatypeName);
    if (datatypeName == "int4") {
-      datatypeName = "int";
-      typeModifiers.push_back(32ull);
+      return lingodb::catalog::Type::int32();
    }
    if (datatypeName == "int8") {
-      datatypeName = "int";
-      typeModifiers.push_back(64ull);
+      return lingodb::catalog::Type::int64();
+   }
+   if (datatypeName == "int") {
+      return lingodb::catalog::Type::int32();
    }
    if (datatypeName == "float4") {
-      datatypeName = "float";
-      typeModifiers.push_back(32ull);
+      return lingodb::catalog::Type::f32();
    }
    if (datatypeName == "float8") {
-      datatypeName = "float";
-      typeModifiers.push_back(64ull);
+      return lingodb::catalog::Type::f64();
    }
-   if (datatypeName == "char" && std::get<size_t>(typeModifiers[0]) > 8) {
-      typeModifiers.clear();
-      datatypeName = "string";
+   if (datatypeName == "char") {
+      if (std::get<size_t>(typeModifiers[0]) > 8) {
+         return lingodb::catalog::Type::stringType();
+      } else {
+         return lingodb::catalog::Type::charType(std::get<size_t>(typeModifiers[0]));
+      }
    }
    if (datatypeName == "date") {
-      typeModifiers.clear();
-      typeModifiers.push_back("day");
+      return lingodb::catalog::Type(lingodb::catalog::LogicalTypeId::DATE, std::make_shared<lingodb::catalog::DateTypeInfo>(lingodb::catalog::DateTypeInfo::DateUnit::DAY));
+   }
+   if (datatypeName == "string") {
+      return lingodb::catalog::Type::stringType();
+   }
+   if (datatypeName == "decimal") {
+      return lingodb::catalog::Type::decimal(std::get<size_t>(typeModifiers[0]), std::get<size_t>(typeModifiers[1]));
    }
    if (datatypeName == "timestamp") {
-      datatypeName = "date";
-      typeModifiers.push_back("millisecond");
+      return lingodb::catalog::Type::timestamp();
    }
+   if (datatypeName == "bool") {
+      return lingodb::catalog::Type::boolean();
+   }
+
    if (datatypeName == "interval") {
       if (typeModifiers.size() > 0 && std::holds_alternative<size_t>(typeModifiers[0])) {
          std::string unit = "";
-         if (std::get<size_t>(typeModifiers[0]) & 2) {
-            unit = "months";
-         }
-         if (std::get<size_t>(typeModifiers[0]) & 4) {
-            unit = "years";
+         if (std::get<size_t>(typeModifiers[0]) & 2 || std::get<size_t>(typeModifiers[0]) & 4) {
+            return catalog::Type::intervalMonths();
          }
          if (std::get<size_t>(typeModifiers[0]) & 8) {
-            unit = "daytime";
+            return catalog::Type::intervalDaytime();
          }
-         assert(!unit.empty() && "should not happen");
-         typeModifiers.clear();
-         typeModifiers.push_back(unit);
       } else {
-         typeModifiers.clear();
-         typeModifiers.push_back("daytime");
+         return catalog::Type::intervalDaytime();
       }
    }
-   lingodb::runtime::ColumnType columnType;
-   columnType.base = datatypeName;
-   columnType.nullable = isNull;
-   columnType.modifiers = typeModifiers;
-   return columnType;
+   throw std::runtime_error("unsupported type mod");
 }
-std::pair<std::string, std::shared_ptr<lingodb::runtime::ColumnMetaData>> frontend::sql::Parser::translateColumnDef(ColumnDef* columnDef) {
+lingodb::catalog::Column frontend::sql::Parser::translateColumnDef(ColumnDef* columnDef) {
    auto* typeName = columnDef->type_name_;
    std::vector<std::variant<size_t, std::string>> typeModifiers = getTypeModList(typeName->typmods_);
-   bool isNotNull = false;
+   bool isNullable = true;
 
    if (columnDef->constraints_ != nullptr) {
       for (auto* cell = columnDef->constraints_->head; cell != nullptr; cell = cell->next) {
          auto* constraint = reinterpret_cast<Constraint*>(cell->data.ptr_value);
          switch (constraint->contype_) {
             case CONSTR_NOTNULL: {
-               isNotNull = true;
+               isNullable = false;
                break;
             }
             case CONSTR_UNIQUE: break; // do something useful
@@ -1442,9 +1446,7 @@ std::pair<std::string, std::shared_ptr<lingodb::runtime::ColumnMetaData>> fronte
    }
    std::string name = columnDef->colname_;
    std::string datatypeName = reinterpret_cast<value*>(typeName->names_->tail->data.ptr_value)->val_.str_;
-   auto columnMetaData = std::make_shared<lingodb::runtime::ColumnMetaData>();
-   columnMetaData->setColumnType(createColumnType(datatypeName, !isNotNull, typeModifiers));
-   return {name, columnMetaData};
+   return lingodb::catalog::Column{name, createType(datatypeName, typeModifiers), isNullable};
 }
 std::vector<std::variant<size_t, std::string>> frontend::sql::Parser::getTypeModList(List* typeMods) {
    std::vector<std::variant<size_t, std::string>> typeModifiers;
@@ -1487,15 +1489,15 @@ void frontend::sql::Parser::translateInsertStmt(mlir::OpBuilder& builder, Insert
       mlir::OpBuilder::InsertionGuard guard(builder);
       builder.setInsertionPointToStart(block);
       auto [tree, targetInfo] = translateSelectStmt(builder, reinterpret_cast<SelectStmt*>(stmt->select_stmt_), context, scope);
-      auto rel = catalog.findRelation(tableName);
-      if (!rel) {
+      auto maybeRel = catalog.getTypedEntry<lingodb::catalog::TableCatalogEntry>(tableName);
+      if (!maybeRel) {
          throw std::runtime_error("can not insert into unknown relation");
       }
-      auto tableMetaData = rel->getMetaData();
+      auto rel = maybeRel.value();
       std::unordered_map<std::string, mlir::Type> tableColumnTypes;
-      for (auto c : tableMetaData->getOrderedColumns()) {
-         auto type = createTypeFromColumnType(builder.getContext(), tableMetaData->getColumnMetaData(c)->getColumnType());
-         tableColumnTypes[c] = type;
+      for (auto& c : rel->getColumns()) {
+         auto type = createTypeForColumn(builder.getContext(), c);
+         tableColumnTypes[c.getColumnName()] = type;
       }
       std::vector<std::string> insertColNames;
       if (stmt->cols_) {
@@ -1504,7 +1506,7 @@ void frontend::sql::Parser::translateInsertStmt(mlir::OpBuilder& builder, Insert
             insertColNames.emplace_back(target->name_);
          }
       } else {
-         insertColNames = tableMetaData->getOrderedColumns();
+         insertColNames = rel->getColumnNames();
       }
       assert(insertColNames.size() == targetInfo.namedResults.size());
       std::vector<mlir::Attribute> attrs;
@@ -1554,7 +1556,7 @@ void frontend::sql::Parser::translateInsertStmt(mlir::OpBuilder& builder, Insert
       std::vector<mlir::Attribute> orderedColAttrs;
       std::vector<mlir::Attribute> colTypes;
       auto& memberManager = builder.getContext()->getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager();
-      for (auto x : tableMetaData->getOrderedColumns()) {
+      for (auto x : rel->getColumnNames()) {
          colMemberNames.push_back(builder.getStringAttr(memberManager.getUniqueMember(x)));
          orderedColNamesAttrs.push_back(builder.getStringAttr(x));
          orderedColAttrs.push_back(insertedCols.at(x));
@@ -2234,7 +2236,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
          std::vector<mlir::Attribute> createdCols;
          mlir::Value expr; //todo
          auto attrDef = attrManager.createDef(groupByName, fakeNode->colId);
-         if (funcName == "rank") {
+         if (funcName == "rank" || funcName =="row_number") { //todo: fix rank
             expr = windowBuilder.create<relalg::RankOp>(builder.getUnknownLoc(), builder.getI64Type(), relation);
 
          } else if (funcName == "count*") {
@@ -2509,30 +2511,12 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
    }
    return std::make_pair(tree, targetInfo);
 }
-mlir::Type frontend::sql::Parser::createBaseTypeFromColumnType(mlir::MLIRContext* context, const lingodb::runtime::ColumnType& colType) {
-   auto asInt = [](std::variant<size_t, std::string> intOrStr) -> size_t {
-      if (std::holds_alternative<size_t>(intOrStr)) {
-         return std::get<size_t>(intOrStr);
-      } else {
-         return std::stoll(std::get<std::string>(intOrStr));
-      }
-   };
-   if (colType.base == "bool") return mlir::IntegerType::get(context, 1);
-   if (colType.base == "int") return mlir::IntegerType::get(context, asInt(colType.modifiers.at(0)));
-   if (colType.base == "index") return mlir::IndexType::get(context);
-   if (colType.base == "float") return asInt(colType.modifiers.at(0)) == 32 ? (mlir::Type)mlir::Float32Type::get(context) : (mlir::Type)mlir::Float64Type::get(context);
-   if (colType.base == "date") return db::DateType::get(context, db::symbolizeDateUnitAttr(std::get<std::string>(colType.modifiers.at(0))).value());
-   if (colType.base == "string") return db::StringType::get(context);
-   if (colType.base == "char") return db::CharType::get(context, asInt(colType.modifiers.at(0)));
-   if (colType.base == "decimal") return db::DecimalType::get(context, asInt(colType.modifiers.at(0)), asInt(colType.modifiers.at(1)));
-   if (colType.base == "interval") return db::IntervalType::get(context, std::get<std::string>(colType.modifiers.at(0)) == "daytime" ? db::IntervalUnitAttr::daytime : db::IntervalUnitAttr::months);
-   if (colType.base == "timestamp") return db::TimestampType::get(context, db::TimeUnitAttr::second);
-   assert(false);
-   return mlir::Type();
+mlir::Type frontend::sql::Parser::createBaseTypeFromColumnType(mlir::MLIRContext* context, const lingodb::catalog::Type& t) {
+   return t.getMLIRTypeCreator()->createType(context);
 }
-mlir::Type frontend::sql::Parser::createTypeFromColumnType(mlir::MLIRContext* context, const lingodb::runtime::ColumnType& colType) {
-   mlir::Type baseType = createBaseTypeFromColumnType(context, colType);
-   return colType.nullable ? db::NullableType::get(context, baseType) : baseType;
+mlir::Type frontend::sql::Parser::createTypeForColumn(mlir::MLIRContext* context, const lingodb::catalog::Column& colDef) {
+   mlir::Type baseType = createBaseTypeFromColumnType(context, colDef.getLogicalType());
+   return colDef.getIsNullable() ? db::NullableType::get(context, baseType) : baseType;
 }
 std::vector<std::string> frontend::sql::Parser::listToStringVec(List* l) {
    std::vector<std::string> res;

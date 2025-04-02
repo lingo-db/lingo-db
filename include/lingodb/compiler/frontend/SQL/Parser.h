@@ -4,10 +4,13 @@
 #include "libpg_query/pg_query.h"
 #include "parsenodes.h"
 
+#include "lingodb/catalog/Catalog.h"
+#include "lingodb/catalog/Defs.h"
+#include "lingodb/catalog/TableCatalogEntry.h"
+#include "lingodb/catalog/Types.h"
 #include "lingodb/compiler/Dialect/DB/IR/DBOps.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "lingodb/compiler/Dialect/util/UtilOps.h"
-#include "lingodb/runtime/Catalog.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -208,7 +211,7 @@ struct Parser {
 
    std::string sql;
    PgQueryInternalParsetreeAndError result;
-   lingodb::runtime::Catalog& catalog;
+   lingodb::catalog::Catalog& catalog;
    std::vector<std::unique_ptr<FakeNode>> fakeNodes;
 
    bool isParallelismAllowed() const;
@@ -230,7 +233,7 @@ struct Parser {
    }
    mlir::ModuleOp moduleOp;
    bool parallelismAllowed;
-   Parser(std::string sql, lingodb::runtime::Catalog& catalog, mlir::ModuleOp moduleOp);
+   Parser(std::string sql, lingodb::catalog::Catalog& catalog, mlir::ModuleOp moduleOp);
 
    mlir::Value createStringValue(mlir::OpBuilder& builder, std::string str) {
       return builder.create<dialect::util::CreateConstVarLen>(builder.getUnknownLoc(), dialect::util::VarLen32Type::get(builder.getContext()), builder.getStringAttr(str));
@@ -245,10 +248,10 @@ struct Parser {
    Node* analyzeTargetExpression(Node* node, ReplaceState& replaceState);
 
    //create mlir base type from runtime column type (w.o. nullability)
-   mlir::Type createBaseTypeFromColumnType(mlir::MLIRContext* context, const lingodb::runtime::ColumnType& colType);
+   mlir::Type createBaseTypeFromColumnType(mlir::MLIRContext* context, const lingodb::catalog::Type& colType);
 
    //create mlir type from runtime column type
-   mlir::Type createTypeFromColumnType(mlir::MLIRContext* context, const lingodb::runtime::ColumnType& colType);
+   mlir::Type createTypeForColumn(mlir::MLIRContext* context, const lingodb::catalog::Column& colDef);
 
    //helper function: convert pg linked list into vector of strings (if possible)
    std::vector<std::string> listToStringVec(List* l);
@@ -260,13 +263,13 @@ struct Parser {
    void translateInsertStmt(mlir::OpBuilder& builder, InsertStmt* stmt);
 
    //creates a column type from the given information
-   lingodb::runtime::ColumnType createColumnType(std::string datatypeName, bool isNull, std::vector<std::variant<size_t, std::string>> typeModifiers);
+   lingodb::catalog::Type createType(std::string datatypeName, const std::vector<std::variant<size_t, std::string>>& typeModifiers);
 
    //translate a column definition in a create statment
-   std::pair<std::string, std::shared_ptr<lingodb::runtime::ColumnMetaData>> translateColumnDef(ColumnDef* columnDef);
+   lingodb::catalog::Column translateColumnDef(ColumnDef* columnDef);
 
    //translates table metadata (column definitions + primary keys)
-   std::shared_ptr<lingodb::runtime::TableMetaData> translateTableMetaData(List* metaData);
+   lingodb::catalog::CreateTableDef translateTableMetaData(List* metaData);
 
    //translate a CREATE statement
    void translateCreateStatement(mlir::OpBuilder& builder, CreateStmt* statement);

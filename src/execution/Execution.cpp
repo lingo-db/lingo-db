@@ -1,5 +1,7 @@
 #include "lingodb/execution/Execution.h"
 
+#include "lingodb/catalog/IndexCatalogEntry.h"
+#include "lingodb/catalog/TableCatalogEntry.h"
 #include "lingodb/compiler/Conversion/DBToStd/DBToStd.h"
 #include "lingodb/compiler/Conversion/DSAToStd/DSAToStd.h"
 #include "lingodb/compiler/Conversion/RelAlgToSubOp/RelAlgToSubOpPass.h"
@@ -9,6 +11,7 @@
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/Passes.h"
 #include "lingodb/execution/CBackend.h"
 #include "lingodb/execution/LLVMBackends.h"
+#include "lingodb/runtime/storage/TableStorage.h"
 #include "lingodb/utility/Setting.h"
 #include "lingodb/utility/Tracer.h"
 
@@ -22,6 +25,7 @@
 #include <unordered_set>
 
 namespace {
+namespace utility = lingodb::utility;
 utility::GlobalSetting<std::string> executionModeSetting("system.execution_mode", "DEFAULT");
 utility::GlobalSetting<std::string> subopOptPassesSetting("system.subop.opt", "GlobalOpt,ReuseLocal,Specialize,PullGatherUp,Compression");
 utility::Tracer::Event queryOptimizationEvent("Compilation", "Query Opt.");
@@ -73,18 +77,17 @@ class RelAlgLoweringStep : public LoweringStep {
          if (auto getExternalOp = mlir::dyn_cast_or_null<subop::GetExternalOp>(*op)) {
             auto* catalog = getCatalog();
             auto json = nlohmann::json::parse(getExternalOp.getDescr().str());
-            auto tableName = json.value("table", "");
-            bool addIndex = false;
-            if (!tableName.size()) {
-               addIndex = json.contains("index");
-               if (!addIndex) return;
-               tableName = json["relation"];
+            if (json.contains("table")) {
+               if (auto relation = catalog->getTypedEntry<lingodb::catalog::TableCatalogEntry>(json["table"])) {
+                  relation.value()->ensureFullyLoaded();
+               }
             }
-            // Load table
-            if (auto relation = catalog->findRelation(tableName)) {
-               relation->loadData();
-               if (addIndex) {
-                  relation->getIndex(json["index"])->ensureLoaded();
+            if (json.contains("index")) {
+               if (auto relation = catalog->getTypedEntry<lingodb::catalog::IndexCatalogEntry>(json["index"])) {
+                  relation.value()->ensureFullyLoaded();
+               }
+               if (auto relation = catalog->getTypedEntry<lingodb::catalog::TableCatalogEntry>(json["relation"])) {
+                  relation.value()->ensureFullyLoaded();
                }
             }
          }
@@ -323,7 +326,7 @@ std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(execution::Exec
    config->loweringSteps.emplace_back(std::make_unique<SubOpLoweringStep>());
    config->loweringSteps.emplace_back(std::make_unique<DefaultImperativeLowering>());
 #if defined(ASAN_ACTIVE)
-   if(runMode == ExecutionMode::DEBUGGING) {
+   if (runMode == ExecutionMode::DEBUGGING) {
       std::cerr << "ASAN is not supported in DEBUGGING mode. Switching to C mode" << std::endl;
       runMode = ExecutionMode::C;
    }

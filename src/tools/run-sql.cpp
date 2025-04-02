@@ -9,7 +9,7 @@
 #include <string>
 
 namespace {
-utility::GlobalSetting<bool> eagerLoading("system.eager_loading", false);
+lingodb::utility::GlobalSetting<bool> eagerLoading("system.eager_loading", false);
 } // namespace
 int main(int argc, char** argv) {
    using namespace lingodb;

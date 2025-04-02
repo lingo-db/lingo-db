@@ -4,8 +4,8 @@
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/OpDefinition.h"
 
+#include "lingodb/catalog/MetaData.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOpsEnums.h"
-#include "lingodb/runtime/metadata.h"
 
 #define GET_ATTRDEF_CLASSES
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOpsAttributes.h.inc"

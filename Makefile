@@ -30,8 +30,8 @@ resources/data/%/.rawdata:
 
 resources/data/%/.stamp: resources/data/%/.rawdata build/lingodb-$(DATA_BUILD_TYPE)/.buildstamp
 	rm -f resources/data/$*/*.arrow
-	rm -f resources/data/$*/*.arrow.sample
-	rm -f resources/data/$*/*.json
+	rm -f resources/data/$*/*.hashidx
+	rm -f resources/data/$*/*.lingodb
 	@dir_name=$(shell dirname $@) && \
 	base_name=$$(basename $$dir_name) && \
 	dataset_name=$$(echo $$base_name | sed -E 's/-[0-9]+$$//') && \

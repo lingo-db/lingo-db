@@ -1,4 +1,3 @@
-#include "lingodb/execution/BackendPasses.h"
 #include "lingodb/compiler/Conversion/DBToStd/DBToStd.h"
 #include "lingodb/compiler/Conversion/DSAToStd/DSAToStd.h"
 #include "lingodb/compiler/Conversion/RelAlgToSubOp/RelAlgToSubOpPass.h"
@@ -12,6 +11,7 @@
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamDialect.h"
 #include "lingodb/compiler/Dialect/util/UtilDialect.h"
 #include "lingodb/compiler/mlir-support/eval.h"
+#include "lingodb/execution/BackendPasses.h"
 #include "mlir/Dialect/Async/IR/Async.h"
 #include "mlir/Dialect/DLTI/DLTI.h"
 #include "mlir/Dialect/Func/Extensions/AllExtensions.h"
@@ -28,15 +28,13 @@
 #include "mlir/Target/LLVMIR/Dialect/All.h"
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
 
-#include "lingodb/runtime/Catalog.h"
-
 #include <lingodb/compiler/Conversion/UtilToLLVM/Passes.h>
 #include <mlir/Dialect/ControlFlow/IR/ControlFlow.h>
 int main(int argc, char** argv) {
    using namespace lingodb::compiler::dialect;
    if (argc > 2) {
       if (std::string(argv[1]) == "--use-db") {
-         relalg::setStaticCatalog(lingodb::runtime::DBCatalog::create(lingodb::runtime::Catalog::createEmpty(), std::string(argv[2]), false));
+         relalg::setStaticCatalog(lingodb::catalog::Catalog::create(std::string(argv[2]), false));
          char** argvReduced = new char*[argc - 2];
          argvReduced[0] = argv[0];
          for (int i = 3; i < argc; i++) {

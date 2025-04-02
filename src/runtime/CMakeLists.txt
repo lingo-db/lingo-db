@@ -26,24 +26,23 @@ add_library(runtime OBJECT
         ExecutionContext.cpp
         RelationHelper.cpp
         #Database.cpp
-        MetaData.cpp
         #ArrowDirDatabase.cpp
         #ExternalArrowDatabase.cpp
         #MetaDataOnlyDatabase.cpp
         #ExternalHashIndex.cpp
-        HashIndex.cpp
-        Relation.cpp
+        LingoDBHashIndex.cpp
         Session.cpp
-        Catalog.cpp)
+        storage/LingoDBTable.cpp
+)
 set(COMPILE_DEFS "")
-if(ENABLE_GPU_BACKEND)
+if (ENABLE_GPU_BACKEND)
     list(APPEND COMPILE_DEFS "GPU_ENABLED=1")
-else()
+else ()
     list(APPEND COMPILE_DEFS "GPU_ENABLED=0")
-endif(ENABLE_GPU_BACKEND)
+endif (ENABLE_GPU_BACKEND)
 
-target_compile_definitions(runtime PUBLIC ${COMPILE_DEFS} )
+target_compile_definitions(runtime PUBLIC ${COMPILE_DEFS})
 target_link_libraries(runtime PRIVATE Arrow::arrow_static)
 
 add_subdirectory(GPU)
-target_link_libraries(runtime PUBLIC GPU-rt)
+target_link_libraries(runtime PUBLIC GPU-rt scheduler)

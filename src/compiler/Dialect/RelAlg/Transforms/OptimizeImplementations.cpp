@@ -13,6 +13,8 @@
 #include <stack>
 #include <unordered_set>
 
+#include <arrow/record_batch.h>
+
 namespace {
 using namespace lingodb::compiler::dialect;
 
@@ -146,46 +148,53 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
    }
 
    // Verify that the join predicate in block takes all and only the primary key columns from baseTableOp into consideration
-   bool containsExactlyPrimaryKey(mlir::MLIRContext* ctxt, mlir::Operation* baseTableOp, mlir::Block* block, std::string& indexName) {
+   bool containsExactlyIndexColumns(mlir::MLIRContext* ctxt, mlir::Operation* baseTableOp, mlir::Block* block, std::string& indexName) {
       llvm::DenseMap<mlir::Value, relalg::ColumnSet> columns;
       auto baseTable = mlir::cast<relalg::BaseTableOp>(baseTableOp);
       auto& colManager = ctxt->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
 
       // Initialize map to verify presence of all primary key attributes
-      std::unordered_map<std::string, bool> primaryKeyFound;
-      for (auto primaryKeyAttribute : baseTable.getMeta().getMeta()->getPrimaryKey()) {
-         primaryKeyFound[primaryKeyAttribute] = false;
-      }
-
-      // Verify all cmp operations
-      bool res = true;
-      block->walk([&](mlir::Operation* op) {
-         if (auto getAttr = mlir::dyn_cast_or_null<tuples::GetColumnOp>(op)) {
-            columns.insert({getAttr.getResult(), relalg::ColumnSet::from(getAttr.getAttr())});
-         } else if (auto cmpOp = mlir::dyn_cast_or_null<relalg::CmpOpInterface>(op)) {
-            relalg::ColumnSet relevantColumns = columns[cmpOp.getLeft()];
-            relevantColumns.insert(columns[cmpOp.getRight()]);
-            for (auto* relevantColumn : relevantColumns) {
-               std::string tableName = colManager.getName(relevantColumn).first;
-               std::string columnName = colManager.getName(relevantColumn).second;
-
-               // Only take columns contained in baseTableOp into consideration
-               if (baseTable.getCreatedColumns().contains(relevantColumn)) {
-                  // Check that no non-primary key attribute was used
-                  if (!primaryKeyFound.contains(columnName)) res = false;
-                  // Mark primary key attribute as used
-                  else
-                     primaryKeyFound[columnName] = true;
-               }
+      auto meta = mlir::dyn_cast_or_null<relalg::TableMetaDataAttr>(baseTableOp->getAttr("meta"));
+      if (meta) {
+         for (auto [idxName,indexColumns] : meta.getMeta()->getIndices()) {
+            std::unordered_map<std::string, bool> indexColumnsFound;
+            for(auto indexCol: indexColumns) {
+               indexColumnsFound[indexCol] = false;
             }
+
+            // Verify all cmp operations
+            bool res = true;
+            block->walk([&](mlir::Operation* op) {
+               if (auto getAttr = mlir::dyn_cast_or_null<tuples::GetColumnOp>(op)) {
+                  columns.insert({getAttr.getResult(), relalg::ColumnSet::from(getAttr.getAttr())});
+               } else if (auto cmpOp = mlir::dyn_cast_or_null<relalg::CmpOpInterface>(op)) {
+                  relalg::ColumnSet relevantColumns = columns[cmpOp.getLeft()];
+                  relevantColumns.insert(columns[cmpOp.getRight()]);
+                  for (auto* relevantColumn : relevantColumns) {
+                     std::string tableName = colManager.getName(relevantColumn).first;
+                     std::string columnName = colManager.getName(relevantColumn).second;
+
+                     // Only take columns contained in baseTableOp into consideration
+                     if (baseTable.getCreatedColumns().contains(relevantColumn)) {
+                        // Check that no non-primary key attribute was used
+                        if (!indexColumnsFound.contains(columnName)) res = false;
+                        // Mark primary key attribute as used
+                        else
+                           indexColumnsFound[columnName] = true;
+                     }
+                  }
+               }
+            });
+            // Check if all primary key attributes were found
+            for (auto primaryKeyAttribute : indexColumnsFound) {
+               res &= primaryKeyAttribute.second;
+            }
+            indexName=idxName;
+            return res;
+
          }
-      });
-      // Check if all primary key attributes were found
-      for (auto primaryKeyAttribute : primaryKeyFound) {
-         res &= primaryKeyAttribute.second;
       }
-      indexName = "pk_hash";
-      return res;
+      return false;
    }
 
    bool isBaseRelationWithSelects(Operator op, std::stack<mlir::Operation*>& path) {
@@ -372,18 +381,19 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                   for (auto c : baseTableOp.getColumns()) {
                      mapping[&mlir::cast<tuples::ColumnDefAttr>(c.getValue()).getColumn()] = c.getName().str();
                   }
-                  auto meta = baseTableOp.getMeta().getMeta();
-                  auto sample = meta->getSample();
-                  if (sample) {
-                     for (auto selOp : selections) {
-                        auto v = mlir::cast<tuples::ReturnOp>(selOp.getPredicateBlock().getTerminator()).getResults()[0];
-                        auto expr = relalg::buildEvalExpr(v, mapping);
-                        auto optionalCount = lingodb::compiler::support::eval::countResults(sample, std::move(expr));
-                        if (optionalCount) {
-                           auto count = optionalCount.value();
-                           if (count == 0) count = 1;
-                           double selectivity = static_cast<double>(count) / static_cast<double>(sample->num_rows());
-                           selOp->setAttr("selectivity", mlir::FloatAttr::get(mlir::Float64Type::get(&getContext()), selectivity));
+                  if (auto meta = mlir::dyn_cast_or_null<relalg::TableMetaDataAttr>(baseTableOp->getAttr("meta"))) {
+                     auto sample = meta.getMeta()->getSample();
+                     if (sample) {
+                        for (auto selOp : selections) {
+                           auto v = mlir::cast<tuples::ReturnOp>(selOp.getPredicateBlock().getTerminator()).getResults()[0];
+                           auto expr = relalg::buildEvalExpr(v, mapping);
+                           auto optionalCount = lingodb::compiler::support::eval::countResults(sample.getSampleData(), std::move(expr));
+                           if (optionalCount) {
+                              auto count = optionalCount.value();
+                              if (count == 0) count = 1;
+                              double selectivity = static_cast<double>(count) / static_cast<double>(sample.getSampleData()->num_rows());
+                              selOp->setAttr("selectivity", mlir::FloatAttr::get(mlir::Float64Type::get(&getContext()), selectivity));
+                           }
                         }
                      }
                   }
@@ -440,41 +450,44 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                   // Determine if index nested loop is possible and is beneficial
                   std::stack<mlir::Operation*> leftPath, rightPath;
                   std::string leftIndexName, rightIndexName;
-                  bool leftCanUsePrimaryKeyIndex = isBaseRelationWithSelects(left, leftPath) && containsExactlyPrimaryKey(binOp.getContext(), leftPath.top(), &predicateOperator.getPredicateBlock(), leftIndexName);
-                  bool rightCanUsePrimaryKeyIndex = isBaseRelationWithSelects(right, rightPath) && containsExactlyPrimaryKey(binOp.getContext(), rightPath.top(), &predicateOperator.getPredicateBlock(), rightIndexName);
+                  bool leftCanUseIndex = isBaseRelationWithSelects(left, leftPath) && containsExactlyIndexColumns(binOp.getContext(), leftPath.top(), &predicateOperator.getPredicateBlock(), leftIndexName);
+                  bool rightCanUseIndex = isBaseRelationWithSelects(right, rightPath) && containsExactlyIndexColumns(binOp.getContext(), rightPath.top(), &predicateOperator.getPredicateBlock(), rightIndexName);
                   bool isInnerJoin = mlir::isa<relalg::InnerJoinOp>(predicateOperator);
                   bool reversed = false;
-
                   prepareForHash(predicateOperator);
 
                   // Select possible build side to the left
-                  if (isInnerJoin && (leftCanUsePrimaryKeyIndex || rightCanUsePrimaryKeyIndex)) {
-                     if (leftCanUsePrimaryKeyIndex && rightCanUsePrimaryKeyIndex) {
+                  if (isInnerJoin && (leftCanUseIndex || rightCanUseIndex)) {
+                     if (leftCanUseIndex && rightCanUseIndex) {
                         // Compute heuristic of which base table the index is more beneficial
                         // Used heuristic: prefer bigger ratio of |buildSide| / |probeSide|
                         auto leftBaseTable = mlir::cast<relalg::BaseTableOp>(leftPath.top());
                         auto rightBaseTable = mlir::cast<relalg::BaseTableOp>(rightPath.top());
-                        int numBaseRowsLeft = leftBaseTable.getMeta().getMeta()->getNumRows() + 1;
-                        int numBaseRowsRight = rightBaseTable.getMeta().getMeta()->getNumRows() + 1;
-                        int numNonBaseRowsLeft = left->hasAttr("rows") ? mlir::dyn_cast_or_null<mlir::FloatAttr>(left->getAttr("rows")).getValueAsDouble() + 1 : 1;
-                        int numNonBaseRowsRight = right->hasAttr("rows") ? mlir::dyn_cast_or_null<mlir::FloatAttr>(right->getAttr("rows")).getValueAsDouble() + 1 : 1;
-                        // Exchange left and right side if deemed beneficial by heuristic
-                        if (numNonBaseRowsRight / numBaseRowsLeft < numNonBaseRowsLeft / numBaseRowsRight) {
-                           reversed = true;
-                           std::swap(left, right);
-                           std::swap(leftPath, rightPath);
-                           std::swap(leftIndexName, rightIndexName);
-                           mlir::Attribute tmp = predicateOperator->getAttr("rightHash");
-                           predicateOperator->setAttr("rightHash", predicateOperator->getAttr("leftHash"));
-                           predicateOperator->setAttr("leftHash", tmp);
+                        auto leftBaseMeta = mlir::dyn_cast_or_null<relalg::TableMetaDataAttr>(leftBaseTable->getAttr("meta"));
+                        auto rightBaseMeta = mlir::dyn_cast_or_null<relalg::TableMetaDataAttr>(rightBaseTable->getAttr("meta"));
+                        if (leftBaseMeta && rightBaseMeta) {
+                           int numBaseRowsLeft = leftBaseMeta.getMeta()->getNumRows() + 1;
+                           int numBaseRowsRight = leftBaseMeta.getMeta()->getNumRows() + 1;
+                           int numNonBaseRowsLeft = left->hasAttr("rows") ? mlir::dyn_cast_or_null<mlir::FloatAttr>(left->getAttr("rows")).getValueAsDouble() + 1 : 1;
+                           int numNonBaseRowsRight = right->hasAttr("rows") ? mlir::dyn_cast_or_null<mlir::FloatAttr>(right->getAttr("rows")).getValueAsDouble() + 1 : 1;
+                           // Exchange left and right side if deemed beneficial by heuristic
+                           if (numNonBaseRowsRight / numBaseRowsLeft < numNonBaseRowsLeft / numBaseRowsRight) {
+                              reversed = true;
+                              std::swap(left, right);
+                              std::swap(leftPath, rightPath);
+                              std::swap(leftIndexName, rightIndexName);
+                              mlir::Attribute tmp = predicateOperator->getAttr("rightHash");
+                              predicateOperator->setAttr("rightHash", predicateOperator->getAttr("leftHash"));
+                              predicateOperator->setAttr("leftHash", tmp);
+                           }
                         }
-                     } else if (!leftCanUsePrimaryKeyIndex) {
+                     } else if (!leftCanUseIndex) {
                         // Exchange left and right side
                         reversed = true;
                         std::swap(left, right);
                         std::swap(leftPath, rightPath);
                         std::swap(leftIndexName, rightIndexName);
-                        leftCanUsePrimaryKeyIndex = true;
+                        leftCanUseIndex = true;
                         mlir::Attribute tmp = predicateOperator->getAttr("rightHash");
                         predicateOperator->setAttr("rightHash", predicateOperator->getAttr("leftHash"));
                         predicateOperator->setAttr("leftHash", tmp);
@@ -489,7 +502,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                   if (auto rightCardinalityAttr = mlir::dyn_cast_or_null<mlir::FloatAttr>(right->getAttr("rows"))) {
                      numRowsRight = rightCardinalityAttr.getValueAsDouble();
                   }
-                  if (isInnerJoin && leftCanUsePrimaryKeyIndex && right->hasAttr("rows") && 20 * numRowsRight < numRowsLeft) {
+                  if (isInnerJoin && leftCanUseIndex && right->hasAttr("rows") && 20 * numRowsRight < numRowsLeft) {
                      // base relations do not need to be moved
                      auto leftBaseTable = mlir::cast<relalg::BaseTableOp>(leftPath.top());
                      leftPath.pop();
@@ -519,7 +532,6 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
 
                      // Add name of table to leftHash annotation
                      std::vector<mlir::Attribute> leftHash;
-                     leftHash.push_back(leftBaseTable.getTableIdentifierAttr());
                      for (auto attr : mlir::dyn_cast_or_null<mlir::ArrayAttr>(op->getAttr("leftHash"))) {
                         leftHash.push_back(attr);
                      }
@@ -528,6 +540,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                      op->setAttr("impl", mlir::StringAttr::get(op.getContext(), "indexNestedLoop"));
                      op->setAttr("useIndexNestedLoop", mlir::UnitAttr::get(op.getContext()));
                      op->setAttr("index", mlir::StringAttr::get(op.getContext(), leftIndexName));
+                     op->setAttr("table", leftBaseTable.getTableIdentifierAttr());
                   } else {
                      op->setAttr("impl", mlir::StringAttr::get(op.getContext(), "hash"));
                      op->setAttr("useHashJoin", mlir::UnitAttr::get(op.getContext()));

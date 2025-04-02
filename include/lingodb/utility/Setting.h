@@ -3,7 +3,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
-namespace utility {
+namespace lingodb::utility {
 
 class Setting {
    protected:
@@ -78,5 +78,5 @@ class GlobalSetting : public Setting {
 };
 
 void setSetting(std::string key, std::string value);
-} // namespace utility
+} // namespace lingodb::utility
 #endif //LINGODB_UTILITY_SETTING_H

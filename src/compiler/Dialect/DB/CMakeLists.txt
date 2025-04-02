@@ -32,4 +32,5 @@ add_mlir_dialect_library(MLIRDB
         MLIRFuncTransforms
         MLIRUtil
         runtime_funcs_ptr
+        mlir-support
 )

@@ -2,15 +2,17 @@
 #include "lingodb/scheduler/Scheduler.h"
 #include "lingodb/scheduler/Tasks.h"
 #include "lingodb/utility/Tracer.h"
+
+#include <cstring>
 #include <queue>
 
 namespace {
-static utility::Tracer::Event sortAllocEvent("GrowingBuffer", "sortAlloc");
-static utility::Tracer::Event sortCopyEvent("GrowingBuffer", "sortCopy");
-static utility::Tracer::Event sortLocalEvent("GrowingBuffer", "sortLocal");
-static utility::Tracer::Event sortSepSearchEvent("GrowingBuffer", "sortSepSearch");
-static utility::Tracer::Event sortOutputRangeEvent("GrowingBuffer", "sortOutputRange");
-static utility::Tracer::Event sortMergeEvent("GrowingBuffer", "sortMerge");
+static lingodb::utility::Tracer::Event sortAllocEvent("GrowingBuffer", "sortAlloc");
+static lingodb::utility::Tracer::Event sortCopyEvent("GrowingBuffer", "sortCopy");
+static lingodb::utility::Tracer::Event sortLocalEvent("GrowingBuffer", "sortLocal");
+static lingodb::utility::Tracer::Event sortSepSearchEvent("GrowingBuffer", "sortSepSearch");
+static lingodb::utility::Tracer::Event sortOutputRangeEvent("GrowingBuffer", "sortOutputRange");
+static lingodb::utility::Tracer::Event sortMergeEvent("GrowingBuffer", "sortMerge");
 
 struct SortSplitState {
    size_t begin{0};
@@ -59,7 +61,7 @@ public:
       return true;
    }
    void performWork() override {
-      utility::Tracer::Trace trace(sortCopyEvent);
+      lingodb::utility::Tracer::Trace trace(sortCopyEvent);
       auto localStartIndex = workerResvs[lingodb::scheduler::currentWorkerId()];
       const lingodb::runtime::Buffer& buffer = buffers[localStartIndex];
       auto offset = bufferOffsets[localStartIndex];
@@ -71,7 +73,7 @@ public:
 };
 
 
-// A whole input vector is split into several equal sized splits. And every worker in this task 
+// A whole input vector is split into several equal sized splits. And every worker in this task
 // 1. take a split and sort it.
 // 2. calculate local seperators of this split. for example split bounded by `|`, separator count for 3
 // ... | 3, 5, 8, 13, 16, 17, 19, 26, 29, 31, 33, 38, 39 | ...
@@ -101,7 +103,7 @@ class SortLocalTask : public lingodb::scheduler::TaskWithImplicitContext {
       return true;
    }
    void performWork() override {
-      utility::Tracer::Trace trace1(sortLocalEvent);
+      lingodb::utility::Tracer::Trace trace1(sortLocalEvent);
       auto localStartIndex = workerResvs[lingodb::scheduler::currentWorkerId()];
       auto begin = localStartIndex * splitSize;
       auto end = (localStartIndex + 1) * splitSize;
@@ -155,7 +157,7 @@ public:
       return true;
    }
    void performWork() override {
-      utility::Tracer::Trace trace3(sortSepSearchEvent);
+      lingodb::utility::Tracer::Trace trace3(sortSepSearchEvent);
       auto workerId = lingodb::scheduler::currentWorkerId();
       auto localStartIndex = workerResvs[workerId];
       auto splitCnt = sctx.splitCnt;
@@ -181,7 +183,7 @@ public:
          // binary search for lower bound if not exactly matched
          auto begin = input.begin() + localState.begin;
          auto it = std::lower_bound(begin, input.begin() + localState.end, globalSepVal, sctx.compareFn);
-         // every `localState.globalSeperators[localStartIndex]` in `localStates` would be aligned. 
+         // every `localState.globalSeperators[localStartIndex]` in `localStates` would be aligned.
          // `localState.globalSeperators[localStartIndex]` then could be input for next merge phase.
          localState.globalSeperators[localStartIndex] = std::distance(begin, it) + localState.begin;
       }
@@ -189,8 +191,8 @@ public:
    }
 };
 
-// Merge all the splits into one output. Every worker map two adjacent seperators to all splits and 
-// collect result segment. Then every worker merge all segment using minheap, which push and poped 
+// Merge all the splits into one output. Every worker map two adjacent seperators to all splits and
+// collect result segment. Then every worker merge all segment using minheap, which push and poped
 // one by one into result output.
 class SortMergeTask : public lingodb::scheduler::TaskWithImplicitContext {
    SortContext& sctx;
@@ -235,7 +237,7 @@ public:
    }
 
    void performWork() override {
-      utility::Tracer::Trace trace5(sortMergeEvent);
+      lingodb::utility::Tracer::Trace trace5(sortMergeEvent);
       auto localStartIndex = workerResvs[lingodb::scheduler::currentWorkerId()];
       std::vector<MergeSource> srcs;
       size_t cnt = 0;
@@ -292,7 +294,7 @@ void calcSplitSeperator(size_t inputSize, size_t workerNum, size_t& splitCnt, si
    };
 
    if (sizePerWorker < minSplitSize*4) {
-      // we don't split smaller granularity than 512. over-parallelism on small input may not be a 
+      // we don't split smaller granularity than 512. over-parallelism on small input may not be a
       // good idea, since
       // 1. input is small. it should be really fast without using all workers. even if more workers
       //    improve performance, it may have a performance boost from 10 µs to 7 µs, which actually
@@ -308,13 +310,13 @@ void calcSplitSeperator(size_t inputSize, size_t workerNum, size_t& splitCnt, si
       // resulting in good performance.
       // size_t splitSize = 32768 * 16;
       size_t splitSize = 32768 * 2;
-      // even if sizePerWorker is huge, we limit splitSize not to big. because a large split 
+      // even if sizePerWorker is huge, we limit splitSize not to big. because a large split
       // seems have poor performance on local sort and binary search of seperator sync phase.
       if (sizePerWorker > 32768 * 16) {
          splitSize = 32768 * 4;
       }
       splitCnt = inputSize / splitSize;
-      // we are more conservative about give splitCnt a big number. increase seperators number will 
+      // we are more conservative about give splitCnt a big number. increase seperators number will
       // increase memory to store those seperators and time spending on find median seperators.
       // a factor 4 is a quite good scale for parallism already.
       seperatorCnt = workerNum * 4;

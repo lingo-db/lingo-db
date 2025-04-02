@@ -7,19 +7,18 @@
 namespace lingodb::runtime {
 class DataSource {
    public:
-   virtual size_t getColumnId(std::string member) = 0;
-   virtual void iterate(bool parallel, std::vector<size_t> colIds, const std::function<void(runtime::RecordBatchInfo*)>& cb) = 0;
+   virtual void iterate(bool parallel, std::vector<std::string> members, const std::function<void(runtime::RecordBatchInfo*)>& cb) = 0;
    virtual ~DataSource() {}
    static DataSource* get( runtime::VarLen32 description);
-   static DataSource* getFromTable(ArrowTable* arrowTable, runtime::VarLen32 mappingVal,runtime::VarLen32 columnArray);
+   //static DataSource* getFromTable(ArrowTable* arrowTable, runtime::VarLen32 mappingVal,runtime::VarLen32 columnArray);
 };
 class DataSourceIteration {
    std::shared_ptr<arrow::RecordBatch> currChunk;
    DataSource* dataSource;
-   std::vector<size_t> colIds;
+   std::vector<std::string> members;
 
    public:
-   DataSourceIteration(DataSource* dataSource, const std::vector<size_t>& colIds);
+   DataSourceIteration(DataSource* dataSource, const std::vector<std::string>& members);
 
    static DataSourceIteration* init(DataSource* dataSource, runtime::VarLen32 members);
    static void end(DataSourceIteration*);

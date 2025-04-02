@@ -8,7 +8,7 @@
 #include <thread>
 #include <unordered_map>
 #include <vector>
-namespace utility {
+namespace lingodb::utility {
 
 class Tracer {
    public:
@@ -164,5 +164,5 @@ class Tracer {
 
    static void dump();
 };
-} // end namespace utility
+} // end namespace lingodb::utility
 #endif // LINGODB_UTILITY_TRACER_H

@@ -5,7 +5,7 @@
 #include <arrow/table.h>
 using namespace lingodb::runtime;
 namespace {
-utility::Tracer::Event tableMerge("ArrowTable", "merge");
+lingodb::utility::Tracer::Event tableMerge("ArrowTable", "merge");
 } // end namespace
 ArrowTable* ArrowTable::createEmpty() {
    auto table = arrow::Table::MakeEmpty(std::make_shared<arrow::Schema>(std::vector<std::shared_ptr<arrow::Field>>{})).ValueOrDie();
