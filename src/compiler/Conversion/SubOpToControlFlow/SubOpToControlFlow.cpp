@@ -21,11 +21,11 @@
 #include "lingodb/compiler/runtime/DataSourceIteration.h"
 #include "lingodb/compiler/runtime/ExecutionContext.h"
 #include "lingodb/compiler/runtime/GrowingBuffer.h"
-#include "lingodb/compiler/runtime/HashIndex.h"
 #include "lingodb/compiler/runtime/HashMultiMap.h"
 #include "lingodb/compiler/runtime/Hashtable.h"
 #include "lingodb/compiler/runtime/Heap.h"
 #include "lingodb/compiler/runtime/LazyJoinHashtable.h"
+#include "lingodb/compiler/runtime/LingoDBHashIndex.h"
 #include "lingodb/compiler/runtime/PreAggregationHashtable.h"
 #include "lingodb/compiler/runtime/RelationHelper.h"
 #include "lingodb/compiler/runtime/SegmentTreeView.h"
@@ -3034,7 +3034,6 @@ class LookupExternalHashIndexLowering : public SubOpTupleStreamConsumerConversio
       return mlir::success();
    }
 };
-
 class DefaultGatherOpLowering : public SubOpTupleStreamConsumerConversionPattern<subop::GatherOp> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::GatherOp>::SubOpTupleStreamConsumerConversionPattern;
@@ -3613,7 +3612,7 @@ class GetExternalHashIndexLowering : public SubOpConversionPattern<subop::GetExt
       if (!mlir::isa<subop::ExternalHashIndexType>(op.getType())) return failure();
       mlir::Value description = rewriter.create<util::CreateConstVarLen>(op->getLoc(), util::VarLen32Type::get(rewriter.getContext()), op.getDescrAttr());
 
-      rewriter.replaceOp(op, rt::RelationHelper::getIndex(rewriter, op->getLoc())({description})[0]);
+      rewriter.replaceOp(op, rt::RelationHelper::accessHashIndex(rewriter, op->getLoc())({description})[0]);
       return mlir::success();
    }
 };

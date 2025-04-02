@@ -4,6 +4,9 @@
 
 #include "mlir/CAPI/IR.h"
 
+#include "lingodb/catalog/TableCatalogEntry.h"
+#include "lingodb/runtime/RelationHelper.h"
+#include "lingodb/runtime/storage/TableStorage.h"
 #include <arrow/table.h>
 
 namespace {
@@ -85,12 +88,9 @@ bool bridge::runSQL(Connection* connection, const char* query, ArrowArrayStream*
    }
    return false;
 }
-void bridge::createTable(Connection* connection, const char* name, const char* metaData) {
-   connection->getSession().getCatalog()->addTable(name, runtime::TableMetaData::create(metaData, name, {}));
-}
 void bridge::appendTable(Connection* connection, const char* name, ArrowArrayStream* recordBatchStream) {
    auto recordBatchReader = arrow::ImportRecordBatchReader(recordBatchStream).ValueOrDie();
-   connection->getSession().getCatalog()->findRelation(name)->append(recordBatchReader->ToTable().ValueOrDie());
+   runtime::RelationHelper::appendToTable(connection->getSession(), name, recordBatchReader->ToTable().ValueOrDie());
 }
 double bridge::getTiming(bridge::Connection* con, const char* type) {
    if (con->getTimes().contains(std::string(type))) {

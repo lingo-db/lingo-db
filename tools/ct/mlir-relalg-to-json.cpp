@@ -110,7 +110,7 @@ class ToJson {
             return nlohmann::json{{"type", "float"}};
          })
          .Case<db::IntervalType>([](db::IntervalType intervalType) {
-            return nlohmann::json{{"type", "interval"},{"unit", stringifyIntervalUnitAttr(intervalType.getUnit())}};
+            return nlohmann::json{{"type", "interval"}, {"unit", stringifyIntervalUnitAttr(intervalType.getUnit())}};
          })
          .Default([](mlir::Type type) {
             llvm::errs() << "type could not be converted ";
@@ -314,15 +314,15 @@ class ToJson {
       }
       return result;
    }
-   nlohmann::json extractHashCondition(BinaryOperator joinOp, bool skipFirstLeft = false) {
+   nlohmann::json extractHashCondition(BinaryOperator joinOp) {
       nlohmann::json result = nlohmann::json::array();
       assert(joinOp->hasAttr("leftHash") && joinOp->hasAttr("rightHash"));
       auto leftJoinColumns = mlir::dyn_cast_or_null<mlir::ArrayAttr>(joinOp->getAttr("leftHash"));
       auto rightJoinColumns = mlir::dyn_cast_or_null<mlir::ArrayAttr>(joinOp->getAttr("rightHash"));
-      assert(leftJoinColumns && rightJoinColumns && leftJoinColumns.size() - skipFirstLeft == rightJoinColumns.size());
-      for (size_t i = skipFirstLeft; i != leftJoinColumns.size(); i++) {
+      assert(leftJoinColumns && rightJoinColumns && leftJoinColumns.size() == rightJoinColumns.size());
+      for (size_t i = 0; i != leftJoinColumns.size(); i++) {
          auto leftColumn = mlir::dyn_cast_or_null<tuples::ColumnRefAttr>(leftJoinColumns[i]);
-         auto rightColumn = mlir::dyn_cast_or_null<tuples::ColumnRefAttr>(rightJoinColumns[i - skipFirstLeft]);
+         auto rightColumn = mlir::dyn_cast_or_null<tuples::ColumnRefAttr>(rightJoinColumns[i]);
          assert(leftColumn && rightColumn);
          result.push_back(innerExpression({"", "=", ""}, {columnToJSON(leftColumn), columnToJSON(rightColumn)}));
       }
@@ -341,7 +341,7 @@ class ToJson {
 
       } else if (impl == "indexNestedLoop") {
          result["joinImpl"] = "index";
-         result["comparisons"] = extractHashCondition(joinOp, true);
+         result["comparisons"] = extractHashCondition(joinOp);
          result["condition"] = convertExpression(predicateBlock.getTerminator());
       } else {
          result["joinImpl"] = "nested";

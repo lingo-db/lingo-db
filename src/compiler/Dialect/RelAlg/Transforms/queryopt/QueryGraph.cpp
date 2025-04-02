@@ -5,6 +5,8 @@
 
 #include <iostream>
 
+#include <arrow/record_batch.h>
+
 using namespace lingodb::compiler::dialect;
 void relalg::QueryGraph::print(llvm::raw_ostream& out) {
    out << "QueryGraph:{\n";
@@ -184,8 +186,9 @@ std::optional<double> estimateUsingSample(relalg::QueryGraph::Node& n) {
       for (auto c : baseTableOp.getColumns()) {
          mapping[&mlir::cast<tuples::ColumnDefAttr>(c.getValue()).getColumn()] = c.getName().str();
       }
-      auto meta = baseTableOp.getMeta().getMeta();
-      auto sample = meta->getSample();
+      auto meta = mlir::dyn_cast_or_null<relalg::TableMetaDataAttr>(baseTableOp->getAttr("meta"));
+      if (!meta) return {};
+      auto sample = meta.getMeta()->getSample();
       if (!sample) return {};
       std::vector<std::unique_ptr<lingodb::compiler::support::eval::expr>> expressions;
       for (auto pred : n.additionalPredicates) {
@@ -194,20 +197,23 @@ std::optional<double> estimateUsingSample(relalg::QueryGraph::Node& n) {
             expressions.push_back(relalg::buildEvalExpr(v, mapping)); //todo: ignore failing ones?
          }
       }
-      auto optionalCount = lingodb::compiler::support::eval::countResults(sample, lingodb::compiler::support::eval::createAnd(expressions));
+      auto optionalCount = lingodb::compiler::support::eval::countResults(sample.getSampleData(), lingodb::compiler::support::eval::createAnd(expressions));
       if (!optionalCount.has_value()) return {};
       auto count = optionalCount.value();
       if (count == 0) count = 1;
-      return static_cast<double>(count) / static_cast<double>(sample->num_rows());
+      return static_cast<double>(count) / static_cast<double>(sample.getSampleData()->num_rows());
    }
 
    return {};
 }
 double getRows(relalg::QueryGraph::Node& n) {
    if (auto baseTableOp = mlir::dyn_cast_or_null<relalg::BaseTableOp>(n.op.getOperation())) {
-      auto numRows = baseTableOp.getMeta().getMeta()->getNumRows();
-      baseTableOp->setAttr("rows", mlir::FloatAttr::get(mlir::Float64Type::get(n.op.getContext()), numRows));
-      return numRows == 0 ? 1 : numRows;
+      auto meta = mlir::dyn_cast_or_null<relalg::TableMetaDataAttr>(baseTableOp->getAttr("meta"));
+      if (meta) {
+         auto numRows = meta.getMeta()->getNumRows();
+         baseTableOp->setAttr("rows", mlir::FloatAttr::get(mlir::Float64Type::get(n.op.getContext()), numRows));
+         return numRows == 0 ? 1 : numRows;
+      }
    }
    if (n.op) {
       if (n.op->hasAttr("rows")) {
@@ -222,16 +228,18 @@ double getRows(relalg::QueryGraph::Node& n) {
 relalg::ColumnSet relalg::QueryGraph::getPKey(relalg::QueryGraph::Node& n) {
    if (!n.op) return {};
    if (auto baseTableOp = mlir::dyn_cast_or_null<relalg::BaseTableOp>(n.op.getOperation())) {
-      auto meta = baseTableOp.getMeta().getMeta();
-      relalg::ColumnSet attributes;
-      std::unordered_map<std::string, const tuples::Column*> mapping;
-      for (auto c : baseTableOp.getColumns()) {
-         mapping[c.getName().str()] = &mlir::cast<tuples::ColumnDefAttr>(c.getValue()).getColumn();
+      auto meta = mlir::dyn_cast_or_null<relalg::TableMetaDataAttr>(baseTableOp->getAttr("meta"));
+      if(meta){
+         relalg::ColumnSet attributes;
+         std::unordered_map<std::string, const tuples::Column*> mapping;
+         for (auto c : baseTableOp.getColumns()) {
+            mapping[c.getName().str()] = &mlir::cast<tuples::ColumnDefAttr>(c.getValue()).getColumn();
+         }
+         for (auto c : meta.getMeta()->getPrimaryKey()) {
+            attributes.insert(mapping.at(c));
+         }
+         return attributes;
       }
-      for (auto c : meta->getPrimaryKey()) {
-         attributes.insert(mapping.at(c));
-      }
-      return attributes;
    }
 
    return {};

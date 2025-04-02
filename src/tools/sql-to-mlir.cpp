@@ -11,7 +11,7 @@
 
 namespace {
 using namespace lingodb::compiler::dialect;
-void printMLIR(std::string sql, std::shared_ptr<lingodb::runtime::Catalog> catalog) {
+void printMLIR(std::string sql, std::shared_ptr<lingodb::catalog::Catalog> catalog) {
    mlir::MLIRContext context;
    mlir::DialectRegistry registry;
    registry.insert<mlir::BuiltinDialect>();
@@ -54,10 +54,10 @@ void printMLIR(std::string sql, std::shared_ptr<lingodb::runtime::Catalog> catal
 } // end namespace
 int main(int argc, char** argv) {
    std::string filename = std::string(argv[1]);
-   auto catalog = lingodb::runtime::Catalog::createEmpty();
+   auto catalog = lingodb::catalog::Catalog::createEmpty();
    if (argc >= 3) {
       std::string dbDir = std::string(argv[2]);
-      catalog = lingodb::runtime::DBCatalog::create(catalog, dbDir, false);
+      catalog = lingodb::catalog::Catalog::create(dbDir, false);
    }
    std::ifstream istream{filename};
    std::stringstream buffer;

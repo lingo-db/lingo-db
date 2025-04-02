@@ -2,8 +2,8 @@
 #include "lingodb/utility/Tracer.h"
 #include <iostream>
 namespace {
-static utility::Tracer::Event createEvent("SimpleState", "create");
-static utility::Tracer::Event mergeEvent("SimpleState", "merge");
+static lingodb::utility::Tracer::Event createEvent("SimpleState", "create");
+static lingodb::utility::Tracer::Event mergeEvent("SimpleState", "merge");
 } // end namespace
 uint8_t* lingodb::runtime::SimpleState::create(size_t sizeOfType) {
    utility::Tracer::Trace trace(createEvent);

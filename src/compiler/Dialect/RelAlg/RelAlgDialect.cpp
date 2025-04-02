@@ -3,6 +3,7 @@
 #include "lingodb/compiler/Dialect/DB/IR/DBDialect.h"
 #include "lingodb/compiler/Dialect/DSA/IR/DSADialect.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOps.h"
+#include "lingodb/utility/Serialization.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -153,11 +154,11 @@ void RelAlgDialect::initialize() {
 ::mlir::Attribute TableMetaDataAttr::parse(::mlir::AsmParser& parser, ::mlir::Type type) {
    StringAttr attr;
    if (parser.parseLess() || parser.parseAttribute(attr) || parser.parseGreater()) return Attribute();
-   return TableMetaDataAttr::get(parser.getContext(), runtime::TableMetaData::deserialize(attr.str()));
+   return TableMetaDataAttr::get(parser.getContext(), utility::deserializeFromHexString<std::shared_ptr<catalog::TableMetaDataProvider>>(attr.str()));
 }
 void TableMetaDataAttr::print(::mlir::AsmPrinter& printer) const {
    printer << "<";
-   printer.printAttribute(StringAttr::get(getContext(), getMeta()->serialize()));
+   printer.printAttribute(StringAttr::get(getContext(), utility::serializeToHexString(getMeta())));
    printer << ">";
 }
 void SortSpecificationAttr::print(::mlir::AsmPrinter& printer) const {

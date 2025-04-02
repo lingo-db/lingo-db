@@ -51,11 +51,7 @@ class ConnectionHandle {
       ArrowArrayStream stream;
       bridge::run(connection, m.c_str(), &stream);
    }
-   void createTable(std::string name, std::string metaData) {
-      std::string m = metaData;
-      std::string n = name;
-      bridge::createTable(connection, n.c_str(), m.c_str());
-   }
+
    double getTime(std::string type) {
       std::string t = type;
       return bridge::getTiming(connection, t.c_str());
@@ -82,7 +78,6 @@ NB_MODULE(ext, m) {
       .def("mlir", &ConnectionHandle::mlir)
       .def("mlir_no_result", &ConnectionHandle::mlir_no_result)
       .def("append", &ConnectionHandle::appendTable)
-      .def("create_table", &ConnectionHandle::createTable)
       .def("get_time", &ConnectionHandle::getTime);
    m.def("connect_to_db", &connectToDB);
    m.def("in_memory", &inMemory);

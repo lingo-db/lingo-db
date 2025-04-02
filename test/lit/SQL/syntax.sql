@@ -15,9 +15,9 @@
 select 1;
 --//CHECK: module {
 --//CHECK:     func.func @main() {
---//CHECK:         %{{.*}} = relalg.basetable  {table_identifier = "test"} columns: {bool => @test::@bool({type = !db.nullable<i1>}), date32 => @test::@date32({type = !db.nullable<!db.date<day>>}), date64 => @test::@date64({type = !db.nullable<!db.date<millisecond>>}), decimal => @test::@decimal({type = !db.nullable<!db.decimal<5, 2>>}), float32 => @test::@float32({type = !db.nullable<f32>}), float64 => @test::@float64({type = !db.nullable<f64>}), int32 => @test::@int32({type = !db.nullable<i32>}), int64 => @test::@int64({type = !db.nullable<i64>}), str => @test::@str({type = !db.nullable<!db.string>})}
---//CHECK:         %{{.*}} = relalg.materialize %{{.*}} [@test::@str,@test::@float32,@test::@float64,@test::@decimal,@test::@int32,@test::@int64,@test::@bool,@test::@date32,@test::@date64] => ["str", "float32", "float64", "decimal", "int32", "int64", "bool", "date32", "date64"] : !subop.local_table<[str$0 : !db.nullable<!db.string>, float32$0 : !db.nullable<f32>, float64$0 : !db.nullable<f64>, decimal$0 : !db.nullable<!db.decimal<5, 2>>, int32$0 : !db.nullable<i32>, int64$0 : !db.nullable<i64>, bool$0 : !db.nullable<i1>, date32$0 : !db.nullable<!db.date<day>>, date64$0 : !db.nullable<!db.date<millisecond>>], ["str", "float32", "float64", "decimal", "int32", "int64", "bool", "date32", "date64"]>
---//CHECK:         subop.set_result 0 %{{.*}} : !subop.local_table<[str$0 : !db.nullable<!db.string>, float32$0 : !db.nullable<f32>, float64$0 : !db.nullable<f64>, decimal$0 : !db.nullable<!db.decimal<5, 2>>, int32$0 : !db.nullable<i32>, int64$0 : !db.nullable<i64>, bool$0 : !db.nullable<i1>, date32$0 : !db.nullable<!db.date<day>>, date64$0 : !db.nullable<!db.date<millisecond>>], ["str", "float32", "float64", "decimal", "int32", "int64", "bool", "date32", "date64"]>
+--//CHECK:         %{{.*}} = relalg.basetable {table_identifier = "test"} columns: {bool => @test::@bool({type = !db.nullable<i1>}), date32 => @test::@date32({type = !db.nullable<!db.date<day>>}), date64 => @test::@date64({type = !db.nullable<!db.timestamp<nanosecond>>}), decimal => @test::@decimal({type = !db.nullable<!db.decimal<5, 2>>}), float32 => @test::@float32({type = !db.nullable<f32>}), float64 => @test::@float64({type = !db.nullable<f64>}), int32 => @test::@int32({type = !db.nullable<i32>}), int64 => @test::@int64({type = !db.nullable<i64>}), str => @test::@str({type = !db.nullable<!db.string>})}
+--//CHECK:         %{{.*}} = relalg.materialize %{{.*}} [@test::@str,@test::@float32,@test::@float64,@test::@decimal,@test::@int32,@test::@int64,@test::@bool,@test::@date32,@test::@date64] => ["str", "float32", "float64", "decimal", "int32", "int64", "bool", "date32", "date64"] : !subop.local_table<[str$0 : !db.nullable<!db.string>, float32$0 : !db.nullable<f32>, float64$0 : !db.nullable<f64>, decimal$0 : !db.nullable<!db.decimal<5, 2>>, int32$0 : !db.nullable<i32>, int64$0 : !db.nullable<i64>, bool$0 : !db.nullable<i1>, date32$0 : !db.nullable<!db.date<day>>, date64$0 : !db.nullable<!db.timestamp<nanosecond>>], ["str", "float32", "float64", "decimal", "int32", "int64", "bool", "date32", "date64"]>
+--//CHECK:         subop.set_result 0 %{{.*}} : !subop.local_table<[str$0 : !db.nullable<!db.string>, float32$0 : !db.nullable<f32>, float64$0 : !db.nullable<f64>, decimal$0 : !db.nullable<!db.decimal<5, 2>>, int32$0 : !db.nullable<i32>, int64$0 : !db.nullable<i64>, bool$0 : !db.nullable<i1>, date32$0 : !db.nullable<!db.date<day>>, date64$0 : !db.nullable<!db.timestamp<nanosecond>>], ["str", "float32", "float64", "decimal", "int32", "int64", "bool", "date32", "date64"]>
 --//CHECK:         return
 --//CHECK:     }
 --//CHECK: }
@@ -194,7 +194,7 @@ select min(x),max(x),sum(x),count(x), count(*)  from (values (1)) t(x);
 --//CHECK: }
 select y, min(x),max(x),sum(x),count(x), count(*) from (values (1,2)) t(x,y) group by x;
 --//CHECK: module
---//CHECK: call @{{.*}}RelationHelper{{.*}}createTable{{.*}}(%{{.*}}, %{{.*}}) : (!util.varlen32, !util.varlen32) -> ()
+--//CHECK: call @{{.*}}RelationHelper{{.*}}createTable{{.*}}(%{{.*}}) : (!util.varlen32) -> ()
 create table test(
                      str varchar(20),
                      float32 float(2),

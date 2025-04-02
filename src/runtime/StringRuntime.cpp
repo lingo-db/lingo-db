@@ -98,28 +98,28 @@ bool lingodb::runtime::StringRuntime::startsWith(lingodb::runtime::VarLen32 str1
 //taken from gandiva
 //source https://github.com/apache/arrow/blob/41d115071587d68891b219cc137551d3ea9a568b/cpp/src/gandiva/gdv_function_stubs.cc
 //Apache-2.0 License
-#define CAST_NUMERIC_FROM_STRING(OUT_TYPE, ARROW_TYPE, TYPE_NAME)                                                               \
+#define CAST_NUMERIC_FROM_STRING(OUT_TYPE, ARROW_TYPE, TYPE_NAME)                                                                                 \
    OUT_TYPE lingodb::runtime::StringRuntime::to##TYPE_NAME(lingodb::runtime::VarLen32 str) { /* NOLINT (clang-diagnostic-return-type-c-linkage)*/ \
-      char* data = (str).data();                                                                                                \
-      int32_t len = (str).getLen();                                                                                             \
-      OUT_TYPE val = 0;                                                                                                         \
-      /* trim leading and trailing spaces */                                                                                    \
-      int32_t trimmed_len;                                                                                                      \
-      int32_t start = 0, end = len - 1;                                                                                         \
-      while (start <= end && data[start] == ' ') {                                                                              \
-         ++start;                                                                                                               \
-      }                                                                                                                         \
-      while (end >= start && data[end] == ' ') {                                                                                \
-         --end;                                                                                                                 \
-      }                                                                                                                         \
-      trimmed_len = end - start + 1;                                                                                            \
-      const char* trimmed_data = data + start;                                                                                  \
-      if (!arrow::internal::ParseValue<ARROW_TYPE>(trimmed_data, trimmed_len, &val)) {                                          \
-         std::string err =                                                                                                      \
-            "Failed to cast the string " + std::string(data, len) + " to " #OUT_TYPE;                                           \
-         /*gdv_fn_context_set_error_msg(context, err.c_str());*/                                                                \
-      }                                                                                                                         \
-      return val;                                                                                                               \
+      char* data = (str).data();                                                                                                                  \
+      int32_t len = (str).getLen();                                                                                                               \
+      OUT_TYPE val = 0;                                                                                                                           \
+      /* trim leading and trailing spaces */                                                                                                      \
+      int32_t trimmed_len;                                                                                                                        \
+      int32_t start = 0, end = len - 1;                                                                                                           \
+      while (start <= end && data[start] == ' ') {                                                                                                \
+         ++start;                                                                                                                                 \
+      }                                                                                                                                           \
+      while (end >= start && data[end] == ' ') {                                                                                                  \
+         --end;                                                                                                                                   \
+      }                                                                                                                                           \
+      trimmed_len = end - start + 1;                                                                                                              \
+      const char* trimmed_data = data + start;                                                                                                    \
+      if (!arrow::internal::ParseValue<ARROW_TYPE>(trimmed_data, trimmed_len, &val)) {                                                            \
+         std::string err =                                                                                                                        \
+            "Failed to cast the string " + std::string(data, len) + " to " #OUT_TYPE;                                                             \
+         /*gdv_fn_context_set_error_msg(context, err.c_str());*/                                                                                  \
+      }                                                                                                                                           \
+      return val;                                                                                                                                 \
    }
 
 CAST_NUMERIC_FROM_STRING(int64_t, arrow::Int64Type, Int)
@@ -141,18 +141,18 @@ __int128 lingodb::runtime::StringRuntime::toDecimal(lingodb::runtime::VarLen32 s
    res |= decimalrep.low_bits();
    return res;
 }
-#define CAST_NUMERIC_TO_STRING(IN_TYPE, ARROW_TYPE, TYPE_NAME)                                                                     \
+#define CAST_NUMERIC_TO_STRING(IN_TYPE, ARROW_TYPE, TYPE_NAME)                                                                                       \
    lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::from##TYPE_NAME(IN_TYPE value) { /* NOLINT (clang-diagnostic-return-type-c-linkage)*/ \
-      arrow::internal::StringFormatter<ARROW_TYPE> formatter;                                                                      \
-      uint8_t* data = nullptr;                                                                                                     \
-      size_t len = 0;                                                                                                              \
-      arrow::Status status = formatter(value, [&](std::string_view v) {                                                    \
-         len = v.length();                                                                                                         \
-         data = new uint8_t[len];                                                                                                  \
-         memcpy(data, v.data(), len);                                                                                              \
-         return arrow::Status::OK();                                                                                               \
-      });                                                                                                                          \
-      return lingodb::runtime::VarLen32(data, len);                                                                                         \
+      arrow::internal::StringFormatter<ARROW_TYPE> formatter;                                                                                        \
+      uint8_t* data = nullptr;                                                                                                                       \
+      size_t len = 0;                                                                                                                                \
+      arrow::Status status = formatter(value, [&](std::string_view v) {                                                                              \
+         len = v.length();                                                                                                                           \
+         data = new uint8_t[len];                                                                                                                    \
+         memcpy(data, v.data(), len);                                                                                                                \
+         return arrow::Status::OK();                                                                                                                 \
+      });                                                                                                                                            \
+      return lingodb::runtime::VarLen32(data, len);                                                                                                  \
    }
 
 CAST_NUMERIC_TO_STRING(int64_t, arrow::Int64Type, Int)
@@ -173,9 +173,9 @@ lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::fromChar(uint64_t va
    return lingodb::runtime::VarLen32((uint8_t*) data, bytes);
 }
 
-#define STR_CMP(NAME, OP)                                                                                  \
-   bool lingodb::runtime::StringRuntime::compare##NAME(lingodb::runtime::VarLen32 str1, lingodb::runtime::VarLen32 str2) {            \
-      return std::string_view(str1.data(), str1.getLen()) OP std::string_view(str2.data(), str2.getLen()); \
+#define STR_CMP(NAME, OP)                                                                                                  \
+   bool lingodb::runtime::StringRuntime::compare##NAME(lingodb::runtime::VarLen32 str1, lingodb::runtime::VarLen32 str2) { \
+      return std::string_view(str1.data(), str1.getLen()) OP std::string_view(str2.data(), str2.getLen());                 \
    }
 
 STR_CMP(Lt, <)
@@ -191,7 +191,6 @@ bool lingodb::runtime::StringRuntime::compareNEq(lingodb::runtime::VarLen32 str1
    if (str1.getLen() != str2.getLen()) return true;
    return std::string_view(str1.data(), str1.getLen()) != std::string_view(str2.data(), str2.getLen());
 }
-
 
 EXPORT char* rt_varlen_to_ref(lingodb::runtime::VarLen32* varlen) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    return varlen->data();
@@ -261,9 +260,21 @@ int64_t lingodb::runtime::StringRuntime::toDate(lingodb::runtime::VarLen32 str) 
    int64_t date64 = static_cast<int64_t>(res) * 24 * 60 * 60 * 1000000000ll;
    return date64;
 }
+
+int64_t lingodb::runtime::StringRuntime::toTimestamp(lingodb::runtime::VarLen32 str) {
+   int64_t res;
+   arrow::TimestampType t(arrow::TimeUnit::NANO);
+   arrow::internal::ParseValue<arrow::TimestampType>(t, str.data(), str.getLen(), &res);
+   return res;
+}
 lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::fromDate(int64_t date) {
    static arrow_vendored::date::sys_days epoch = arrow_vendored::date::sys_days{arrow_vendored::date::jan / 1 / 1970};
    auto asString = arrow_vendored::date::format("%F", epoch + std::chrono::nanoseconds{date});
+   return lingodb::runtime::VarLen32::fromString(asString);
+}
+lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::fromTimestamp(int64_t timestamp) {
+   static arrow_vendored::date::sys_days epoch = arrow_vendored::date::sys_days{arrow_vendored::date::jan / 1 / 1970};
+   auto asString = arrow_vendored::date::format("%F %T", epoch + std::chrono::nanoseconds{timestamp});
    return lingodb::runtime::VarLen32::fromString(asString);
 }
 

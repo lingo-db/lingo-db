@@ -13,6 +13,8 @@ std::shared_ptr<arrow::Array> cast(std::shared_ptr<arrow::Array> array, std::sha
    arrayData = arrow::ArrayData::Make(type, arrayData->length, arrayData->buffers, arrayData->child_data, arrayData->null_count, arrayData->offset);
    return arrow::MakeArray(arrayData);
 }
+//todo: avoid this
+
 std::shared_ptr<arrow::DataType> createType(std::string name, uint32_t p1, uint32_t p2) {
    if (name == "int") {
       switch (p1) {
@@ -76,6 +78,7 @@ std::shared_ptr<arrow::DataType> parseType(std::string typeDescr) {
    }
    return createType(typeName, std::stoi(p1), std::stoi(p2));
 }
+
 void handleStatus(arrow::Status status) {
    if (!status.ok()) {
       throw std::runtime_error(status.ToString());

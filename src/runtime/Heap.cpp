@@ -2,7 +2,7 @@
 #include "lingodb/utility/Tracer.h"
 #include <cstring>
 namespace {
-utility::Tracer::Event mergeHeapEvent("Heap", "merge");
+lingodb::utility::Tracer::Event mergeHeapEvent("Heap", "merge");
 } //end namespace
 
 void lingodb::runtime::Heap::bubbleDown(size_t idx, size_t end) {

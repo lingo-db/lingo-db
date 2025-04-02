@@ -2,6 +2,9 @@
 #include <algorithm>
 #include <mutex>
 #include <unordered_map>
+
+namespace utility=lingodb::utility;
+
 template <>
 std::optional<int64_t> utility::parseSetting<int64_t>(const std::string& value) {
    size_t charactersParsed;

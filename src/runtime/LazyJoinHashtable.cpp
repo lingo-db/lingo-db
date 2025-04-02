@@ -6,7 +6,7 @@
 #include <iostream>
 
 namespace {
-static utility::Tracer::Event buildEvent("HashIndexedView", "build");
+static lingodb::utility::Tracer::Event buildEvent("HashIndexedView", "build");
 } // end namespace
 lingodb::runtime::HashIndexedView* lingodb::runtime::HashIndexedView::build(lingodb::runtime::GrowingBuffer* buffer) {
    utility::Tracer::Trace trace(buildEvent);

@@ -71,7 +71,7 @@ with context4, ir.Location.unknown():
             i32type=ir.IntegerType.get_signless(32)
             col1 = tuples.ColumnDefAttr.get(context4,"t1","a",i32type)
             col1_ref = tuples.ColumnRefAttr.get(context4,"t1","a")
-            rel1 = relalg.BaseTableOp(ir.StringAttr.get('test_table'), relalg.TableMetaDataAttr.get_empty(context4),ir.DictAttr.get({'a': col1 }))
+            rel1 = relalg.BaseTableOp(ir.StringAttr.get('test_table'), ir.DictAttr.get({'a': col1 }))
             rel2 = relalg.SortOp(rel1,ir.ArrayAttr.get([relalg.SortSpecificationAttr.get(col1_ref,relalg.SortSpec.desc)]))
             ret = func.ReturnOp([])
     print(module)

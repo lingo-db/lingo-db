@@ -272,34 +272,12 @@ ParseResult relalg::BaseTableOp::parse(OpAsmParser& parser, OperationState& resu
       if (parser.parseRBrace()) { return failure(); }
       break;
    }
-   auto meta = result.attributes.get("meta");
-   if (meta) {
-      if (auto strAttr = mlir::dyn_cast<mlir::StringAttr>(meta)) {
-         result.attributes.set("meta", relalg::TableMetaDataAttr::get(parser.getContext(), runtime::TableMetaData::deserialize(strAttr.str())));
-      } else {
-         return failure();
-      }
-   } else {
-      result.addAttribute("meta", relalg::TableMetaDataAttr::get(parser.getContext(), std::make_shared<runtime::TableMetaData>()));
-   }
    result.addAttribute("columns", mlir::DictionaryAttr::get(parser.getBuilder().getContext(), columns));
    return parser.addTypeToList(tuples::TupleStreamType::get(parser.getBuilder().getContext()), result.types);
 }
 void relalg::BaseTableOp::print(OpAsmPrinter& p) {
    p << " ";
-   std::vector<mlir::NamedAttribute> colsToPrint;
-   for (auto attr : this->getOperation()->getAttrs()) {
-      if (attr.getName().str() == "meta") {
-         if (auto metaAttr = mlir::dyn_cast_or_null<relalg::TableMetaDataAttr>(attr.getValue())) {
-            if (metaAttr.getMeta()->isPresent()) {
-               colsToPrint.push_back(mlir::NamedAttribute(mlir::StringAttr::get(getContext(), "meta"), mlir::StringAttr::get(getContext(), metaAttr.getMeta()->serialize())));
-            }
-         }
-      } else {
-         colsToPrint.push_back(attr);
-      }
-   }
-   p.printOptionalAttrDict(colsToPrint, /*elidedAttrs=*/{"sym_name", "columns"});
+   p.printOptionalAttrDict(this->getOperation()->getAttrs(), /*elidedAttrs=*/{"sym_name", "columns"});
    p << " columns: {";
    auto first = true;
    for (auto mapping : getColumns()) {
