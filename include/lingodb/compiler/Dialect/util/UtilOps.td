@@ -40,6 +40,7 @@ def BufferGetElementRef : Util_Op<"buffer_getelementref"> {
     let arguments = (ins BufferType:$buffer, Index:$idx);
     let results = (outs RefType: $ref);
     let assemblyFormat = " $buffer `[` $idx `]` `:` type($buffer) `->` type($ref) attr-dict";
+    let hasVerifier=1;
 }
 def VarLenGetLen : Util_Op<"varlen32_getlen"> {
     let arguments = (ins VarLen32Type:$varlen);

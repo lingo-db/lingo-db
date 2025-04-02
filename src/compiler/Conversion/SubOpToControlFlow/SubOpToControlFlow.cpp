@@ -1765,7 +1765,7 @@ class ScanRefsSortedViewLowering : public SubOpConversionPattern<subop::ScanRefs
       auto c1 = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
       auto forOp = rewriter.create<mlir::scf::ForOp>(loc, start, end, c1, mlir::ValueRange{});
       rewriter.atStartOf(forOp.getBody(), [&](SubOpRewriter& rewriter) {
-         auto currElementPtr = rewriter.create<util::BufferGetElementRef>(loc, util::RefType::get(elementType), adaptor.getState(), forOp.getInductionVar());
+         auto currElementPtr = rewriter.create<util::BufferGetElementRef>(loc, elementType, adaptor.getState(), forOp.getInductionVar());
          mapping.define(scanOp.getRef(), currElementPtr);
          rewriter.replaceTupleStream(scanOp, mapping);
       });

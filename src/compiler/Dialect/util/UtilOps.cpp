@@ -52,6 +52,19 @@ using namespace lingodb::compiler::dialect;
    return success();
 }
 
+
+::mlir::LogicalResult util::BufferGetElementRef::verify() {
+   util::BufferGetElementRef& op = *this;
+   if (auto bufType = mlir::dyn_cast_or_null<util::BufferType>(op.getBuffer().getType())) {
+      if (bufType.getElementType() != op.getResult().getType()) {
+         op.emitOpError("element type must match buffer type");
+         return failure();
+      }
+      return success();
+   }
+   op.emitOpError("must be buffer type");
+   return failure();
+}
 LogicalResult util::UnPackOp::canonicalize(util::UnPackOp unPackOp, mlir::PatternRewriter& rewriter) {
    auto tuple = unPackOp.getTuple();
    if (auto* tupleCreationOp = tuple.getDefiningOp()) {
