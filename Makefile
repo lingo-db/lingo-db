@@ -105,7 +105,7 @@ test-coverage: build/lingodb-debug-coverage/.stamp resources/data/test/.stamp re
 coverage: build/lingodb-debug-coverage/.stamp
 	$(MAKE) test-coverage
 	mkdir -p build/coverage-report
-	llvmcov2html --exclude-dir=$(dir $<),vendored build/coverage-report $(dir $<)/run-mlir $(dir $<)/run-sql $(dir $<)/mlir-db-opt $(dir $<)/sql-to-mlir $(dir $<)/tester $(dir $<)/coverage.profdata
+	llvmcov2html --exclude-dir=$(dir $<),vendored,test build/coverage-report --projectroot=$(ROOT_DIR) $(dir $<)/run-mlir $(dir $<)/run-sql $(dir $<)/mlir-db-opt $(dir $<)/sql-to-mlir $(dir $<)/tester $(dir $<)/coverage.profdata
 
 
 .PHONY: run-benchmark

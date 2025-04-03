@@ -31,7 +31,7 @@ namespace lingodb::runtime {
 
 void LingoDBHashIndex::rawBuild() {
    size_t numRows = buffer.getLen();
-   size_t htSize = nextPow2(std::min(1ul, numRows));
+   size_t htSize = nextPow2(std::max(1ul, numRows));
    if (ht) {
       FixedSizedBuffer<Entry*>::deallocate(ht, mask + 1);
    }
