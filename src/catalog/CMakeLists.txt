@@ -5,5 +5,5 @@ target_link_libraries(mlirTypes
         ${translation_libs}
 )
 
-add_library(catalog Catalog.cpp Types.cpp Defs.cpp)
+add_library(catalog Catalog.cpp Types.cpp Defs.cpp TableCatalogEntry.cpp IndexCatalogEntry.cpp MetaData.cpp Column.cpp)
 target_link_libraries(catalog PUBLIC mlirTypes)

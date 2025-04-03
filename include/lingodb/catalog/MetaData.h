@@ -5,6 +5,8 @@
 #ifndef LINGODB_CATALOG_METADATA_H
 #define LINGODB_CATALOG_METADATA_H
 #include <arrow/type_fwd.h>
+
+#include <optional>
 namespace lingodb::utility {
 class Serializer;
 class Deserializer;

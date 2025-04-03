@@ -1,6 +1,9 @@
 #ifndef LINGODB_CATALOG_DEFS_H
 #define LINGODB_CATALOG_DEFS_H
-#include "TableCatalogEntry.h"
+#include "Column.h"
+
+#include <vector>
+
 namespace lingodb::catalog {
 struct CreateTableDef {
    std::string name;

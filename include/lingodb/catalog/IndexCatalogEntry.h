@@ -1,5 +1,9 @@
 #ifndef LINGODB_CATALOG_INDEXCATALOGENTRY_H
 #define LINGODB_CATALOG_INDEXCATALOGENTRY_H
+#include "Catalog.h"
+
+#include <vector>
+
 namespace lingodb::runtime {
 class Index;
 class LingoDBHashIndex;
