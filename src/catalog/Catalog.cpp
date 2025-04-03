@@ -11,10 +11,15 @@
 namespace lingodb::catalog {
 Catalog Catalog::deserialize(lingodb::utility::Deserializer& deSerializer) {
    Catalog res;
+   auto version = deSerializer.readProperty<size_t>(0);
+   if (version != binaryVersion) {
+      throw std::runtime_error("Catalog: version mismatch");
+   }
    res.entries = deSerializer.readProperty<std::unordered_map<std::string, std::shared_ptr<CatalogEntry>>>(1);
    return res;
 }
 void Catalog::serialize(lingodb::utility::Serializer& serializer) const {
+   serializer.writeProperty(0, binaryVersion);
    serializer.writeProperty(1, entries);
 }
 
