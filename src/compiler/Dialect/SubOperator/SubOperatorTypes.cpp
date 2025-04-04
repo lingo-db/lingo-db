@@ -40,6 +40,21 @@ static void printStateMembers(mlir::AsmPrinter& p, subop::StateMembersAttr state
    }
    p << "]";
 }
+
+static mlir::LogicalResult parseWithLock(mlir::AsmParser& parser, bool& withLock) {
+   llvm::StringRef boolAsRef;
+   if (parser.parseOptionalComma().succeeded() && parser.parseKeyword(&boolAsRef).succeeded()) {
+      withLock = (boolAsRef == "lockable");
+   } else {
+      withLock = false;
+   }
+   return mlir::success();
+}
+static void printWithLock(mlir::AsmPrinter& p, bool withLock) {
+   if (withLock) {
+      p << ", lockable";
+   }
+}
 } // namespace
 subop::StateMembersAttr subop::HashMapType::getMembers() {
    std::vector<mlir::Attribute> names;
@@ -131,6 +146,7 @@ void lingodb::compiler::dialect::subop::SubOperatorDialect::registerTypes() {
    addTypes<
 #define GET_TYPEDEF_LIST
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOpsTypes.cpp.inc"
+
       >();
 }
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOpsTypeInterfaces.cpp.inc"

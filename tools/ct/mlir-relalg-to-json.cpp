@@ -445,6 +445,35 @@ class ToJson {
             result["order"] = convertSortSpec(sortOp.getSortspecs());
             return result;
          })
+         .Case<relalg::GroupJoinOp>([&](relalg::GroupJoinOp groupJoin) {
+            result["operator"] = "groupjoin";
+            result["keys"] = nlohmann::json::array();
+            for (auto [leftKey, rightKey] : llvm::zip(groupJoin.getLeftCols(), groupJoin.getRightCols())) {
+               auto leftRefAttr = mlir::cast<tuples::ColumnRefAttr>(leftKey);
+               auto rightRefAttr = mlir::cast<tuples::ColumnRefAttr>(rightKey);
+               result["keys"].push_back({{"left", columnToJSON(leftRefAttr)}, {"right", columnToJSON(rightRefAttr)}});
+            }
+            result["aggregates"] = nlohmann::json::array();
+            for (auto [aggregate, aggrResult] : llvm::zip(groupJoin.getComputedCols(), groupJoin.getAggrFunc().getBlocks().begin()->getTerminator()->getOperands())) {
+               auto colDefAttr = mlir::cast<tuples::ColumnDefAttr>(aggregate);
+               nlohmann::json aggrExpr;
+               if (auto countStar = mlir::dyn_cast_or_null<relalg::CountRowsOp>(aggrResult.getDefiningOp())) {
+                  aggrExpr = innerExpression({"count(*)"}, mlir::ValueRange{});
+               } else if (auto aggrFunc = mlir::dyn_cast_or_null<relalg::AggrFuncOp>(aggrResult.getDefiningOp())) {
+                  aggrExpr = innerExpression({stringifyEnum(aggrFunc.getFn()).str() + std::string("("), ")"}, {columnToJSON(aggrFunc.getAttr())});
+               } else {
+                  aggrExpr = nlohmann::json{{"type", "expression_leaf"}, {"leaf_type", "unknown"}};
+               }
+               result["aggregates"].push_back(nlohmann::json{{"computed", columnToJSON(colDefAttr)}, {"aggregation", aggrExpr}});
+            }
+            result["mapped"] = nlohmann::json::array();
+            for (auto [column, computed] : llvm::zip(groupJoin.getMappedCols(), groupJoin.getMapFunc().front().getTerminator()->getOperands())) {
+               auto columnDefAttr = mlir::cast<tuples::ColumnDefAttr>(column);
+               result["mapped"].push_back({{"computed", columnToJSON(columnDefAttr)}, {"expression", convertExpression(computed.getDefiningOp())}});
+            }
+            result["behavior"]= groupJoin.getBehavior() == relalg::GroupJoinBehavior::inner ? "inner" : "outer";
+            return result;
+         })
          .Case<relalg::AggregationOp>([&](relalg::AggregationOp aggregationOp) {
             result["operator"] = "aggregation";
             result["keys"] = nlohmann::json::array();

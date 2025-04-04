@@ -311,7 +311,7 @@ class ProjectionDistinctLowering : public OpConversionPattern<relalg::Projection
       auto keyMembers = subop::StateMembersAttr::get(context, mlir::ArrayAttr::get(context, keyNames), mlir::ArrayAttr::get(context, keyTypesAttr));
       auto stateMembers = subop::StateMembersAttr::get(context, mlir::ArrayAttr::get(context, {}), mlir::ArrayAttr::get(context, {}));
 
-      auto stateType = subop::MapType::get(rewriter.getContext(), keyMembers, stateMembers);
+      auto stateType = subop::MapType::get(rewriter.getContext(), keyMembers, stateMembers, false);
       mlir::Value state = rewriter.create<subop::GenericCreateOp>(loc, stateType);
       auto [referenceDef, referenceRef] = createColumn(subop::LookupEntryRefType::get(context, stateType), "lookup", "ref");
       auto lookupOp = rewriter.create<subop::LookupOrInsertOp>(loc, tuples::TupleStreamType::get(getContext()), adaptor.getRel(), state, projectionOp.getCols(), referenceDef);
@@ -612,7 +612,7 @@ class UnionDistinctLowering : public OpConversionPattern<relalg::UnionOp> {
       auto keyMembers = subop::StateMembersAttr::get(context, mlir::ArrayAttr::get(context, keyNames), mlir::ArrayAttr::get(context, keyTypesAttr));
       auto stateMembers = subop::StateMembersAttr::get(context, mlir::ArrayAttr::get(context, {}), mlir::ArrayAttr::get(context, {}));
 
-      auto stateType = subop::MapType::get(rewriter.getContext(), keyMembers, stateMembers);
+      auto stateType = subop::MapType::get(rewriter.getContext(), keyMembers, stateMembers, false);
       mlir::Value state = rewriter.create<subop::GenericCreateOp>(loc, stateType);
       auto [referenceDefLeft, referenceRefLeft] = createColumn(subop::LookupEntryRefType::get(context, stateType), "lookup", "ref");
       auto [referenceDefRight, referenceRefRight] = createColumn(subop::LookupEntryRefType::get(context, stateType), "lookup", "ref");
@@ -720,7 +720,7 @@ class CountingSetOperationLowering : public ConversionPattern {
       auto keyMembers = subop::StateMembersAttr::get(context, mlir::ArrayAttr::get(context, keyNames), mlir::ArrayAttr::get(context, keyTypesAttr));
       auto stateMembers = subop::StateMembersAttr::get(context, mlir::ArrayAttr::get(context, counterNames), mlir::ArrayAttr::get(context, counterTypes));
 
-      auto stateType = subop::MapType::get(rewriter.getContext(), keyMembers, stateMembers);
+      auto stateType = subop::MapType::get(rewriter.getContext(), keyMembers, stateMembers, false);
       mlir::Value state = rewriter.create<subop::GenericCreateOp>(loc, stateType);
       auto [referenceDefLeft, referenceRefLeft] = createColumn(subop::LookupEntryRefType::get(context, stateType), "lookup", "ref");
       auto [referenceDefRight, referenceRefRight] = createColumn(subop::LookupEntryRefType::get(context, stateType), "lookup", "ref");
@@ -2087,7 +2087,7 @@ static std::tuple<mlir::Value, mlir::DictionaryAttr, mlir::DictionaryAttr> perfo
          locations.push_back(loc);
       }
       auto keyMembers = subop::StateMembersAttr::get(context, mlir::ArrayAttr::get(context, keyNames), mlir::ArrayAttr::get(context, keyTypesAttr));
-      stateType = subop::MapType::get(rewriter.getContext(), keyMembers, stateMembers);
+      stateType = subop::MapType::get(rewriter.getContext(), keyMembers, stateMembers, false);
 
       auto createOp = rewriter.create<subop::GenericCreateOp>(loc, stateType);
       state = createOp.getRes();
@@ -2213,7 +2213,7 @@ class WindowLowering : public OpConversionPattern<relalg::WindowOp> {
 
          auto stateMembers = subop::StateMembersAttr::get(context, mlir::ArrayAttr::get(context, {rewriter.getStringAttr(bufferMember)}), mlir::ArrayAttr::get(context, {mlir::TypeAttr::get(bufferType)}));
          auto keyMembers = subop::StateMembersAttr::get(context, mlir::ArrayAttr::get(context, keyNames), mlir::ArrayAttr::get(context, keyTypesAttr));
-         auto hashMapType = subop::MapType::get(rewriter.getContext(), keyMembers, stateMembers);
+         auto hashMapType = subop::MapType::get(rewriter.getContext(), keyMembers, stateMembers, false);
 
          auto createOp = rewriter.create<subop::GenericCreateOp>(loc, hashMapType);
          mlir::Value hashMap = createOp.getRes();
@@ -2561,7 +2561,7 @@ class AggregationLowering : public OpConversionPattern<relalg::AggregationOp> {
       return success();
    }
 };
-/*
+
 class GroupJoinLowering : public OpConversionPattern<relalg::GroupJoinOp> {
    public:
    using OpConversionPattern<relalg::GroupJoinOp>::OpConversionPattern;
@@ -2574,7 +2574,7 @@ class GroupJoinLowering : public OpConversionPattern<relalg::GroupJoinOp> {
       std::unordered_map<mlir::Operation*, std::pair<relalg::OrderedAttributes, std::vector<std::shared_ptr<DistAggrFunc>>>> distinct;
       distinct.insert({nullptr, {relalg::OrderedAttributes::fromVec({}), {}}});
       for (size_t i = 0; i < groupJoinOp.getComputedCols().size(); i++) {
-         auto destColumnAttr = groupJoinOp.getComputedCols()[mlir::cast<tuples::ColumnDefAttr>(i]);
+         auto destColumnAttr = mlir::cast<tuples::ColumnDefAttr>(groupJoinOp.getComputedCols()[i]);
          mlir::Value computedVal = terminator.getResults()[i];
          mlir::Value tupleStream;
          std::shared_ptr<DistAggrFunc> distAggrFunc;
@@ -2622,10 +2622,10 @@ class GroupJoinLowering : public OpConversionPattern<relalg::GroupJoinOp> {
       auto loc = groupJoinOp->getLoc();
       auto storedColumns = groupJoinOp.getUsedColumns().intersect(groupJoinOp.getChildren()[0].getAvailableColumns());
       for (auto z : llvm::zip(groupJoinOp.getLeftCols(), groupJoinOp.getRightCols())) {
-         auto leftType = std::get<0>(z).cast<tuples::ColumnRefAttr>().getColumn().type;
-         auto rightType = std::get<1>(z).cast<tuples::ColumnRefAttr>().getColumn().type;
+         auto leftType = mlir::cast<tuples::ColumnRefAttr>(std::get<0>(z)).getColumn().type;
+         auto rightType = mlir::cast<tuples::ColumnRefAttr>(std::get<1>(z)).getColumn().type;
          if (leftType == rightType) {
-            storedColumns.remove(relalg::ColumnSet::from(&std::get<0>(z).cast<tuples::ColumnRefAttr>().getColumn()));
+            storedColumns.remove(relalg::ColumnSet::from(&mlir::cast<tuples::ColumnRefAttr>(std::get<0>(z)).getColumn()));
          }
       }
       auto additionalColumns = relalg::OrderedAttributes::fromColumns(storedColumns);
@@ -2648,18 +2648,24 @@ class GroupJoinLowering : public OpConversionPattern<relalg::GroupJoinOp> {
       std::vector<mlir::Attribute> names;
       std::vector<mlir::Attribute> reduceNames;
       std::vector<mlir::Attribute> types;
+      std::vector<mlir::Type> valueTypes;
       std::vector<NamedAttribute> defMapping;
       std::vector<NamedAttribute> additionalColsDefMapping;
-      std::vector<NamedAttribute> additionalColsRefMapping;
+      std::vector<size_t> additionalColsMemberIdx;
+      std::vector<Attribute> additionalColsRefs;
+      std::vector<mlir::Type> additionalColsTypes;
+      std::vector<mlir::Location> valueLocations;
       tuples::ColumnRefAttr marker;
       std::string markerMember;
       if (groupJoinOp.getBehavior() == relalg::GroupJoinBehavior::inner) {
          markerMember = getUniqueMember(getContext(), "gjvalmarker");
          names.push_back(rewriter.getStringAttr(markerMember));
          types.push_back(mlir::TypeAttr::get(rewriter.getI1Type()));
+         valueTypes.push_back(rewriter.getI1Type());
          auto [def, ref] = createColumn(rewriter.getI1Type(), "groupjoin", "marker");
          marker = ref;
          defMapping.push_back(rewriter.getNamedAttr(markerMember, def));
+         valueLocations.push_back(loc);
       }
       for (auto* c : additionalColumns.getAttrs()) {
          auto memberName = getUniqueMember(getContext(), "gjval");
@@ -2668,7 +2674,11 @@ class GroupJoinLowering : public OpConversionPattern<relalg::GroupJoinOp> {
          auto def = colManager.createDef(c);
          defMapping.push_back(rewriter.getNamedAttr(memberName, def));
          additionalColsDefMapping.push_back(rewriter.getNamedAttr(memberName, def));
-         additionalColsRefMapping.push_back(rewriter.getNamedAttr(memberName, colManager.createRef(c)));
+         additionalColsMemberIdx.push_back(names.size() - 1);
+         additionalColsRefs.push_back(colManager.createRef(c));
+         valueTypes.push_back(c->type);
+         additionalColsTypes.push_back(c->type);
+         valueLocations.push_back(loc);
       }
 
       for (auto aggrFn : distAggrFuncs) {
@@ -2678,6 +2688,8 @@ class GroupJoinLowering : public OpConversionPattern<relalg::GroupJoinOp> {
          types.push_back(mlir::TypeAttr::get(aggrFn->getStateType()));
          auto def = aggrFn->getDestAttribute();
          defMapping.push_back(rewriter.getNamedAttr(memberName, def));
+         valueLocations.push_back(loc);
+         valueTypes.push_back(aggrFn->getStateType());
       }
       auto stateMembers = subop::StateMembersAttr::get(context, mlir::ArrayAttr::get(context, names), mlir::ArrayAttr::get(context, types));
       auto leftKeys = relalg::OrderedAttributes::fromRefArr(groupJoinOp.getLeftCols());
@@ -2700,7 +2712,7 @@ class GroupJoinLowering : public OpConversionPattern<relalg::GroupJoinOp> {
          otherKeyTypes.push_back((x->type));
       }
       auto keyMembers = subop::StateMembersAttr::get(context, mlir::ArrayAttr::get(context, keyNames), mlir::ArrayAttr::get(context, keyTypesAttr));
-      auto stateType = subop::MapType::get(rewriter.getContext(), keyMembers, stateMembers);
+      auto stateType = subop::MapType::get(rewriter.getContext(), keyMembers, stateMembers, false);
 
       auto createOp = rewriter.create<subop::GenericCreateOp>(loc, stateType);
       auto state = createOp.getRes();
@@ -2719,7 +2731,40 @@ class GroupJoinLowering : public OpConversionPattern<relalg::GroupJoinOp> {
             rewriter.create<tuples::ReturnOp>(loc, compared);
          }
       }
-      rewriter.create<subop::ScatterOp>(loc, lookupOp, referenceRefAttr, rewriter.getDictionaryAttr(additionalColsRefMapping));
+      auto reduceOp = rewriter.create<subop::ReduceOp>(loc, lookupOp, referenceRefAttr, rewriter.getArrayAttr(additionalColsRefs), rewriter.getArrayAttr(names));
+
+      {
+         mlir::Block* reduceBlock = new Block;
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         reduceBlock->addArguments(additionalColsTypes, valueLocations);
+         reduceBlock->addArguments(valueTypes, valueLocations);
+         rewriter.setInsertionPointToStart(reduceBlock);
+         std::vector<mlir::Value> storeVals;
+         for (size_t i = 0; i < valueTypes.size(); i++) {
+            auto colVal = reduceBlock->getArgument(i + additionalColsRefs.size());
+            storeVals.push_back(colVal);
+         }
+         for (size_t i = 0; i < additionalColsMemberIdx.size(); i++) {
+            auto colVal = reduceBlock->getArgument(i);
+            storeVals[additionalColsMemberIdx[i]] = colVal;
+         }
+         rewriter.create<tuples::ReturnOp>(loc, storeVals);
+         reduceOp.getRegion().push_back(reduceBlock);
+      }
+      {
+         mlir::Block* combineBlock = new Block;
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         combineBlock->addArguments(valueTypes, valueLocations);
+         combineBlock->addArguments(valueTypes, valueLocations);
+         rewriter.setInsertionPointToStart(combineBlock);
+         std::vector<mlir::Value> leftValsVec;
+         for (size_t i = 0; i < valueTypes.size(); i++) {
+            auto colVal = combineBlock->getArgument(i);
+            leftValsVec.push_back(colVal);
+         }
+         rewriter.create<tuples::ReturnOp>(loc, leftValsVec);
+         reduceOp.getCombine().push_back(combineBlock);
+      }
 
       auto [aggrDef, aggrRef] = createColumn(subop::OptionalType::get(getContext(), subop::LookupEntryRefType::get(context, stateType)), "lookup", "ref");
       auto [unwrappedAggrDef, unwrappedAggrRef] = createColumn(subop::LookupEntryRefType::get(context, stateType), "lookup", "ref");
@@ -2740,8 +2785,8 @@ class GroupJoinLowering : public OpConversionPattern<relalg::GroupJoinOp> {
       std::vector<mlir::Attribute> renameLeftDefs;
       std::vector<mlir::Attribute> renameRightDefs;
       for (auto z : llvm::zip(groupJoinOp.getLeftCols(), groupJoinOp.getRightCols())) {
-         auto rightAttr = std::get<1>(z).cast<tuples::ColumnRefAttr>();
-         auto leftAttr = std::get<0>(z).cast<tuples::ColumnRefAttr>();
+         auto rightAttr = mlir::cast<tuples::ColumnRefAttr>(std::get<1>(z));
+         auto leftAttr = mlir::cast<tuples::ColumnRefAttr>(std::get<0>(z));
          if (!storedColumns.contains(&leftAttr.getColumn())) {
             renameLeftDefs.push_back(tuples::ColumnDefAttr::get(getContext(), leftAttr.getName(), leftAttr.getColumnPtr(), rewriter.getArrayAttr(rightAttr)));
          }
@@ -2757,9 +2802,25 @@ class GroupJoinLowering : public OpConversionPattern<relalg::GroupJoinOp> {
          rewriter.create<subop::ScatterOp>(loc, withTrueCol, unwrappedAggrRef, rewriter.getDictionaryAttr(rewriter.getNamedAttr(markerMember, colManager.createRef(trueCol))));
       }
       if (!groupJoinOp.getMappedCols().empty()) {
-         auto mapOp2 = rewriter.create<subop::MapOp>(loc, tuples::TupleStreamType::get(rewriter.getContext()), filtered, groupJoinOp.getMappedCols());
-         auto moved = safelyMoveRegion(rewriter, groupJoinOp.getMapFunc(), mapOp2.getFn()).succeeded();
-         assert(moved);
+         subop::MapCreationHelper helper(rewriter.getContext());
+         std::vector<mlir::Operation*> toMove;
+         for (auto& op : groupJoinOp.getMapFunc().front()) {
+            toMove.push_back(&op);
+         }
+         for (auto* op : toMove) {
+            op->remove();
+            helper.getMapBlock()->push_back(op);
+         }
+         std::vector<mlir::Operation*> toErase;
+         helper.getMapBlock()->walk([&](tuples::GetColumnOp getColumnOp) {
+            getColumnOp.replaceAllUsesWith(helper.access(getColumnOp.getAttr(), getColumnOp->getLoc()));
+            toErase.push_back(getColumnOp);
+         });
+         for (auto* op : toErase) {
+            rewriter.eraseOp(op);
+         }
+         auto mapOp2 = rewriter.create<subop::MapOp>(loc, tuples::TupleStreamType::get(rewriter.getContext()), filtered, groupJoinOp.getMappedCols(), helper.getColRefs());
+         mapOp2.getFn().push_back(helper.getMapBlock());
          filtered = mapOp2;
       }
       performAggrFuncReduce(loc, rewriter, distAggrFuncs, unwrappedAggrRef, filtered, reduceNames, defMapping);
@@ -2772,7 +2833,7 @@ class GroupJoinLowering : public OpConversionPattern<relalg::GroupJoinOp> {
       return success();
    }
 };
-*/
+
 class NestedLowering : public OpConversionPattern<relalg::NestedOp> {
    public:
    using OpConversionPattern<relalg::NestedOp>::OpConversionPattern;
@@ -2920,7 +2981,7 @@ void RelalgToSubOpLoweringPass::runOnOperation() {
    patterns.insert<UnionAllLowering>(typeConverter, ctxt);
    patterns.insert<UnionDistinctLowering>(typeConverter, ctxt);
    patterns.insert<CountingSetOperationLowering>(ctxt);
-   //patterns.insert<GroupJoinLowering>(ctxt);
+   patterns.insert<GroupJoinLowering>(ctxt);
    patterns.insert<NestedLowering>(ctxt);
    patterns.insert<TrackTuplesLowering>(ctxt);
    patterns.insert<QueryOpLowering>(ctxt);

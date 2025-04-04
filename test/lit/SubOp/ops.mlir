@@ -87,8 +87,8 @@ subop.reduce %stream @state::@ref [@t::@col] ["sum"] ([%curr],[%val]){
 // -----
 %c0 = arith.constant 0 : i64
 %initial_stream=subop.in_flight %c0 : i64 => [@t::@col({type=i64})]
-%map = subop.create !subop.map<[key : i64],[val : i64]>
-//CHECK: %{{.*}} = subop.lookup_or_insert %{{.*}}%{{.*}} [@t::@col] : !subop.map<[key : i64], [val : i64]> @state::@ref({type = !subop.lookup_entry_ref<!subop.map<[key : i64], [val : i64]>>}) eq: ([%arg0],[%arg1]) {
+%map = subop.create !subop.map<[key : i64],[val : i64] >
+//CHECK: %{{.*}} = subop.lookup_or_insert %{{.*}}%{{.*}} [@t::@col] : !subop.map<[key : i64], [val : i64] > @state::@ref({type = !subop.lookup_entry_ref<!subop.map<[key : i64], [val : i64] >>}) eq: ([%arg0],[%arg1]) {
 //CHECK:     %{{.*}} = arith.cmpi eq, %arg0, %arg1 : i64
 //CHECK:     tuples.return %{{.*}} : i1
 //CHECK:   }initial: {
@@ -97,7 +97,7 @@ subop.reduce %stream @state::@ref [@t::@col] ["sum"] ([%curr],[%val]){
 //CHECK:   }
 //CHECK: }
 
-%stream =subop.lookup_or_insert %initial_stream %map[@t::@col] : !subop.map<[key : i64],[val : i64]> @state::@ref({type=!subop.lookup_entry_ref<!subop.map<[key : i64],[val : i64]>>})
+%stream =subop.lookup_or_insert %initial_stream %map[@t::@col] : !subop.map<[key : i64],[val : i64] > @state::@ref({type=!subop.lookup_entry_ref<!subop.map<[key : i64],[val : i64] >>})
 eq: ([%l], [%r]){
 	%eq = arith.cmpi eq, %l, %r :i64
 	tuples.return %eq : i1
@@ -109,15 +109,15 @@ initial: {
 // -----
 %c0 = arith.constant 0 : i64
 %initial_stream=subop.in_flight %c0 : i64 => [@t::@col({type=i64})]
-%map = subop.create !subop.map<[key : i64],[val : i64]>
-//CHECK:   subop.insert %{{.*}}%{{.*}}  : !subop.map<[key : i64], [val : i64]> {@t::@col => key, @t::@col => val}
-subop.insert %initial_stream %map : !subop.map<[key : i64],[val : i64]> {@t::@col => key,@t::@col => val}
-//CHECK:  subop.insert %{{.*}}%{{.*}}  : !subop.map<[key : i64], [val : i64]> {@t::@col => key, @t::@col => val} eq: ([%arg0],[%arg1]) {
+%map = subop.create !subop.map<[key : i64],[val : i64] >
+//CHECK:   subop.insert %{{.*}}%{{.*}}  : !subop.map<[key : i64], [val : i64] > {@t::@col => key, @t::@col => val}
+subop.insert %initial_stream %map : !subop.map<[key : i64],[val : i64] > {@t::@col => key,@t::@col => val}
+//CHECK:  subop.insert %{{.*}}%{{.*}}  : !subop.map<[key : i64], [val : i64] > {@t::@col => key, @t::@col => val} eq: ([%arg0],[%arg1]) {
 //CHECK:    %{{.*}} = arith.cmpi eq, %arg0, %arg1 : i64
 //CHECK:    tuples.return %{{.*}} : i1
 //CHECK:  }
 
-subop.insert %initial_stream %map : !subop.map<[key : i64],[val : i64]> {@t::@col => key,@t::@col => val}
+subop.insert %initial_stream %map : !subop.map<[key : i64],[val : i64] > {@t::@col => key,@t::@col => val}
 eq: ([%l], [%r]){
 	%eq = arith.cmpi eq, %l, %r :i64
 	tuples.return %eq : i1

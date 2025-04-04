@@ -210,7 +210,7 @@ class MapAsHashMap : public mlir::RewritePattern {
       if (!mapType) {
          return mlir::failure();
       }
-      auto hashMapType = subop::HashMapType::get(getContext(), mapType.getKeyMembers(), mapType.getValueMembers());
+      auto hashMapType = subop::HashMapType::get(getContext(), mapType.getKeyMembers(), mapType.getValueMembers(), mapType.getWithLock());
 
       mlir::TypeConverter typeConverter;
       typeConverter.addConversion([&](subop::ListType listType) {

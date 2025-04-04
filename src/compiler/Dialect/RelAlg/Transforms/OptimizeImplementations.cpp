@@ -721,8 +721,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
             }
          }
       });
-      bool enableGroupJoins = false;
-      //todo: reactivate groupjoins
+      bool enableGroupJoins = true;
       if (enableGroupJoins) {
          getOperation().walk([&](relalg::AggregationOp op) {
             auto* potentialJoin = op.getRel().getDefiningOp();

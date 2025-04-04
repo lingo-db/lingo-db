@@ -43,8 +43,8 @@ static bool cachelineRemains8(const uint8_t* p) {
 static uint64_t read8PadZero(const uint8_t* p, uint32_t len) {
    if (len == 0) return 0; //do not dereference!
 #if defined(ASAN_ACTIVE)
-   uint64_t x=0;
-   memcpy(&x,p,len);
+   uint64_t x = 0;
+   memcpy(&x, p, len);
    return x;
 #else
    if (len >= 8) return unalignedLoad64(p); //best case
@@ -65,16 +65,20 @@ static uint64_t read8PadZero(const uint8_t* p, uint32_t len) {
 
 class VarLen32 {
    private:
-   uint32_t len;
-
    public:
    static constexpr uint32_t shortLen = 12;
    union {
-      uint8_t bytes[shortLen];
-      struct __attribute__((__packed__)) {
-         uint32_t first4;
-         uint64_t last8;
+      struct {
+         uint32_t len;
+         union {
+            uint8_t bytes[shortLen];
+            struct __attribute__((__packed__)) {
+               uint32_t first4;
+               uint64_t last8;
+            };
+         };
       };
+      __int128 i128Val;
    };
 
    private:
@@ -126,7 +130,7 @@ class VarLen32 {
    }
 
    __int128 asI128() {
-      return *(reinterpret_cast<__int128*>(this));
+      return i128Val;
    }
 
    operator std::string() { return std::string((char*) getPtr(), getLen()); }
