@@ -19,28 +19,28 @@ class PreAggregationHashtableFragment {
    size_t typeSize;
    size_t len;
    runtime::FlexibleBuffer* outputs[numOutputs];
-   PreAggregationHashtableFragment(size_t typeSize) : ht(), typeSize(typeSize), len(0), outputs() {}
-   static PreAggregationHashtableFragment* create(size_t typeSize);
+   bool withLocks;
+   PreAggregationHashtableFragment(size_t typeSize, bool withLocks) : ht(), typeSize(typeSize), len(0), outputs(), withLocks(withLocks) {}
+   static PreAggregationHashtableFragment* create(size_t typeSize, bool withLocks);
    Entry* insert(size_t hash);
    ~PreAggregationHashtableFragment();
 };
 class PreAggregationHashtable {
-   using Entry=PreAggregationHashtableFragment::Entry;
-   struct PartitionHt{
+   using Entry = PreAggregationHashtableFragment::Entry;
+   struct PartitionHt {
       Entry** ht;
       size_t hashMask;
    };
    PartitionHt ht[PreAggregationHashtableFragment::numOutputs];
    runtime::FlexibleBuffer buffer;
    PreAggregationHashtable() : ht(), buffer(1, sizeof(PreAggregationHashtableFragment::Entry*)) {
-
    }
 
    public:
    static runtime::PreAggregationHashtable* merge(ThreadLocal*, bool (*eq)(uint8_t*, uint8_t*), void (*combine)(uint8_t*, uint8_t*));
    Entry* lookup(size_t hash);
-   static void lock(Entry* entry,size_t subtract);
-   static void unlock(Entry* entry,size_t subtract);
+   static void lock(Entry* entry, size_t kvSize);
+   static void unlock(Entry* entry, size_t kvSize);
    runtime::BufferIterator* createIterator();
    ~PreAggregationHashtable();
 };

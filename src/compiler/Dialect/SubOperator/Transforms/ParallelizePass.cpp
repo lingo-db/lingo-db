@@ -13,6 +13,8 @@
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
+#include "mlir/Transforms/DialectConversion.h"
+
 namespace {
 using namespace lingodb::compiler::dialect;
 
@@ -105,6 +107,13 @@ ExecutionStepAnalyzed analyze(subop::ExecutionStepOp executionStepOp, subop::Col
          return collisions;
       };
       auto isNested = [&](mlir::Value v) { return !extStates.contains(v); };
+      auto getCreationOp = [&](tuples::Column& column) {
+         auto creationOp = mlir::cast<subop::SubOperator>(columnCreationAnalysis.getColumnCreator(&column));
+         if (auto unwrapOp = mlir::dyn_cast_or_null<subop::UnwrapOptionalRefOp>(creationOp.getOperation())) {
+            creationOp = mlir::cast<subop::SubOperator>(columnCreationAnalysis.getColumnCreator(&unwrapOp.getOptionalRef().getColumn()));
+         }
+         return creationOp;
+      };
       //
       if (auto stateUsingSubOp = mlir::dyn_cast_or_null<subop::StateUsingSubOperator>(pipelineOp)) {
          if (mlir::isa<subop::ScanListOp, subop::NestedMapOp>(pipelineOp)) {
@@ -123,19 +132,19 @@ ExecutionStepAnalyzed analyze(subop::ExecutionStepOp executionStepOp, subop::Col
                addProblematicOp(lookupOrInsertOp, getCollisions(), {});
             }
          } else if (auto reduceOp = mlir::dyn_cast_or_null<subop::ReduceOp>(pipelineOp)) {
-            auto creationOp = mlir::cast<subop::SubOperator>(columnCreationAnalysis.getColumnCreator(&reduceOp.getRef().getColumn()));
+            auto creationOp = getCreationOp(reduceOp.getRef().getColumn());
             auto accessesNestedState = llvm::all_of(creationOp->getOperands(), [&](mlir::Value v) { return mlir::isa<subop::State>(v.getType()) ? isNested(v) : true; });
             if (!accessesNestedState) {
                addProblematicOp(reduceOp, getCollisions(), creationOp);
             }
          } else if (auto scatterOp = mlir::dyn_cast_or_null<subop::ScatterOp>(pipelineOp)) {
-            auto creationOp = mlir::cast<subop::SubOperator>(columnCreationAnalysis.getColumnCreator(&scatterOp.getRef().getColumn()));
+            auto creationOp = getCreationOp(scatterOp.getRef().getColumn());
             auto accessesNestedState = llvm::all_of(creationOp->getOperands(), [&](mlir::Value v) { return mlir::isa<subop::State>(v.getType()) ? isNested(v) : true; });
             if (!accessesNestedState) {
                addProblematicOp(scatterOp, getCollisions(), creationOp);
             }
          } else if (auto gatherOp = mlir::dyn_cast_or_null<subop::ScatterOp>(pipelineOp)) {
-            auto creationOp = mlir::cast<subop::SubOperator>(columnCreationAnalysis.getColumnCreator(&gatherOp.getRef().getColumn()));
+            auto creationOp = getCreationOp(gatherOp.getRef().getColumn());
             auto accessesNestedState = llvm::all_of(creationOp->getOperands(), [&](mlir::Value v) { return mlir::isa<subop::State>(v.getType()) ? isNested(v) : true; });
             if (!accessesNestedState) {
                addProblematicOp(gatherOp, getCollisions(), creationOp);
@@ -181,14 +190,18 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
       bool isClosed = false;
    };
    void runOnOperation() override {
+      auto& colManager = getContext().getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+
       std::vector<subop::ExecutionGroupOp> executionGroupOps;
       getOperation()->walk([&](subop::ExecutionGroupOp executionGroupOp) {
          executionGroupOps.push_back(executionGroupOp);
       });
       for (auto executionGroup : executionGroupOps) {
+         //todo: maybe move outside?
          auto columnCreationAnalysis = getAnalysis<subop::ColumnCreationAnalysis>();
+         auto columnUsageAnalysis = getAnalysis<subop::ColumnUsageAnalysis>();
          llvm::DenseMap<mlir::Value, GlobalThreadLocalInfo> toThreadLocalsGlobal;
-         std::vector<std::pair<tuples::ColumnRefAttr, std::vector<mlir::Operation*>>> toLockGlobal;
+         std::map<tuples::Column*, std::vector<std::pair<mlir::Value, mlir::Operation*>>> toLockGlobal;
          llvm::DenseSet<mlir::Value> threadLocalNotPossibleAnymore;
          for (auto& op : executionGroup.getSubOps().front()) {
             if (auto executionStepOp = mlir::dyn_cast_or_null<subop::ExecutionStepOp>(&op)) {
@@ -201,7 +214,7 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                   if (!scanRefsOp->hasAttr("sequential")) {
                      ExecutionStepAnalyzed analyzed = analyze(executionStepOp, columnCreationAnalysis);
                      std::unordered_set<mlir::Operation*> markAsAtomic;
-
+                     std::map<tuples::Column*, std::vector<std::pair<mlir::Value, mlir::Operation*>>> toLock;
                      llvm::DenseMap<mlir::Value, ToThreadLocalInfo> toThreadLocals;
                      bool canBeParallel = true;
                      for (auto& collisionGroup : analyzed.collisionGroups) {
@@ -230,6 +243,8 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                                  if (ext.getDefiningOp() && mlir::isa<subop::SimpleStateType>(ext.getType()) && mlir::dyn_cast_or_null<subop::SimpleStateType>(ext.getType()).getMembers().getTypes().size() == reduceOp.getMembers().size() && !reduceOp.getCombine().empty()) {
                                     toThreadLocals[ext].requiresCombine = true;
                                     toThreadLocals[ext].combineRegion = &reduceOp.getCombine();
+                                 } else if (ext.getDefiningOp() && mlir::isa<subop::HashMapType>(ext.getType())) {
+                                    toLock[&reduceOp.getRef().getColumn()].push_back(std::pair<mlir::Value, mlir::Operation*>{ext, reduceOp.getOperation()});
                                  } else {
                                     canBeParallel = false;
                                  }
@@ -246,8 +261,16 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                                  canBeParallel = false;
                               }
                            } else if (auto scatterOp = mlir::dyn_cast_or_null<subop::ScatterOp>(problematicOp.op.getOperation())) {
+                              auto stateAccessing = problematicOp.stateAccessing;
                               if (collisionGroup.ops.size() == 1) {
                                  markAsAtomic.insert(scatterOp);
+                              } else if (auto lookupOp = mlir::dyn_cast_or_null<subop::LookupOp>(stateAccessing.getOperation())) {
+                                 auto ext = extStates[lookupOp.getState()];
+                                 if (ext.getDefiningOp() && mlir::isa<subop::HashMapType>(ext.getType())) {
+                                    toLock[&scatterOp.getRef().getColumn()].push_back({ext, scatterOp.getOperation()});
+                                 } else {
+                                    canBeParallel = false;
+                                 }
                               } else {
                                  canBeParallel = false;
                               }
@@ -295,9 +318,9 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                            for (auto* mA : markAsAtomic) {
                               mA->setAttr("atomic", mlir::UnitAttr::get(&getContext()));
                            }
-                           //for (auto l : toLock) {
-                           //   toLockGlobal.push_back(l);
-                           //}
+                           for (auto l : toLock) {
+                              toLockGlobal[l.first].insert(toLockGlobal[l.first].end(), l.second.begin(), l.second.end());
+                           }
                         }
                      }
                      if (!canBeParallel) {
@@ -311,32 +334,72 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                }
             }
          }
-         /*
+
          for (auto toLock : toLockGlobal) {
             mlir::OpBuilder builder(&getContext());
-            builder.setInsertionPoint(toLock.second.front());
-            auto tupleStream = toLock.second.front()->getOperand(0);
-            auto lockOp = builder.create<subop::LockOp>(builder.getUnknownLoc(), tupleStream, toLock.first);
+            builder.setInsertionPoint(toLock.second.front().second);
+
+            auto tupleStream = toLock.second.front().second->getOperand(0);
+            auto lockOp = builder.create<subop::LockOp>(builder.getUnknownLoc(), tupleStream, colManager.createRef(toLock.first));
+
+            auto stateVal = toLock.second.front().first;
+            auto hashMapType = mlir::cast<subop::HashMapType>(stateVal.getType());
+
+            auto newType = subop::HashMapType::get(builder.getContext(), hashMapType.getKeyMembers(), hashMapType.getValueMembers(), true);
+            auto executionStep = mlir::cast<subop::ExecutionStepOp>(stateVal.getDefiningOp());
+            auto returnOp = mlir::cast<subop::ExecutionStepReturnOp>(executionStep.getSubOps().front().getTerminator());
+            auto createOp = mlir::cast<subop::GenericCreateOp>(returnOp.getOperand(0).getDefiningOp());
+            createOp->getResult(0).setType(newType);
+            executionStep->getResult(0).setType(newType);
+
+            mlir::TypeConverter htTypeConverter;
+            htTypeConverter.addConversion([&](subop::HashMapType mapType) {
+               return subop::HashMapType::get(builder.getContext(), mapType.getKeyMembers(), mapType.getValueMembers(), true);
+            });
+            htTypeConverter.addConversion([&](subop::HashMapEntryRefType refType) {
+               return subop::HashMapEntryRefType::get(refType.getContext(), subop::HashMapType::get(refType.getContext(), refType.getHashMap().getKeyMembers(), refType.getHashMap().getValueMembers(), true));
+            });
+            htTypeConverter.addConversion([&](subop::LookupEntryRefType lookupRefType) {
+               return subop::LookupEntryRefType::get(lookupRefType.getContext(), mlir::cast<subop::LookupAbleState>(htTypeConverter.convertType(lookupRefType.getState())));
+            });
+
+            htTypeConverter.addConversion([&](subop::ListType listType) {
+               return subop::ListType::get(listType.getContext(), mlir::cast<subop::StateEntryReference>(htTypeConverter.convertType(listType.getT())));
+            });
+            htTypeConverter.addConversion([&](subop::OptionalType optionalType) {
+               return subop::OptionalType::get(optionalType.getContext(), mlir::cast<subop::StateEntryReference>(htTypeConverter.convertType(optionalType.getT())));
+            });
+            subop::SubOpStateUsageTransformer htTransformer(columnUsageAnalysis, &getContext(), [&](mlir::Operation* op, mlir::Type type) -> mlir::Type {
+               return htTypeConverter.convertType(type);
+            });
+            for (auto& u : stateVal.getUses()) {
+               auto step = mlir::cast<subop::ExecutionStepOp>(u.getOwner());
+               htTransformer.updateValue(step.getSubOps().getArgument(u.getOperandNumber()), newType);
+               step.getSubOps().getArgument(u.getOperandNumber()).setType(newType);
+            }
+            lockOp.setRefAttr(colManager.createRef(htTransformer.getNewColumn(toLock.first)));
+
             auto* block = new mlir::Block;
-            auto tupleStream2 = block->addArgument(mlir::tuples::TupleStreamType::get(builder.getContext()), builder.getUnknownLoc());
-            for (auto* op : toLock.second) {
+            auto tupleStream2 = block->addArgument(tuples::TupleStreamType::get(builder.getContext()), builder.getUnknownLoc());
+            for (auto [val, op] : toLock.second) {
                op->remove();
                block->push_back(op);
             }
-            toLock.second.front()->setOperand(0, tupleStream2);
-            auto* lastOp = toLock.second.back();
+            toLock.second.front().second->setOperand(0, tupleStream2);
+            auto* lastOp = toLock.second.back().second;
 
             if (lastOp->getNumResults() > 0) {
                mlir::Value lastResult = lastOp->getResult(0);
                lastResult.replaceAllUsesWith(lockOp.getRes());
                builder.setInsertionPointToEnd(block);
-               builder.create<mlir::tuples::ReturnOp>(builder.getUnknownLoc(), lastResult);
+               builder.create<tuples::ReturnOp>(builder.getUnknownLoc(), lastResult);
             } else {
                builder.setInsertionPointToEnd(block);
-               builder.create<mlir::tuples::ReturnOp>(builder.getUnknownLoc());
+               builder.create<tuples::ReturnOp>(builder.getUnknownLoc());
             }
             lockOp.getNested().push_back(block);
-         }*/
+         }
+
          for (auto toThreadLocal : toThreadLocalsGlobal) {
             assert(toThreadLocal.first.getDefiningOp());
             auto producingExecutionStep = mlir::cast<subop::ExecutionStepOp>(toThreadLocal.first.getDefiningOp());

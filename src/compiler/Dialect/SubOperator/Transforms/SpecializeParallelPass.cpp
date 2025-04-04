@@ -100,8 +100,8 @@ class IntroducePreAggrHt : public mlir::RewritePattern {
             return mlir::failure();
          }
       }
-      auto optimisticHt = subop::PreAggrHtType::get(getContext(), mapType.getKeyMembers(), mapType.getValueMembers());
-      auto optimisticHtFragment = subop::PreAggrHtFragmentType::get(getContext(), mapType.getKeyMembers(), mapType.getValueMembers());
+      auto optimisticHt = subop::PreAggrHtType::get(getContext(), mapType.getKeyMembers(), mapType.getValueMembers(), mapType.getWithLock());
+      auto optimisticHtFragment = subop::PreAggrHtFragmentType::get(getContext(), mapType.getKeyMembers(), mapType.getValueMembers(),mapType.getWithLock());
       auto threadLocalType = subop::ThreadLocalType::get(getContext(), optimisticHtFragment);
       mlir::TypeConverter fragmentTypeConverter;
 

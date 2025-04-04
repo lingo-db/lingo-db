@@ -1327,7 +1327,8 @@ class CreateOpenHtFragmentLowering : public SubOpConversionPattern<subop::Generi
       auto t = mlir::cast<subop::PreAggrHtFragmentType>(createOp.getType());
 
       auto typeSize = rewriter.create<util::SizeOfOp>(createOp->getLoc(), rewriter.getIndexType(), getHtEntryType(t, *typeConverter));
-      auto ptr = rt::PreAggregationHashtableFragment::create(rewriter, createOp->getLoc())({typeSize})[0];
+      auto withLocks = rewriter.create<mlir::arith::ConstantIntOp>(createOp->getLoc(), t.getWithLock(), rewriter.getI1Type());
+      auto ptr = rt::PreAggregationHashtableFragment::create(rewriter, createOp->getLoc())({typeSize,withLocks})[0];
       rewriter.replaceOpWithNewOp<util::GenericMemrefCastOp>(createOp, typeConverter->convertType(t), ptr);
       return mlir::success();
    }
@@ -3868,6 +3869,36 @@ class SetTrackedCountLowering : public SubOpConversionPattern<subop::SetTrackedC
    }
 };
 
+class LockLowering : public SubOpTupleStreamConsumerConversionPattern<subop::LockOp> {
+   public:
+   using SubOpTupleStreamConsumerConversionPattern<subop::LockOp>::SubOpTupleStreamConsumerConversionPattern;
+
+   LogicalResult matchAndRewrite(subop::LockOp lockOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+      auto refType = lockOp.getRef().getColumn().type;
+      auto entryRefType = mlir::dyn_cast_or_null<subop::LookupEntryRefType>(refType);
+      if (!entryRefType) return failure();
+      auto hashMapType = mlir::dyn_cast_or_null<subop::PreAggrHtType>(entryRefType.getState());
+      if (!hashMapType||!hashMapType.getWithLock()) return failure();
+      auto valTupleType = EntryStorageHelper(lockOp,hashMapType.getValueMembers(), typeConverter).getStorageType();
+      auto subtractType = TupleType::get(rewriter.getContext(), {valTupleType});
+      auto ref = mapping.resolve(lockOp,lockOp.getRef());
+
+      auto keySize = rewriter.create<util::SizeOfOp>(lockOp->getLoc(), rewriter.getIndexType(), subtractType);
+      rt::PreAggregationHashtable::lock(rewriter, lockOp->getLoc())({ref,keySize});
+      auto inflight = rewriter.createInFlight(mapping);
+      rewriter.inlineBlock<tuples::ReturnOpAdaptor>(&lockOp.getNested().front(), inflight.getRes(), [&](tuples::ReturnOpAdaptor adaptor) {
+         if (!adaptor.getResults().empty()) {
+            lockOp.getRes().replaceAllUsesWith(adaptor.getResults()[0]);
+            rewriter.eraseOp(lockOp);
+         } else {
+            rewriter.eraseOp(lockOp);
+         }
+      });
+      rt::PreAggregationHashtable::unlock(rewriter, lockOp->getLoc())({ref,keySize});
+      return success();
+   }
+};
+
 }; // namespace
 namespace {
 
@@ -3905,7 +3936,7 @@ void handleExecutionStepCPU(subop::ExecutionStepOp step, subop::ExecutionGroupOp
    rewriter.insertPattern<PureLookupHashMapLowering>(typeConverter, ctxt);
    rewriter.insertPattern<HashMapRefGatherOpLowering>(typeConverter, ctxt);
    rewriter.insertPattern<ScanHashMapListLowering>(typeConverter, ctxt);
-   //rewriter.insertPattern<LockLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<LockLowering>(typeConverter, ctxt);
 
    //HashMultiMap
    rewriter.insertPattern<CreateHashMultiMapLowering>(typeConverter, ctxt);

@@ -15,6 +15,7 @@ class SubOpStateUsageTransformer {
    std::function<void(mlir::Operation* op)> callBeforeFn;
    std::function<void(mlir::Operation* op)> callAfterFn;
    std::unordered_map<std::string, std::string> memberMapping;
+   std::unordered_map<tuples::Column*, tuples::Column*> columnMapping;
 
    public:
    SubOpStateUsageTransformer(const ColumnUsageAnalysis& columnUsageAnalysis, mlir::MLIRContext* context, const std::function<mlir::Type(mlir::Operation* op, mlir::Type oldRefType)>& getNewRefTypeFn) : columnManager(context->getLoadedDialect<dialect::tuples::TupleStreamDialect>()->getColumnManager()), columnUsageAnalysis(columnUsageAnalysis), getNewRefTypeFn(getNewRefTypeFn) {}
@@ -33,6 +34,12 @@ class SubOpStateUsageTransformer {
    }
    void setCallAfterFn(const std::function<void(mlir::Operation*)>& callAfterFn) {
       SubOpStateUsageTransformer::callAfterFn = callAfterFn;
+   }
+   tuples::Column* getNewColumn(tuples::Column* oldColumn) {
+      if (columnMapping.contains(oldColumn)) {
+         return columnMapping[oldColumn];
+      }
+      return oldColumn;
    }
 };
 } // namespace lingodb::compiler::dialect::subop

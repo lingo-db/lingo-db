@@ -86,30 +86,30 @@ def SimpleState : SubOperator_Type<"SimpleState", "simple_state",[State,LookupAb
 }
 def Map : SubOperator_Type<"Map", "map",[State,LookupAbleState]> {
     let summary = "simple state with multiple members";
-    let parameters = (ins "StateMembersAttr":$keyMembers,"StateMembersAttr":$valueMembers );
-    let assemblyFormat = "`<` custom<StateMembers>($keyMembers) `,` custom<StateMembers>($valueMembers) `>`";
+    let parameters = (ins "StateMembersAttr":$keyMembers,"StateMembersAttr":$valueMembers, "bool": $withLock  );
+    let assemblyFormat = "`<` custom<StateMembers>($keyMembers) `,` custom<StateMembers>($valueMembers)custom<WithLock>($withLock) `>`";
     let extraClassDeclaration = [{
         StateMembersAttr getMembers();
     }];
 }
 def Hashmap : SubOperator_Type<"HashMap", "hashmap",[State,LookupAbleState]> {
     let summary = "simple state with multiple members";
-    let parameters = (ins "StateMembersAttr":$keyMembers,"StateMembersAttr":$valueMembers );
-    let assemblyFormat = "`<` custom<StateMembers>($keyMembers) `,` custom<StateMembers>($valueMembers) `>`";
+    let parameters = (ins "StateMembersAttr":$keyMembers,"StateMembersAttr":$valueMembers, "bool": $withLock  );
+    let assemblyFormat = "`<` custom<StateMembers>($keyMembers) `,` custom<StateMembers>($valueMembers)custom<WithLock>($withLock) `>`";
     let extraClassDeclaration = [{
         StateMembersAttr getMembers();
     }];
 }
 def PreAggrHtFragment : SubOperator_Type<"PreAggrHtFragment", "optimistic_ht_fragment",[State,LookupAbleState]> {
-    let parameters = (ins "StateMembersAttr":$keyMembers,"StateMembersAttr":$valueMembers );
-    let assemblyFormat = "`<` custom<StateMembers>($keyMembers) `,` custom<StateMembers>($valueMembers) `>`";
+    let parameters = (ins "StateMembersAttr":$keyMembers,"StateMembersAttr":$valueMembers, "bool": $withLock  );
+    let assemblyFormat = "`<` custom<StateMembers>($keyMembers) `,` custom<StateMembers>($valueMembers)  custom<WithLock>($withLock)  `>`";
     let extraClassDeclaration = [{
         StateMembersAttr getMembers();
     }];
 }
 def PreAggrHt : SubOperator_Type<"PreAggrHt", "optimistic_ht",[State,LookupAbleState]> {
-    let parameters = (ins "StateMembersAttr":$keyMembers,"StateMembersAttr":$valueMembers );
-    let assemblyFormat = "`<` custom<StateMembers>($keyMembers) `,` custom<StateMembers>($valueMembers) `>`";
+    let parameters = (ins "StateMembersAttr":$keyMembers,"StateMembersAttr":$valueMembers, "bool": $withLock  );
+    let assemblyFormat = "`<` custom<StateMembers>($keyMembers) `,` custom<StateMembers>($valueMembers)  custom<WithLock>($withLock) `>`";
     let extraClassDeclaration = [{
         StateMembersAttr getMembers();
     }];

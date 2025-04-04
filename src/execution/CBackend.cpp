@@ -64,7 +64,7 @@ class DefaultCBackend : public lingodb::execution::ExecutionBackend {
       outputFile.close();
       usleep(20000);
 
-      std::string cmd = " cc -shared -O0 -g -gdwarf-4 -fPIC -Wl,--export-dynamic -x c++ -std=c++20 -I " + std::string(SOURCE_DIR) + "/include " + currPath + "/mlir-c-module.cpp -o " + currPath + "/c-backend.so";
+      std::string cmd = " cc -march=native -shared -O0 -g -gdwarf-4 -fPIC -Wl,--export-dynamic -x c++ -std=c++20 -I " + std::string(SOURCE_DIR) + "/include " + currPath + "/mlir-c-module.cpp -o " + currPath + "/c-backend.so";
       auto* pPipe = ::popen(cmd.c_str(), "r");
       if (pPipe == nullptr) {
          error.emit() << "Could not compile query module statically (Pipe could not be opened)";

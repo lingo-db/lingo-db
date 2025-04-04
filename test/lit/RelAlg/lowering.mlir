@@ -25,8 +25,8 @@
 %1 = relalg.projection all  [@t::@col1] %0
 // -----
 //CHECK: [[INITIAL:%.*]], %{{.*}}:2 = subop.generate
-//CHECK: [[MAP:%.*]]  = subop.create !subop.map<[keyval$0 : !db.string], []>
-//CHECK: %{{.*}} = subop.lookup_or_insert [[INITIAL]][[MAP]] [@t::@col1] : !subop.map<[keyval$0 : !db.string], []> @lookup::@ref({type = !subop.lookup_entry_ref<!subop.map<[keyval$0 : !db.string], []>>}) eq: ([%arg0],[%arg1]) {
+//CHECK: [[MAP:%.*]]  = subop.create !subop.map<[keyval$0 : !db.string], [] >
+//CHECK: %{{.*}} = subop.lookup_or_insert [[INITIAL]][[MAP]] [@t::@col1] : !subop.map<[keyval$0 : !db.string], [] > @lookup::@ref({type = !subop.lookup_entry_ref<!subop.map<[keyval$0 : !db.string], [] >>}) eq: ([%arg0],[%arg1]) {
 //CHECK:   %true = arith.constant true
 //CHECK:   %{{.*}} = db.compare isa %arg0 : !db.string, %arg1 : !db.string
 //CHECK:   %{{.*}} = arith.andi %true, %{{.*}} : i1
@@ -34,7 +34,7 @@
 //CHECK: }initial: {
 //CHECK:   tuples.return
 //CHECK: }
-//CHECK: %{{.*}} = subop.scan [[MAP]] : !subop.map<[keyval$0 : !db.string], []> {keyval$0 => @t::@col1({type = !db.string})}
+//CHECK: %{{.*}} = subop.scan [[MAP]] : !subop.map<[keyval$0 : !db.string], [] > {keyval$0 => @t::@col1({type = !db.string})}
 
 %0 = relalg.const_relation columns : [@t::@col1({type = !db.string})] values : [["A"],["B"]]
 %1 = relalg.projection distinct  [@t::@col1] %0
@@ -80,7 +80,7 @@
 //CHECK: module
 //CHECK: [[LEFT:%.*]], %{{.*}} = subop.generate[@t::@col1({type = i64})]
 //CHECK: [[RIGHT:%.*]], %{{.*}} = subop.generate[@t_u_2::@col1({type = i64})]
-//CHECK-DAG: [[MAP:%.*]] = subop.create !subop.map<[keyval$0 : i64], []>
+//CHECK-DAG: [[MAP:%.*]] = subop.create !subop.map<[keyval$0 : i64], [] >
 //CHECK-DAG: [[LEFTMAP:%.*]] = subop.map [[LEFT]]
 //CHECK-DAG: [[RIGHTMAP:%.*]] = subop.map [[RIGHT]]
 //CHECK: %{{.*}} = subop.lookup_or_insert [[LEFTMAP]][[MAP]] [@setop::@col1]

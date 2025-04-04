@@ -23,6 +23,7 @@ void SubOpStateUsageTransformer::updateValue(mlir::Value oldValue, mlir::Type ne
 }
 
 void SubOpStateUsageTransformer::replaceColumn(tuples::Column* oldColumn, tuples::Column* newColumn) {
+   columnMapping[oldColumn] = newColumn;
    for (auto* user : columnUsageAnalysis.findOperationsUsing(oldColumn)) {
       if (auto stateUsingSubOp = mlir::dyn_cast_or_null<::StateUsingSubOperator>(user)) {
          if (callBeforeFn) { callBeforeFn(stateUsingSubOp.getOperation()); }

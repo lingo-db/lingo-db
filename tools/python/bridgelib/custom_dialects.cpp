@@ -227,7 +227,8 @@ bool mlirTypeIsASubOpSimpleStateType(MlirType type) {
 }
 
 MlirType mlirSubOpMapTypeGet(MlirAttribute keyMembers, MlirAttribute valMembers) {
-   return wrap(subop::MapType::get(unwrap(keyMembers).getContext(), mlir::cast<subop::StateMembersAttr>(unwrap(keyMembers)), mlir::cast<subop::StateMembersAttr>(unwrap(valMembers))));
+   return wrap(subop::MapType::get(unwrap(keyMembers).getContext(), mlir::cast<subop::StateMembersAttr>(unwrap(keyMembers)), mlir::cast<subop::StateMembersAttr>(unwrap(valMembers)),false
+      ));
 }
 MlirTypeID mlirSubOpMapTypeGetTypeID() {
    return wrap(subop::MapType::getTypeID());
