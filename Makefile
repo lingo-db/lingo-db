@@ -142,3 +142,4 @@ format:
 	find include \( -name '*.cpp' -o -name '*.h' \) -exec clang-format -i {} +
 	find src \( -name '*.cpp' -o -name '*.h' \) -exec clang-format -i {} +
 	find tools \( -name '*.cpp' -o -name '*.h' \) -exec clang-format -i {} +
+	find test \( -name '*.cpp' -o -name '*.h' \) -exec clang-format -i {} +
