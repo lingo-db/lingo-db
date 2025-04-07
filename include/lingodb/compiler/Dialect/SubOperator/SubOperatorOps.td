@@ -90,6 +90,7 @@ def Map : SubOperator_Type<"Map", "map",[State,LookupAbleState]> {
     let assemblyFormat = "`<` custom<StateMembers>($keyMembers) `,` custom<StateMembers>($valueMembers)custom<WithLock>($withLock) `>`";
     let extraClassDeclaration = [{
         StateMembersAttr getMembers();
+        bool hasLock(){return getWithLock();}
     }];
 }
 def Hashmap : SubOperator_Type<"HashMap", "hashmap",[State,LookupAbleState]> {
@@ -98,6 +99,7 @@ def Hashmap : SubOperator_Type<"HashMap", "hashmap",[State,LookupAbleState]> {
     let assemblyFormat = "`<` custom<StateMembers>($keyMembers) `,` custom<StateMembers>($valueMembers)custom<WithLock>($withLock) `>`";
     let extraClassDeclaration = [{
         StateMembersAttr getMembers();
+        bool hasLock(){return getWithLock();}
     }];
 }
 def PreAggrHtFragment : SubOperator_Type<"PreAggrHtFragment", "optimistic_ht_fragment",[State,LookupAbleState]> {
@@ -105,6 +107,7 @@ def PreAggrHtFragment : SubOperator_Type<"PreAggrHtFragment", "optimistic_ht_fra
     let assemblyFormat = "`<` custom<StateMembers>($keyMembers) `,` custom<StateMembers>($valueMembers)  custom<WithLock>($withLock)  `>`";
     let extraClassDeclaration = [{
         StateMembersAttr getMembers();
+        bool hasLock(){return getWithLock();}
     }];
 }
 def PreAggrHt : SubOperator_Type<"PreAggrHt", "optimistic_ht",[State,LookupAbleState]> {
@@ -112,6 +115,7 @@ def PreAggrHt : SubOperator_Type<"PreAggrHt", "optimistic_ht",[State,LookupAbleS
     let assemblyFormat = "`<` custom<StateMembers>($keyMembers) `,` custom<StateMembers>($valueMembers)  custom<WithLock>($withLock) `>`";
     let extraClassDeclaration = [{
         StateMembersAttr getMembers();
+        bool hasLock(){return getWithLock();}
     }];
 }
 def HashMultimap : SubOperator_Type<"HashMultiMap", "hashmultimap",[State,LookupAbleState]> {
@@ -204,6 +208,7 @@ def GenericEntryRef : SubOperator_Type<"EntryRef", "entry_ref",[StateEntryRefere
         bool isWriteable(){return true;}
         bool isStable(){return false;}
         bool canBeOffset(){return false;}
+        bool hasLock(){return getState().hasLock();}
         StateMembersAttr getMembers() { return getState().getMembers(); }
     }];
 }
@@ -216,6 +221,7 @@ def TableEntryRef : SubOperator_Type<"TableEntryRef", "table_entry_ref",[StateEn
         bool isWriteable(){return false;}
         bool isStable(){return false;}
         bool canBeOffset(){return false;}
+        bool hasLock(){return false;}
         StateMembersAttr getMembers() { return getTableColumns(); }
     }];
 }
@@ -228,6 +234,7 @@ def GenericLookupEntryRef : SubOperator_Type<"LookupEntryRef", "lookup_entry_ref
         bool isWriteable(){return true;}
         bool isStable(){return false;}
         bool canBeOffset(){return false;}
+        bool hasLock(){return mlir::cast<subop::State>(getState()).hasLock();}
         StateMembersAttr getMembers(){ return getState().getValueMembers();}
     }];
 }
@@ -240,6 +247,7 @@ def ContinuousEntryRef : SubOperator_Type<"ContinuousEntryRef", "continous_entry
         bool isWriteable(){return true;}
         bool isStable(){return true;}
         bool canBeOffset(){return true;}
+        bool hasLock(){return getState().hasLock();}
         StateMembersAttr getMembers(){ return getState().getMembers();}
     }];
 }
@@ -252,6 +260,7 @@ def MultiMapEntryRef : SubOperator_Type<"MultiMapEntryRef", "multi_map_entry_ref
         bool isWriteable(){return true;}
         bool isStable(){return true;}
         bool canBeOffset(){return true;}
+        bool hasLock(){return getMultiMap().hasLock();}
         StateMembersAttr getMembers(){ return getMultiMap().getMembers();}
     }];
 }
@@ -265,6 +274,7 @@ def MapEntryRef : SubOperator_Type<"MapEntryRef", "map_entry_ref",[StateEntryRef
         bool isStable(){return true;}
         bool canBeOffset(){return true;}
         StateMembersAttr getMembers();
+        bool hasLock(){return getMap().hasLock();}
     }];
     let extraClassDefinition= [{ StateMembersAttr $cppClass::getMembers(){ return getMap().getMembers();} }];
 }
@@ -278,6 +288,7 @@ def HashMapEntryRef : SubOperator_Type<"HashMapEntryRef", "hash_map_entry_ref",[
         bool isStable(){return true;}
         bool canBeOffset(){return true;}
         StateMembersAttr getMembers();
+        bool hasLock(){return getHashMap().hasLock();}
     }];
     let extraClassDefinition= [{ StateMembersAttr $cppClass::getMembers(){ return getHashMap().getMembers();} }];
 }
@@ -291,6 +302,7 @@ def PreAggrHTEntryRef : SubOperator_Type<"PreAggrHTEntryRef", "optimistic_ht_ent
         bool isStable(){return true;}
         bool canBeOffset(){return true;}
         StateMembersAttr getMembers();
+        bool hasLock(){return getHashMap().hasLock();}
     }];
     let extraClassDefinition= [{ StateMembersAttr $cppClass::getMembers(){ return getHashMap().getMembers();} }];
 }
@@ -303,6 +315,7 @@ def ExternalHashIndexEntryRef : SubOperator_Type<"ExternalHashIndexEntryRef", "e
        bool isWriteable(){return true;}
        bool isStable(){return true;}
        bool canBeOffset(){return true;}
+       bool hasLock(){return false;}
        StateMembersAttr getMembers();
     }];
     let extraClassDefinition= [{ StateMembersAttr $cppClass::getMembers(){ return getExternalHashIndex().getMembers();} }];
@@ -317,6 +330,7 @@ def HashMultiMapEntryRef : SubOperator_Type<"HashMultiMapEntryRef", "hash_multim
         bool isStable(){return true;}
         bool canBeOffset(){return true;}
         StateMembersAttr getMembers();
+        bool hasLock(){return getHashMultimap().hasLock();}
     }];
     let extraClassDefinition= [{ StateMembersAttr $cppClass::getMembers(){ return getHashMultimap().getMembers();} }];
 }

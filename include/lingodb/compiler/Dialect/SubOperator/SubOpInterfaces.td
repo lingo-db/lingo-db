@@ -82,7 +82,10 @@ def State : TypeInterface<"State"> {
     }]>,
     InterfaceMethod</*description=*/"", /*retTy=*/"bool", /*methodName=*/"canPerformScan",(ins ),"", /*defaultImplementation=*/[{
         return true;
-    }]>
+    }]>,
+    InterfaceMethod</*description=*/"", /*retTy=*/"bool", /*methodName=*/"hasLock",(ins ), "", /*defaultImplementation=*/[{
+                                                                                          return false;
+    }]>,
   ];
 }
 
@@ -94,6 +97,7 @@ def StateEntryReference : TypeInterface<"StateEntryReference"> {
      InterfaceMethod</*description=*/"", /*retTy=*/"bool", /*methodName=*/"isWriteable">,
      InterfaceMethod</*description=*/"", /*retTy=*/"bool", /*methodName=*/"isStable">,
      InterfaceMethod</*description=*/"", /*retTy=*/"bool", /*methodName=*/"canBeOffset">,
+     InterfaceMethod</*description=*/"", /*retTy=*/"bool", /*methodName=*/"hasLock">,
      InterfaceMethod</*description=*/"", /*retTy=*/"lingodb::compiler::dialect::subop::StateMembersAttr", /*methodName=*/"getMembers">
   ];
 }
