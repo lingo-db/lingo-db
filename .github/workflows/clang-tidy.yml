@@ -1,0 +1,14 @@
+name: Clang Tidy Check
+on: [pull_request]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    container: ghcr.io/lingo-db/lingodb-dev:e62ea236a788af041758bc8008ac07a44c64fe78
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Build
+        run: |
+          make clean
+          make lint

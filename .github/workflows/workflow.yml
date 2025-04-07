@@ -36,16 +36,6 @@ jobs:
           name: ${{ matrix.build_type }}-build
           path: build/lingodb-${{ matrix.build_type }}
           retention-days: 1
-  lint:
-    runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-dev:e62ea236a788af041758bc8008ac07a44c64fe78
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: Build
-        run: |
-            make clean
-            make lint
 
   test:
     needs: build
@@ -177,20 +167,3 @@ jobs:
             pip install pandas
             python3 tools/python/test/test.py
             python3 tools/python/test/mlir-construction.py
-  coverage:
-    runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-dev:e62ea236a788af041758bc8008ac07a44c64fe78
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: Build
-        run: |
-            make clean
-            make test-coverage
-            mkdir -p /coverage
-            llvm-cov-20 show ./build/lingodb-debug-coverage/run-mlir -object ./build/lingodb-debug-coverage/mlir-db-opt -object ./build/lingodb-debug-coverage/run-sql  -instr-profile=build/lingodb-debug-coverage/coverage.profdata  --ignore-filename-regex="vendored" --ignore-filename-regex="build/lingodb-debug-coverage" > /coverage/coverage.txt
-      - uses: actions/checkout@master
-      - uses: codecov/codecov-action@v3
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: /coverage/coverage.txt
