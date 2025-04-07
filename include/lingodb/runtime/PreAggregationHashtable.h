@@ -39,8 +39,6 @@ class PreAggregationHashtable {
    public:
    static runtime::PreAggregationHashtable* merge(ThreadLocal*, bool (*eq)(uint8_t*, uint8_t*), void (*combine)(uint8_t*, uint8_t*));
    Entry* lookup(size_t hash);
-   static void lock(Entry* entry, size_t kvSize);
-   static void unlock(Entry* entry, size_t kvSize);
    runtime::BufferIterator* createIterator();
    ~PreAggregationHashtable();
 };

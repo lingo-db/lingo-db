@@ -12,29 +12,8 @@ static lingodb::utility::Tracer::Event mergeAllocate("Oht", "mergeAlloc");
 static lingodb::utility::Tracer::Event mergeDeallocate("Oht", "mergeDealloc");
 
 // https://en.cppreference.com/w/cpp/atomic/atomic_flag
-class SpinLock {
-   std::atomic_flag m{};
 
-   public:
-   void lock() noexcept {
-      while (m.test_and_set(std::memory_order_acquire))
-#if defined(__cpp_lib_atomic_wait) && __cpp_lib_atomic_wait >= 201907L
-         // Since C++20, locks can be acquired only after notification in the unlock,
-         // avoiding any unnecessary spinning.
-         // Note that even though wait guarantees it returns only after the value has
-         // changed, the lock is acquired after the next condition check.
-         m.wait(true, std::memory_order_relaxed)
-#endif
-            ;
-   }
-   void unlock() noexcept {
-      m.clear(std::memory_order_release);
-#if defined(__cpp_lib_atomic_wait) && __cpp_lib_atomic_wait >= 201907L
-      m.notify_one();
-#endif
-   }
-};
-static_assert(sizeof(SpinLock) <= 8, "SpinLock is too big");
+
 
 class FragmentOutputsTask : public lingodb::scheduler::TaskWithImplicitContext {
    std::vector<lingodb::runtime::FlexibleBuffer*>* outputs;
@@ -71,15 +50,12 @@ lingodb::runtime::PreAggregationHashtableFragment::Entry* lingodb::runtime::PreA
    len++;
    auto outputIdx = hash & outputMask;
    if (!outputs[outputIdx]) {
-      outputs[outputIdx] = new FlexibleBuffer(256, typeSize + (withLocks ? 16 : 0));
+      outputs[outputIdx] = new FlexibleBuffer(256, typeSize);
    }
    auto* newEntry = reinterpret_cast<lingodb::runtime::PreAggregationHashtableFragment::Entry*>(outputs[outputIdx]->insert());
    newEntry->hashValue = hash;
    newEntry->next = nullptr;
    ht[hash >> htShift & htMask] = newEntry;
-   if (withLocks) {
-      new (((std::byte*) newEntry) + typeSize) SpinLock();
-   }
    return newEntry;
 }
 
@@ -191,14 +167,6 @@ lingodb::runtime::PreAggregationHashtable::Entry* lingodb::runtime::PreAggregati
    } else {
       return lingodb::runtime::filterTagged(ht[partition].ht[ht[partition].hashMask & hash >> 6], hash);
    }
-}
-void lingodb::runtime::PreAggregationHashtable::lock(Entry* entry, size_t kvSize) {
-   auto* lock = reinterpret_cast<SpinLock*>(reinterpret_cast<uint8_t*>(entry) + kvSize);
-   lock->lock();
-}
-void lingodb::runtime::PreAggregationHashtable::unlock(Entry* entry, size_t kvSize) {
-   auto* lock = reinterpret_cast<SpinLock*>(reinterpret_cast<uint8_t*>(entry) + kvSize);
-   lock->unlock();
 }
 
 lingodb::runtime::PreAggregationHashtable::~PreAggregationHashtable() {
