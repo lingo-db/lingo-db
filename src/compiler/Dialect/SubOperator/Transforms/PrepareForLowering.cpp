@@ -321,11 +321,11 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
                };
                computeAvailableColumns(combineOp);
                addRequiredColumns(combineOp, availableColumns);
-               if(requiredColumns.empty()) {
+               if (requiredColumns.empty()) {
                   combineOp->replaceAllUsesWith(mlir::ValueRange{combineOp.getStream()}); //useless combineop -> just remove
                   opsToErase.push_back(combineOp);
                   continue;
-               }else {
+               } else {
                   std::vector<mlir::Attribute> createdByMap;
                   mlir::OpBuilder b(combineOp);
                   mlir::Block* mapBlock = new mlir::Block;

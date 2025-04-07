@@ -23,6 +23,6 @@ double lingodb::runtime::FloatRuntime::exp(double x) {
 double lingodb::runtime::FloatRuntime::erf(double x) {
    return ::erf(x);
 }
-double lingodb::runtime::FloatRuntime::pow(double x,double y) {
-   return ::pow(x,y);
+double lingodb::runtime::FloatRuntime::pow(double x, double y) {
+   return ::pow(x, y);
 }

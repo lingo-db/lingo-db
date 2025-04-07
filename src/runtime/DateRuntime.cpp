@@ -70,8 +70,8 @@ int64_t lingodb::runtime::DateRuntime::extractDay(int64_t date) {
    return DateHelper(date).tmMday();
 }
 int64_t lingodb::runtime::DateRuntime::dateDiffSeconds(int64_t start, int64_t end) {
-   auto diffNanos=end-start;
-   return diffNanos/(1000000000ull);
+   auto diffNanos = end - start;
+   return diffNanos / (1000000000ull);
 }
 int64_t lingodb::runtime::DateRuntime::extractHour(int64_t date) {
    return DateHelper(date).tmHour();

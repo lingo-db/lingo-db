@@ -23,7 +23,7 @@ ArrowTable* ArrowTable::merge(ThreadLocal* threadLocal) {
    utility::Tracer::Trace trace(tableMerge);
    std::vector<std::shared_ptr<arrow::Table>> tables;
    for (auto* ptr : threadLocal->getThreadLocalValues<ArrowTable>()) {
-      if(!ptr) continue;
+      if (!ptr) continue;
       auto* current = ptr;
       tables.push_back(current->get());
    }

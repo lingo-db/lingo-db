@@ -92,39 +92,38 @@ ArrowColumnBuilder* ArrowColumnBuilder::create(VarLen32 type) {
 
 ArrowColumnBuilder::ArrowColumnBuilder(std::shared_ptr<arrow::DataType> type) : type(type) {
    builderUnique = arrow::MakeBuilder(GetPhysicalType(type)).ValueOrDie();
-   auto reserveOk=builderUnique->Reserve(20000).ok();
+   auto reserveOk = builderUnique->Reserve(20000).ok();
    assert(reserveOk);
-   builder=builderUnique.get();
-   if (type->id() == arrow::Type::LIST){
+   builder = builderUnique.get();
+   if (type->id() == arrow::Type::LIST) {
       childBuilder = new ArrowColumnBuilder(reinterpret_cast<arrow::ListBuilder*>(builder)->value_builder());
    }
 }
 void ArrowColumnBuilder::next() {
-   if(builderUnique) {
+   if (builderUnique) {
       //only do this for "root builder"
       numValues++;
-      if(numValues>20000) {
+      if (numValues > 20000) {
          auto array = builder->Finish().ValueOrDie();
          additionalArrays.push_back(cast(array, type));
-         auto reserveOk=builderUnique->Reserve(20000).ok();
+         auto reserveOk = builderUnique->Reserve(20000).ok();
          assert(reserveOk);
-         numValues=0;
+         numValues = 0;
       }
    }
 }
- ArrowColumnBuilder::ArrowColumnBuilder(arrow::ArrayBuilder* valueBuilder) :type(){
-
-   builder=valueBuilder;
-   childBuilder=nullptr;
+ArrowColumnBuilder::ArrowColumnBuilder(arrow::ArrayBuilder* valueBuilder) : type() {
+   builder = valueBuilder;
+   childBuilder = nullptr;
 }
 ArrowColumnBuilder* ArrowColumnBuilder::getChildBuilder() {
-   if(!childBuilder) {
+   if (!childBuilder) {
       throw std::runtime_error("child builder is null");
    }
    return childBuilder;
 }
- ArrowColumnBuilder::~ArrowColumnBuilder() {
-   if(childBuilder) {
+ArrowColumnBuilder::~ArrowColumnBuilder() {
+   if (childBuilder) {
       delete childBuilder;
    }
 }
@@ -138,15 +137,15 @@ void ArrowColumnBuilder::addBool(bool isValid, bool value) {
       handleStatus(typedBuilder->Append(value));
    }
 }
-#define COLUMN_BUILDER_ADD_PRIMITIVE(name, blubb)                                                 \
-   void ArrowColumnBuilder::add##name(bool isValid, arrow::blubb ::c_type val) {                  \
-      next();                                                                                     \
-      auto* typedBuilder = reinterpret_cast<arrow::NumericBuilder<arrow::blubb>*>(builder); \
-      if (!isValid) {                                                                             \
-         handleStatus(typedBuilder->AppendNull()); /*NOLINT (clang-diagnostic-unused-result)*/    \
-      } else {                                                                                    \
-         handleStatus(typedBuilder->Append(val)); /*NOLINT (clang-diagnostic-unused-result)*/     \
-      }                                                                                           \
+#define COLUMN_BUILDER_ADD_PRIMITIVE(name, blubb)                                              \
+   void ArrowColumnBuilder::add##name(bool isValid, arrow::blubb ::c_type val) {               \
+      next();                                                                                  \
+      auto* typedBuilder = reinterpret_cast<arrow::NumericBuilder<arrow::blubb>*>(builder);    \
+      if (!isValid) {                                                                          \
+         handleStatus(typedBuilder->AppendNull()); /*NOLINT (clang-diagnostic-unused-result)*/ \
+      } else {                                                                                 \
+         handleStatus(typedBuilder->Append(val)); /*NOLINT (clang-diagnostic-unused-result)*/  \
+      }                                                                                        \
    }
 
 COLUMN_BUILDER_ADD_PRIMITIVE(Int8, Int8Type)
@@ -203,5 +202,5 @@ ArrowColumn* ArrowColumnBuilder::finish() {
 void ArrowColumnBuilder::merge(ArrowColumnBuilder* other) {
    auto array = other->builder->Finish().ValueOrDie();
    additionalArrays.push_back(cast(array, type));
-   additionalArrays.insert(additionalArrays.end(),other->additionalArrays.begin(),other->additionalArrays.end());
+   additionalArrays.insert(additionalArrays.end(), other->additionalArrays.begin(), other->additionalArrays.end());
 }

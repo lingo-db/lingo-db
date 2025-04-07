@@ -52,7 +52,6 @@ using namespace lingodb::compiler::dialect;
    return success();
 }
 
-
 ::mlir::LogicalResult util::BufferGetElementRef::verify() {
    util::BufferGetElementRef& op = *this;
    if (auto bufType = mlir::dyn_cast_or_null<util::BufferType>(op.getBuffer().getType())) {

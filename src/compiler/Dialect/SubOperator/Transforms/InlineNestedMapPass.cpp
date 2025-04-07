@@ -1,6 +1,6 @@
-#include "llvm/Support/Debug.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorDialect.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
+#include "llvm/Support/Debug.h"
 
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/ColumnCreationAnalysis.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/ColumnUsageAnalysis.h"
@@ -28,7 +28,7 @@ class InlineNestedMapPass : public mlir::PassWrapper<InlineNestedMapPass, mlir::
       getOperation()->walk([&](subop::NestedMapOp nestedMapOp) {
          nestedMapOps.push(nestedMapOp);
       });
-      while(!nestedMapOps.empty()) {
+      while (!nestedMapOps.empty()) {
          auto nestedMap = nestedMapOps.front();
          nestedMapOps.pop();
          auto returnOp = mlir::dyn_cast<tuples::ReturnOp>(nestedMap.getRegion().front().getTerminator());
@@ -46,7 +46,7 @@ class InlineNestedMapPass : public mlir::PassWrapper<InlineNestedMapPass, mlir::
          std::vector<mlir::Operation*> opsToMove;
          std::queue<std::tuple<mlir::OpOperand&, mlir::Value, bool, subop::ColumnMapping>> opsToProcess;
          for (auto& use : streamResult.getUses()) {
-            opsToProcess.push({use, streamResult, false,{}});
+            opsToProcess.push({use, streamResult, false, {}});
          }
          std::vector<subop::UnionOp> unions;
          while (!opsToProcess.empty()) {
@@ -73,8 +73,8 @@ class InlineNestedMapPass : public mlir::PassWrapper<InlineNestedMapPass, mlir::
                mlir::OpBuilder builder(op);
                mlir::IRMapping mapping;
                mapping.map(currentUse.get(), v);
-               auto* cloned =  mlir::cast<subop::SubOperator>(op).cloneSubOp(builder, mapping,  columnMapping);
-               if(auto clonedNestedMap = mlir::dyn_cast<subop::NestedMapOp>(cloned)) {
+               auto* cloned = mlir::cast<subop::SubOperator>(op).cloneSubOp(builder, mapping, columnMapping);
+               if (auto clonedNestedMap = mlir::dyn_cast<subop::NestedMapOp>(cloned)) {
                   nestedMapOps.push(clonedNestedMap);
                }
                opsToMove.push_back(cloned);
@@ -122,7 +122,6 @@ class InlineNestedMapPass : public mlir::PassWrapper<InlineNestedMapPass, mlir::
             }
          }
       }
-
    }
 };
 } // end anonymous namespace

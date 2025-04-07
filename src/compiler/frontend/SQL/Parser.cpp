@@ -979,8 +979,8 @@ mlir::Value frontend::sql::Parser::translateExpression(mlir::OpBuilder& builder,
                   if (auto intervalType = mlir::dyn_cast<db::IntervalType>(resType)) {
                      std::string unit = "";
                      auto stringRepresentation = mlir::cast<mlir::StringAttr>(constOp.getValue()).str();
-                     auto typeModList=getTypeModList(castNode->type_name_->typmods_);
-                     if(typeModList.size()>0&&std::get<size_t>(typeModList[0]) & 4){
+                     auto typeModList = getTypeModList(castNode->type_name_->typmods_);
+                     if (typeModList.size() > 0 && std::get<size_t>(typeModList[0]) & 4) {
                         //interval in years
                         stringRepresentation = std::to_string(std::stol(stringRepresentation) * 12);
                      }
@@ -2236,7 +2236,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
          std::vector<mlir::Attribute> createdCols;
          mlir::Value expr; //todo
          auto attrDef = attrManager.createDef(groupByName, fakeNode->colId);
-         if (funcName == "rank" || funcName =="row_number") { //todo: fix rank
+         if (funcName == "rank" || funcName == "row_number") { //todo: fix rank
             expr = windowBuilder.create<relalg::RankOp>(builder.getUnknownLoc(), builder.getI64Type(), relation);
 
          } else if (funcName == "count*") {

@@ -17,7 +17,7 @@ class DecomposeInnerJoin : public mlir::RewritePattern {
       auto cp = rewriter.create<relalg::CrossProductOp>(op->getLoc(), innerJoin.getLeft(), innerJoin.getRight());
       auto sel = rewriter.create<relalg::SelectionOp>(op->getLoc(), cp);
       rewriter.inlineRegionBefore(innerJoin.getPredicate(), sel.getPredicate(), sel.getPredicate().end());
-      rewriter.replaceOp(op,sel.getResult());
+      rewriter.replaceOp(op, sel.getResult());
       return mlir::success();
    }
 };
@@ -225,7 +225,7 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
       getOperation().walk([&](relalg::SelectionOp op) {
          auto* terminator = op.getRegion().front().getTerminator();
          mlir::Value val = op.getRel();
-         if(terminator->getNumOperands()>0){
+         if (terminator->getNumOperands() > 0) {
             decomposeSelection(terminator->getOperand(0), val);
          }
          op.replaceAllUsesWith(val);
@@ -240,7 +240,7 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
 
       getOperation().walk([&](relalg::OuterJoinOp op) {
          auto* terminator = op.getRegion().front().getTerminator();
-         if(terminator->getNumOperands()==0){
+         if (terminator->getNumOperands() == 0) {
             return;
          }
          auto retval = terminator->getOperand(0);
@@ -252,10 +252,8 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
          builder.create<tuples::ReturnOp>(terminator->getLoc(), val ? mlir::ValueRange{val} : mlir::ValueRange{});
          terminator->erase();
       });
-
    }
 };
 } // end anonymous namespace
-
 
 std::unique_ptr<mlir::Pass> relalg::createDecomposeLambdasPass() { return std::make_unique<DecomposeLambdas>(); }

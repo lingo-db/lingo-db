@@ -101,6 +101,7 @@ class ReduceAggrKeyPattern : public mlir::RewritePattern {
 
 class ReduceAggrKeys : public mlir::PassWrapper<ReduceAggrKeys, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-reduce-aggr-keys"; }
+
    public:
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(ReduceAggrKeys)
    void runOnOperation() override {
@@ -132,6 +133,7 @@ static std::optional<std::pair<const tuples::Column*, const tuples::Column*>> an
 
 class ExpandTransitiveEqualities : public mlir::PassWrapper<ExpandTransitiveEqualities, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-expand-transitive-eq"; }
+
    public:
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(ExpandTransitiveEqualities)
    private:
@@ -215,7 +217,6 @@ class ExpandTransitiveEqualities : public mlir::PassWrapper<ExpandTransitiveEqua
    }
 };
 } // end anonymous namespace
-
 
 std::unique_ptr<mlir::Pass> relalg::createReduceGroupByKeysPass() { return std::make_unique<ReduceAggrKeys>(); }
 std::unique_ptr<mlir::Pass> relalg::createExpandTransitiveEqualities() { return std::make_unique<ExpandTransitiveEqualities>(); }

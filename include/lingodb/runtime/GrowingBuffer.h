@@ -8,10 +8,10 @@ namespace lingodb::runtime {
 class GrowingBuffer;
 class GrowingBufferAllocator {
    public:
-   virtual GrowingBuffer* create(ExecutionContext* executionContext,size_t sizeOfType, size_t initialCapacity) = 0;
+   virtual GrowingBuffer* create(ExecutionContext* executionContext, size_t sizeOfType, size_t initialCapacity) = 0;
    static GrowingBufferAllocator* getDefaultAllocator();
-   static GrowingBufferAllocator* getGroupAllocator( size_t groupId);
-   virtual ~GrowingBufferAllocator(){}
+   static GrowingBufferAllocator* getGroupAllocator(size_t groupId);
+   virtual ~GrowingBufferAllocator() {}
 };
 class GrowingBuffer {
    runtime::FlexibleBuffer values;

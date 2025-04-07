@@ -1,0 +1,24 @@
+name: Clang Format Check
+
+on: [pull_request]
+
+jobs:
+  clang-format:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install clang-format
+        run: sudo apt-get install -y clang-format
+
+      - name: Run clang-format
+        run: make format
+      - name: Check for unformatted files
+        run: |
+          if ! git diff --quiet; then
+            echo "Code is not properly formatted. Run clang-format to fix formatting."
+            git --no-pager diff
+            exit 1
+          fi

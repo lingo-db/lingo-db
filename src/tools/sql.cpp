@@ -2,8 +2,8 @@
 #include <iostream>
 #include <string>
 
-#include "lingodb/execution/Execution.h"
 #include "lingodb/compiler/mlir-support/eval.h"
+#include "lingodb/execution/Execution.h"
 
 namespace {
 using namespace lingodb;
@@ -42,13 +42,13 @@ int main(int argc, char** argv) {
       std::cerr << "USAGE: sql database" << std::endl;
       return 1;
    }
-   bool reportTimes=false;
-   if(const char* reportTimesEnv=std::getenv("LINGODB_SQL_REPORT_TIMES")){
-      reportTimes= std::stoll(reportTimesEnv);
+   bool reportTimes = false;
+   if (const char* reportTimesEnv = std::getenv("LINGODB_SQL_REPORT_TIMES")) {
+      reportTimes = std::stoll(reportTimesEnv);
    }
-   bool prompt=true;
-   if(const char* promptEnv=std::getenv("LINGODB_SQL_PROMPT")){
-      prompt= std::stoll(promptEnv);
+   bool prompt = true;
+   if (const char* promptEnv = std::getenv("LINGODB_SQL_PROMPT")) {
+      prompt = std::stoll(promptEnv);
    }
 
    auto session = runtime::Session::createSession(std::string(argv[1]), true);
@@ -57,7 +57,7 @@ int main(int argc, char** argv) {
    auto scheduler = scheduler::startScheduler();
    while (true) {
       //print prompt
-      if (prompt){
+      if (prompt) {
          std::cout << "sql>";
       }
       //read query from stdin until semicolon appears

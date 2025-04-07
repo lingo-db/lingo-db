@@ -1,8 +1,8 @@
 #ifndef LINGODB_BRIDGE_H
 #define LINGODB_BRIDGE_H
+#include "mlir-c/IR.h"
 #include <memory>
 #include <arrow/c/bridge.h>
-#include "mlir-c/IR.h"
 namespace bridge {
 class Connection;
 struct MLIRValueRangeImpl;

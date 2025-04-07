@@ -1,6 +1,6 @@
 #include "lingodb/compiler/Dialect/RelAlg/Transforms/queryopt/QueryGraphBuilder.h"
 
-namespace{
+namespace {
 using namespace lingodb::compiler::dialect;
 relalg::NodeSet getNodeSetFromClass(llvm::EquivalenceClasses<size_t>& classes, size_t val, size_t numNodes) {
    relalg::NodeSet res(numNodes);

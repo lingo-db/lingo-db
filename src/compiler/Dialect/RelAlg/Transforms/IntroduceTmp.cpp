@@ -1,14 +1,14 @@
-#include "llvm/ADT/TypeSwitch.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "lingodb/compiler/Dialect/RelAlg/Passes.h"
-#include "mlir/IR/IRMapping.h"
-#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+
+#include "llvm/ADT/TypeSwitch.h"
 
 namespace {
 using namespace lingodb::compiler::dialect;
 
 class IntroduceTmp : public mlir::PassWrapper<IntroduceTmp, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-introduce-tmp"; }
+
    public:
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(IntroduceTmp)
    relalg::ColumnSet getUsed(mlir::Operation* op) {
@@ -47,6 +47,5 @@ class IntroduceTmp : public mlir::PassWrapper<IntroduceTmp, mlir::OperationPass<
    }
 };
 } // end anonymous namespace
-
 
 std::unique_ptr<mlir::Pass> relalg::createIntroduceTmpPass() { return std::make_unique<IntroduceTmp>(); }

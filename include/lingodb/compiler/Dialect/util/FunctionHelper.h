@@ -36,12 +36,13 @@ class FunctionSpec {
 
 class FunctionHelper {
    mlir::ModuleOp parentModule;
+
    public:
    static void visitAllFunctions(const std::function<void(std::string, void*)>& fn);
    void setParentModule(const mlir::ModuleOp& parentModule);
 
    public:
-   static mlir::func::CallOp call (mlir::OpBuilder& builder, mlir::Location loc, const FunctionSpec& function, mlir::ValueRange values);
+   static mlir::func::CallOp call(mlir::OpBuilder& builder, mlir::Location loc, const FunctionSpec& function, mlir::ValueRange values);
    static mlir::Value convertValue(mlir::OpBuilder& builder, mlir::Value v, mlir::Type t, mlir::Location loc);
 };
 } // namespace lingodb::compiler::dialect::util

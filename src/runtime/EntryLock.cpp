@@ -23,5 +23,4 @@ void EntryLock::unlock(EntryLock* lock) {
 #endif
 }
 
-
 } // namespace lingodb::runtime

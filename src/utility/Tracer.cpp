@@ -8,7 +8,7 @@
 #include <mutex>
 #include <queue>
 #include <unistd.h>
-namespace utility=lingodb::utility;
+namespace utility = lingodb::utility;
 namespace {
 utility::GlobalSetting<std::string> traceOutputDir("system.trace_dir", ".");
 

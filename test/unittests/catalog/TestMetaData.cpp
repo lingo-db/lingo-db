@@ -86,27 +86,27 @@ class MockTableMetaDataProvider : public TableMetaDataProvider {
    std::vector<std::pair<std::string, std::vector<std::string>>> getIndices() const override { return indices; }
 };
 TEST_CASE("MetaData:TableMetaDataProvider") {
-        auto schema = arrow::schema({arrow::field("a", arrow::int32()), arrow::field("b", arrow::float64())});
-        auto x = arrow::ipc::internal::json::ArrayFromJSON(arrow::int32(), "[1, 2]").ValueOrDie();
-        auto y = arrow::ipc::internal::json::ArrayFromJSON(arrow::float64(), "[3.0, 4.0]").ValueOrDie();
-        auto batch = arrow::RecordBatch::Make(schema, 2, std::vector<std::shared_ptr<arrow::Array>>{x, y});
-        Sample sample(batch);
-        size_t numRows = 2;
-        std::vector<std::string> primaryKey{"a"};
-        std::vector<std::string> columnNames{"a", "b"};
-        std::vector<std::unique_ptr<ColumnStatistics>> columnStatistics;
-        columnStatistics.push_back(std::make_unique<ColumnStatistics>(10));
-        columnStatistics.push_back(std::make_unique<ColumnStatistics>(std::nullopt));
-        std::vector<std::pair<std::string, std::vector<std::string>>> indices{{"index1", {"a"}}};
+   auto schema = arrow::schema({arrow::field("a", arrow::int32()), arrow::field("b", arrow::float64())});
+   auto x = arrow::ipc::internal::json::ArrayFromJSON(arrow::int32(), "[1, 2]").ValueOrDie();
+   auto y = arrow::ipc::internal::json::ArrayFromJSON(arrow::float64(), "[3.0, 4.0]").ValueOrDie();
+   auto batch = arrow::RecordBatch::Make(schema, 2, std::vector<std::shared_ptr<arrow::Array>>{x, y});
+   Sample sample(batch);
+   size_t numRows = 2;
+   std::vector<std::string> primaryKey{"a"};
+   std::vector<std::string> columnNames{"a", "b"};
+   std::vector<std::unique_ptr<ColumnStatistics>> columnStatistics;
+   columnStatistics.push_back(std::make_unique<ColumnStatistics>(10));
+   columnStatistics.push_back(std::make_unique<ColumnStatistics>(std::nullopt));
+   std::vector<std::pair<std::string, std::vector<std::string>>> indices{{"index1", {"a"}}};
 
-        auto metaData=std::make_shared<MockTableMetaDataProvider>(sample, numRows, primaryKey, columnNames, std::move(columnStatistics), indices);
-        SimpleByteWriter writer;
-        Serializer serializer(writer);
-        serializer.writeProperty(1, metaData);
-        SimpleByteReader reader(writer.data(), writer.size());
-        Deserializer deserializer(reader);
-        auto metaData2 = deserializer.readProperty<std::shared_ptr<TableMetaDataProvider>>(1);
-        REQUIRE(metaData2->getNumRows() == numRows);
-        REQUIRE(metaData2->getPrimaryKey() == primaryKey);
-        REQUIRE(metaData2->getColumnNames() == columnNames);
+   auto metaData = std::make_shared<MockTableMetaDataProvider>(sample, numRows, primaryKey, columnNames, std::move(columnStatistics), indices);
+   SimpleByteWriter writer;
+   Serializer serializer(writer);
+   serializer.writeProperty(1, metaData);
+   SimpleByteReader reader(writer.data(), writer.size());
+   Deserializer deserializer(reader);
+   auto metaData2 = deserializer.readProperty<std::shared_ptr<TableMetaDataProvider>>(1);
+   REQUIRE(metaData2->getNumRows() == numRows);
+   REQUIRE(metaData2->getPrimaryKey() == primaryKey);
+   REQUIRE(metaData2->getColumnNames() == columnNames);
 }

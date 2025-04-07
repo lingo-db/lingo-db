@@ -471,7 +471,7 @@ class ToJson {
                auto columnDefAttr = mlir::cast<tuples::ColumnDefAttr>(column);
                result["mapped"].push_back({{"computed", columnToJSON(columnDefAttr)}, {"expression", convertExpression(computed.getDefiningOp())}});
             }
-            result["behavior"]= groupJoin.getBehavior() == relalg::GroupJoinBehavior::inner ? "inner" : "outer";
+            result["behavior"] = groupJoin.getBehavior() == relalg::GroupJoinBehavior::inner ? "inner" : "outer";
             return result;
          })
          .Case<relalg::AggregationOp>([&](relalg::AggregationOp aggregationOp) {

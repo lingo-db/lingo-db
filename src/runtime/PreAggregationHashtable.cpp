@@ -13,8 +13,6 @@ static lingodb::utility::Tracer::Event mergeDeallocate("Oht", "mergeDealloc");
 
 // https://en.cppreference.com/w/cpp/atomic/atomic_flag
 
-
-
 class FragmentOutputsTask : public lingodb::scheduler::TaskWithImplicitContext {
    std::vector<lingodb::runtime::FlexibleBuffer*>* outputs;
    std::function<void(std::vector<lingodb::runtime::FlexibleBuffer*>&)> cb;

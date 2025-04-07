@@ -21,14 +21,12 @@
 
 namespace {
 
-
 class DefaultCBackend : public lingodb::execution::ExecutionBackend {
    void execute(mlir::ModuleOp& moduleOp, lingodb::runtime::ExecutionContext* executionContext) override {
-
       std::string translatedModule;
       llvm::raw_string_ostream sstream(translatedModule);
 
-      if (lingodb::execution::emitC(moduleOp.getOperation(), sstream,false).failed()) {
+      if (lingodb::execution::emitC(moduleOp.getOperation(), sstream, false).failed()) {
          error.emit() << "Can not translate module to c++";
          return;
       }
@@ -37,7 +35,7 @@ class DefaultCBackend : public lingodb::execution::ExecutionBackend {
 
       translatedModule = std::regex_replace(translatedModule, r, "extern \"C\" void mainFunc() {");
 
-      std::ofstream outputFile(currPath+"/mlir-c-module.cpp");
+      std::ofstream outputFile(currPath + "/mlir-c-module.cpp");
       outputFile << "#include<cstdint>\n"
                     "#include<tuple>\n"
                     "#include<math.h>\n"
@@ -84,7 +82,7 @@ class DefaultCBackend : public lingodb::execution::ExecutionBackend {
       void* handle = dlopen(std::string(currPath + "/c-backend.so").c_str(), RTLD_LAZY);
       const char* dlsymError = dlerror();
       if (dlsymError) {
-         error.emit() << "Can not open static library: " << std::string(dlsymError) <<"\nerror:"<<result<<std::endl;
+         error.emit() << "Can not open static library: " << std::string(dlsymError) << "\nerror:" << result << std::endl;
          return;
       }
       auto mainFunc = reinterpret_cast<lingodb::execution::mainFnType>(dlsym(handle, "mainFunc"));

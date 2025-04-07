@@ -173,7 +173,7 @@ class AllocOpLowering : public OpConversionPattern<util::AllocOp> {
       mlir::Value bytesPerEntry = rewriter.create<util::SizeOfOp>(loc, rewriter.getIndexType(), genericMemrefType.getElementType());
       bytesPerEntry = rewriter.create<mlir::UnrealizedConversionCastOp>(loc, rewriter.getI64Type(), bytesPerEntry).getResult(0);
       Value sizeInBytes = rewriter.create<mlir::LLVM::MulOp>(loc, rewriter.getI64Type(), entries, bytesPerEntry);
-      LLVM::LLVMFuncOp mallocFunc = LLVM::lookupOrCreateMallocFn(allocOp->getParentOfType<ModuleOp>(), rewriter.getI64Type()).value();//todo: check for error
+      LLVM::LLVMFuncOp mallocFunc = LLVM::lookupOrCreateMallocFn(allocOp->getParentOfType<ModuleOp>(), rewriter.getI64Type()).value(); //todo: check for error
       auto result = rewriter.create<mlir::LLVM::CallOp>(loc, mallocFunc, mlir::ValueRange{sizeInBytes}).getResult();
       rewriter.replaceOp(allocOp, result);
 
@@ -184,7 +184,7 @@ class DeAllocOpLowering : public OpConversionPattern<util::DeAllocOp> {
    public:
    using OpConversionPattern<util::DeAllocOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(util::DeAllocOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto freeFunc = LLVM::lookupOrCreateFreeFn(op->getParentOfType<ModuleOp>()).value();//todo: check for error
+      auto freeFunc = LLVM::lookupOrCreateFreeFn(op->getParentOfType<ModuleOp>()).value(); //todo: check for error
       rewriter.replaceOpWithNewOp<LLVM::CallOp>(op, freeFunc, adaptor.getRef());
       return success();
    }
@@ -285,7 +285,7 @@ class CreateVarLenLowering : public OpConversionPattern<util::CreateVarLen> {
    public:
    using OpConversionPattern<util::CreateVarLen>::OpConversionPattern;
    LogicalResult matchAndRewrite(util::CreateVarLen op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto fn = LLVM::lookupOrCreateFn(op->getParentOfType<ModuleOp>(), "createVarLen32", {mlir::LLVM::LLVMPointerType::get(getContext()), rewriter.getI32Type()}, rewriter.getIntegerType(128)).value();//todo: check for error
+      auto fn = LLVM::lookupOrCreateFn(op->getParentOfType<ModuleOp>(), "createVarLen32", {mlir::LLVM::LLVMPointerType::get(getContext()), rewriter.getI32Type()}, rewriter.getIntegerType(128)).value(); //todo: check for error
       auto result = rewriter.create<mlir::LLVM::CallOp>(op->getLoc(), fn, mlir::ValueRange{adaptor.getRef(), adaptor.getLen()}).getResult();
       rewriter.replaceOp(op, result);
       return success();
@@ -456,7 +456,7 @@ class HashVarLenLowering : public OpConversionPattern<util::HashVarLen> {
    public:
    using OpConversionPattern<util::HashVarLen>::OpConversionPattern;
    LogicalResult matchAndRewrite(util::HashVarLen op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto fn = LLVM::lookupOrCreateFn(op->getParentOfType<ModuleOp>(), "hashVarLenData", {rewriter.getIntegerType(128)}, rewriter.getI64Type()).value();//todo: check for error
+      auto fn = LLVM::lookupOrCreateFn(op->getParentOfType<ModuleOp>(), "hashVarLenData", {rewriter.getIntegerType(128)}, rewriter.getI64Type()).value(); //todo: check for error
       auto result = rewriter.create<mlir::LLVM::CallOp>(op->getLoc(), fn, mlir::ValueRange{adaptor.getVal()}).getResult();
       rewriter.replaceOp(op, result);
       return success();
@@ -496,9 +496,9 @@ class BufferGetMemRefOpLowering : public OpConversionPattern<util::BufferGetMemR
       tpl = rewriter.create<LLVM::InsertValueOp>(op->getLoc(), targetType, tpl, alignedPtr, rewriter.getDenseI64ArrayAttr(1));
       tpl = rewriter.create<LLVM::InsertValueOp>(op->getLoc(), targetType, tpl, offset, rewriter.getDenseI64ArrayAttr(2));
       // array<1 x i64> - dimension size
-      tpl = rewriter.create<LLVM::InsertValueOp>(op->getLoc(), targetType, tpl, len, rewriter.getDenseI64ArrayAttr({3,0}));
+      tpl = rewriter.create<LLVM::InsertValueOp>(op->getLoc(), targetType, tpl, len, rewriter.getDenseI64ArrayAttr({3, 0}));
       // array<1 x i64> - stride
-      tpl = rewriter.create<LLVM::InsertValueOp>(op->getLoc(), targetType, tpl, bytesPerEntry, rewriter.getDenseI64ArrayAttr({4,0}));
+      tpl = rewriter.create<LLVM::InsertValueOp>(op->getLoc(), targetType, tpl, bytesPerEntry, rewriter.getDenseI64ArrayAttr({4, 0}));
 
       rewriter.replaceOp(op, tpl);
       return success();

@@ -68,7 +68,7 @@ class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::Oper
          })
          .Case<relalg::BaseTableOp>([&](relalg::BaseTableOp baseTableOp) {
             auto meta = mlir::dyn_cast_or_null<relalg::TableMetaDataAttr>(baseTableOp->getAttr("meta"));
-            if(!meta) return;
+            if (!meta) return;
             auto numRows = meta.getMeta()->getNumRows();
             baseTableOp->setAttr("rows", mlir::FloatAttr::get(mlir::Float64Type::get(&getContext()), numRows));
          })
@@ -85,7 +85,7 @@ class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::Oper
          })
          .Case<relalg::AggregationOp>([&](relalg::AggregationOp aggregationOp) {
             if (aggregationOp.getGroupByCols().empty()) {
-               aggregationOp->setAttr("rows", mlir::FloatAttr::get(mlir::Float64Type::get(&getContext()),1.0));
+               aggregationOp->setAttr("rows", mlir::FloatAttr::get(mlir::Float64Type::get(&getContext()), 1.0));
             } else if (children.size() == 1 && children[0]->hasAttr("rows")) {
                aggregationOp->setAttr("rows", children[0]->getAttr("rows"));
             }

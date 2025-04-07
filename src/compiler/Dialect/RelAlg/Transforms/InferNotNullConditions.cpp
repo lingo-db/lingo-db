@@ -28,7 +28,7 @@ class InferNotNullConditions : public mlir::PassWrapper<InferNotNullConditions, 
    void addNullCheck(relalg::SelectionOp selection, mlir::Value v, relalg::ColumnCreatorAnalysis columnCreatorAnalysis) {
       if (mlir::isa<db::NullableType>(v.getType())) {
          if (auto getColumnOp = mlir::dyn_cast_or_null<tuples::GetColumnOp>(v.getDefiningOp())) {
-            const auto *c = &getColumnOp.getAttr().getColumn();
+            const auto* c = &getColumnOp.getAttr().getColumn();
             if (!columnCreatorAnalysis.getCreator(c).canColumnReach({}, selection, c)) return;
             auto returnOp = mlir::cast<tuples::ReturnOp>(selection.getPredicate().front().getTerminator());
             mlir::OpBuilder builder(returnOp);
@@ -71,6 +71,5 @@ class InferNotNullConditions : public mlir::PassWrapper<InferNotNullConditions, 
    }
 };
 } // end anonymous namespace
-
 
 std::unique_ptr<mlir::Pass> relalg::createInferNotNullConditionsPass() { return std::make_unique<InferNotNullConditions>(); }

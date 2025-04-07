@@ -7,7 +7,6 @@ class BoolTypeCreator : public lingodb::catalog::MLIRTypeCreator {
    mlir::Type createType(mlir::MLIRContext* context) override {
       return mlir::IntegerType::get(context, 1);
    }
-
 };
 class IntTypeCreator : public lingodb::catalog::MLIRTypeCreator {
    public:
@@ -15,6 +14,7 @@ class IntTypeCreator : public lingodb::catalog::MLIRTypeCreator {
    mlir::Type createType(mlir::MLIRContext* context) override {
       return mlir::IntegerType::get(context, info->getBitWidth()); //todo: sign
    }
+
    private:
    std::shared_ptr<lingodb::catalog::IntTypeInfo> info;
 };
@@ -31,6 +31,7 @@ class DecimalTypeCreator : public lingodb::catalog::MLIRTypeCreator {
    mlir::Type createType(mlir::MLIRContext* context) override {
       return lingodb::compiler::dialect::db::DecimalType::get(context, info->getPrecision(), info->getScale());
    }
+
    private:
    std::shared_ptr<lingodb::catalog::DecimalTypeInfo> info;
 };
@@ -40,6 +41,7 @@ class TimestampTypeCreator : public lingodb::catalog::MLIRTypeCreator {
    mlir::Type createType(mlir::MLIRContext* context) override {
       return lingodb::compiler::dialect::db::TimestampType::get(context, lingodb::compiler::dialect::db::symbolizeTimeUnitAttr(static_cast<size_t>(info->getUnit())).value());
    }
+
    private:
    std::shared_ptr<lingodb::catalog::TimestampTypeInfo> info;
 };
@@ -49,6 +51,7 @@ class DateTypeCreator : public lingodb::catalog::MLIRTypeCreator {
    mlir::Type createType(mlir::MLIRContext* context) override {
       return lingodb::compiler::dialect::db::DateType::get(context, lingodb::compiler::dialect::db::symbolizeDateUnitAttr(static_cast<size_t>(info->getUnit())).value());
    }
+
    private:
    std::shared_ptr<lingodb::catalog::DateTypeInfo> info;
 };
@@ -59,6 +62,7 @@ class IntervalTypeCreator : public lingodb::catalog::MLIRTypeCreator {
    mlir::Type createType(mlir::MLIRContext* context) override {
       return lingodb::compiler::dialect::db::IntervalType::get(context, lingodb::compiler::dialect::db::symbolizeIntervalUnitAttr(static_cast<size_t>(info->getUnit())).value());
    }
+
    private:
    std::shared_ptr<lingodb::catalog::IntervalTypeInfo> info;
 };
@@ -68,6 +72,7 @@ class CharTypeCreator : public lingodb::catalog::MLIRTypeCreator {
    mlir::Type createType(mlir::MLIRContext* context) override {
       return lingodb::compiler::dialect::db::CharType::get(context, info->getLength());
    }
+
    private:
    std::shared_ptr<lingodb::catalog::CharTypeInfo> info;
 };

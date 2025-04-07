@@ -382,5 +382,4 @@ class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir
 };
 } // end anonymous namespace
 
-
 std::unique_ptr<mlir::Pass> relalg::createSimplifyAggregationsPass() { return std::make_unique<SimplifyAggregations>(); }

@@ -156,9 +156,9 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
       // Initialize map to verify presence of all primary key attributes
       auto meta = mlir::dyn_cast_or_null<relalg::TableMetaDataAttr>(baseTableOp->getAttr("meta"));
       if (meta) {
-         for (auto [idxName,indexColumns] : meta.getMeta()->getIndices()) {
+         for (auto [idxName, indexColumns] : meta.getMeta()->getIndices()) {
             std::unordered_map<std::string, bool> indexColumnsFound;
-            for(auto indexCol: indexColumns) {
+            for (auto indexCol : indexColumns) {
                indexColumnsFound[indexCol] = false;
             }
 
@@ -189,9 +189,8 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
             for (auto primaryKeyAttribute : indexColumnsFound) {
                res &= primaryKeyAttribute.second;
             }
-            indexName=idxName;
+            indexName = idxName;
             return res;
-
          }
       }
       return false;

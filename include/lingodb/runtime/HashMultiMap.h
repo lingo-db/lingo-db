@@ -4,7 +4,7 @@
 #include "lingodb/runtime/helpers.h"
 namespace lingodb::runtime {
 class HashMultiMap {
-   struct Value{
+   struct Value {
       Value* nextValue;
       uint8_t valueContent[];
    };
@@ -20,7 +20,7 @@ class HashMultiMap {
    runtime::FlexibleBuffer values;
 
    //initial value follows...
-   HashMultiMap(size_t initialCapacity, size_t entryTypeSize, size_t valueTypeSize) : ht(initialCapacity * 2), hashMask(initialCapacity * 2 - 1), entries(initialCapacity,entryTypeSize),values(initialCapacity,valueTypeSize) {}
+   HashMultiMap(size_t initialCapacity, size_t entryTypeSize, size_t valueTypeSize) : ht(initialCapacity * 2), hashMask(initialCapacity * 2 - 1), entries(initialCapacity, entryTypeSize), values(initialCapacity, valueTypeSize) {}
 
    public:
    void resize();

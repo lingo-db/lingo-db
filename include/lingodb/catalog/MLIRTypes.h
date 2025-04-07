@@ -2,7 +2,6 @@
 #define LINGODB_CATALOG_MLIRTYPES_H
 #include "mlir/IR/Types.h"
 
-
 namespace lingodb::catalog {
 class IntTypeInfo;
 class DecimalTypeInfo;

@@ -74,7 +74,6 @@ class Type {
    static Type timestamp();
    static Type intervalDaytime();
    static Type intervalMonths();
-
 };
 class IntTypeInfo : public TypeInfo {
    bool isSigned;

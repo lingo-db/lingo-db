@@ -137,3 +137,9 @@ lint: build/lingodb-debug/.stamp
 	cmake --build build/lingodb-debug --target build_includes
 	sed -i 's/-fno-lifetime-dse//g' build/lingodb-debug/compile_commands.json
 	python3 tools/scripts/run-clang-tidy.py -p $(dir $<) -quiet -header-filter="$(shell pwd)/include/.*" -exclude="arrow|vendored" -clang-tidy-binary=clang-tidy-20
+
+format:
+	find include \( -name '*.cpp' -o -name '*.h' \) -exec clang-format -i {} +
+	find src \( -name '*.cpp' -o -name '*.h' \) -exec clang-format -i {} +
+	find tools \( -name '*.cpp' -o -name '*.h' \) -exec clang-format -i {} +
+	find test \( -name '*.cpp' -o -name '*.h' \) -exec clang-format -i {} +

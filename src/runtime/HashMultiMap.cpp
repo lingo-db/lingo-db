@@ -1,8 +1,8 @@
 #include "lingodb/runtime/HashMultiMap.h"
 
 lingodb::runtime::HashMultiMap* lingodb::runtime::HashMultiMap::create(size_t entryTypeSize, size_t valueTypeSize, size_t initialCapacity) {
-   lingodb::runtime::ExecutionContext* executionContext= runtime::getCurrentExecutionContext();
-   auto* hmm= new HashMultiMap(initialCapacity, entryTypeSize, valueTypeSize);
+   lingodb::runtime::ExecutionContext* executionContext = runtime::getCurrentExecutionContext();
+   auto* hmm = new HashMultiMap(initialCapacity, entryTypeSize, valueTypeSize);
    executionContext->registerState({hmm, [](void* ptr) { delete reinterpret_cast<lingodb::runtime::HashMultiMap*>(ptr); }});
    return hmm;
 }

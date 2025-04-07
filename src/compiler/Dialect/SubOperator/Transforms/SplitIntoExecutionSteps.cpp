@@ -1,9 +1,12 @@
-#include "llvm/Support/Debug.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/Passes.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/SubOpDependencyAnalysis.h"
+
+#include "llvm/Support/Debug.h"
+
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/IRMapping.h"
+
 #include <queue>
 namespace {
 using namespace lingodb::compiler::dialect;
@@ -16,7 +19,6 @@ class SplitIntoExecutionSteps : public mlir::PassWrapper<SplitIntoExecutionSteps
    void runOnOperation() override {
       // Step 1: split into different streams
       getOperation()->walk([&](subop::ExecutionGroupOp executionGroup) {
-
          std::unordered_map<mlir::Operation*, std::vector<mlir::Operation*>> steps;
          std::unordered_map<mlir::Operation*, mlir::Operation*> opToStep;
          for (mlir::Operation& op : executionGroup.getSubOps().front()) {
