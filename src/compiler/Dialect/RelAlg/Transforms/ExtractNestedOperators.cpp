@@ -33,7 +33,7 @@ class ExtractNestedOperators : public mlir::PassWrapper<ExtractNestedOperators, 
                o = mlir::dyn_cast_or_null<TupleLamdaOperator>(o->getParentOfType<Operator>().getOperation());
             }
             innerOperator->walk([&](mlir::Operation* op) {
-               if (!mlir::isa<Operator>(op)&&op->getParentOp()==innerOperator.getOperation()) {
+               if (!mlir::isa<Operator>(op) && op->getParentOp() == innerOperator.getOperation()) {
                   relalg::detail::inlineOpIntoBlock(op, toMoveBefore, op->getBlock(), mapping);
                   sanitizeOp(mapping, op);
                }

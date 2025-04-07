@@ -22,6 +22,7 @@ class ArrowColumnBuilder {
    ArrowColumnBuilder(std::shared_ptr<arrow::DataType> type);
    ArrowColumnBuilder(arrow::ArrayBuilder* childBuilder);
    inline void next();
+
    public:
    static ArrowColumnBuilder* create(VarLen32 type);
    ArrowColumnBuilder* getChildBuilder();

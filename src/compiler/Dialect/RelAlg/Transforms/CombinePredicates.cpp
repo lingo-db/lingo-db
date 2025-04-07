@@ -41,7 +41,7 @@ class CombinePredicates : public mlir::PassWrapper<CombinePredicates, mlir::Oper
       getOperation().walk([&](relalg::SelectionOp op) {
          mlir::Value lower = op.getRel();
          bool canCombine = mlir::isa<relalg::InnerJoinOp>(lower.getDefiningOp());
-         if (canCombine&&lower.hasOneUse()) {
+         if (canCombine && lower.hasOneUse()) {
             combine(op, mlir::cast<PredicateOperator>(lower.getDefiningOp()));
             op.replaceAllUsesWith(lower);
             op->erase();
@@ -50,6 +50,5 @@ class CombinePredicates : public mlir::PassWrapper<CombinePredicates, mlir::Oper
    }
 };
 } // end anonymous namespace
-
 
 std::unique_ptr<mlir::Pass> relalg::createCombinePredicatesPass() { return std::make_unique<CombinePredicates>(); }

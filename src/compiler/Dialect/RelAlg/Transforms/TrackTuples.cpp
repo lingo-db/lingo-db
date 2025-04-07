@@ -74,5 +74,4 @@ class TrackTuples : public mlir::PassWrapper<TrackTuples, mlir::OperationPass<ml
 };
 } // end anonymous namespace
 
-
 std::unique_ptr<mlir::Pass> relalg::createTrackTuplesPass() { return std::make_unique<TrackTuples>(); }

@@ -27,7 +27,7 @@ bool mlirTypeIsAUtilRefType(MlirType type) {
 }
 
 MlirType mlirUtilBufferTypeGet(MlirType elementType) {
-   return wrap(util::BufferType::get(unwrap(elementType).getContext(),unwrap(elementType)));
+   return wrap(util::BufferType::get(unwrap(elementType).getContext(), unwrap(elementType)));
 }
 MlirTypeID mlirUtilBufferTypeGetTypeID() {
    return wrap(util::BufferType::getTypeID());
@@ -175,7 +175,6 @@ bool mlirAttributeIsARelalgTableMetaDataAttr(MlirAttribute attribute) {
    return llvm::isa<relalg::TableMetaDataAttr>(unwrap(attribute));
 }
 
-
 //----------------------------------------------------------------------------------------------------------------------
 // SubOp Dialect
 //----------------------------------------------------------------------------------------------------------------------
@@ -196,7 +195,7 @@ bool mlirTypeIsASubOpTableType(MlirType type) {
    return llvm::isa<subop::TableType>(unwrap(type));
 }
 
-MlirType mlirSubOpLocalTableTypeGet(MlirAttribute members,MlirAttribute columns) {
+MlirType mlirSubOpLocalTableTypeGet(MlirAttribute members, MlirAttribute columns) {
    return wrap(subop::LocalTableType::get(unwrap(members).getContext(), mlir::cast<subop::StateMembersAttr>(unwrap(members)), mlir::cast<mlir::ArrayAttr>(unwrap(columns))));
 }
 MlirTypeID mlirSubOpLocalTableTypeGetTypeID() {
@@ -227,8 +226,7 @@ bool mlirTypeIsASubOpSimpleStateType(MlirType type) {
 }
 
 MlirType mlirSubOpMapTypeGet(MlirAttribute keyMembers, MlirAttribute valMembers) {
-   return wrap(subop::MapType::get(unwrap(keyMembers).getContext(), mlir::cast<subop::StateMembersAttr>(unwrap(keyMembers)), mlir::cast<subop::StateMembersAttr>(unwrap(valMembers)),false
-      ));
+   return wrap(subop::MapType::get(unwrap(keyMembers).getContext(), mlir::cast<subop::StateMembersAttr>(unwrap(keyMembers)), mlir::cast<subop::StateMembersAttr>(unwrap(valMembers)), false));
 }
 MlirTypeID mlirSubOpMapTypeGetTypeID() {
    return wrap(subop::MapType::getTypeID());
@@ -336,7 +334,6 @@ MlirTypeID mlirSubOpTableEntryRefTypeGetTypeID() {
 bool mlirTypeIsASubOpTableEntryRefType(MlirType type) {
    return llvm::isa<subop::TableEntryRefType>(unwrap(type));
 }
-
 
 MlirType mlirSubOpLookupEntryRefTypeGet(MlirType t) {
    return wrap(subop::LookupEntryRefType::get(unwrap(t).getContext(), mlir::cast<subop::LookupAbleState>(unwrap(t))));

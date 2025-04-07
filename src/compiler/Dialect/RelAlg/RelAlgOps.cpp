@@ -307,7 +307,7 @@ void relalg::BaseTableOp::print(OpAsmPrinter& p) {
    }
    for (auto z : llvm::zip(returnOp.getResults(), getComputedCols())) {
       if (auto colDef = mlir::dyn_cast_or_null<tuples::ColumnDefAttr>(std::get<1>(z))) {
-         auto expected=std::get<0>(z).getType();
+         auto expected = std::get<0>(z).getType();
          if (colDef.getColumn().type != expected) {
             emitError("type mismatch between returned value and column definition");
             return mlir::failure();
@@ -331,11 +331,11 @@ void relalg::BaseTableOp::print(OpAsmPrinter& p) {
       return mlir::failure();
    }
    mlir::ArrayAttr usedCols, availableCols;
-   if(parseCustRefArr(parser,usedCols).failed()||parser.parseArrow().failed()||parseCustRefArr(parser,availableCols).failed()){
+   if (parseCustRefArr(parser, usedCols).failed() || parser.parseArrow().failed() || parseCustRefArr(parser, availableCols).failed()) {
       return mlir::failure();
    }
-   result.addAttribute("used_cols",usedCols);
-   result.addAttribute("available_cols",availableCols);
+   result.addAttribute("used_cols", usedCols);
+   result.addAttribute("available_cols", availableCols);
    llvm::SmallVector<mlir::OpAsmParser::Argument> regionArgs;
 
    if (parser.parseArgumentList(regionArgs, mlir::OpAsmParser::Delimiter::Paren)) {
@@ -351,9 +351,9 @@ void relalg::BaseTableOp::print(OpAsmPrinter& p) {
 
 void relalg::NestedOp::print(::mlir::OpAsmPrinter& p) {
    p.printOperands(getInputs());
-   printCustRefArr(p,this->getOperation(),getUsedCols());
-   p<< " -> ";
-   printCustRefArr(p,this->getOperation(),getAvailableCols());
+   printCustRefArr(p, this->getOperation(), getUsedCols());
+   p << " -> ";
+   printCustRefArr(p, this->getOperation(), getAvailableCols());
 
    p << " (";
    p.printOperands(getNestedFn().front().getArguments());

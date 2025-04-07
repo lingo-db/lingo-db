@@ -1,6 +1,6 @@
-#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "lingodb/compiler/Dialect/DB/IR/DBOps.h"
 #include "lingodb/compiler/Dialect/DB/Passes.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
@@ -136,7 +136,7 @@ class SimplifyCompareISAPattern : public mlir::RewritePattern {
                mlir::Value res=b.create<db::CmpOp>(loc,db::DBCmpPredicate::eq,left,right);
                b.create<mlir::scf::YieldOp>(loc,res); });
       } else if (isLeftNullable || isRightNullable) {
-         mlir::Value isNull=rewriter.create<db::IsNullOp>(loc, isLeftNullable?cmpOp.getLeft():cmpOp.getRight());
+         mlir::Value isNull = rewriter.create<db::IsNullOp>(loc, isLeftNullable ? cmpOp.getLeft() : cmpOp.getRight());
          rewriter.replaceOpWithNewOp<mlir::scf::IfOp>(
             op, isNull, [&](mlir::OpBuilder& b, mlir::Location loc) {
                mlir::Value falseVal = rewriter.create<mlir::arith::ConstantIntOp>(loc, 0, rewriter.getI1Type());
@@ -184,7 +184,5 @@ class EliminateNulls : public mlir::PassWrapper<EliminateNulls, mlir::OperationP
    }
 };
 } // end anonymous namespace
-
-
 
 std::unique_ptr<mlir::Pass> lingodb::compiler::dialect::db::createEliminateNullsPass() { return std::make_unique<EliminateNulls>(); } // NOLINT(misc-use-internal-linkage)

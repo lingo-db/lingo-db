@@ -207,7 +207,7 @@ class StringCastOpLowering : public OpConversionPattern<db::CastOp> {
             }
          } else if (mlir::isa<db::DateType>(scalarTargetType)) {
             result = StringRuntime::toDate(rewriter, loc)({valueToCast})[0];
-         }else if (mlir::isa<db::TimestampType>(scalarTargetType)) {
+         } else if (mlir::isa<db::TimestampType>(scalarTargetType)) {
             result = StringRuntime::toTimestamp(rewriter, loc)({valueToCast})[0];
          }
       } else if (scalarSourceType.isInteger(1)) {

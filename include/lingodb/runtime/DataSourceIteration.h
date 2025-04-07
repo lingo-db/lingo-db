@@ -9,7 +9,7 @@ class DataSource {
    public:
    virtual void iterate(bool parallel, std::vector<std::string> members, const std::function<void(runtime::RecordBatchInfo*)>& cb) = 0;
    virtual ~DataSource() {}
-   static DataSource* get( runtime::VarLen32 description);
+   static DataSource* get(runtime::VarLen32 description);
    //static DataSource* getFromTable(ArrowTable* arrowTable, runtime::VarLen32 mappingVal,runtime::VarLen32 columnArray);
 };
 class DataSourceIteration {

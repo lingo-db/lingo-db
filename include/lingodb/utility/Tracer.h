@@ -32,7 +32,6 @@ class Tracer {
    /// An event
    struct Event {
       constexpr Event(std::string_view /*category*/, std::string_view /*name*/) {}
-
    };
 #endif
 
@@ -145,7 +144,7 @@ class Tracer {
    class Trace {
       public:
       constexpr Trace(const Event& /*event*/) {}
-      constexpr Trace(const Event& /*event*/,uint64_t) {}
+      constexpr Trace(const Event& /*event*/, uint64_t) {}
       void setMetaData(uint64_t metaData) {}
       constexpr ~Trace() {}
       void stop() {}
@@ -153,10 +152,9 @@ class Tracer {
    template <class E, class M>
    class MetaDataTrace : public Trace {
       public:
-      MetaDataTrace(const E& event, M metaData) : Trace(event,0) {}
+      MetaDataTrace(const E& event, M metaData) : Trace(event, 0) {}
    };
    class StringMetaDataEvent : public Event {
-
       public:
       StringMetaDataEvent(std::string category, std::string name, std::string metaName) : utility::Tracer::Event(category, name) {}
    };

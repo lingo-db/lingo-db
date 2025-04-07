@@ -12,6 +12,7 @@ using namespace lingodb::compiler::dialect;
 
 class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-implicit-to-explicit-joins"; }
+
    public:
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(ImplicitToExplicitJoins)
    private:
@@ -149,6 +150,5 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
    }
 };
 } // end anonymous namespace
-
 
 std::unique_ptr<mlir::Pass> relalg::createImplicitToExplicitJoinsPass() { return std::make_unique<ImplicitToExplicitJoins>(); }

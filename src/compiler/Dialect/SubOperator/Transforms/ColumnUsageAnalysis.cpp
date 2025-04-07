@@ -25,7 +25,7 @@ subop::ColumnUsageAnalysis::ColumnUsageAnalysis(mlir::Operation* op) {
       for (auto attr : curr->getAttrs()) {
          analyze(curr, attr.getValue());
       }
-      if (auto *parentOp = curr->getParentOp()) {
+      if (auto* parentOp = curr->getParentOp()) {
          auto& currUsedColumns = getUsedColumns(curr);
          usedColumns[parentOp].insert(currUsedColumns.begin(), currUsedColumns.end());
       }

@@ -51,7 +51,8 @@ mlir::func::CallOp lingodb::compiler::dialect::util::FunctionHelper::call(mlir::
       assert(converted.getType() == funcOp.getFunctionType().getInput(i));
    }
    auto funcCall = builder.create<mlir::func::CallOp>(loc, funcOp, convertedValues);
-   return funcCall;}
+   return funcCall;
+}
 void lingodb::compiler::dialect::util::FunctionHelper::setParentModule(const mlir::ModuleOp& parentModule) {
    FunctionHelper::parentModule = parentModule;
 }

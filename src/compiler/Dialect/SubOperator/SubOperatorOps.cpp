@@ -1108,7 +1108,7 @@ std::vector<std::string> subop::LockOp::getWrittenMembers() {
    });
    return res;
 }
-namespace{
+namespace {
 void cloneRegionInto(mlir::OpBuilder& builder, mlir::IRMapping& mapping, subop::ColumnMapping& columnMapping, mlir::Region& region, mlir::Region& newRegion) {
    newRegion.getBlocks().clear();
    for (auto& block : region) {
@@ -1349,11 +1349,11 @@ mlir::Operation* subop::InsertOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRM
 }
 std::vector<std::string> subop::LookupOp::getReadMembers() {
    std::vector<std::string> res;
-if (auto lookableState = mlir::dyn_cast_or_null<subop::LookupAbleState>(getState().getType())) {
-for (auto x : lookableState.getKeyMembers().getNames()) {
-   res.push_back(mlir::cast<mlir::StringAttr>(x).str());
-}
-}
+   if (auto lookableState = mlir::dyn_cast_or_null<subop::LookupAbleState>(getState().getType())) {
+      for (auto x : lookableState.getKeyMembers().getNames()) {
+         res.push_back(mlir::cast<mlir::StringAttr>(x).str());
+      }
+   }
    return res;
 }
 mlir::Operation* subop::LookupOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, subop::ColumnMapping& columnMapping) {

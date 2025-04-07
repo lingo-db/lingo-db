@@ -270,7 +270,7 @@ struct PerfEvent {
    void stopCounters() {}
    void printReport(std::ostream&, uint64_t) {}
    template <class T>
-   void setParam(const std::string&, const T&){};
+   void setParam(const std::string&, const T&) {};
 };
 
 struct BenchmarkParameters {

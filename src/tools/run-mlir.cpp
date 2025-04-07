@@ -2,8 +2,8 @@
 #include <iostream>
 #include <string>
 
-#include "lingodb/execution/Execution.h"
 #include "lingodb/compiler/mlir-support/eval.h"
+#include "lingodb/execution/Execution.h"
 #include "lingodb/scheduler/Scheduler.h"
 
 int main(int argc, char** argv) {

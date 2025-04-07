@@ -180,7 +180,7 @@ class GlobalOptPass : public mlir::PassWrapper<GlobalOptPass, mlir::OperationPas
          }
          first.setMappingAttr(builder.getDictionaryAttr(newMapping));
       }
-      for(auto* op : toDelete) {
+      for (auto* op : toDelete) {
          op->erase();
       }
       std::unordered_map<std::string, std::unordered_set<mlir::Operation*>> writtenToMember;
@@ -436,7 +436,7 @@ class GlobalOptPass : public mlir::PassWrapper<GlobalOptPass, mlir::OperationPas
                std::sort(groupUsers.begin(), groupUsers.end(), [&](mlir::Operation* left, mlir::Operation* right) {
                   return left->isBeforeInBlock(right);
                });
-               auto *firstGroupUser = groupUsers[0];
+               auto* firstGroupUser = groupUsers[0];
                mlir::OpBuilder builder(firstGroupUser->getContext());
                builder.setInsertionPoint(firstGroupUser);
                auto* cloned = builder.clone(*scanOp);
@@ -449,7 +449,6 @@ class GlobalOptPass : public mlir::PassWrapper<GlobalOptPass, mlir::OperationPas
             }
          }
       });
-
    }
 };
 } // end anonymous namespace

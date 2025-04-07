@@ -1,6 +1,6 @@
-#include "llvm/Support/Debug.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorDialect.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
+#include "llvm/Support/Debug.h"
 
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/ColumnCreationAnalysis.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/ColumnUsageAnalysis.h"
@@ -49,7 +49,7 @@ class SplitTableScan : public mlir::RewritePattern {
          mlir::Value scanRefsOp = rewriter.create<subop::ScanRefsOp>(op->getLoc(), scanOp.getState(), refDef);
          rewriter.replaceOpWithNewOp<subop::GatherOp>(op, scanRefsOp, refRef, scanOp.getMapping());
          return mlir::success();
-      }else if(mlir::isa<subop::LocalTableType>(scanOp.getState().getType())) {
+      } else if (mlir::isa<subop::LocalTableType>(scanOp.getState().getType())) {
          auto tableType = mlir::cast<subop::LocalTableType>(scanOp.getState().getType());
          std::vector<mlir::Attribute> memberNames;
          std::vector<mlir::Attribute> memberTypes;

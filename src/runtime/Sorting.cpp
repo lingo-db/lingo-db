@@ -40,13 +40,14 @@ class SortCopyTask : public lingodb::scheduler::TaskWithImplicitContext {
    std::atomic<size_t> startIndex{0};
    std::vector<size_t> workerResvs;
    std::vector<size_t> bufferOffsets;
-public:
+
+   public:
    SortCopyTask(const std::vector<lingodb::runtime::Buffer>& buffers, std::vector<uint8_t*>& copy, size_t typeSize) : buffers(buffers), copy(copy), typeSize(typeSize) {
       for (size_t i = 0; i < lingodb::scheduler::getNumWorkers(); i++) {
          workerResvs.push_back(0);
       }
       size_t cnt = 0;
-      for (size_t i = 0; i < buffers.size(); i ++) {
+      for (size_t i = 0; i < buffers.size(); i++) {
          bufferOffsets.push_back(cnt);
          cnt += buffers[i].numElements;
       }
@@ -65,13 +66,12 @@ public:
       auto localStartIndex = workerResvs[lingodb::scheduler::currentWorkerId()];
       const lingodb::runtime::Buffer& buffer = buffers[localStartIndex];
       auto offset = bufferOffsets[localStartIndex];
-      for (size_t i = 0; i < buffer.numElements; i ++) {
-         copy[i+offset] = &buffer.ptr[i * typeSize];
+      for (size_t i = 0; i < buffer.numElements; i++) {
+         copy[i + offset] = &buffer.ptr[i * typeSize];
       }
       trace.stop();
    }
 };
-
 
 // A whole input vector is split into several equal sized splits. And every worker in this task
 // 1. take a split and sort it.
@@ -89,7 +89,7 @@ class SortLocalTask : public lingodb::scheduler::TaskWithImplicitContext {
    public:
    SortLocalTask(SortContext& sctx) : sctx(sctx) {
       auto splitCnt = sctx.splitCnt;
-      splitSize = (sctx.input.size()+splitCnt-1)/splitCnt;
+      splitSize = (sctx.input.size() + splitCnt - 1) / splitCnt;
       workerResvs.resize(lingodb::scheduler::getNumWorkers());
       sctx.localStates.resize(splitCnt);
    }
@@ -125,7 +125,7 @@ class SortLocalTask : public lingodb::scheduler::TaskWithImplicitContext {
       // should never be asserted fail.
       assert(range < 2000000000);
       assert(seperatorCnt < 2000000);
-      for (double i = 0; i < seperatorCnt; i ++) {
+      for (double i = 0; i < seperatorCnt; i++) {
          // use `i * range / seperatorCnt` instead of `range / seperatorCnt * i` to generate evenly
          // distributed seperator sequence. and `i * range` is not likely to overflow.
          sepVec.push_back(begin + startOffset + i * range / seperatorCnt);
@@ -139,11 +139,12 @@ class SortSepSearchTask : public lingodb::scheduler::TaskWithImplicitContext {
    std::atomic<size_t> startIndex{0};
    std::vector<size_t> workerResvs;
    std::vector<std::vector<size_t>> workerSamePosSeps;
-public:
+
+   public:
    SortSepSearchTask(SortContext& sctx) : sctx(sctx) {
       workerResvs.resize(lingodb::scheduler::getNumWorkers());
       workerSamePosSeps.resize(lingodb::scheduler::getNumWorkers());
-      for (size_t i = 0; i < sctx.splitCnt; i ++) {
+      for (size_t i = 0; i < sctx.splitCnt; i++) {
          sctx.localStates[i].globalSeperators = std::vector<size_t>(sctx.seperatorCnt);
       }
    }
@@ -167,19 +168,19 @@ public:
          samePosSeps.resize(splitCnt);
       }
       // Step 1. collect local seperators of same position from all splits
-      for (size_t j = 0; j < splitCnt; j ++) {
+      for (size_t j = 0; j < splitCnt; j++) {
          samePosSeps[j] = sctx.localStates[j].localSeperators[localStartIndex];
       }
       // Step 2. find median of local seperators' element, assign it to `globalSepVal`
       auto& input = sctx.input;
-      std::sort(samePosSeps.begin(), samePosSeps.end(), [&](size_t l, size_t r){
+      std::sort(samePosSeps.begin(), samePosSeps.end(), [&](size_t l, size_t r) {
          return sctx.compareFn(input[l], input[r]);
       });
-      auto globalSepIdx = samePosSeps[samePosSeps.size()/2];
+      auto globalSepIdx = samePosSeps[samePosSeps.size() / 2];
       auto* globalSepVal = input[globalSepIdx];
       // Step 3. take each split as input and do binary search `globalSepVal`.
-      for (size_t i = 0; i < splitCnt; i ++) {
-         auto &localState = sctx.localStates[i];
+      for (size_t i = 0; i < splitCnt; i++) {
+         auto& localState = sctx.localStates[i];
          // binary search for lower bound if not exactly matched
          auto begin = input.begin() + localState.begin;
          auto it = std::lower_bound(begin, input.begin() + localState.end, globalSepVal, sctx.compareFn);
@@ -202,7 +203,7 @@ class SortMergeTask : public lingodb::scheduler::TaskWithImplicitContext {
    std::vector<size_t> workerResvs;
 
    class MergeSource {
-   public:
+      public:
       std::vector<uint8_t*>& input;
       size_t begin;
       size_t end;
@@ -222,8 +223,8 @@ class SortMergeTask : public lingodb::scheduler::TaskWithImplicitContext {
       size_t srcIdx;
    };
 
-public:
-   SortMergeTask(SortContext& sctx, uint8_t* output, std::vector<size_t>& outputRanges) : sctx(sctx), output(output), outputRanges(outputRanges){
+   public:
+   SortMergeTask(SortContext& sctx, uint8_t* output, std::vector<size_t>& outputRanges) : sctx(sctx), output(output), outputRanges(outputRanges) {
       workerResvs.resize(lingodb::scheduler::getNumWorkers());
    }
    bool allocateWork() override {
@@ -246,7 +247,7 @@ public:
          size_t begin = localStates[i].begin;
          size_t end = localStates[i].end;
          if (localStartIndex != 0) {
-            begin = localStates[i].globalSeperators[localStartIndex-1];
+            begin = localStates[i].globalSeperators[localStartIndex - 1];
          }
          if (localStartIndex != sctx.seperatorCnt) {
             end = localStates[i].globalSeperators[localStartIndex];
@@ -259,15 +260,15 @@ public:
          return !sctx.compareFn(l.datum, r.datum);
       };
       std::priority_queue<HeapDatum, std::vector<HeapDatum>, std::function<bool(HeapDatum, HeapDatum)>> minHeap(cmp);
-      for (size_t i = 0; i < srcs.size(); i ++) {
+      for (size_t i = 0; i < srcs.size(); i++) {
          if (srcs[i].hasNext()) {
             minHeap.push(HeapDatum(srcs[i].next(), i));
          }
       }
 
       auto typeSize = sctx.typeSize;
-      uint8_t* cursor = output+outputRanges[localStartIndex]*typeSize;
-      assert(cnt == (outputRanges[localStartIndex+1] - outputRanges[localStartIndex]));
+      uint8_t* cursor = output + outputRanges[localStartIndex] * typeSize;
+      assert(cnt == (outputRanges[localStartIndex + 1] - outputRanges[localStartIndex]));
       while (minHeap.size() > 0) {
          auto top = minHeap.top();
          minHeap.pop();
@@ -293,7 +294,7 @@ void calcSplitSeperator(size_t inputSize, size_t workerNum, size_t& splitCnt, si
       }
    };
 
-   if (sizePerWorker < minSplitSize*4) {
+   if (sizePerWorker < minSplitSize * 4) {
       // we don't split smaller granularity than 512. over-parallelism on small input may not be a
       // good idea, since
       // 1. input is small. it should be really fast without using all workers. even if more workers
@@ -361,18 +362,17 @@ lingodb::runtime::Buffer parallelSort(lingodb::runtime::FlexibleBuffer& values, 
    std::vector<size_t> outputRanges;
    outputRanges.push_back(0);
    size_t growingSpan = 0;
-   for (size_t j = 0; j <= seperatorCnt; j ++) {
-      for (size_t i = 0; i < splitCnt; i ++) {
+   for (size_t j = 0; j <= seperatorCnt; j++) {
+      for (size_t i = 0; i < splitCnt; i++) {
          size_t begin = localStates[i].begin;
          size_t end = localStates[i].end;
          if (j != 0) {
-            begin = localStates[i].globalSeperators[j-1];
+            begin = localStates[i].globalSeperators[j - 1];
          }
          if (j != seperatorCnt) {
             end = localStates[i].globalSeperators[j];
          }
          growingSpan += end - begin;
-
       }
       outputRanges.push_back(growingSpan);
    }
@@ -385,7 +385,7 @@ lingodb::runtime::Buffer parallelSort(lingodb::runtime::FlexibleBuffer& values, 
    size_t len = values.getLen();
    uint8_t* sorted = new uint8_t[typeSize * len];
    trace4.stop();
-   auto* executionContext= lingodb::runtime::getCurrentExecutionContext();
+   auto* executionContext = lingodb::runtime::getCurrentExecutionContext();
    executionContext->registerState({sorted, [](void* ptr) { delete[] reinterpret_cast<uint8_t*>(ptr); }});
    lingodb::scheduler::awaitChildTask(std::make_unique<SortMergeTask>(sctx, sorted, outputRanges));
 

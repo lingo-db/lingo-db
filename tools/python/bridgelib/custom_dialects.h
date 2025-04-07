@@ -90,7 +90,7 @@ MLIR_CAPI_EXPORTED MlirType mlirSubOpTableTypeGet(MlirAttribute members);
 MLIR_CAPI_EXPORTED MlirTypeID mlirSubOpTableTypeGetTypeID();
 MLIR_CAPI_EXPORTED bool mlirTypeIsASubOpTableType(MlirType type);
 
-MLIR_CAPI_EXPORTED MlirType mlirSubOpLocalTableTypeGet(MlirAttribute members,MlirAttribute columns);
+MLIR_CAPI_EXPORTED MlirType mlirSubOpLocalTableTypeGet(MlirAttribute members, MlirAttribute columns);
 MLIR_CAPI_EXPORTED MlirTypeID mlirSubOpLocalTableTypeGetTypeID();
 MLIR_CAPI_EXPORTED bool mlirTypeIsASubOpLocalTableType(MlirType type);
 

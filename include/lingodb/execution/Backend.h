@@ -16,6 +16,7 @@ class ExecutionBackend {
    Error error;
    bool verify = true;
    std::shared_ptr<SnapshotState> serializationState;
+
    public:
    size_t getNumRepetitions() const {
       return numRepetitions;

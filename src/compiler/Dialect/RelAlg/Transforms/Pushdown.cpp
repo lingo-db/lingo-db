@@ -1,10 +1,10 @@
-#include "llvm/ADT/TypeSwitch.h"
 #include "lingodb/compiler/Dialect/DB/IR/DBOps.h"
 #include "lingodb/compiler/Dialect/RelAlg/ColumnSet.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "lingodb/compiler/Dialect/RelAlg/Passes.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 #include "lingodb/compiler/Dialect/RelAlg/Transforms/ColumnCreatorAnalysis.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
@@ -270,6 +270,5 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
    }
 };
 } // end anonymous namespace
-
 
 std::unique_ptr<mlir::Pass> relalg::createPushdownPass() { return std::make_unique<Pushdown>(); }

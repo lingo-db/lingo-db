@@ -4,15 +4,15 @@
 #include "mlir/Transforms/Passes.h"
 
 #include <iostream>
-namespace{
-std::shared_ptr< lingodb::catalog::Catalog> staticCatalog = {};
+namespace {
+std::shared_ptr<lingodb::catalog::Catalog> staticCatalog = {};
 } // end anonymous namespace
 using namespace lingodb::compiler::dialect;
-void relalg::setStaticCatalog(std::shared_ptr< lingodb::catalog::Catalog> catalog) {
+void relalg::setStaticCatalog(std::shared_ptr<lingodb::catalog::Catalog> catalog) {
    std::cerr << "Warning: setting static catalog, should only be used in combination with mlir-db-opt" << std::endl;
    staticCatalog = catalog;
 }
-void relalg::createQueryOptPipeline(mlir::OpPassManager& pm,  lingodb::catalog::Catalog* catalog) {
+void relalg::createQueryOptPipeline(mlir::OpPassManager& pm, lingodb::catalog::Catalog* catalog) {
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createSimplifyAggregationsPass());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createExtractNestedOperatorsPass());
    pm.addPass(mlir::createCSEPass());

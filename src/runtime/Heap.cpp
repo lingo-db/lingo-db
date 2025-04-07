@@ -40,7 +40,7 @@ void lingodb::runtime::Heap::insert(uint8_t* currData) {
    }
 }
 lingodb::runtime::Heap* lingodb::runtime::Heap::create(size_t maxElements, size_t typeSize, bool (*cmpFn)(unsigned char*, unsigned char*)) {
-   auto* executionContext= runtime::getCurrentExecutionContext();
+   auto* executionContext = runtime::getCurrentExecutionContext();
    auto* heap = new Heap(maxElements, typeSize, cmpFn);
    executionContext->registerState({heap, [](void* ptr) { delete reinterpret_cast<Heap*>(ptr); }});
    return heap;
@@ -64,7 +64,7 @@ lingodb::runtime::Heap* lingodb::runtime::Heap::merge(lingodb::runtime::ThreadLo
    utility::Tracer::Trace trace(mergeHeapEvent);
    Heap* first = nullptr;
    for (auto* current : threadLocal->getThreadLocalValues<Heap>()) {
-      if(!current) continue;
+      if (!current) continue;
       if (!first) {
          first = current;
       } else {

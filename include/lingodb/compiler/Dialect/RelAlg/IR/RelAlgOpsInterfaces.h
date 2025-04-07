@@ -18,7 +18,7 @@
 namespace lingodb::compiler::dialect::relalg::detail {
 void replaceUsages(mlir::Operation* op, std::function<lingodb::compiler::dialect::tuples::ColumnRefAttr(dialect::tuples::ColumnRefAttr)> fn);
 ColumnSet getUsedColumns(mlir::Operation* op);
-bool canColumnReach(mlir::Operation* currentOp,mlir::Operation* sourceOp,mlir::Operation* targetOp,const lingodb::compiler::dialect::tuples::Column* column);
+bool canColumnReach(mlir::Operation* currentOp, mlir::Operation* sourceOp, mlir::Operation* targetOp, const lingodb::compiler::dialect::tuples::Column* column);
 ColumnSet getAvailableColumns(mlir::Operation* op);
 ColumnSet getFreeColumns(mlir::Operation* op);
 ColumnSet getSetOpCreatedColumns(mlir::Operation* op);

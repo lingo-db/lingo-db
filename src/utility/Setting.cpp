@@ -3,7 +3,7 @@
 #include <mutex>
 #include <unordered_map>
 
-namespace utility=lingodb::utility;
+namespace utility = lingodb::utility;
 
 template <>
 std::optional<int64_t> utility::parseSetting<int64_t>(const std::string& value) {
@@ -14,15 +14,15 @@ std::optional<int64_t> utility::parseSetting<int64_t>(const std::string& value) 
    }
    return res;
 }
-template<>
+template <>
 std::optional<std::string> utility::parseSetting<std::string>(const std::string& value) {
    return value;
 }
-template<>
+template <>
 std::optional<bool> utility::parseSetting<bool>(const std::string& value) {
-   std::string mutValue=value;
+   std::string mutValue = value;
    std::transform(mutValue.begin(), mutValue.end(), mutValue.begin(), ::tolower);
-   if (mutValue == "true" ) {
+   if (mutValue == "true") {
       return true;
    } else if (mutValue == "false") {
       return false;
@@ -39,7 +39,7 @@ std::optional<bool> utility::parseSetting<bool>(const std::string& value) {
       }
    }
 }
-template<>
+template <>
 std::optional<double> utility::parseSetting<double>(const std::string& value) {
    size_t charactersParsed;
    double res = std::stod(value, &charactersParsed);
@@ -48,17 +48,16 @@ std::optional<double> utility::parseSetting<double>(const std::string& value) {
    }
    return res;
 }
-struct RegisteredSettings{
+struct RegisteredSettings {
    std::mutex mutex;
    std::unordered_map<std::string, utility::Setting*> settings;
 };
-namespace{
-RegisteredSettings& getRegisteredSettings(){
+namespace {
+RegisteredSettings& getRegisteredSettings() {
    static RegisteredSettings settings;
    return settings;
 }
 } // namespace
-
 
 void utility::Setting::registerSetting() {
    auto& settings = getRegisteredSettings();
@@ -87,4 +86,3 @@ void utility::setSetting(std::string key, std::string value) {
    }
    it->second->setValue(value);
 }
-

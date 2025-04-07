@@ -427,7 +427,6 @@ static bool lowerToLLVMDialect(mlir::ModuleOp& moduleOp, std::shared_ptr<executi
    }
 }
 
-
 static llvm::Error performDefaultLLVMPasses(llvm::Module* module) {
    utility::Tracer::Trace trace(llvmOpt);
    llvm::legacy::FunctionPassManager funcPM(module);

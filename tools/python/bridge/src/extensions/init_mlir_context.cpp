@@ -1,8 +1,8 @@
 #include <nanobind/nanobind.h>
 
-#include <iostream>
 #include "mlir-c/IR.h"
 #include "mlir/Bindings/Python/NanobindAdaptors.h"
+#include <iostream>
 
 namespace bridge {
 __attribute__((visibility("default"))) void initContext(MlirContext context);

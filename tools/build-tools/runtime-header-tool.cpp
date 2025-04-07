@@ -26,7 +26,6 @@ cl::opt<std::string> cppOutputFile("ocpp", cl::desc("output path for cpp file"),
 cl::opt<std::string> libPrefix("lib-prefix", cl::desc("output path for cpp file"), cl::cat(mycat));
 cl::opt<std::string> resultNamespace("result-namespace", cl::desc("lib prefix"), cl::cat(mycat));
 
-
 DeclarationMatcher methodMatcher = cxxRecordDecl(isDefinition(), hasParent(namespaceDecl(matchesName("::runtime"))), isExpansionInMainFile()).bind("class");
 
 class MethodPrinter : public MatchFinder::MatchCallback {
@@ -176,7 +175,7 @@ class MethodPrinter : public MatchFinder::MatchCallback {
             emitTypeCreateFn(hStream, resTypes);
             hStream << "," << getPtrFuncName << ");\n";
             hStream << "#endif \n";
-            cppStream << "void* "<<resultNamespace<<"::" << className << "::" << getPtrFuncName << "(){  auto x= &" << fullName << ";  return *reinterpret_cast<void**>(&x);}";
+            cppStream << "void* " << resultNamespace << "::" << className << "::" << getPtrFuncName << "(){  auto x= &" << fullName << ";  return *reinterpret_cast<void**>(&x);}";
          };
          hStream << "};\n";
       }
@@ -207,7 +206,7 @@ int main(int argc, const char** argv) {
    MatchFinder finder;
    finder.addMatcher(methodMatcher, &printer);
    hStream << "#include \"lingodb/compiler/Dialect/util/FunctionHelper.h\"\n";
-   hStream << "namespace "<<resultNamespace<<" {\n";
+   hStream << "namespace " << resultNamespace << " {\n";
    cppStream << "#define RUNTIME_PTR_LIB\n";
    cppStream << "#include \"" << headerOutputFile << "\"\n";
    cppStream << "#include \"" << currentFile << "\"\n";

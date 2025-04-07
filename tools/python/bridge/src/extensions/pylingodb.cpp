@@ -1,11 +1,11 @@
 #include "bridge.h"
-#include <nanobind/nanobind.h>
-#include <nanobind/stl/string.h>
-#include <nanobind/stl/unique_ptr.h>
 #include <iostream>
 #include <arrow/c/bridge.h>
 #include <arrow/python/pyarrow.h>
 #include <arrow/table.h>
+#include <nanobind/nanobind.h>
+#include <nanobind/stl/string.h>
+#include <nanobind/stl/unique_ptr.h>
 
 namespace nb = nanobind;
 class ConnectionHandle {

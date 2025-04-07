@@ -229,7 +229,7 @@ relalg::ColumnSet relalg::QueryGraph::getPKey(relalg::QueryGraph::Node& n) {
    if (!n.op) return {};
    if (auto baseTableOp = mlir::dyn_cast_or_null<relalg::BaseTableOp>(n.op.getOperation())) {
       auto meta = mlir::dyn_cast_or_null<relalg::TableMetaDataAttr>(baseTableOp->getAttr("meta"));
-      if(meta){
+      if (meta) {
          relalg::ColumnSet attributes;
          std::unordered_map<std::string, const tuples::Column*> mapping;
          for (auto c : baseTableOp.getColumns()) {

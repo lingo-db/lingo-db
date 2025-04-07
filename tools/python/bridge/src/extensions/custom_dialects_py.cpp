@@ -166,10 +166,10 @@ NB_MODULE(mlir_lingodb, m) {
    mlir::python::nanobind_adaptors::mlir_type_subclass(subOpModule, "LocalTableType", mlirTypeIsASubOpLocalTableType, mlirSubOpLocalTableTypeGetTypeID)
       .def_classmethod(
          "get",
-         [](nb::object cls, MlirAttribute members,MlirAttribute columns) {
-            return cls(mlirSubOpLocalTableTypeGet(members,columns));
+         [](nb::object cls, MlirAttribute members, MlirAttribute columns) {
+            return cls(mlirSubOpLocalTableTypeGet(members, columns));
          },
-         nb::arg("cls"), nb::arg("members"),nb::arg("columns"));
+         nb::arg("cls"), nb::arg("members"), nb::arg("columns"));
    mlir::python::nanobind_adaptors::mlir_type_subclass(subOpModule, "ResultTableType", mlirTypeIsASubOpResultTableType, mlirSubOpResultTableTypeGetTypeID)
       .def_classmethod(
          "get",
@@ -229,7 +229,7 @@ NB_MODULE(mlir_lingodb, m) {
       .def_classmethod(
          "get",
          [](nb::object cls, MlirAttribute members, uint32_t maxElements) {
-            return cls(mlirSubOpHeapTypeGet(members,maxElements));
+            return cls(mlirSubOpHeapTypeGet(members, maxElements));
          },
          nb::arg("cls"), nb::arg("members"), nb::arg("maxElements"));
 

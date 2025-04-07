@@ -1,9 +1,9 @@
+#include "lingodb/compiler/Dialect/util/UtilDialect.h"
+#include "lingodb/compiler/Dialect/util/UtilOps.h"
 #include "lingodb/execution/BackendPasses.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Func/Transforms/DecomposeCallGraphTypes.h"
-#include "lingodb/compiler/Dialect/util/UtilDialect.h"
-#include "lingodb/compiler/Dialect/util/UtilOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -52,7 +52,7 @@ struct DecomposeCallGraphTypesForCondBranchOp
          decomposer.decomposeValue(rewriter, op.getLoc(), operand.getType(), operand, newTrueOperands);
       for (Value operand : adaptor.getFalseDestOperands())
          decomposer.decomposeValue(rewriter, op.getLoc(), operand.getType(), operand, newFalseOperands);
-      rewriter.replaceOpWithNewOp<mlir::cf::CondBranchOp>(op, op.getCondition(), op.getTrueDest(),newTrueOperands,op.getFalseDest(),newFalseOperands);
+      rewriter.replaceOpWithNewOp<mlir::cf::CondBranchOp>(op, op.getCondition(), op.getTrueDest(), newTrueOperands, op.getFalseDest(), newFalseOperands);
       return success();
    }
 };

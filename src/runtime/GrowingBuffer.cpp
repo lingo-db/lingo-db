@@ -40,7 +40,7 @@ class GroupAllocator : public lingodb::runtime::GrowingBufferAllocator {
 } // end namespace
 
 lingodb::runtime::GrowingBuffer* lingodb::runtime::GrowingBuffer::create(lingodb::runtime::GrowingBufferAllocator* allocator, size_t sizeOfType, size_t initialCapacity) {
-   lingodb::runtime::ExecutionContext* executionContext= runtime::getCurrentExecutionContext();
+   lingodb::runtime::ExecutionContext* executionContext = runtime::getCurrentExecutionContext();
    return allocator->create(executionContext, sizeOfType, initialCapacity);
 }
 
@@ -61,7 +61,7 @@ lingodb::runtime::Buffer lingodb::runtime::GrowingBuffer::sort(bool (*compareFn)
       trace.stop();
       return result;
    }
-   auto* executionContext= runtime::getCurrentExecutionContext();
+   auto* executionContext = runtime::getCurrentExecutionContext();
    std::vector<uint8_t*> toSort;
    values.iterate([&](uint8_t* entryRawPtr) {
       toSort.push_back(entryRawPtr);
@@ -80,7 +80,7 @@ lingodb::runtime::Buffer lingodb::runtime::GrowingBuffer::sort(bool (*compareFn)
    return Buffer{typeSize * len, sorted};
 }
 lingodb::runtime::Buffer lingodb::runtime::GrowingBuffer::asContinuous() {
-   auto* executionContext= runtime::getCurrentExecutionContext();
+   auto* executionContext = runtime::getCurrentExecutionContext();
    //todo make more performant...
    std::vector<uint8_t*> toSort;
    values.iterate([&](uint8_t* entryRawPtr) {
@@ -104,7 +104,7 @@ lingodb::runtime::GrowingBuffer* lingodb::runtime::GrowingBuffer::merge(lingodb:
    utility::Tracer::Trace trace(mergeEvent);
    GrowingBuffer* first = nullptr;
    for (auto* current : threadLocal->getThreadLocalValues<GrowingBuffer>()) {
-      if(!current) continue;
+      if (!current) continue;
       if (!first) {
          first = current;
       } else {
@@ -119,7 +119,7 @@ lingodb::runtime::BufferIterator* lingodb::runtime::GrowingBuffer::createIterato
 }
 
 lingodb::runtime::Buffer lingodb::runtime::Buffer::createZeroed(size_t bytes) {
-   auto* executionContext= runtime::getCurrentExecutionContext();
+   auto* executionContext = runtime::getCurrentExecutionContext();
    auto* ptr = FixedSizedBuffer<uint8_t>::createZeroed(bytes);
    executionContext->registerState({ptr, [bytes](void* ptr) { FixedSizedBuffer<uint8_t>::deallocate((uint8_t*) ptr, bytes); }});
    return Buffer{bytes, ptr};
@@ -131,7 +131,7 @@ lingodb::runtime::GrowingBufferAllocator* lingodb::runtime::GrowingBufferAllocat
 }
 
 lingodb::runtime::GrowingBufferAllocator* lingodb::runtime::GrowingBufferAllocator::getGroupAllocator(size_t groupId) {
-   lingodb::runtime::ExecutionContext* executionContext= runtime::getCurrentExecutionContext();
+   lingodb::runtime::ExecutionContext* executionContext = runtime::getCurrentExecutionContext();
    auto& state = executionContext->getAllocator(groupId);
    if (state.ptr) {
       return static_cast<GrowingBufferAllocator*>(state.ptr);

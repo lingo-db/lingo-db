@@ -1,6 +1,6 @@
-#include "llvm/Support/Debug.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorDialect.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
+#include "llvm/Support/Debug.h"
 
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/ColumnCreationAnalysis.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/ColumnUsageAnalysis.h"
@@ -21,14 +21,12 @@ class FinalizePass : public mlir::PassWrapper<FinalizePass, mlir::OperationPass<
    public:
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(FinalizePass)
    virtual llvm::StringRef getArgument() const override { return "subop-finalize"; }
-   void cloneRec(mlir::Operation* op, mlir::IRMapping mapping,mlir::Value val, subop::ColumnMapping columnMapping) {
-
-
+   void cloneRec(mlir::Operation* op, mlir::IRMapping mapping, mlir::Value val, subop::ColumnMapping columnMapping) {
       mlir::OpBuilder builder(op->getContext());
-      builder.setInsertionPointAfter(mapping.lookup(val).getDefiningOp()?mapping.lookup(val).getDefiningOp():op);
+      builder.setInsertionPointAfter(mapping.lookup(val).getDefiningOp() ? mapping.lookup(val).getDefiningOp() : op);
       mlir::cast<subop::SubOperator>(op).cloneSubOp(builder, mapping, columnMapping);
       for (auto& use : op->getUses()) {
-         cloneRec(use.getOwner(), mapping,use.get(), columnMapping);
+         cloneRec(use.getOwner(), mapping, use.get(), columnMapping);
       }
    }
    void runOnOperation() override {
@@ -41,16 +39,16 @@ class FinalizePass : public mlir::PassWrapper<FinalizePass, mlir::OperationPass<
          auto currentUnion = unionOps[unionOps.size() - 1 - i];
          std::vector<mlir::Value> operands(currentUnion.getOperands().begin(), currentUnion.getOperands().end());
          std::sort(operands.begin(), operands.end(), [&](mlir::Value a, mlir::Value b) {
-            return a.getDefiningOp()&&b.getDefiningOp()&&a.getDefiningOp()->getBlock() == b.getDefiningOp()->getBlock() && a.getDefiningOp()->isBeforeInBlock(b.getDefiningOp());
+            return a.getDefiningOp() && b.getDefiningOp() && a.getDefiningOp()->getBlock() == b.getDefiningOp()->getBlock() && a.getDefiningOp()->isBeforeInBlock(b.getDefiningOp());
          });
-         for (size_t i=0;i+1<operands.size();i++) {
+         for (size_t i = 0; i + 1 < operands.size(); i++) {
             mlir::IRMapping mapping;
             mapping.map(currentUnion.getResult(), operands[i]);
             for (auto* user : currentUnion.getResult().getUsers()) {
-               cloneRec(user, mapping,currentUnion.getResult(),{});
+               cloneRec(user, mapping, currentUnion.getResult(), {});
             }
          }
-         currentUnion->replaceAllUsesWith(mlir::ValueRange{operands[operands.size()-1]});
+         currentUnion->replaceAllUsesWith(mlir::ValueRange{operands[operands.size() - 1]});
          currentUnion->erase();
       }
 

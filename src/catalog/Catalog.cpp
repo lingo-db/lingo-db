@@ -4,8 +4,6 @@
 #include "lingodb/catalog/Types.h"
 #include "lingodb/utility/Serialization.h"
 
-
-
 #include <filesystem>
 
 namespace lingodb::catalog {
