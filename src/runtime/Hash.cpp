@@ -1,7 +1,7 @@
 #include "lingodb/runtime/helpers.h"
-#include "xxhash.h"
+#include "llvm/Support/xxhash.h"
 
 EXPORT uint64_t hashVarLenData(lingodb::runtime::VarLen32 str) {
-   xxh::hash_t<64> hash = xxh::xxhash<64>(str.getPtr(), str.getLen());
-   return hash;
+   llvm::ArrayRef<uint8_t> data(str.getPtr(), str.getLen());
+   return llvm::xxHash64(data);
 }
