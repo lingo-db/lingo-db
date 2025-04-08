@@ -2,6 +2,7 @@
 #define LINGODB_CATALOG_TYPES_H
 
 #include <memory>
+#include <string>
 #include <optional>
 namespace lingodb::utility {
 class Serializer;

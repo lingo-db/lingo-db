@@ -13,6 +13,14 @@ set -x
 ./dbgen -f -s $2
 ls -la .
 chmod +r *.tbl
-for table in ./*.tbl; do  sed -i 's/|$//' "$table"; done
-for table in ./*.tbl; do mv "$table" "$1/$table"; done
+mkdir -p "$1"  # Ensure the target directory exists
+for table in ./*.tbl; do
+  # sed behaves differently on macOS and linux. Currently, there is no stable, portable command that works on both.
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    sed -i '' 's/|$//' "$table"  # macOS
+  else
+    sed -i 's/|$//' "$table"     # Linux
+  fi
+  mv "$table" "$1/$table"
+done
 popd

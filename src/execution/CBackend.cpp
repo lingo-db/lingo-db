@@ -1,6 +1,7 @@
 #include "lingodb/execution/CBackend.h"
 #include "lingodb/execution/BackendPasses.h"
 #include "lingodb/execution/Error.h"
+#include "lingodb/utility/Setting.h"
 
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -18,6 +19,8 @@
 
 #include "dlfcn.h"
 #include "unistd.h"
+
+lingodb::utility::GlobalSetting<std::string> cBackendCompilerDriver("system.compilation.c_backend_compiler_driver", "c++");
 
 namespace {
 
@@ -62,7 +65,12 @@ class DefaultCBackend : public lingodb::execution::ExecutionBackend {
       outputFile.close();
       usleep(20000);
 
-      std::string cmd = " cc -march=native -shared -O0 -g -gdwarf-4 -fPIC -Wl,--export-dynamic -x c++ -std=c++20 -I " + std::string(SOURCE_DIR) + "/include " + currPath + "/mlir-c-module.cpp -o " + currPath + "/c-backend.so";
+#ifdef __APPLE__
+      std::string cmd = cBackendCompilerDriver.getValue() + std::string(" -march=native -shared -O0 -g -gdwarf-4 -fPIC -Wl,-export_dynamic -x c++ -std=c++20 -Wno-invalid-partial-specialization -Wno-invalid-specialization -I ") + std::string(SOURCE_DIR) + "/include " + currPath + "/mlir-c-module.cpp -o " + currPath + "/c-backend.so";
+#else
+      std::string cmd = cBackendCompilerDriver.getValue() + std::string(" -march=native -shared -O0 -g -gdwarf-4 -fPIC -Wl,--export-dynamic -x c++ -std=c++20 -I ") + std::string(SOURCE_DIR) + "/include " + currPath + "/mlir-c-module.cpp -o " + currPath + "/c-backend.so";
+#endif
+
       auto* pPipe = ::popen(cmd.c_str(), "r");
       if (pPipe == nullptr) {
          error.emit() << "Could not compile query module statically (Pipe could not be opened)";

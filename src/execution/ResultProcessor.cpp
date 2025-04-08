@@ -1,5 +1,6 @@
 #include <iomanip>
 #include <iostream>
+#include <sstream>
 
 #include <arrow/pretty_print.h>
 #include <arrow/table.h>

@@ -205,7 +205,7 @@ void access(std::vector<size_t> colIds, lingodb::runtime::RecordBatchInfo* info,
       colInfo = chunk.getColumnInfo(colId);
       colInfo.offset += offset;
    }
-   info->numRows = std::min(currChunk->num_rows() - offset, numRows);
+   info->numRows = std::min(static_cast<size_t>(currChunk->num_rows() - offset), numRows);
 }
 
 } // namespace

@@ -1,6 +1,9 @@
 #include "lingodb/runtime/Hashtable.h"
 #include "lingodb/utility/Tracer.h"
+#include <atomic>
 #include <cstring>
+#include <iostream>
+
 namespace {
 static lingodb::utility::Tracer::Event mergeEvent("Hashtable", "merge");
 } // end namespace
