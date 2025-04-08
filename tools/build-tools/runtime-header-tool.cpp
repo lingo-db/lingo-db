@@ -40,9 +40,9 @@ class MethodPrinter : public MatchFinder::MatchCallback {
    std::string translatePointer() {
       return "lingodb::compiler::dialect::util::RefType::get(context,mlir::IntegerType::get(context,8))";
    }
-   std::optional<std::string> translateType(QualType type) {
+   std::optional<std::string> translateType(QualType type, const ASTContext& ctxt) {
       if (const auto* tdType = type->getAs<TypedefType>()) {
-         return translateType(tdType->desugar());
+         return translateType(tdType->desugar(), ctxt);
       }
       if (const auto* pointerType = type->getAs<clang::PointerType>()) {
          auto pointeeType = pointerType->desugar()->getPointeeType();
@@ -56,14 +56,14 @@ class MethodPrinter : public MatchFinder::MatchCallback {
                   } else {
                      funcType += ",";
                   }
-                  auto translated = translateType(paramType);
+                  auto translated = translateType(paramType, ctxt);
                   if (!translated.has_value()) return {};
                   funcType += translated.value();
                }
                if (funcProtoType->getReturnType()->isVoidType()) {
                   funcType += "},{})";
                } else {
-                  auto translated = translateType(funcProtoType->getReturnType());
+                  auto translated = translateType(funcProtoType->getReturnType(), ctxt);
                   if (!translated.has_value()) return {};
                   funcType += "}, {" + translated.value() + "})";
                }
@@ -80,17 +80,23 @@ class MethodPrinter : public MatchFinder::MatchCallback {
       if (const auto* bt = dyn_cast<BuiltinType>(canonicalType)) {
          switch (bt->getKind()) {
             case clang::BuiltinType::Bool: return translateIntegerType(1);
-            case clang::BuiltinType::SChar: return translateIntegerType(8);
-            case clang::BuiltinType::UChar: return translateIntegerType(8);
-            case clang::BuiltinType::UShort: return translateIntegerType(16);
-            case clang::BuiltinType::Short: return translateIntegerType(16);
-            case clang::BuiltinType::UInt: return translateIntegerType(32);
-            case clang::BuiltinType::Int: return translateIntegerType(32);
-            case clang::BuiltinType::ULong: return translateIntegerType(64);
-            case clang::BuiltinType::Long: return translateIntegerType(64);
             case clang::BuiltinType::Float: return "mlir::Float32Type::get(context)";
             case clang::BuiltinType::Double: return "mlir::Float64Type::get(context)";
-            case clang::BuiltinType::Int128: return translateIntegerType(128);
+
+            case clang::BuiltinType::SChar:
+            case clang::BuiltinType::UChar:
+            case clang::BuiltinType::Short:
+            case clang::BuiltinType::UShort:
+            case clang::BuiltinType::Int:
+            case clang::BuiltinType::UInt:
+            case clang::BuiltinType::Long:
+            case clang::BuiltinType::ULong:
+            case clang::BuiltinType::Int128:
+            case clang::BuiltinType::UInt128:
+            case clang::BuiltinType::LongLong:
+            case clang::BuiltinType::ULongLong:
+               return translateIntegerType(ctxt.getTypeSize(type));
+
             default: break;
          }
       }
@@ -103,6 +109,7 @@ class MethodPrinter : public MatchFinder::MatchCallback {
       }
       return std::optional<std::string>();
    }
+
    void emitTypeCreateFn(llvm::raw_ostream& os, std::vector<std::string> types) {
       os << " [](mlir::MLIRContext* context) { return std::vector<mlir::Type>{";
       bool first = true;
@@ -120,7 +127,6 @@ class MethodPrinter : public MatchFinder::MatchCallback {
    public:
    MethodPrinter(raw_ostream& hStream, raw_ostream& cppStream) : hStream(hStream), cppStream(cppStream) {}
    virtual void run(const MatchFinder::MatchResult& result) override {
-      //std::cout << "match" << std::endl;
       if (const CXXRecordDecl* md = result.Nodes.getNodeAs<clang::CXXRecordDecl>("class")) {
          auto* mangleContext = md->getASTContext().createMangleContext();
 
@@ -144,7 +150,7 @@ class MethodPrinter : public MatchFinder::MatchCallback {
             mangleStream.flush();
             bool unknownTypes = false;
             for (const auto& p : method->parameters()) {
-               auto translatedType = translateType(p->getType());
+               auto translatedType = translateType(p->getType(), method->getASTContext());
                if (!translatedType.has_value()) {
                   unknownTypes = true;
                   break;
@@ -153,7 +159,7 @@ class MethodPrinter : public MatchFinder::MatchCallback {
             }
             const auto& resType = method->getReturnType();
             if (!resType->isVoidType()) {
-               auto translatedType = translateType(resType);
+               auto translatedType = translateType(resType, method->getASTContext());
                if (!translatedType.has_value()) {
                   unknownTypes = true;
                   continue;
@@ -211,7 +217,11 @@ int main(int argc, const char** argv) {
    cppStream << "#include \"" << headerOutputFile << "\"\n";
    cppStream << "#include \"" << currentFile << "\"\n";
 
-   tool.run(newFrontendActionFactory(&finder).get());
+   // 0 = success, 1 = failure, 2 = success
+   if(1 == tool.run(newFrontendActionFactory(&finder).get())) {
+      std::cerr << "Error during clang tools execution. Aborting. " << std::endl;
+      return 1;
+   }
 
    hStream << "}\n";
    hStream.flush();

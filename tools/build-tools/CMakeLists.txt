@@ -19,11 +19,11 @@ set(CLANG_TOOL_FLAGS "${CLANG_TOOL_FLAGS}" "-I${ARROW_INCLUDE_DIR}")
 
 # Get Clang resource directory
 # Check if the compiler is ccache
-if (CMAKE_CXX_COMPILER MATCHES "ccache")
+if(CMAKE_CXX_COMPILER MATCHES "ccache")
     set(ACTUAL_CXX_COMPILER ${CMAKE_CXX_COMPILER_ARG1})
-else ()
+else()
     set(ACTUAL_CXX_COMPILER ${CMAKE_CXX_COMPILER})
-endif ()
+endif()
 
 # Remove whitespace from ACTUAL_CXX_COMPILER
 string(STRIP "${ACTUAL_CXX_COMPILER}" ACTUAL_CXX_COMPILER)
@@ -36,9 +36,9 @@ if (ACTUAL_CXX_COMPILER MATCHES "clang")
             OUTPUT_STRIP_TRAILING_WHITESPACE
     )
     # Fail if the result is empty
-    if (CLANG_RESOURCE_DIR STREQUAL "")
+    if(CLANG_RESOURCE_DIR STREQUAL "")
         message(FATAL_ERROR "Failed to query clang resource directory. `${ACTUAL_CXX_COMPILER} --print-resource-dir` did not return a valid resource directory.")
-    endif ()
+    endif()
     message(STATUS "Queried clang resource dir: ${CLANG_RESOURCE_DIR}")
     set(CLANG_TOOL_FLAGS "${CLANG_TOOL_FLAGS}" "-resource-dir" "${CLANG_RESOURCE_DIR}")
 elseif (CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES)
@@ -51,7 +51,7 @@ else ()
 endif ()
 
 # Add xcode sysroot if building on macOS (required for finding libc++)
-if (APPLE)
+if(APPLE)
     execute_process(
             COMMAND xcrun --sdk macosx --show-sdk-path
             OUTPUT_VARIABLE MACOS_SDK_PATH
@@ -59,7 +59,7 @@ if (APPLE)
     )
     set(CLANG_TOOL_FLAGS "${CLANG_TOOL_FLAGS}" "-isysroot" "${MACOS_SDK_PATH}")
     message(STATUS "Queried macOS SDK path: ${MACOS_SDK_PATH}")
-endif ()
+endif()
 # cache clang-tool flags
 set(CLANG_TOOL_FLAGS "${CLANG_TOOL_FLAGS}" CACHE STRING "Flags for Clang tools" FORCE)
 ##
@@ -67,8 +67,10 @@ set(CLANG_TOOL_FLAGS "${CLANG_TOOL_FLAGS}" CACHE STRING "Flags for Clang tools" 
 target_compile_options(runtime-header-tool PRIVATE -fno-sanitize=address)
 target_link_options(runtime-header-tool PRIVATE -fno-sanitize=address)
 function(gen_rt_def_generic target_name header_file output_path input_path lib_prefix result_namespace)
+    # Retrieve cached value
+    set(CLANG_TOOL_FLAGS "${CLANG_TOOL_FLAGS}" CACHE STRING "Flags for Clang tools")
     add_custom_command(
-            COMMAND ${CMAKE_BINARY_DIR}/bin/runtime-header-tool --oh=${CMAKE_BINARY_DIR}/${output_path}/${header_file} --ocpp=${CMAKE_BINARY_DIR}/${output_path}/${header_file}.cpp --lib-prefix=${lib_prefix} --result-namespace=${result_namespace} ${CMAKE_SOURCE_DIR}/${input_path}/${header_file} -- -x c++ --std=c++20 -I ${MLIR_DIR}/../../clang/20/include/ -I ${CMAKE_SOURCE_DIR}/include -I ${ARROW_INCLUDE_DIR}
+            COMMAND ${CMAKE_BINARY_DIR}/bin/runtime-header-tool --oh=${CMAKE_BINARY_DIR}/${output_path}/${header_file} --ocpp=${CMAKE_BINARY_DIR}/${output_path}/${header_file}.cpp --lib-prefix=${lib_prefix} --result-namespace=${result_namespace} ${CMAKE_SOURCE_DIR}/${input_path}/${header_file} -- ${CLANG_TOOL_FLAGS}
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
             DEPENDS ${CMAKE_BINARY_DIR}/bin/runtime-header-tool
             DEPENDS ${CMAKE_SOURCE_DIR}/${input_path}/${header_file}
