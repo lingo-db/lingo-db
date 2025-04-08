@@ -2,6 +2,8 @@
 #include "lingodb/runtime/helpers.h"
 #include "lingodb/scheduler/Tasks.h"
 #include "lingodb/utility/Tracer.h"
+#include <atomic>
+#include <algorithm>
 #include <iostream>
 
 namespace {
@@ -116,7 +118,7 @@ lingodb::runtime::PreAggregationHashtable* lingodb::runtime::PreAggregationHasht
          return v;
       };
 
-      size_t htSize = std::max(nextPow2(totalValues * 1.25), 1ul);
+      size_t htSize = std::max(nextPow2(totalValues * 1.25), static_cast<uint64_t>(1));
       size_t htMask = htSize - 1;
       utility::Tracer::Trace allocTrace(mergeAllocate);
       Entry** ht = lingodb::runtime::FixedSizedBuffer<Entry*>::createZeroed(htSize);

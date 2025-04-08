@@ -1,0 +1,194 @@
+name: build+test (macOS)
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: macos-15
+    strategy:
+      matrix:
+        build_type:
+          - debug
+          - asan
+          - release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: CCache
+        id: ccache
+        uses: actions/cache@v4
+        with:
+          path: $HOME/.ccache
+          key: ccache-${{ matrix.build_type }}-build-build-macos-15
+
+      - name: Cache Homebrew packages
+        id: cache-brew
+        uses: actions/cache@v4
+        with:
+          path: |
+            /opt/homebrew
+            ~/Library/Caches/Homebrew
+          key: brew-${{ runner.os }}-${{ hashFiles('.github/workflows/workflow-macos.yml') }}
+          restore-keys: |
+            brew-${{ runner.os }}-
+
+      - name: Install dependencies with Homebrew
+        run: |
+          brew update
+          brew install ccache cmake ninja llvm@20 catch2 lit
+          brew install apache-arrow --HEAD
+          brew link --force llvm
+
+      - name: Build
+        run: |
+          mkdir -p $HOME/.ccache
+          export CXX="ccache /opt/homebrew/opt/llvm/bin/clang++"
+          export CC="ccache /opt/homebrew/opt/llvm/bin/clang"
+          export CCACHE_DIR="${HOME}/.ccache"
+          export CMAKE_PREFIX_PATH="/opt/homebrew/"
+
+          make clean
+          make build-${{ matrix.build_type }}
+
+      - uses: actions/upload-artifact@master
+        with:
+          name: ${{ matrix.build_type }}-build-macos
+          path: build/lingodb-${{ matrix.build_type }}
+          retention-days: 1
+
+  test:
+    needs: build
+    runs-on: macos-15
+    strategy:
+      matrix:
+        build_type:
+          - debug
+          - asan
+    steps:
+      - uses: actions/checkout@master
+      - uses: actions/download-artifact@master
+        with:
+          name: ${{ matrix.build_type }}-build-macos
+          path: build/lingodb-${{ matrix.build_type }}
+
+      - name: Cache Homebrew packages
+        id: cache-brew
+        uses: actions/cache@v3
+        with:
+          path: |
+            /opt/homebrew
+            ~/Library/Caches/Homebrew
+          key: brew-${{ runner.os }}-${{ hashFiles('.github/workflows/workflow-macos.yml') }}
+          restore-keys: |
+            brew-${{ runner.os }}-
+
+      - name: Test
+        run: |
+          export ASAN_OPTIONS="detect_leaks=0 detect_container_overflow=0"
+
+          touch build/dependencies
+          touch build/lingodb-${{ matrix.build_type }}/.stamp
+          touch build/lingodb-${{ matrix.build_type }}/.buildstamp
+          chmod +x build/lingodb-${{ matrix.build_type }}/*
+          make TEST_BUILD_TYPE=${{ matrix.build_type }} DATA_BUILD_TYPE=${{ matrix.build_type }} test-no-rebuild
+
+  sqlite_tests:
+    needs: build
+    runs-on: macos-15
+    strategy:
+      matrix:
+        build_type:
+          - release
+          - asan
+    steps:
+      - uses: actions/checkout@master
+      - uses: actions/download-artifact@master
+        with:
+          name: ${{ matrix.build_type }}-build-macos
+          path: build/lingodb-${{ matrix.build_type }}
+
+      - name: Cache Homebrew packages
+        id: cache-brew
+        uses: actions/cache@v3
+        with:
+          path: |
+            /opt/homebrew
+            ~/Library/Caches/Homebrew
+          key: brew-${{ runner.os }}-${{ hashFiles('.github/workflows/workflow-macos.yml') }}
+          restore-keys: |
+            brew-${{ runner.os }}-
+
+      - name: Test
+        run: |
+          export ASAN_OPTIONS="detect_leaks=0 detect_container_overflow=0"
+          touch build/dependencies
+          touch build/lingodb-${{ matrix.build_type }}/.stamp
+          touch build/lingodb-${{ matrix.build_type }}/.buildstamp
+          chmod +x build/lingodb-${{ matrix.build_type }}/*
+          make SQLITE_TEST_BUILD_TYPE=${{ matrix.build_type }} sqlite-test-no-rebuild
+
+  sqlite_dataset-tests:
+    needs: build
+    runs-on: macos-15
+    strategy:
+      matrix:
+        build_type:
+          - release
+          # - asan // this SEGFAULTs
+    steps:
+      - uses: actions/checkout@master
+      - uses: actions/download-artifact@master
+        with:
+          name: ${{ matrix.build_type }}-build-macos
+          path: build/lingodb-${{ matrix.build_type }}
+
+      - name: Cache Homebrew packages
+        id: cache-brew
+        uses: actions/cache@v3
+        with:
+          path: |
+            /opt/homebrew
+            ~/Library/Caches/Homebrew
+          key: brew-${{ runner.os }}-${{ hashFiles('.github/workflows/workflow-macos.yml') }}
+          restore-keys: |
+            brew-${{ runner.os }}-
+
+      - name: Cache datasets
+        id: cache-datasets
+        uses: actions/cache@v3
+        with:
+          path: ~/datasets/
+          key: datasets-macos
+
+      - name: Generate dataset if not cached
+        if: steps.cache-datasets.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/datasets/tpch-1
+          mkdir -p ~/datasets/tpcds-1
+          bash tools/generate/tpch.sh ~/datasets/tpch-1 1
+          bash tools/generate/tpcds.sh ~/datasets/tpcds-1 1
+
+      - name: Load datasets
+        run: |
+          export BASE_PATH=$(pwd)
+          export ASAN_OPTIONS="detect_leaks=0 detect_container_overflow=0"
+          mkdir -p ~/db/tpch-1
+          cd ~/datasets/tpch-1
+          chmod +x $BASE_PATH/build/lingodb-${{ matrix.build_type }}/sql
+
+          $BASE_PATH/build/lingodb-${{ matrix.build_type }}/sql ~/db/tpch-1 < $BASE_PATH/resources/sql/tpch/initialize.sql
+
+          mkdir -p ~/db/tpcds-1
+          cd ~/datasets/tpcds-1
+          $BASE_PATH/build/lingodb-${{ matrix.build_type }}/sql ~/db/tpcds-1 < $BASE_PATH/resources/sql/tpcds/initialize.sql
+
+      - name: Test
+        run: |
+          export ASAN_OPTIONS="detect_leaks=0 detect_container_overflow=0"
+          chmod +x ./build/lingodb-${{ matrix.build_type }}/sql
+
+          ./build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpchSf1.test ~/db/tpch-1
+          ./build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpcdsSf1.test ~/db/tpcds-1

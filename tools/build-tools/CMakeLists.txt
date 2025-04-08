@@ -11,6 +11,59 @@ target_link_libraries(runtime-header-tool
         clangTooling
 )
 
+## Query clang-tool flags once (equal for all calls)
+# Base flags
+set(CLANG_TOOL_FLAGS "-xc++" "--std=c++20" "-v" "-v" "-v")
+set(CLANG_TOOL_FLAGS "${CLANG_TOOL_FLAGS}" "-I${CMAKE_SOURCE_DIR}/include")
+set(CLANG_TOOL_FLAGS "${CLANG_TOOL_FLAGS}" "-I${ARROW_INCLUDE_DIR}")
+
+# Get Clang resource directory
+# Check if the compiler is ccache
+if (CMAKE_CXX_COMPILER MATCHES "ccache")
+    set(ACTUAL_CXX_COMPILER ${CMAKE_CXX_COMPILER_ARG1})
+else ()
+    set(ACTUAL_CXX_COMPILER ${CMAKE_CXX_COMPILER})
+endif ()
+
+# Remove whitespace from ACTUAL_CXX_COMPILER
+string(STRIP "${ACTUAL_CXX_COMPILER}" ACTUAL_CXX_COMPILER)
+
+# only use resource dir if actual compiler is clang
+if (ACTUAL_CXX_COMPILER MATCHES "clang")
+    execute_process(
+            COMMAND ${ACTUAL_CXX_COMPILER} --print-resource-dir
+            OUTPUT_VARIABLE CLANG_RESOURCE_DIR
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    # Fail if the result is empty
+    if (CLANG_RESOURCE_DIR STREQUAL "")
+        message(FATAL_ERROR "Failed to query clang resource directory. `${ACTUAL_CXX_COMPILER} --print-resource-dir` did not return a valid resource directory.")
+    endif ()
+    message(STATUS "Queried clang resource dir: ${CLANG_RESOURCE_DIR}")
+    set(CLANG_TOOL_FLAGS "${CLANG_TOOL_FLAGS}" "-resource-dir" "${CLANG_RESOURCE_DIR}")
+elseif (CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES)
+    foreach (dir ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES})
+        message(STATUS "Adding implicit include directory: ${dir}")
+        set(CLANG_TOOL_FLAGS "${CLANG_TOOL_FLAGS}" "-I${dir}")
+    endforeach ()
+else ()
+    set(CLANG_TOOL_FLAGS "${CLANG_TOOL_FLAGS}" "-I${MLIR_DIR}/../../clang/20/include/")
+endif ()
+
+# Add xcode sysroot if building on macOS (required for finding libc++)
+if (APPLE)
+    execute_process(
+            COMMAND xcrun --sdk macosx --show-sdk-path
+            OUTPUT_VARIABLE MACOS_SDK_PATH
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    set(CLANG_TOOL_FLAGS "${CLANG_TOOL_FLAGS}" "-isysroot" "${MACOS_SDK_PATH}")
+    message(STATUS "Queried macOS SDK path: ${MACOS_SDK_PATH}")
+endif ()
+# cache clang-tool flags
+set(CLANG_TOOL_FLAGS "${CLANG_TOOL_FLAGS}" CACHE STRING "Flags for Clang tools" FORCE)
+##
+
 target_compile_options(runtime-header-tool PRIVATE -fno-sanitize=address)
 target_link_options(runtime-header-tool PRIVATE -fno-sanitize=address)
 function(gen_rt_def_generic target_name header_file output_path input_path lib_prefix result_namespace)

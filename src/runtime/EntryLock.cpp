@@ -1,4 +1,5 @@
 #include "lingodb/runtime/EntryLock.h"
+#include <new>
 
 namespace lingodb::runtime {
 void EntryLock::initialize(EntryLock* lock) {

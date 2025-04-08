@@ -3,6 +3,7 @@
 #include <array>
 #include <memory>
 #include <optional>
+#include <string>
 #include <unordered_map>
 namespace lingodb::utility {
 class Serializer;

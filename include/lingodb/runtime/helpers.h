@@ -1,11 +1,11 @@
 #ifndef LINGODB_RUNTIME_HELPERS_H
 #define LINGODB_RUNTIME_HELPERS_H
-#include "string.h"
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
 #include <string>
 #include <vector>
+#include <string.h> // for memcpy
 
 #include <sys/mman.h>
 
@@ -166,7 +166,11 @@ struct FixedSizedBuffer {
    }
    static T* createZeroed(size_t elements) {
       if (shouldUseMMAP(elements)) {
+#ifdef __linux__
          return (T*) mmap(NULL, elements * sizeof(T), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE, -1, 0);
+#else
+         return (T*) mmap(NULL, elements * sizeof(T), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+#endif
       } else {
          auto res = (T*) malloc(elements * sizeof(T));
          runtime::MemoryHelper::zero((uint8_t*) res, elements * sizeof(T));

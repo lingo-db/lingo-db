@@ -1,6 +1,8 @@
 ROOT_DIR := $(dir $(abspath $(firstword $(MAKEFILE_LIST))))
-NPROCS := $(shell echo $$(nproc))
+NPROCS := $(shell if [ "$(shell uname)" = "Darwin" ]; then sysctl -n hw.logicalcpu; else nproc; fi)
 LLVM_LIT_BINARY := lit
+CMAKE_PREFIX_PATH ?= ""
+CMAKE_PREFIX_PATH_FLAG := -DCMAKE_PREFIX_PATH=$(CMAKE_PREFIX_PATH)
 
 DATA_BUILD_TYPE ?= debug
 TEST_BUILD_TYPE ?= debug
@@ -58,7 +60,7 @@ build/lingodb-release/.buildstamp: build/lingodb-release/.stamp
 	touch $@
 
 build/lingodb-release/.stamp: build
-	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS) -DCMAKE_BUILD_TYPE=Release
+	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS) -DCMAKE_BUILD_TYPE=Release $(CMAKE_PREFIX_PATH_FLAG)
 	touch $@
 
 build/lingodb-asan/.buildstamp: build/lingodb-asan/.stamp
@@ -66,7 +68,7 @@ build/lingodb-asan/.buildstamp: build/lingodb-asan/.stamp
 	touch $@
 
 build/lingodb-asan/.stamp: build
-	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS) -DCMAKE_BUILD_TYPE=ASAN
+	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS) -DCMAKE_BUILD_TYPE=ASAN $(CMAKE_PREFIX_PATH_FLAG)
 	touch $@
 
 build/lingodb-relwithdebinfo/.buildstamp: build/lingodb-relwithdebinfo/.stamp
@@ -74,10 +76,10 @@ build/lingodb-relwithdebinfo/.buildstamp: build/lingodb-relwithdebinfo/.stamp
 	touch $@
 
 build/lingodb-relwithdebinfo/.stamp: build
-	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS) -DCMAKE_BUILD_TYPE=RelWithDebInfo
+	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS) -DCMAKE_BUILD_TYPE=RelWithDebInfo $(CMAKE_PREFIX_PATH_FLAG)
 	touch $@
 build/lingodb-debug-coverage/.stamp: build
-	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS) -DCMAKE_CXX_FLAGS="-O0 -fprofile-instr-generate -fcoverage-mapping" -DCMAKE_C_FLAGS="-O0 -fprofile-instr-generate -fcoverage-mapping" -DCMAKE_CXX_COMPILER=clang++-20 -DCMAKE_C_COMPILER=clang-20
+	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS) -DCMAKE_CXX_FLAGS="-O0 -fprofile-instr-generate -fcoverage-mapping" -DCMAKE_C_FLAGS="-O0 -fprofile-instr-generate -fcoverage-mapping" -DCMAKE_CXX_COMPILER=clang++-20 -DCMAKE_C_COMPILER=clang-20 $(CMAKE_PREFIX_PATH_FLAG)
 	touch $@
 
 .PHONY: run-test

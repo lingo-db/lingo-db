@@ -46,6 +46,9 @@
 #include <spawn.h>
 #include <unistd.h>
 
+// should be declared as a part of unistd.h, but fails on macos 15
+extern char** environ;
+
 namespace {
 namespace utility = lingodb::utility;
 utility::Tracer::Event execution("Execution", "run");
@@ -56,6 +59,8 @@ utility::Tracer::Event llvmOpt("Compilation", "LLVMOptPasses");
 utility::GlobalSetting<bool> runLoweringPasses("system.compilation.llvm_lowering", true);
 utility::GlobalSetting<std::string> perfFile("system.execution.perf_file", "perf.data");
 utility::GlobalSetting<std::string> perfBinary("system.execution.perf_binary", "/usr/bin/perf");
+utility::GlobalSetting<std::string> assembler("system.compilation.assembler", "as");
+utility::GlobalSetting<std::string> staticLinker("system.compilation.static_linker", "c++");
 
 namespace {
 using namespace lingodb;
@@ -445,19 +450,7 @@ static llvm::Error performDefaultLLVMPasses(llvm::Module* module) {
    return llvm::Error::success();
 }
 
-static void linkStatic(LLVMBackend* engine, execution::Error& error, execution::mainFnType& mainFunc) {
-   auto currPath = std::filesystem::current_path();
-   std::ofstream symbolfile("symbolfile");
-   util::FunctionHelper::visitAllFunctions([&](std::string s, void* ptr) {
-      symbolfile << s << " = " << ptr << ";\n";
-   });
-   execution::visitBareFunctions([&](std::string s, void* ptr) {
-      symbolfile << s << " = " << ptr << ";\n";
-   });
-   symbolfile.close();
-
-   engine->dumpToObjectFile("llvm-jit-static.o");
-   std::string cmd = "g++ -shared -fPIC -o llvm-jit-static.so -Wl,--just-symbols=symbolfile llvm-jit-static.o";
+static void executeCmd(const std::string& cmd, execution::Error& error) {
    auto* pPipe = ::popen(cmd.c_str(), "r");
    if (pPipe == nullptr) {
       error.emit() << "Could not compile query module statically (Pipe could not be opened)";
@@ -474,6 +467,36 @@ static void linkStatic(LLVMBackend* engine, execution::Error& error, execution::
       error.emit() << "Could not compile query module statically (Pipe could not be closed)";
       return;
    }
+}
+
+static void linkStatic(LLVMBackend* engine, execution::Error& error, execution::mainFnType& mainFunc) {
+   auto currPath = std::filesystem::current_path();
+   std::ofstream symbolStubFile("symbol_stubs.s");
+   util::FunctionHelper::visitAllFunctions([&](std::string s, void* ptr) {
+      symbolStubFile << ".globl " << s << "\n"
+                     << ".set " << s << ", " << std::hex << ptr << "\n";
+   });
+#ifdef __APPLE__
+   execution::visitBareFunctions([&](std::string s, void* ptr) {
+      symbolStubFile << ".globl _" << s << "\n"
+                     << ".set _" << s << ", " << std::hex << ptr << "\n";
+   });
+#else
+   execution::visitBareFunctions([&](std::string s, void* ptr) {
+      symbolStubFile << ".globl " << s << "\n"
+                     << ".set " << s << ", " << std::hex << ptr << "\n";
+   });
+#endif
+   symbolStubFile.close();
+
+   engine->dumpToObjectFile("llvm-jit-static.o");
+
+   std::string symbolStubCompileCmd = assembler.getValue() + " symbol_stubs.s -o symbol_stubs.o";
+   executeCmd(symbolStubCompileCmd, error);
+
+   std::string linkCmd = staticLinker.getValue() + " -shared -fPIC llvm-jit-static.o symbol_stubs.o -o llvm-jit-static.so";
+   executeCmd(linkCmd, error);
+
    void* handle = dlopen(std::string(currPath.string() + "/llvm-jit-static.so").c_str(), RTLD_LAZY);
    const char* dlsymError = dlerror();
    if (dlsymError) {
@@ -795,7 +818,11 @@ class CPULLVMProfilingBackend : public execution::ExecutionBackend {
    void execute(mlir::ModuleOp& moduleOp, runtime::ExecutionContext* executionContext) override {
       mlir::registerBuiltinDialectTranslation(*moduleOp->getContext());
       mlir::registerLLVMDialectTranslation(*moduleOp->getContext());
+#ifdef __x86_64__
       LLVMInitializeX86AsmParser();
+#elif __arm64__
+      LLVMInitializeAArch64AsmParser();
+#endif
       llvm::InitializeNativeTarget();
       llvm::InitializeNativeTargetAsmPrinter();
       auto targetTriple = llvm::sys::getDefaultTargetTriple();

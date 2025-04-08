@@ -2,6 +2,7 @@
 #include "lingodb/runtime/GrowingBuffer.h"
 #include "lingodb/utility/Tracer.h"
 
+#include <algorithm>
 #include <atomic>
 #include <iostream>
 
@@ -12,7 +13,7 @@ lingodb::runtime::HashIndexedView* lingodb::runtime::HashIndexedView::build(ling
    utility::Tracer::Trace trace(buildEvent);
    auto* executionContext = runtime::getCurrentExecutionContext();
    auto& values = buffer->getValues();
-   size_t htSize = std::max(nextPow2(values.getLen() * 1.25), 1ul);
+   size_t htSize = std::max(nextPow2(values.getLen() * 1.25), static_cast<uint64_t>(1));
    size_t htMask = htSize - 1;
    auto* htView = new HashIndexedView(htSize, htMask);
    executionContext->registerState({htView, [](void* ptr) { delete reinterpret_cast<lingodb::runtime::HashIndexedView*>(ptr); }});
