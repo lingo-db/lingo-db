@@ -17,7 +17,7 @@ jobs:
       - name: Build
         run: |
             mkdir build
-            cmake -G Ninja . -B build -DCMAKE_BUILD_TYPE=Release -DClang_DIR=/built-llvm/lib/cmake/clang -DArrow_DIR=/built-arrow/lib64/cmake/Arrow
+            cmake -G Ninja . -B build -DCMAKE_BUILD_TYPE=Release -DClang_DIR=/built-llvm/lib/cmake/clang -DArrow_DIR=/built-arrow/lib64/cmake/Arrow -DENABLE_TESTS=OFF
             cmake --build build --target sql run-sql run-mlir mlir-db-opt sql-to-mlir
       - uses: actions/upload-artifact@master
         with:
