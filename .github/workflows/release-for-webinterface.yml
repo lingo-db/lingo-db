@@ -12,7 +12,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-dev:1c7ad317756b6ce7a36f868ae14f0d064187d238 
+    container: ghcr.io/lingo-db/lingodb-py-dev:313ae67dd4c39b7af54aae98b8d97ed1d6a452fc
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
@@ -26,14 +26,11 @@ jobs:
           key: ccache-release-build
       - name: Build
         run: |
-          mkdir -p /ccache
-          export CXX="ccache clang++-19"
-          export CC="ccache clang-19"
-          export CCACHE_DIR="/ccache"
-          make clean
-          make build-release
+          mkdir build
+          cmake -G Ninja . -B build -DCMAKE_BUILD_TYPE=Release -DClang_DIR=/built-llvm/lib/cmake/clang -DArrow_DIR=/built-arrow/lib64/cmake/Arrow -DENABLE_TESTS=OFF
+          cmake --build build
       - uses: actions/upload-artifact@master
         with:
           name: release-build
-          path: build/lingodb-release
+          path: build
           retention-days: 1
