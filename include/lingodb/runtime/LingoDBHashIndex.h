@@ -62,6 +62,7 @@ class LingoDBHashIndex : public Index {
 class HashIndexAccess {
    LingoDBHashIndex& hashIndex;
    std::vector<size_t> colIds;
+   std::vector<HashIndexIteration> iteration;
 
    public:
    HashIndexAccess(LingoDBHashIndex& hashIndex, std::vector<std::string> cols);
@@ -75,9 +76,12 @@ class HashIndexIteration {
 
    public:
    HashIndexIteration(HashIndexAccess& access, size_t hash, LingoDBHashIndex::Entry* current) : access(access), hash(hash), current(current) {}
+   void reset(size_t hash, LingoDBHashIndex::Entry* current) {
+      this->hash = hash;
+      this->current = current;
+   }
    bool hasNext();
    void consumeRecordBatch(RecordBatchInfo*);
-   static void close(HashIndexIteration* iteration);
 };
 
 } //end namespace lingodb::runtime

@@ -97,15 +97,17 @@ TEST_CASE("Storage") {
    //load again
    auto catalog2 = Catalog::create(tempDir.string(), true);
    catalog2->setShouldPersist(true);
-   auto indexEntry2 = catalog2->getTypedEntry<IndexCatalogEntry>("test_table.pk");
-   REQUIRE(indexEntry2 != std::nullopt);
-   auto& index2 = indexEntry2.value()->getIndex();
-   auto* hashIndex2 = dynamic_cast<lingodb::runtime::LingoDBHashIndex*>(&index2);
-   REQUIRE(hashIndex2 != nullptr);
-   lingodb::runtime::HashIndexAccess access2(*hashIndex2, {"col1"});
-   auto* iter2 = access2.lookup(0);
-   REQUIRE(!iter2->hasNext());
-   lingodb::runtime::HashIndexIteration::close(iter2);
+   lingodb::scheduler::awaitEntryTask(std::make_unique<MockTask>([&]() {
+      auto indexEntry2 = catalog2->getTypedEntry<IndexCatalogEntry>("test_table.pk");
+      REQUIRE(indexEntry2 != std::nullopt);
+      auto& index2 = indexEntry2.value()->getIndex();
+      auto* hashIndex2 = dynamic_cast<lingodb::runtime::LingoDBHashIndex*>(&index2);
+      REQUIRE(hashIndex2 != nullptr);
+      lingodb::runtime::HashIndexAccess access2(*hashIndex2, {"col1"});
+      auto* iter2 = access2.lookup(0);
+      REQUIRE(!iter2->hasNext());
+   }));
+
    lingodb::scheduler::awaitEntryTask(std::make_unique<MockTask>([&]() {
       auto tableData = createTableData();
       if (auto relation = catalog2->getTypedEntry<TableCatalogEntry>("test_table")) {
@@ -119,29 +121,30 @@ TEST_CASE("Storage") {
       }
       catalog2->persist();
    }));
-
-   //load again
-   auto catalog3 = Catalog::create(tempDir.string(), true);
-   auto indexEntry3 = catalog3->getTypedEntry<IndexCatalogEntry>("test_table.pk");
-   REQUIRE(indexEntry3 != std::nullopt);
-   auto& index3 = indexEntry3.value()->getIndex();
-   auto* hashIndex3 = dynamic_cast<lingodb::runtime::LingoDBHashIndex*>(&index3);
-   REQUIRE(hashIndex3 != nullptr);
-   lingodb::runtime::HashIndexAccess access3(*hashIndex3, {"col1", "col2"});
-   auto* iter3 = access3.lookup(-3797884931935089717);
-   REQUIRE(iter3->hasNext());
-   lingodb::runtime::RecordBatchInfo* info = static_cast<lingodb::runtime::RecordBatchInfo*>(alloca(sizeof(lingodb::runtime::RecordBatchInfo) + sizeof(lingodb::runtime::ColumnInfo) * 2));
-   iter3->consumeRecordBatch(info);
-   REQUIRE(info->numRows == 1);
-   REQUIRE(!iter3->hasNext());
-   REQUIRE(info->columnInfo[0].offset == 0);
-   REQUIRE(info->columnInfo[1].offset == 0);
-   REQUIRE(*reinterpret_cast<int8_t*>(info->columnInfo[0].dataBuffer) == 1);
-   auto* strOffsets = reinterpret_cast<int32_t*>(info->columnInfo[1].dataBuffer);
-   auto strLen = strOffsets[1] - strOffsets[0];
-   auto* strData = reinterpret_cast<char*>(info->columnInfo[1].varLenBuffer);
-   auto str = std::string(&strData[strOffsets[0]], strLen);
-   REQUIRE(str == "a");
+   lingodb::scheduler::awaitEntryTask(std::make_unique<MockTask>([&]() {
+      //load again
+      auto catalog3 = Catalog::create(tempDir.string(), true);
+      auto indexEntry3 = catalog3->getTypedEntry<IndexCatalogEntry>("test_table.pk");
+      REQUIRE(indexEntry3 != std::nullopt);
+      auto& index3 = indexEntry3.value()->getIndex();
+      auto* hashIndex3 = dynamic_cast<lingodb::runtime::LingoDBHashIndex*>(&index3);
+      REQUIRE(hashIndex3 != nullptr);
+      lingodb::runtime::HashIndexAccess access3(*hashIndex3, {"col1", "col2"});
+      auto* iter3 = access3.lookup(-3797884931935089717);
+      REQUIRE(iter3->hasNext());
+      lingodb::runtime::RecordBatchInfo* info = static_cast<lingodb::runtime::RecordBatchInfo*>(alloca(sizeof(lingodb::runtime::RecordBatchInfo) + sizeof(lingodb::runtime::ColumnInfo) * 2));
+      iter3->consumeRecordBatch(info);
+      REQUIRE(info->numRows == 1);
+      REQUIRE(!iter3->hasNext());
+      REQUIRE(info->columnInfo[0].offset == 0);
+      REQUIRE(info->columnInfo[1].offset == 0);
+      REQUIRE(*reinterpret_cast<int8_t*>(info->columnInfo[0].dataBuffer) == 1);
+      auto* strOffsets = reinterpret_cast<int32_t*>(info->columnInfo[1].dataBuffer);
+      auto strLen = strOffsets[1] - strOffsets[0];
+      auto* strData = reinterpret_cast<char*>(info->columnInfo[1].varLenBuffer);
+      auto str = std::string(&strData[strOffsets[0]], strLen);
+      REQUIRE(str == "a");
+   }));
 }
 TEST_CASE("Storage:RelationHelper") {
    auto scheduler = lingodb::scheduler::startScheduler();
@@ -165,7 +168,8 @@ TEST_CASE("Storage:RelationHelper") {
          lingodb::runtime::RelationHelper::appendToTable(*session, "test_table", createTableDataAsTable());
       }));
    }
-   {
+
+   lingodb::scheduler::awaitEntryTask(std::make_unique<MockTask>([&]() {
       auto session = lingodb::runtime::Session::createSession(tempDir, true);
       auto context = session->createExecutionContext();
 
@@ -192,5 +196,5 @@ TEST_CASE("Storage:RelationHelper") {
          auto str = std::string(&strData[strOffsets[0]], strLen);
          REQUIRE(str == "a");
       }));
-   }
+   }));
 }

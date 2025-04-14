@@ -132,10 +132,9 @@ void LingoDBHashIndex::bulkInsert(size_t startRowId, std::shared_ptr<arrow::Tabl
    flush();
 }
 HashIndexIteration* HashIndexAccess::lookup(size_t hash) {
-   return new HashIndexIteration(*this, hash, hashIndex.ht[hash & hashIndex.mask]);
-}
-void HashIndexIteration::close(lingodb::runtime::HashIndexIteration* iteration) {
-   delete iteration;
+   auto& iter = iteration[lingodb::scheduler::currentWorkerId()];
+   iter.reset(hash, hashIndex.ht[hash & hashIndex.mask]);
+   return &iter;
 }
 bool HashIndexIteration::hasNext() {
    while (current) {
@@ -166,6 +165,9 @@ void HashIndexIteration::consumeRecordBatch(lingodb::runtime::RecordBatchInfo* i
 HashIndexAccess::HashIndexAccess(lingodb::runtime::LingoDBHashIndex& hashIndex, std::vector<std::string> cols) : hashIndex(hashIndex) {
    for (const auto& c : cols) {
       colIds.push_back(dynamic_cast<LingoDBTable*>(&hashIndex.table->getTableStorage())->getColIndex(c));
+   }
+   for (auto i = 0ull; i < lingodb::scheduler::getNumWorkers(); i++) {
+      iteration.push_back(HashIndexIteration(*this, 0, nullptr));
    }
 }
 LingoDBHashIndex::~LingoDBHashIndex() {

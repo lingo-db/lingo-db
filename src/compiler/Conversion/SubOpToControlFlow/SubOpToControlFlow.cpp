@@ -2159,8 +2159,6 @@ class ScanExternalHashIndexListLowering : public SubOpConversionPattern<subop::S
          rewriter.create<mlir::scf::YieldOp>(loc, list);
       });
 
-      // Close iterator
-      rt::HashIndexIteration::close(rewriter, loc)({adaptor.getList()});
       return success();
    }
 };
