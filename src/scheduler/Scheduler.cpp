@@ -623,12 +623,11 @@ void TaskWrapper::finalize() {
 void awaitEntryTask(std::unique_ptr<Task> task) {
    TaskWrapper* taskWrapper = new TaskWrapper{std::move(task)};
    std::condition_variable finished;
-   std::mutex mutex;
    taskWrapper->onFinalize = [&]() {
       finished.notify_one();
    };
+   std::unique_lock<std::mutex> lk(taskWrapper->finalizeMutex);
    scheduler->enqueueTask(taskWrapper);
-   std::unique_lock<std::mutex> lk(mutex);
    finished.wait(lk);
 }
 void awaitChildTask(std::unique_ptr<Task> task) {
