@@ -691,12 +691,16 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
       mapOp.getPredicate().push_back(leftMapBlock);
       leftMapBuilder.create<tuples::ReturnOp>(builder.getUnknownLoc(), leftMapResults);
       lTree = mapOp.getResult();
+   } else {
+      delete leftMapBlock;
    }
    if (!rightMapResults.empty()) {
       auto mapOp = builder.create<relalg::MapOp>(builder.getUnknownLoc(), tuples::TupleStreamType::get(builder.getContext()), rTree, builder.getArrayAttr(createdColsRight));
       mapOp.getPredicate().push_back(rightMapBlock);
       rightMapBuilder.create<tuples::ReturnOp>(builder.getUnknownLoc(), rightMapResults);
       rTree = mapOp.getResult();
+   } else {
+      delete rightMapBlock;
    }
    mlir::Value tree;
    switch (stmt->op_) {

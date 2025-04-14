@@ -50,6 +50,7 @@ void printMLIR(std::string sql, std::shared_ptr<lingodb::catalog::Catalog> catal
    mlir::OpPrintingFlags flags;
    flags.assumeVerified();
    moduleOp->print(llvm::outs(), flags);
+   moduleOp.erase();
 }
 } // end namespace
 int main(int argc, char** argv) {
