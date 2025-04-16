@@ -14,12 +14,12 @@
 #include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVMPass.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
-#include "mlir/ExecutionEngine/ExecutionEngine.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/InitAllPasses.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
+#include "mlir/Support/FileUtilities.h"
 #include "mlir/Target/LLVMIR/Dialect/Builtin/BuiltinToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Export.h"
@@ -27,10 +27,14 @@
 
 #include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/ExecutionEngine/ObjectCache.h"
 #include "llvm/ExecutionEngine/Orc/JITTargetMachineBuilder.h"
+#include "llvm/ExecutionEngine/Orc/LLJIT.h"
 #include "llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h"
+#include "llvm/ExecutionEngine/SectionMemoryManager.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/MC/TargetRegistry.h"
+#include "llvm/Support/Path.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/TargetParser/Host.h"
@@ -70,6 +74,96 @@ static llvm::Error makeStringError(const llvm::Twine& message) {
                                               llvm::inconvertibleErrorCode());
 }
 
+// inlined class from https://github.com/llvm/llvm-project/blob/11857bef8a5fdfb8ab65971c3da6593c6076ff62/mlir/lib/ExecutionEngine/ExecutionEngine.cpp#L83
+// required to remove linkage to MLIRExecutionEngine which leads to shared MLIR linkage which segfaults the mlir-db-opt tool.
+class SimpleObjectCache : public llvm::ObjectCache {
+   public:
+   void notifyObjectCompiled(const llvm::Module* m,
+                             llvm::MemoryBufferRef objBuffer) override {
+      cachedObjects[m->getModuleIdentifier()] = llvm::MemoryBuffer::getMemBufferCopy(
+         objBuffer.getBuffer(), objBuffer.getBufferIdentifier());
+   }
+
+   std::unique_ptr<llvm::MemoryBuffer> getObject(const llvm::Module* m) override {
+      auto i = cachedObjects.find(m->getModuleIdentifier());
+      if (i == cachedObjects.end()) {
+         return nullptr;
+      }
+      return llvm::MemoryBuffer::getMemBuffer(i->second->getMemBufferRef());
+   }
+
+   /// Dump cached object to output file `filename`.
+   void dumpToObjectFile(llvm::StringRef filename) {
+      // Set up the output file.
+      std::string errorMessage;
+      auto file = mlir::openOutputFile(filename, &errorMessage);
+      if (!file) {
+         llvm::errs() << errorMessage << "\n";
+         return;
+      }
+
+      // Dump the object generated for a single module to the output file.
+      assert(cachedObjects.size() == 1 && "Expected only one object entry.");
+      auto& cachedObject = cachedObjects.begin()->second;
+      file->os() << cachedObject->getBuffer();
+      file->keep();
+   }
+
+   /// Returns `true` if cache hasn't been populated yet.
+   bool isEmpty() { return cachedObjects.empty(); }
+
+   private:
+   llvm::StringMap<std::unique_ptr<llvm::MemoryBuffer>> cachedObjects;
+};
+
+// from https://github.com/llvm/llvm-project/blob/70d34e4bfd32d8518a70226d3d68398d94c1d68f/mlir/include/mlir/ExecutionEngine/ExecutionEngine.h#L57
+struct LLVMBackendOptions {
+   /// If `llvmModuleBuilder` is provided, it will be used to create an LLVM
+   /// module from the given MLIR IR. Otherwise, a default
+   /// `translateModuleToLLVMIR` function will be used to translate to LLVM IR.
+   llvm::function_ref<std::unique_ptr<llvm::Module>(mlir::Operation*,
+                                                    llvm::LLVMContext&)>
+      llvmModuleBuilder = nullptr;
+
+   /// If `transformer` is provided, it will be called on the LLVM module during
+   /// JIT-compilation and can be used, e.g., for reporting or optimization.
+   llvm::function_ref<llvm::Error(llvm::Module*)> transformer = {};
+
+   /// `jitCodeGenOptLevel`, when provided, is used as the optimization level for
+   /// target code generation.
+   std::optional<llvm::CodeGenOptLevel> jitCodeGenOptLevel;
+
+   /// If `sharedLibPaths` are provided, the underlying JIT-compilation will
+   /// open and link the shared libraries for symbol resolution. Libraries that
+   /// are designed to be used with the `ExecutionEngine` may implement a
+   /// loading and unloading protocol: if they implement the two functions with
+   /// the names defined in `kLibraryInitFnName` and `kLibraryDestroyFnName`,
+   /// these functions will be called upon loading the library and upon
+   /// destruction of the `ExecutionEngine`. In the init function, the library
+   /// may provide a list of symbols that it wants to make available to code
+   /// run by the `ExecutionEngine`. If the two functions are not defined, only
+   /// symbols with public visibility are available to the executed code.
+   llvm::ArrayRef<llvm::StringRef> sharedLibPaths = {};
+
+   /// Specifies an existing `sectionMemoryMapper` to be associated with the
+   /// compiled code. If none is provided, a default memory mapper that directly
+   /// calls into the operating system is used.
+   llvm::SectionMemoryManager::MemoryMapper* sectionMemoryMapper = nullptr;
+
+   /// If `enableObjectCache` is set, the JIT compiler will create one to store
+   /// the object generated for the given module. The contents of the cache can
+   /// be dumped to a file via the `dumpToObjectFile` method.
+   bool enableObjectDump = false;
+
+   /// If enable `enableGDBNotificationListener` is set, the JIT compiler will
+   /// notify the llvm's global GDB notification listener.
+   bool enableGDBNotificationListener = true;
+
+   /// If `enablePerfNotificationListener` is set, the JIT compiler will notify
+   /// the llvm's global Perf notification listener.
+   bool enablePerfNotificationListener = true;
+};
+
 class LLVMBackend {
    public:
    /// Name of init functions of shared libraries. If a library provides a
@@ -94,7 +188,7 @@ class LLVMBackend {
    using LibraryDestroyFn = void (*)();
 
    LLVMBackend(bool enableObjectDump, bool enableGDBNotificationListener,
-               bool enablePerfNotificationListener) : cache(enableObjectDump ? new mlir::SimpleObjectCache() : nullptr),
+               bool enablePerfNotificationListener) : cache(enableObjectDump ? new SimpleObjectCache() : nullptr),
                                                       functionNames(),
                                                       gdbListener(enableGDBNotificationListener ? llvm::JITEventListener::createGDBRegistrationListener() : nullptr),
                                                       perfListener(nullptr) {
@@ -121,7 +215,7 @@ class LLVMBackend {
    /// not provided, default TM is created (i.e. ignoring any command line flags
    /// that could affect the set-up).
    static llvm::Expected<std::unique_ptr<LLVMBackend>>
-   create(mlir::Operation* op, const mlir::ExecutionEngineOptions& options = {},
+   create(mlir::Operation* op, const LLVMBackendOptions& options = {},
           std::unique_ptr<llvm::TargetMachine> tm = nullptr) {
       auto engine = std::make_unique<LLVMBackend>(
          options.enableObjectDump, options.enableGDBNotificationListener,
@@ -363,7 +457,7 @@ class LLVMBackend {
    std::unique_ptr<llvm::orc::LLJIT> jit;
 
    /// Underlying cache.
-   std::unique_ptr<mlir::SimpleObjectCache> cache;
+   std::unique_ptr<SimpleObjectCache> cache;
 
    /// Names of functions that may be looked up.
    std::vector<std::string> functionNames;
