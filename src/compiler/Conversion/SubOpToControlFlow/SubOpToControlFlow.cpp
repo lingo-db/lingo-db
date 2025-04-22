@@ -3474,12 +3474,29 @@ class ReduceOpLowering : public SubOpTupleStreamConsumerConversionPattern<subop:
 class CreateHashIndexedViewLowering : public SubOpConversionPattern<subop::CreateHashIndexedView> {
    using SubOpConversionPattern<subop::CreateHashIndexedView>::SubOpConversionPattern;
    LogicalResult matchAndRewrite(subop::CreateHashIndexedView createOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
+      printf("<<<< CreateHashIndexedViewLowering\n");
       auto bufferType = mlir::dyn_cast<subop::BufferType>(createOp.getSource().getType());
       if (!bufferType) return failure();
       auto linkIsFirst = mlir::cast<mlir::StringAttr>(bufferType.getMembers().getNames()[0]).str() == createOp.getLinkMember();
       auto hashIsSecond = mlir::cast<mlir::StringAttr>(bufferType.getMembers().getNames()[1]).str() == createOp.getHashMember();
       if (!linkIsFirst || !hashIsSecond) return failure();
       auto htView = rt::HashIndexedView::build(rewriter, createOp->getLoc())({adaptor.getSource()})[0];
+      printf("  <<<< CreateHashIndexedViewLowering replace\n");
+      rewriter.replaceOp(createOp, htView);
+      return success();
+   }
+};
+class CreatePerfectHashViewLowering : public SubOpConversionPattern<subop::CreatePerfectHashView> {
+   using SubOpConversionPattern<subop::CreatePerfectHashView>::SubOpConversionPattern;
+   LogicalResult matchAndRewrite(subop::CreatePerfectHashView createOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
+      printf("<<<< CreatePerfectHashViewLowering\n");
+      auto bufferType = mlir::dyn_cast<subop::BufferType>(createOp.getSource().getType());
+      if (!bufferType) return failure();
+      auto linkIsFirst = mlir::cast<mlir::StringAttr>(bufferType.getMembers().getNames()[0]).str() == createOp.getLinkMember();
+      auto hashIsSecond = mlir::cast<mlir::StringAttr>(bufferType.getMembers().getNames()[1]).str() == createOp.getHashMember();
+      if (!linkIsFirst || !hashIsSecond) return failure();
+      auto htView = rt::HashIndexedView::build(rewriter, createOp->getLoc())({adaptor.getSource()})[0];
+      printf("  <<<< CreatePerfectHashViewLowering replace\n");
       rewriter.replaceOp(createOp, htView);
       return success();
    }
@@ -3979,6 +3996,7 @@ void handleExecutionStepCPU(subop::ExecutionStepOp step, subop::ExecutionGroupOp
    rewriter.insertPattern<ScanRefsSortedViewLowering>(typeConverter, ctxt);
    //HashIndexedView
    rewriter.insertPattern<CreateHashIndexedViewLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<CreatePerfectHashViewLowering>(typeConverter, ctxt);
    rewriter.insertPattern<LookupHashIndexedViewLowering>(typeConverter, ctxt);
    rewriter.insertPattern<ScanListLowering>(typeConverter, ctxt);
    //ContinuousView
@@ -4257,7 +4275,7 @@ void subop::createLowerSubOpPipeline(mlir::OpPassManager& pm) {
    pm.addPass(subop::createGlobalOptPass());
    pm.addPass(subop::createFoldColumnsPass());
    pm.addPass(subop::createReuseLocalPass());
-   pm.addPass(subop::createSpecializeSubOpPass(true));
+   // pm.addPass(subop::createSpecializeSubOpPass(false));
    pm.addPass(subop::createNormalizeSubOpPass());
    pm.addPass(subop::createPullGatherUpPass());
    pm.addPass(subop::createParallelizePass());

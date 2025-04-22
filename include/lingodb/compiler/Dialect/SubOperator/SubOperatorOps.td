@@ -128,10 +128,11 @@ def HashMultimap : SubOperator_Type<"HashMultiMap", "hashmultimap",[State,Lookup
 }
 def MultiMap : SubOperator_Type<"MultiMap", "multimap",[State,LookupAbleState]> {
     let summary = "multi map: key -> [values]";
-    let parameters = (ins "StateMembersAttr":$keyMembers,"StateMembersAttr":$valueMembers );
-    let assemblyFormat = "`<` custom<StateMembers>($keyMembers) `,` custom<StateMembers>($valueMembers) `>`";
+    let parameters = (ins "StateMembersAttr":$keyMembers,"StateMembersAttr":$valueMembers,"bool":$fixed );
+    let assemblyFormat = "`<` custom<StateMembers>($keyMembers) `,` custom<StateMembers>($valueMembers) custom<Fixed>($fixed) `>`";
     let extraClassDeclaration = [{
         StateMembersAttr getMembers();
+        bool isFixed(){return getFixed();}
     }];
 }
 def ExternalHashIndex : SubOperator_Type<"ExternalHashIndex", "externalhashindex",[State,LookupAbleState]> {
@@ -605,6 +606,15 @@ def CreateSortedViewOp : SubOperator_Op<"create_sorted_view", [IsolatedFromAbove
       }];
 }
 def CreateHashIndexedView : SubOperator_Op<"create_hash_indexed_view", [SubOperator]> {
+    let arguments = (ins Buffer:$source,StrAttr: $hash_member, StrAttr: $link_member);
+    let results = (outs HashIndexedView:$result);
+    let assemblyFormat = [{ $source `:` type($source) `hash` `(` $hash_member `)` `link` `(` $link_member `)` `->` type($result) attr-dict }];
+      let extraClassDeclaration = [{
+          std::vector<std::string> getWrittenMembers();
+          std::vector<std::string> getReadMembers();
+      }];
+}
+def CreatePerfectHashView : SubOperator_Op<"create_perfect_hash_view", [SubOperator]> {
     let arguments = (ins Buffer:$source,StrAttr: $hash_member, StrAttr: $link_member);
     let results = (outs HashIndexedView:$result);
     let assemblyFormat = [{ $source `:` type($source) `hash` `(` $hash_member `)` `link` `(` $link_member `)` `->` type($result) attr-dict }];

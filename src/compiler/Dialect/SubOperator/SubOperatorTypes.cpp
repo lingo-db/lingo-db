@@ -55,6 +55,20 @@ static void printWithLock(mlir::AsmPrinter& p, bool withLock) {
       p << ", lockable";
    }
 }
+static mlir::LogicalResult parseFixed(mlir::AsmParser& parser, bool& fixed) {
+   llvm::StringRef boolAsRef;
+   if (parser.parseOptionalComma().succeeded() && parser.parseKeyword(&boolAsRef).succeeded()) {
+      fixed = (boolAsRef == "fixed");
+   } else {
+      fixed = false;
+   }
+   return mlir::success();
+}
+static void printFixed(mlir::AsmPrinter& p, bool fixed) {
+   if (fixed) {
+      p << ", fixed";
+   }
+}
 } // namespace
 subop::StateMembersAttr subop::HashMapType::getMembers() {
    std::vector<mlir::Attribute> names;

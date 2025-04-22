@@ -236,7 +236,7 @@ bool mlirTypeIsASubOpMapType(MlirType type) {
 }
 
 MlirType mlirSubOpMultiMapTypeGet(MlirAttribute keyMembers, MlirAttribute valMembers) {
-   return wrap(subop::MultiMapType::get(unwrap(keyMembers).getContext(), mlir::cast<subop::StateMembersAttr>(unwrap(keyMembers)), mlir::cast<subop::StateMembersAttr>(unwrap(valMembers))));
+   return wrap(subop::MultiMapType::get(unwrap(keyMembers).getContext(), mlir::cast<subop::StateMembersAttr>(unwrap(keyMembers)), mlir::cast<subop::StateMembersAttr>(unwrap(valMembers)), false));
 }
 MlirTypeID mlirSubOpMultiMapTypeGetTypeID() {
    return wrap(subop::MultiMapType::getTypeID());

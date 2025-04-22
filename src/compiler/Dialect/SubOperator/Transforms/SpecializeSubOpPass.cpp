@@ -37,6 +37,7 @@ class MultiMapAsHashIndexedView : public mlir::RewritePattern {
    MultiMapAsHashIndexedView(mlir::MLIRContext* context, subop::ColumnUsageAnalysis& analysis)
       : RewritePattern(subop::GenericCreateOp::getOperationName(), 1, context), analysis(analysis) {}
    mlir::LogicalResult matchAndRewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
+      printf("!!! MultiMapAsHashIndexedView\n");
       auto& memberManager = getContext()->getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager();
       auto& columnManager = getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
 
@@ -62,6 +63,7 @@ class MultiMapAsHashIndexedView : public mlir::RewritePattern {
             otherUses.push_back(u);
          }
       }
+      printf("*** multiMapType.getFixed() %d\n", multiMapType.getFixed());
 
       auto hashMember = memberManager.getUniqueMember("hash");
       auto linkMember = memberManager.getUniqueMember("link");
@@ -108,7 +110,11 @@ class MultiMapAsHashIndexedView : public mlir::RewritePattern {
          newMapping.push_back(rewriter.getNamedAttr(linkMember, linkRef));
          rewriter.create<subop::MaterializeOp>(loc, mapOp.getResult(), buffer, rewriter.getDictionaryAttr(newMapping));
          hashIndexedViewType = subop::HashIndexedViewType::get(rewriter.getContext(), subop::StateMembersAttr::get(rewriter.getContext(), rewriter.getArrayAttr({rewriter.getStringAttr(hashMember)}), rewriter.getArrayAttr({mlir::TypeAttr::get(rewriter.getIndexType())})), subop::StateMembersAttr::get(getContext(), rewriter.getArrayAttr(hashIndexedViewNames), rewriter.getArrayAttr(hashIndexedViewTypes)));
-         hashIndexedView = rewriter.create<subop::CreateHashIndexedView>(loc, hashIndexedViewType, buffer, hashMember, linkMember);
+         if (multiMapType.getFixed()) {
+            hashIndexedView = rewriter.create<subop::CreatePerfectHashView>(loc, hashIndexedViewType, buffer, hashMember, linkMember);
+         } else {
+            hashIndexedView = rewriter.create<subop::CreateHashIndexedView>(loc, hashIndexedViewType, buffer, hashMember, linkMember);  
+         }
       }
       auto entryRefType = subop::LookupEntryRefType::get(rewriter.getContext(), mlir::cast<subop::LookupAbleState>(hashIndexedViewType));
       auto entryRefListType = subop::ListType::get(rewriter.getContext(), entryRefType);
