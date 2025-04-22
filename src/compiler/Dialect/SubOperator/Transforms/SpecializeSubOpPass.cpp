@@ -63,7 +63,65 @@ class MultiMapAsHashIndexedView : public mlir::RewritePattern {
             otherUses.push_back(u);
          }
       }
+      // TODO getFixed is not needed
       printf("*** multiMapType.getFixed() %d\n", multiMapType.getFixed());
+      mlir::OpPrintingFlags flags;
+      flags.assumeVerified();
+      insertOp.getStream().print(llvm::outs(), flags);
+      insertOp.getStream().getType().print(llvm::outs());
+      auto generateOp = mlir::cast<subop::GenerateOp>(insertOp.getStream().getDefiningOp());
+      std::vector<subop::GenerateEmitOp> emitOps;
+      generateOp.getRegion().walk([&](subop::GenerateEmitOp emitOp) {
+         emitOps.push_back(emitOp);
+      });
+
+      bool insertConst = true;
+      std::vector<std::string> constHashRaws;
+      // TODO it maybe not necessary go through all emitOps to check insertConst. only check emitOps[0] is const?
+      for (auto emitOp : emitOps) {
+         printf("\n-----\n");
+         emitOp.print(llvm::outs(), flags);
+
+         printf("\n  -----\n");
+         auto v = emitOp.getValues()[0];
+         v.print(llvm::outs());
+         auto c = mlir::dyn_cast_or_null<db::ConstantOp>(v.getDefiningOp());
+         if (!c) {
+            insertConst = false;
+            break;
+         }
+         auto strAttr = mlir::dyn_cast_or_null<mlir::StringAttr>(c.getValue());
+         if (!strAttr) {
+            insertConst = false;
+            break;
+         }
+         constHashRaws.push_back(strAttr.str());
+
+         
+         // for (auto it = emitOp.getOperandTypes().begin(); it != emitOp.getOperandTypes().end(); it ++) {
+         //    printf("\n  -----\n");
+         //    (*it).print(llvm::outs());
+         // }
+      }
+
+      if (insertConst) {
+         size_t htSize = constHashRaws.size() * 1.25;
+         std::vector<size_t> htPoses;
+         // TODO PHASE 1.
+         // auto perfectHashParams = perfectHashCalc(constHashRaws, htPoses, htSize);
+         // create CreateHashIndexedView. pass in buffer
+
+         // TODO PHASE 2. inside for (auto lookupOp : lookupOps) {
+         // replace rewriter.create<db::Hash> to 
+         //         rewriter.create<db::ParameterizedHash>(..., perfectHashParams);
+      }
+
+
+
+      auto im = insertOp.getMapping();
+      printf("\n-----\n");
+      im.print(llvm::outs());
+
 
       auto hashMember = memberManager.getUniqueMember("hash");
       auto linkMember = memberManager.getUniqueMember("link");
@@ -94,6 +152,9 @@ class MultiMapAsHashIndexedView : public mlir::RewritePattern {
          std::vector<mlir::Value> values;
          for (auto keyMemberName : multiMapType.getKeyMembers().getNames()) {
             auto keyColumnAttr = mlir::cast<tuples::ColumnRefAttr>(insertOp.getMapping().get(mlir::cast<mlir::StringAttr>(keyMemberName).strref()));
+            auto aa = buildHashHelper.access(keyColumnAttr, loc);
+            printf("\n*****\n");
+            aa.print(llvm::outs());
             values.push_back(buildHashHelper.access(keyColumnAttr, loc));
          }
          mlir::Value hashed = rewriter.create<db::Hash>(loc, rewriter.create<util::PackOp>(loc, values));

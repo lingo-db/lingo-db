@@ -128,6 +128,7 @@ def HashMultimap : SubOperator_Type<"HashMultiMap", "hashmultimap",[State,Lookup
 }
 def MultiMap : SubOperator_Type<"MultiMap", "multimap",[State,LookupAbleState]> {
     let summary = "multi map: key -> [values]";
+    // TODO fixed is not needed
     let parameters = (ins "StateMembersAttr":$keyMembers,"StateMembersAttr":$valueMembers,"bool":$fixed );
     let assemblyFormat = "`<` custom<StateMembers>($keyMembers) `,` custom<StateMembers>($valueMembers) custom<Fixed>($fixed) `>`";
     let extraClassDeclaration = [{
