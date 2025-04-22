@@ -32,5 +32,5 @@ ENV PLAT=manylinux_2_28_x86_64
 FROM devimg AS build
 WORKDIR /repo
 COPY . /repo
-RUN cp /repo/tools/python/bridge/create_package.sh /usr/bin/
-RUN chmod +x /usr/bin/create_package.sh
+RUN cp /repo/tools/python/bridge/create_package.linux.sh /usr/bin/
+RUN chmod +x /usr/bin/create_package.linux.sh
