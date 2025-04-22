@@ -1,9 +1,8 @@
 set -e
-ls -la
+
 /opt/python/$1/bin/python3 -m venv venv
 venv/bin/python3 -m pip install build pyarrow===20.0.0
 venv/bin/python3 -c "import pyarrow; pyarrow.create_library_symlinks()"
-ARROW_LIB_DIR=$(venv/bin/python3 -c "import pyarrow as pa; print(':'.join(pa.get_library_dirs()))")
 cmake -G Ninja . -B build/lingodb-release/ -DCMAKE_BUILD_TYPE=Release -DClang_DIR=/built-llvm/lib/cmake/clang -DArrow_DIR=/built-arrow/lib64/cmake/Arrow  -DENABLE_TESTS=OFF
 
 cmake --build build/lingodb-release --target pybridge -j$(nproc)
@@ -40,5 +39,5 @@ cp -r /llvm-src/mlir/lib/Bindings/Python src/extensions/mlir_vendored
 mkdir -p src/lingodbbridge/libs
 cp ../lingodb-release/tools/python/bridgelib/libpybridge.so  src/lingodbbridge/libs/.
 
-$BASE_PATH/venv/bin/python3 -m build --wheel
+$BASE_PATH/venv/bin/python3 -m build --wheel --config-setting cmake.define.LLVM_DIR=/built-llvm/
 auditwheel repair dist/*.whl --plat "$PLAT" --exclude libarrow_python.so.2000 --exclude libarrow.so.2000 -w /built-packages

@@ -47,7 +47,7 @@ LDB_ARGS= -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  \
 	   	 -DCMAKE_BUILD_TYPE=Debug
 
 build/lingodb-debug/.stamp: build
-	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS)
+	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS) -DCMAKE_BUILD_TYPE=Debug $(CMAKE_PREFIX_PATH_FLAG)
 	touch $@
 
 build/lingodb-debug/.buildstamp: build/lingodb-debug/.stamp

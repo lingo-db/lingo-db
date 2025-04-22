@@ -17,7 +17,7 @@ jobs:
         run: |
           rm -rf /built-packages          
           mkdir -p /built-packages
-          bash tools/python/bridge/create_package.sh cp310-cp310          
+          bash tools/python/bridge/create_package.linux.sh cp310-cp310
           cd tools/python
           /opt/python/cp310-cp310/bin/python3 -m build .
           cp dist/*.whl /built-packages/.
@@ -35,7 +35,7 @@ jobs:
         run: |
           rm -rf /built-packages          
           mkdir -p /built-packages
-          bash tools/python/bridge/create_package.sh cp311-cp311          
+          bash tools/python/bridge/create_package.linux.sh cp311-cp311
           cd tools/python
           /opt/python/cp311-cp311/bin/python3 -m build .
           cp dist/*.whl /built-packages/.
@@ -53,7 +53,7 @@ jobs:
         run: |
           rm -rf /built-packages          
           mkdir -p /built-packages
-          bash tools/python/bridge/create_package.sh cp312-cp312          
+          bash tools/python/bridge/create_package.linux.sh cp312-cp312
           cd tools/python
           /opt/python/cp312-cp312/bin/python3 -m build .
           cp dist/*.whl /built-packages/.
