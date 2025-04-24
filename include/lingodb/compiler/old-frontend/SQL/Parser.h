@@ -28,6 +28,7 @@
 #include <iostream>
 #include <limits>
 #include <unordered_set>
+#include <variant>
 
 namespace {
 struct TranslationContext;

@@ -1,0 +1,92 @@
+#pragma once
+#include "bound_expression.h"
+#include "lingodb/compiler/frontend/ast/table_producer.h"
+#include "lingodb/compiler/frontend/ast/tableref.h"
+#include "lingodb/compiler/frontend/sql_scope.h"
+namespace lingodb::ast {
+class BoundTableRef : public TableProducer {
+   public:
+   explicit BoundTableRef(TableReferenceType type) : TableProducer(NodeType::BOUND_TABLE_REF), type(type) {
+   }
+   BoundTableRef(TableReferenceType type, std::string alias) : TableProducer(NodeType::BOUND_TABLE_REF, alias), type(type) {
+   }
+   TableReferenceType type;
+
+   virtual std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) = 0;
+};
+
+class BoundBaseTableRef : public BoundTableRef {
+   public:
+   static constexpr TableReferenceType TYPE = TableReferenceType::BASE_TABLE;
+
+   BoundBaseTableRef(std::vector<std::shared_ptr<NamedResult>> namedResultsEntries, std::string alias, std::string relationName, std::string mlirScope);
+
+   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
+
+   //TODO missing semantic
+   std::vector<std::shared_ptr<NamedResult>> namedResultsEntries;
+   std::string relationName;
+   std::string mlirScope;
+};
+using boundJoinCond = std::variant<std::shared_ptr<BoundExpression>, std::vector<std::shared_ptr<ColumnRefExpression>>>;
+class BoundJoinRef : public BoundTableRef {
+   static constexpr TableReferenceType TYPE = TableReferenceType::JOIN;
+
+   public:
+   BoundJoinRef(JoinType type, JoinCondType refType, std::shared_ptr<TableProducer> left, std::shared_ptr<TableProducer> right, boundJoinCond condition);
+
+   //! The left hand side of the join
+   //! QueryNode as variant is needed for pipe syntax. Example: FROM Test |> join ok on id1=id2
+   //! Bound left hand
+   std::shared_ptr<TableProducer> left;
+   //! Bound right hand
+   std::shared_ptr<TableProducer> right;
+   //TODO is this condition a good solution for on condiotion and using?
+   //! The joint condition or a vector of ColumnRefExpression if USING
+   boundJoinCond condition;
+   //! The join type
+   JoinType type;
+   //! Join condition type
+   JoinCondType refType;
+
+   std::vector<std::pair<std::string, std::shared_ptr<ast::NamedResult>>> outerJoinMapping;
+
+   //TODO check if needed for every type of JOIN
+   std::shared_ptr<analyzer::SQLScope> leftScope;
+   std::shared_ptr<analyzer::SQLScope> rightScope;
+
+   //! The set of USING columns (if any)
+   //std::vector<std::string> usingColumns;
+   /*//! Duplicate eliminated columns (if any)
+   vector<unique_ptr<ParsedExpression>> duplicate_eliminated_columns;*/
+
+   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
+};
+class BoundSubqueryRef : public BoundTableRef {
+   static constexpr TableReferenceType TYPE = TableReferenceType::SUBQUERY;
+
+   public:
+   BoundSubqueryRef(std::shared_ptr<analyzer::SQLScope> sqlScope, std::shared_ptr<TableProducer> subSelect);
+
+   std::shared_ptr<analyzer::SQLScope> sqlScope;
+   //! The subquery
+   //TODO correct Type?
+   std::shared_ptr<TableProducer> subSelect;
+
+   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
+};
+
+class BoundExpressionListRef : public BoundTableRef {
+
+
+   public:
+   static constexpr TableReferenceType TYPE = TableReferenceType::EXPRESSION_LIST;
+   BoundExpressionListRef(std::vector<std::vector<std::shared_ptr<BoundConstantExpression>>> values, std::vector<std::shared_ptr<NamedResult>> namedResultsEntries);
+
+   //! The expressions in the list
+   std::vector<std::vector<std::shared_ptr<BoundConstantExpression>>> values;
+   std::vector<std::shared_ptr<NamedResult>> namedResultsEntries;
+
+   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
+};
+} // namespace lingodb::ast

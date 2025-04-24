@@ -2,8 +2,13 @@
 #define LINGODB_CATALOG_TYPES_H
 
 #include <memory>
+#include <mlir/Dialect/Func/Transforms/Passes.h.inc>
 #include <optional>
 #include <string>
+#include <mlir/IR/Builders.h>
+#include <mlir/IR/MLIRContext.h>
+#include <mlir/IR/Types.h>
+#include <mlir/IR/Value.h>
 namespace lingodb::utility {
 class Serializer;
 class Deserializer;
@@ -24,6 +29,7 @@ enum class LogicalTypeId : uint8_t {
    INTERVAL = 9,
    CHAR = 10,
    STRING = 11,
+   NONE = 12,
 };
 class TypeInfo {
    protected:
@@ -44,6 +50,8 @@ class TypeInfo {
    virtual void serializeConcrete(utility::Serializer& serializer) const = 0;
    static std::shared_ptr<TypeInfo> deserialize(utility::Deserializer& deserializer);
    virtual ~TypeInfo() = default;
+
+
 };
 class Type {
    LogicalTypeId id;
@@ -53,7 +61,7 @@ class Type {
    public:
    Type(LogicalTypeId id, std::shared_ptr<TypeInfo> info);
    std::string toString() const;
-   LogicalTypeId getTypeId() { return id; }
+   LogicalTypeId getTypeId() const { return id; }
    template <class T>
    std::shared_ptr<T> getInfo() {
       return std::dynamic_pointer_cast<T>(info);
@@ -75,6 +83,22 @@ class Type {
    static Type timestamp();
    static Type intervalDaytime();
    static Type intervalMonths();
+   static Type noneType();
+};
+class NullableType {
+   public:
+   NullableType(Type type);
+   NullableType(Type type, bool isNullable);
+   Type type;
+   std::shared_ptr<NullableType> castType = nullptr;
+   bool isNullable;
+   mlir::Type toMlirType(mlir::MLIRContext* context) const ;
+   mlir::Value castValueToThisType(mlir::OpBuilder& builder, mlir::Value valueToCast, bool valueNullable) const;
+   mlir::Value castValue(mlir::OpBuilder& builder, mlir::Value valueToCast) const;
+   bool isNumeric() const;
+
+   bool operator==( NullableType&) ;
+   bool operator!=( NullableType&) ;
 };
 class IntTypeInfo : public TypeInfo {
    bool isSigned;
@@ -87,6 +111,7 @@ class IntTypeInfo : public TypeInfo {
    std::string toString();
    bool getIsSigned() { return isSigned; }
    size_t getBitWidth() { return bitWidth; }
+
 };
 class DecimalTypeInfo : public TypeInfo {
    size_t precision;
@@ -99,6 +124,7 @@ class DecimalTypeInfo : public TypeInfo {
    std::string toString();
    size_t getPrecision() { return precision; }
    size_t getScale() { return scale; }
+
 };
 class CharTypeInfo : public TypeInfo {
    size_t length;
@@ -109,6 +135,7 @@ class CharTypeInfo : public TypeInfo {
    static std::shared_ptr<CharTypeInfo> deserialize(utility::Deserializer& deserializer);
    std::string toString();
    size_t getLength() { return length; }
+
 };
 class StringTypeInfo : public TypeInfo {
    std::string collation;
@@ -119,6 +146,7 @@ class StringTypeInfo : public TypeInfo {
    void serializeConcrete(utility::Serializer& serializer) const override;
    static std::shared_ptr<StringTypeInfo> deserialize(utility::Deserializer& deserializer);
    std::string toString();
+
 };
 class TimestampTypeInfo : public TypeInfo {
    public:
@@ -141,6 +169,7 @@ class TimestampTypeInfo : public TypeInfo {
    std::string toString();
    auto getTimezone() { return timezone; }
    auto getUnit() { return unit; }
+
 };
 
 class DateTypeInfo : public TypeInfo {
@@ -159,6 +188,7 @@ class DateTypeInfo : public TypeInfo {
    static std::shared_ptr<DateTypeInfo> deserialize(utility::Deserializer& deserializer);
    std::string toString();
    auto getUnit() { return unit; }
+
 };
 class IntervalTypeInfo : public TypeInfo {
    public:
@@ -176,6 +206,7 @@ class IntervalTypeInfo : public TypeInfo {
    static std::shared_ptr<IntervalTypeInfo> deserialize(utility::Deserializer& deserializer);
    std::string toString();
    auto getUnit() { return unit; }
+
 };
 } //end namespace lingodb::catalog
 #endif //LINGODB_CATALOG_TYPES_H
