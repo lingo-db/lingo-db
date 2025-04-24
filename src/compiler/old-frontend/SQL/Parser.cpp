@@ -1,4 +1,4 @@
-#include "lingodb/compiler/frontend/SQL/Parser.h"
+#include "lingodb/compiler/old-frontend/SQL/Parser.h"
 #include "lingodb/catalog/Defs.h"
 #include "lingodb/catalog/MLIRTypes.h"
 #include "lingodb/catalog/TableCatalogEntry.h"
