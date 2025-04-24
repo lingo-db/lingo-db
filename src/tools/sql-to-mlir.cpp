@@ -4,7 +4,7 @@
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamDialect.h"
 #include "lingodb/compiler/Dialect/util/UtilDialect.h"
-#include "lingodb/compiler/frontend/SQL/Parser.h"
+#include "lingodb/compiler/old-frontend/SQL/Parser.h"
 #include "lingodb/runtime/Session.h"
 
 #include "mlir/IR/BuiltinDialect.h"

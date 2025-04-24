@@ -1,5 +1,5 @@
 #include "lingodb/execution/Frontend.h"
-#include "lingodb/compiler/frontend/SQL/Parser.h"
+#include "lingodb/compiler/old-frontend/SQL/Parser.h"
 
 #include "lingodb/compiler/Dialect/Arrow/IR/ArrowDialect.h"
 #include "lingodb/compiler/Dialect/DB/IR/DBDialect.h"
