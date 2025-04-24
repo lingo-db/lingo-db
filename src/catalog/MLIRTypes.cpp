@@ -77,6 +77,12 @@ class CharTypeCreator : public lingodb::catalog::MLIRTypeCreator {
    private:
    std::shared_ptr<lingodb::catalog::CharTypeInfo> info;
 };
+class NoneTypeCreator : public lingodb::catalog::MLIRTypeCreator {
+   public:
+   mlir::Type createType(mlir::MLIRContext* context) override {
+      return mlir::NoneType::get(context);
+   }
+};
 } // namespace
 namespace lingodb::catalog {
 std::shared_ptr<MLIRTypeCreator> createBoolTypeCreator() {
@@ -108,6 +114,9 @@ std::shared_ptr<MLIRTypeCreator> createCharTypeCreator(std::shared_ptr<catalog::
 }
 std::shared_ptr<MLIRTypeCreator> createStringTypeCreator(std::shared_ptr<catalog::StringTypeInfo> info) {
    return std::make_shared<GenericTypeCreator<lingodb::compiler::dialect::db::StringType>>();
+}
+std::shared_ptr<MLIRTypeCreator> createNoneTypeCreator() {
+   return std::make_shared<NoneTypeCreator>();
 }
 } // namespace lingodb::catalog
 #else
