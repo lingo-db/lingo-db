@@ -1,5 +1,6 @@
 #include "catch2/catch_all.hpp"
 #include <string>
+#include <vector>
 
 #include "lingodb/runtime/StringRuntime.h"
 using namespace lingodb::runtime;
@@ -82,8 +83,42 @@ TEST_CASE("Length:MultiByte") {
    REQUIRE(StringRuntime::len(str) == 20);
 }
 
-// -- ASCII and multibyte mix
-
-// -- Characters from various scripts
-
 // -- Edge Unicode points
+TEST_CASE("Length:EdgePoints") {
+   std::string edgePoints[] = {
+      //"\u0000", // To discuss later
+      "\u007F",
+      "\u0080",
+      "\u07FF",
+      "\u0800",
+      "\uFFFF",
+      "\U00010000",
+      "\U0010FFFF"
+   };
+
+   struct TestCase{
+      int length;
+      std::string testString;
+   };
+
+   std::vector<TestCase> testCases = {
+      {0, ""}
+   };
+
+   for (std::string point: edgePoints) {
+      int length = testCases.size();
+      for (int i=0;i<length;i++) {
+         TestCase testCase = testCases[i];
+         testCases.push_back({
+            testCase.length + 1,
+            testCase.testString + point
+         });
+      }
+   }
+
+   for (TestCase testCase: testCases) {
+      VarLen32 str = VarLen32::fromString(testCase.testString);
+      REQUIRE(StringRuntime::len(str) == testCase.length);
+   }
+
+}
