@@ -229,17 +229,14 @@ void toUpper(char* str, size_t len) {
 int64_t lingodb::runtime::StringRuntime::len(VarLen32 str) {
    char* data = str.data();
    uint32_t byteLen = str.getLen();
-   // start with byteLen, subtract at every continatuation (starting with b10xxxxxx)
-   uint32_t charLen = byteLen; 
 
-   // utf8 special character
-   constexpr uint8_t setFirst  = 0x80; // 1000 0000
-   constexpr uint8_t delSecond = 0xBF; // 1011 1111
+   // start with byteLen, subtract at every continuation (starting with b10xxxxxx)
+   uint32_t charLen = byteLen;
 
    for (uint32_t i=0;i<byteLen;i++) {
-      unsigned char c = data[i];
-      uint8_t comp = (c & delSecond) | setFirst;
-      charLen -= !(c ^ comp);
+      const unsigned char c = data[i];
+      uint8_t shifted = c>>6;
+      charLen -= (shifted == 2);
    }
 
    return charLen;
