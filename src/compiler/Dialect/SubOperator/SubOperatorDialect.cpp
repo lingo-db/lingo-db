@@ -1,7 +1,7 @@
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorDialect.h"
 
 #include "lingodb/compiler/Dialect/DB/IR/DBDialect.h"
-#include "lingodb/compiler/Dialect/DSA/IR/DSADialect.h"
+#include "lingodb/compiler/Dialect/Arrow/IR/ArrowDialect.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
 
@@ -42,7 +42,7 @@ void subop::SubOperatorDialect::initialize() {
    addInterfaces<SubOperatorInlinerInterface>();
    addInterfaces<SubOpFoldInterface>();
    getContext()->loadDialect<db::DBDialect>();
-   getContext()->loadDialect<dsa::DSADialect>();
+   getContext()->loadDialect<arrow::ArrowDialect>();
    getContext()->loadDialect<mlir::arith::ArithDialect>();
    getContext()->loadDialect<mlir::index::IndexDialect>();
    getContext()->loadDialect<tuples::TupleStreamDialect>();

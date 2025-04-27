@@ -1,5 +1,5 @@
-#include "lingodb/compiler/Dialect/DSA/IR/DSADialect.h"
-#include "lingodb/compiler/Dialect/DSA/IR/DSAOps.h"
+#include "lingodb/compiler/Dialect/Arrow/IR/ArrowDialect.h"
+#include "lingodb/compiler/Dialect/Arrow/IR/ArrowOps.h"
 #include "mlir/IR/DialectImplementation.h"
 #include <mlir/Transforms/InliningUtils.h>
 using namespace mlir;
@@ -13,12 +13,12 @@ struct DSAInlinerInterface : public DialectInlinerInterface {
       return true;
    }
 };
-void lingodb::compiler::dialect::dsa::DSADialect::initialize() {
+void lingodb::compiler::dialect::arrow::ArrowDialect::initialize() {
    addOperations<
 #define GET_OP_LIST
-#include "lingodb/compiler/Dialect/DSA/IR/DSAOps.cpp.inc"
+#include "lingodb/compiler/Dialect/Arrow/IR/ArrowOps.cpp.inc"
       >();
    addInterfaces<DSAInlinerInterface>();
    registerTypes();
 }
-#include "lingodb/compiler/Dialect/DSA/IR/DSAOpsDialect.cpp.inc"
+#include "lingodb/compiler/Dialect/Arrow/IR/ArrowOpsDialect.cpp.inc"

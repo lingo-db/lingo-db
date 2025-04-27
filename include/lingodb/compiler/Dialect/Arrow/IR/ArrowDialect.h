@@ -1,0 +1,7 @@
+#ifndef LINGODB_COMPILER_DIALECT_ARROW_IR_ARROWDIALECT_H
+#define LINGODB_COMPILER_DIALECT_ARROW_IR_ARROWDIALECT_H
+
+#include "mlir/IR/Dialect.h"
+#include "lingodb/compiler/Dialect/Arrow/IR/ArrowOpsDialect.h.inc"
+
+#endif //LINGODB_COMPILER_DIALECT_ARROW_IR_ARROWDIALECT_H

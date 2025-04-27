@@ -8,6 +8,7 @@
 #include "lingodb/compiler/Dialect/DB/IR/DBOpsEnums.h"
 #include "lingodb/compiler/Dialect/DB/IR/DBOpsInterfaces.h"
 #include "lingodb/compiler/Dialect/DB/IR/DBTypes.h"
+#include "lingodb/compiler/Dialect/Arrow/IR/ArrowTypes.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOpsInterfaces.h"
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"

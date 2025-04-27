@@ -3,7 +3,7 @@
 #include "lingodb/catalog/IndexCatalogEntry.h"
 #include "lingodb/catalog/TableCatalogEntry.h"
 #include "lingodb/compiler/Conversion/DBToStd/DBToStd.h"
-#include "lingodb/compiler/Conversion/DSAToStd/DSAToStd.h"
+#include "lingodb/compiler/Conversion/ArrowToStd/ArrowToStd.h"
 #include "lingodb/compiler/Conversion/RelAlgToSubOp/RelAlgToSubOpPass.h"
 #include "lingodb/compiler/Conversion/SubOpToControlFlow/SubOpToControlFlowPass.h"
 #include "lingodb/compiler/Dialect/RelAlg/Passes.h"
@@ -172,7 +172,7 @@ class DefaultImperativeLowering : public LoweringStep {
       mlir::PassManager lowerDSAPm(moduleOp->getContext());
       lowerDSAPm.enableVerifier(verify);
       addLingoDBInstrumentation(lowerDSAPm, getSerializationState());
-      lowerDSAPm.addPass(dsa::createLowerToStdPass());
+      lowerDSAPm.addPass(arrow::createLowerToStdPass());
       lowerDSAPm.addPass(mlir::createCanonicalizerPass());
       lowerDSAPm.addPass(mlir::createLoopInvariantCodeMotionPass());
       lowerDSAPm.addPass(mlir::createCSEPass());

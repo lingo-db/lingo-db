@@ -28,7 +28,7 @@ add_mlir_conversion_library(MLIRSubOpToControlFlow
         LINK_LIBS PUBLIC
         MLIRIR
         MLIRDB
-        MLIRDSA
+        MLIRArrow
         MLIRSubOperator
         runtime_funcs_ptr
 )

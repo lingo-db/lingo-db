@@ -1,6 +1,6 @@
 #include "lingodb/runtime/storage/LingoDBTable.h"
 #include "lingodb/catalog/Defs.h"
-#include "lingodb/runtime/RecordBatchInfo.h"
+//#include "lingodb/runtime/RecordBatchInfo.h"
 #include "lingodb/scheduler/Tasks.h"
 #include "lingodb/utility/Serialization.h"
 #include "lingodb/utility/Tracer.h"
@@ -16,6 +16,7 @@
 #include <iostream>
 #include <random>
 #include <ranges>
+#include <lingodb/runtime/ArrowView.h>
 namespace {
 namespace utility = lingodb::utility;
 static utility::Tracer::Event processMorsel("DataSourceIteration", "processMorsel");
@@ -201,23 +202,30 @@ std::optional<size_t> countDistinctValues(std::shared_ptr<arrow::ChunkedArray> c
    return {};
 }
 
-void access(std::vector<size_t> colIds, lingodb::runtime::RecordBatchInfo* info, const lingodb::runtime::LingoDBTable::TableChunk& chunk, size_t offset = 0, size_t numRows = std::numeric_limits<size_t>::max()) {
-   auto currChunk = chunk.data();
-   for (size_t i = 0; i < colIds.size(); i++) {
-      auto colId = colIds[i];
-      auto& colInfo = info->columnInfo[i];
-      colInfo = chunk.getColumnInfo(colId);
-      colInfo.offset += offset;
-   }
-   info->numRows = std::min(static_cast<size_t>(currChunk->num_rows() - offset), numRows);
-}
-
 } // namespace
 
 namespace lingodb::runtime {
 LingoDBTable::TableChunk::TableChunk(std::shared_ptr<arrow::RecordBatch> data, size_t startRowId) : internalData(data), startRowId(startRowId), numRows(data->num_rows()) {
+   std::vector<size_t> bufferStart;
    for (auto colId = 0; colId < data->num_columns(); colId++) {
-      columnInfo.push_back(RecordBatchInfo::getColumnInfo(colId, data));
+      auto arrayData = data->column(colId)->data();
+      size_t currBufId = buffers.size();
+      for (size_t i = 0; i < arrayData->buffers.size(); i++) {
+         auto buffer = arrayData->buffers[i];
+         if (buffer) {
+            buffers.push_back(buffer->data());
+         } else {
+            buffers.push_back(nullptr);
+         }
+      }
+      if (!buffers[currBufId]) {
+         buffers[currBufId] = ArrayView::validData.data();
+      }
+      bufferStart.push_back(currBufId);
+   }
+   for (auto colId = 0; colId < data->num_columns(); colId++) {
+      auto arrayData = data->column(colId)->data();
+      columnInfo.push_back(ArrayView{.length = arrayData->length, .null_count = arrayData->null_count, .offset = arrayData->offset, .n_buffers = static_cast<int64_t>(arrayData->buffers.size()), .n_children = static_cast<int64_t>(arrayData->child_data.size()), .buffers = &buffers[bufferStart.at(colId)], .children = nullptr});
    }
 }
 
@@ -339,16 +347,20 @@ class BatchesWorkerResvState {
 class ScanBatchesTask : public lingodb::scheduler::TaskWithImplicitContext {
    std::vector<lingodb::runtime::LingoDBTable::TableChunk>& batches;
    std::vector<size_t> colIds;
-   std::function<void(lingodb::runtime::RecordBatchInfo*)> cb;
-   std::vector<lingodb::runtime::RecordBatchInfo*> batchInfos;
+   std::function<void(lingodb::runtime::BatchView*)> cb;
+   std::vector<lingodb::runtime::BatchView> batchInfos;
+   std::vector<std::vector<const ArrayView*>> arrayViewPtrs;
    std::atomic<size_t> startIndex{0};
    size_t splitSize{20000};
    std::vector<std::unique_ptr<BatchesWorkerResvState>> workerResvs;
 
    public:
-   ScanBatchesTask(std::vector<lingodb::runtime::LingoDBTable::TableChunk>& batches, std::vector<size_t> colIds, const std::function<void(lingodb::runtime::RecordBatchInfo*)>& cb) : batches(batches), colIds(colIds), cb(cb) {
+   ScanBatchesTask(std::vector<lingodb::runtime::LingoDBTable::TableChunk>& batches, std::vector<size_t> colIds, const std::function<void(lingodb::runtime::BatchView*)>& cb) : batches(batches), colIds(colIds), cb(cb) {
       for (size_t i = 0; i < lingodb::scheduler::getNumWorkers(); i++) {
-         batchInfos.push_back(reinterpret_cast<lingodb::runtime::RecordBatchInfo*>(malloc(sizeof(lingodb::runtime::RecordBatchInfo) + sizeof(lingodb::runtime::ColumnInfo) * colIds.size())));
+         batchInfos.emplace_back(lingodb::runtime::BatchView());
+         arrayViewPtrs.emplace_back(std::vector<const ArrayView*>(colIds.size()));
+         batchInfos[i].arrays = arrayViewPtrs[i].data();
+
          workerResvs.emplace_back(std::make_unique<BatchesWorkerResvState>());
       }
    }
@@ -359,11 +371,15 @@ class ScanBatchesTask : public lingodb::scheduler::TaskWithImplicitContext {
       }
       size_t begin = splitSize * unitId;
       size_t len = std::min(begin + splitSize, chunk.getNumRows()) - begin;
-
-      auto* batchInfo = batchInfos[lingodb::scheduler::currentWorkerId()];
+      BatchView& batchView = batchInfos[lingodb::scheduler::currentWorkerId()];
+      batchView.offset = begin;
+      batchView.length = std::min(static_cast<size_t>(chunk.getNumRows() - begin), len);
       utility::Tracer::Trace trace(processMorsel);
-      access(colIds, batchInfo, chunk, begin, len);
-      cb(batchInfo);
+
+      for (size_t i = 0; i < colIds.size(); i++) {
+         batchView.arrays[i] = chunk.getArrayView(colIds[i]);
+      }
+      cb(&batchView);
       trace.stop();
    }
 
@@ -439,13 +455,6 @@ class ScanBatchesTask : public lingodb::scheduler::TaskWithImplicitContext {
       unitRun(state->batchId, state->resvId);
    }
    ~ScanBatchesTask() {
-      utility::Tracer::Trace cleanUpTrace(cleanupTLS);
-      for (auto* bI : batchInfos) {
-         if (bI) {
-            free(bI);
-         }
-      }
-      cleanUpTrace.stop();
    }
 };
 std::unique_ptr<LingoDBTable> LingoDBTable::deserialize(lingodb::utility::Deserializer& deserializer) {
@@ -463,10 +472,10 @@ std::unique_ptr<LingoDBTable> LingoDBTable::deserialize(lingodb::utility::Deseri
 class ScanBatchesSingleThreadedTask : public lingodb::scheduler::TaskWithImplicitContext {
    std::vector<lingodb::runtime::LingoDBTable::TableChunk>& batches;
    std::vector<size_t> colIds;
-   std::function<void(lingodb::runtime::RecordBatchInfo*)> cb;
+   std::function<void(lingodb::runtime::BatchView*)> cb;
 
    public:
-   ScanBatchesSingleThreadedTask(std::vector<lingodb::runtime::LingoDBTable::TableChunk>& batches, std::vector<size_t> colIds, const std::function<void(lingodb::runtime::RecordBatchInfo*)>& cb) : batches(batches), colIds(colIds), cb(cb) {
+   ScanBatchesSingleThreadedTask(std::vector<lingodb::runtime::LingoDBTable::TableChunk>& batches, std::vector<size_t> colIds, const std::function<void(lingodb::runtime::BatchView*)>& cb) : batches(batches), colIds(colIds), cb(cb) {
    }
 
    bool allocateWork() override {
@@ -476,15 +485,21 @@ class ScanBatchesSingleThreadedTask : public lingodb::scheduler::TaskWithImplici
       return false;
    }
    void performWork() override {
-      auto* batchInfo = reinterpret_cast<lingodb::runtime::RecordBatchInfo*>(malloc(sizeof(lingodb::runtime::RecordBatchInfo) + sizeof(lingodb::runtime::ColumnInfo) * colIds.size()));
+      BatchView batchView;
+      std::vector<const ArrayView*> arrayViewPtrs(colIds.size());
+      batchView.arrays = arrayViewPtrs.data();
+      batchView.offset = 0;
+      batchView.length = 0;
 
-      for (const auto& batch : batches) {
+      for (auto& batch : batches) {
          utility::Tracer::Trace trace(processMorselSingle);
-         access(colIds, batchInfo, batch);
-         cb(batchInfo);
+         batchView.length = batch.getNumRows();
+         for (size_t i = 0; i < colIds.size(); i++) {
+            batchView.arrays[i] = batch.getArrayView(colIds[i]);
+         }
+         cb(&batchView);
          trace.stop();
       }
-      free(batchInfo);
    }
    ~ScanBatchesSingleThreadedTask() {
    }

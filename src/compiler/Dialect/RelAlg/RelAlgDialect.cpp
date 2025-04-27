@@ -1,7 +1,6 @@
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgDialect.h"
 
 #include "lingodb/compiler/Dialect/DB/IR/DBDialect.h"
-#include "lingodb/compiler/Dialect/DSA/IR/DSADialect.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "lingodb/utility/Serialization.h"
 
@@ -144,7 +143,7 @@ void RelAlgDialect::initialize() {
    addInterfaces<RelalgInlinerInterface>();
    addInterfaces<RelAlgFoldInterface>();
    getContext()->loadDialect<db::DBDialect>();
-   getContext()->loadDialect<dsa::DSADialect>();
+//getContext()->loadDialect<dsa::DSADialect>();
    getContext()->loadDialect<mlir::arith::ArithDialect>();
    getContext()->loadDialect<tuples::TupleStreamDialect>();
 

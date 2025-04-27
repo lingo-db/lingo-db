@@ -70,61 +70,61 @@ std::unique_ptr<lingodb::compiler::support::eval::expr> buildEvalExpr(mlir::Valu
          return support::eval::createInvalid();
       }
       auto type = constantOp.getType();
-      arrow::Type::type typeConstant = arrow::Type::type::NA;
+      ::arrow::Type::type typeConstant = ::arrow::Type::type::NA;
       uint32_t param1 = 0, param2 = 0;
       if (isIntegerType(type, 1)) {
-         typeConstant = arrow::Type::type::BOOL;
+         typeConstant = ::arrow::Type::type::BOOL;
       } else if (auto intWidth = getIntegerWidth(type, false)) {
          switch (intWidth) {
-            case 8: typeConstant = arrow::Type::type::INT8; break;
-            case 16: typeConstant = arrow::Type::type::INT16; break;
-            case 32: typeConstant = arrow::Type::type::INT32; break;
-            case 64: typeConstant = arrow::Type::type::INT64; break;
+            case 8: typeConstant = ::arrow::Type::type::INT8; break;
+            case 16: typeConstant = ::arrow::Type::type::INT16; break;
+            case 32: typeConstant = ::arrow::Type::type::INT32; break;
+            case 64: typeConstant = ::arrow::Type::type::INT64; break;
          }
       } else if (auto uIntWidth = getIntegerWidth(type, true)) {
          switch (uIntWidth) {
-            case 8: typeConstant = arrow::Type::type::UINT8; break;
-            case 16: typeConstant = arrow::Type::type::UINT16; break;
-            case 32: typeConstant = arrow::Type::type::UINT32; break;
-            case 64: typeConstant = arrow::Type::type::UINT64; break;
+            case 8: typeConstant = ::arrow::Type::type::UINT8; break;
+            case 16: typeConstant = ::arrow::Type::type::UINT16; break;
+            case 32: typeConstant = ::arrow::Type::type::UINT32; break;
+            case 64: typeConstant = ::arrow::Type::type::UINT64; break;
          }
       } else if (auto decimalType = mlir::dyn_cast_or_null<db::DecimalType>(type)) {
-         typeConstant = arrow::Type::type::DECIMAL128;
+         typeConstant = ::arrow::Type::type::DECIMAL128;
          param1 = decimalType.getP();
          param2 = decimalType.getS();
       } else if (auto floatType = mlir::dyn_cast_or_null<mlir::FloatType>(type)) {
          switch (floatType.getWidth()) {
-            case 16: typeConstant = arrow::Type::type::HALF_FLOAT; break;
-            case 32: typeConstant = arrow::Type::type::FLOAT; break;
-            case 64: typeConstant = arrow::Type::type::DOUBLE; break;
+            case 16: typeConstant = ::arrow::Type::type::HALF_FLOAT; break;
+            case 32: typeConstant = ::arrow::Type::type::FLOAT; break;
+            case 64: typeConstant = ::arrow::Type::type::DOUBLE; break;
          }
       } else if (auto stringType = mlir::dyn_cast_or_null<db::StringType>(type)) {
-         typeConstant = arrow::Type::type::STRING;
+         typeConstant = ::arrow::Type::type::STRING;
       } else if (auto dateType = mlir::dyn_cast_or_null<db::DateType>(type)) {
          if (dateType.getUnit() == db::DateUnitAttr::day) {
-            typeConstant = arrow::Type::type::DATE32;
+            typeConstant = ::arrow::Type::type::DATE32;
          } else {
-            typeConstant = arrow::Type::type::DATE64;
+            typeConstant = ::arrow::Type::type::DATE64;
          }
       } else if (auto charType = mlir::dyn_cast_or_null<db::CharType>(type)) {
          // we need to multiply by 4 to get the maximum number of required bytes (4 bytes per character utf-8)
          if (charType.getLen() <= 1) {
-            typeConstant = arrow::Type::type::FIXED_SIZE_BINARY;
+            typeConstant = ::arrow::Type::type::FIXED_SIZE_BINARY;
             param1 = charType.getLen() * 4;
          } else {
-            typeConstant = arrow::Type::type::STRING;
+            typeConstant = ::arrow::Type::type::STRING;
          }
       } else if (auto intervalType = mlir::dyn_cast_or_null<db::IntervalType>(type)) {
          if (intervalType.getUnit() == db::IntervalUnitAttr::months) {
-            typeConstant = arrow::Type::type::INTERVAL_MONTHS;
+            typeConstant = ::arrow::Type::type::INTERVAL_MONTHS;
          } else {
-            typeConstant = arrow::Type::type::INTERVAL_DAY_TIME;
+            typeConstant = ::arrow::Type::type::INTERVAL_DAY_TIME;
          }
       } else if (auto timestampType = mlir::dyn_cast_or_null<db::TimestampType>(type)) {
-         typeConstant = arrow::Type::type::TIMESTAMP;
+         typeConstant = ::arrow::Type::type::TIMESTAMP;
          param1 = static_cast<uint32_t>(timestampType.getUnit());
       }
-      assert(typeConstant != arrow::Type::type::NA);
+      assert(typeConstant != ::arrow::Type::type::NA);
 
       auto parseResult = support::parse(parseArg, typeConstant, param1);
       return support::eval::createLiteral(parseResult, std::make_tuple(typeConstant, param1, param2));
