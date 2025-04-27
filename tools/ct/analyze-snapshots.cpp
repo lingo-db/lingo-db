@@ -1,5 +1,5 @@
 #include "lingodb/compiler/Dialect/DB/IR/DBDialect.h"
-#include "lingodb/compiler/Dialect/DSA/IR/DSADialect.h"
+#include "lingodb/compiler/Dialect/Arrow//IR/ArrowDialect.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorDialect.h"
@@ -249,7 +249,7 @@ int main(int argc, char** argv) {
    registry.insert<tuples::TupleStreamDialect>();
    registry.insert<subop::SubOperatorDialect>();
    registry.insert<db::DBDialect>();
-   registry.insert<dsa::DSADialect>();
+   registry.insert<lingodb::compiler::dialect::arrow::ArrowDialect>();
    registry.insert<mlir::func::FuncDialect>();
    registry.insert<mlir::arith::ArithDialect>();
 

@@ -1,7 +1,7 @@
 #ifndef LINGODB_RUNTIME_LINGODBHASHINDEX_H
 #define LINGODB_RUNTIME_LINGODBHASHINDEX_H
 #include "lingodb/runtime/Buffer.h"
-#include "lingodb/runtime/RecordBatchInfo.h"
+#include "lingodb/runtime/ArrowView.h"
 #include "lingodb/runtime/storage/Index.h"
 #include "lingodb/utility/Serialization.h"
 #include <arrow/type_fwd.h>
@@ -73,15 +73,16 @@ class HashIndexIteration {
    HashIndexAccess& access;
    size_t hash;
    LingoDBHashIndex::Entry* current;
+   std::vector<const ArrayView*> arrayViewPtrs;
 
    public:
-   HashIndexIteration(HashIndexAccess& access, size_t hash, LingoDBHashIndex::Entry* current) : access(access), hash(hash), current(current) {}
+   HashIndexIteration(HashIndexAccess& access, size_t hash, LingoDBHashIndex::Entry* current);
    void reset(size_t hash, LingoDBHashIndex::Entry* current) {
       this->hash = hash;
       this->current = current;
    }
    bool hasNext();
-   void consumeRecordBatch(RecordBatchInfo*);
+   void consumeRecordBatch(lingodb::runtime::BatchView* batchView);
 };
 
 } //end namespace lingodb::runtime

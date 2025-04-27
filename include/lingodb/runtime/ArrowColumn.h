@@ -27,14 +27,8 @@ class ArrowColumnBuilder {
    static ArrowColumnBuilder* create(VarLen32 type);
    ArrowColumnBuilder* getChildBuilder();
    void addBool(bool isValid, bool value);
-   void addInt8(bool isValid, int8_t);
-   void addInt16(bool isValid, int16_t);
-   void addInt32(bool isValid, int32_t);
-   void addInt64(bool isValid, int64_t);
-   void addFloat32(bool isValid, float);
-   void addFloat64(bool isValid, double);
-   void addDecimal(bool isValid, __int128);
-   void addFixedSized(bool isValid, int64_t);
+   void addFixedSized(bool isValid, uint8_t* value);
+
    void addList(bool isValid);
    void addBinary(bool isValid, runtime::VarLen32);
    void merge(ArrowColumnBuilder* other);

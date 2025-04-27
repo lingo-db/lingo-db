@@ -1,7 +1,7 @@
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamDialect.h"
 
 #include "lingodb/compiler/Dialect/DB/IR/DBDialect.h"
-#include "lingodb/compiler/Dialect/DSA/IR/DSADialect.h"
+#include "lingodb/compiler/Dialect/Arrow/IR/ArrowDialect.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
@@ -44,7 +44,7 @@ void lingodb::compiler::dialect::tuples::TupleStreamDialect::initialize() {
    addInterfaces<TupleStreamInlinerInterface>();
    columnManager.setContext(getContext());
    getContext()->loadDialect<db::DBDialect>();
-   getContext()->loadDialect<dsa::DSADialect>();
+   getContext()->loadDialect<arrow::ArrowDialect>();
    getContext()->loadDialect<mlir::arith::ArithDialect>();
 }
 void lingodb::compiler::dialect::tuples::ColumnDefAttr::print(::mlir::AsmPrinter& printer) const {

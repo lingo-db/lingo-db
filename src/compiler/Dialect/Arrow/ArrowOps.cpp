@@ -1,5 +1,5 @@
-#include "lingodb/compiler/Dialect/DSA/IR/DSAOps.h"
-#include "lingodb/compiler/Dialect/DSA/IR/DSADialect.h"
+#include "lingodb/compiler/Dialect/Arrow/IR/ArrowOps.h"
+#include "lingodb/compiler/Dialect/Arrow/IR/ArrowDialect.h"
 #include "lingodb/compiler/Dialect/util/UtilOps.h"
 
 #include "mlir/IR/OpImplementation.h"
@@ -11,5 +11,4 @@
 using namespace mlir;
 
 #define GET_OP_CLASSES
-#include "lingodb/compiler/Dialect/DSA/IR/DSAOps.cpp.inc"
-#include "lingodb/compiler/Dialect/DSA/IR/DSAOpsInterfaces.cpp.inc"
+#include "lingodb/compiler/Dialect/Arrow/IR/ArrowOps.cpp.inc"

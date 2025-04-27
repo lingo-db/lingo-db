@@ -3,7 +3,7 @@ add_library(runtime OBJECT
         Tracing.cpp
         ArrowColumn.cpp
         ArrowTable.cpp
-        RecordBatchInfo.cpp
+        ArrowView.cpp
         ThreadLocal.cpp
         Heap.cpp
         DumpRuntime.cpp

@@ -5,17 +5,12 @@
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
-#include "lingodb/compiler/Dialect/DSA/IR/DSAOpsEnums.h"
-#include "lingodb/compiler/Dialect/DSA/IR/DSAOpsInterfaces.h"
-#include "lingodb/compiler/Dialect/DSA/IR/DSATypes.h"
+#include "lingodb/compiler/Dialect/Arrow/IR/ArrowTypes.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOpsInterfaces.h"
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 
 #define GET_OP_CLASSES
-#include "lingodb/compiler/Dialect/DSA/IR/DSAOps.h.inc"
-mlir::Type getBaseType(mlir::Type t);
-bool isIntegerType(mlir::Type, unsigned int width);
-int getIntegerWidth(mlir::Type, bool isUnSigned);
+#include "lingodb/compiler/Dialect/Arrow/IR/ArrowOps.h.inc"
 #endif //LINGODB_COMPILER_DIALECT_DSA_IR_DSAOPS_H

@@ -21,7 +21,7 @@ class TableSource : public lingodb::runtime::DataSource {
 
    public:
    TableSource(lingodb::runtime::TableStorage& tableStorage, std::unordered_map<std::string, std::string> memberToColumn) : tableStorage(tableStorage), memberToColumn(memberToColumn) {}
-   void iterate(bool parallel, std::vector<std::string> members, const std::function<void(lingodb::runtime::RecordBatchInfo*)>& cb) override {
+   void iterate(bool parallel, std::vector<std::string> members, const std::function<void(lingodb::runtime::BatchView*)>& cb) override {
       std::vector<std::string> columns;
       for (const auto& member : members) {
          columns.push_back(memberToColumn.at(member));
@@ -64,9 +64,9 @@ lingodb::runtime::DataSource* lingodb::runtime::DataSource::get(lingodb::runtime
    }
 }
 
-void lingodb::runtime::DataSourceIteration::iterate(bool parallel, void (*forEachChunk)(lingodb::runtime::RecordBatchInfo*, void*), void* context) {
+void lingodb::runtime::DataSourceIteration::iterate(bool parallel, void (*forEachChunk)(lingodb::runtime::BatchView*, void*), void* context) {
    utility::Tracer::Trace trace(tableScan);
-   dataSource->iterate(parallel, members, [context, forEachChunk](lingodb::runtime::RecordBatchInfo* recordBatchInfo) {
+   dataSource->iterate(parallel, members, [context, forEachChunk](lingodb::runtime::BatchView* recordBatchInfo) {
       forEachChunk(recordBatchInfo, context);
    });
    trace.stop();

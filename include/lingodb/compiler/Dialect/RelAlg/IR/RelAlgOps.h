@@ -7,7 +7,6 @@
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
 #include "lingodb/compiler/Dialect/DB/IR/DBTypes.h"
-#include "lingodb/compiler/Dialect/DSA/IR/DSATypes.h"
 
 #include "lingodb/compiler/Dialect/TupleStream/Column.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOpsAttributes.h"

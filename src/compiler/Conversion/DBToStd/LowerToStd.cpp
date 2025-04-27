@@ -1,11 +1,11 @@
 #include "lingodb/compiler/Conversion/DBToStd/DBToStd.h"
 #include "lingodb/compiler/Conversion/UtilToLLVM/Passes.h"
+#include "lingodb/compiler/Dialect/Arrow/IR/ArrowDialect.h"
+#include "lingodb/compiler/Dialect/Arrow/IR/ArrowOps.h"
 #include "lingodb/compiler/Dialect/DB/IR/DBDialect.h"
 #include "lingodb/compiler/Dialect/DB/IR/DBOps.h"
 #include "lingodb/compiler/Dialect/DB/IR/RuntimeFunctions.h"
 #include "lingodb/compiler/Dialect/DB/Passes.h"
-#include "lingodb/compiler/Dialect/DSA/IR/DSADialect.h"
-#include "lingodb/compiler/Dialect/DSA/IR/DSAOps.h"
 #include "lingodb/compiler/Dialect/util/FunctionHelper.h"
 #include "lingodb/compiler/Dialect/util/UtilDialect.h"
 #include "lingodb/compiler/Dialect/util/UtilOps.h"
@@ -75,103 +75,138 @@ class SimpleTypeConversionPattern : public ConversionPattern {
       return success();
    }
 };
-mlir::Type convertPhysicalSingle(mlir::Type t, const TypeConverter& typeConverter) {
-   MLIRContext* ctxt = t.getContext();
-   mlir::Type arrowPhysicalType = typeConverter.convertType(t);
-   if (auto decimalType = mlir::dyn_cast_or_null<db::DecimalType>(t)) {
-      arrowPhysicalType = dsa::ArrowDecimalType::get(ctxt, decimalType.getP(), decimalType.getS());
-   } else if (auto dateType = mlir::dyn_cast_or_null<db::DateType>(t)) {
-      arrowPhysicalType = dateType.getUnit() == db::DateUnitAttr::day ? (mlir::Type) dsa::ArrowDate32Type::get(t.getContext()) : (mlir::Type) dsa::ArrowDate64Type::get(t.getContext());
-   } else if (mlir::isa<util::VarLen32Type>(arrowPhysicalType)) {
-      arrowPhysicalType = dsa::ArrowStringType::get(t.getContext());
-   } else if (auto charType = mlir::dyn_cast_or_null<db::CharType>(t)) {
-      assert(charType.getLen() <= 1 && "at this point, all char arrays longer than 1 should already be converted to strings");
-      arrowPhysicalType = dsa::ArrowFixedSizedBinaryType::get(t.getContext(), 4 * charType.getLen());
-   } else if (auto timestampType = mlir::dyn_cast_or_null<db::TimestampType>(t)) {
-      switch (timestampType.getUnit()) {
-         case db::TimeUnitAttr::second:
-            arrowPhysicalType = dsa::ArrowTimeStampType::get(t.getContext(), dsa::TimeUnitAttr::second);
-            break;
-         case db::TimeUnitAttr::millisecond:
-            arrowPhysicalType = dsa::ArrowTimeStampType::get(t.getContext(), dsa::TimeUnitAttr::millisecond);
-            break;
-         case db::TimeUnitAttr::microsecond:
-            arrowPhysicalType = dsa::ArrowTimeStampType::get(t.getContext(), dsa::TimeUnitAttr::nanosecond);
-            break;
-         case db::TimeUnitAttr::nanosecond:
-            arrowPhysicalType = dsa::ArrowTimeStampType::get(t.getContext(), dsa::TimeUnitAttr::nanosecond);
-            break;
-      }
-   } else if (auto intervalType = mlir::dyn_cast_or_null<db::IntervalType>(t)) {
-      if (intervalType.getUnit() == db::IntervalUnitAttr::daytime) {
-         arrowPhysicalType = dsa::ArrowDayTimeIntervalType::get(t.getContext());
-      } else {
-         arrowPhysicalType = dsa::ArrowMonthIntervalType::get(t.getContext());
-      }
-   }
-   return arrowPhysicalType;
-};
-class AtLowering : public OpConversionPattern<dsa::At> {
+class LoadArrowOpLowering : public OpConversionPattern<db::LoadArrowOp> {
    public:
-   using OpConversionPattern<dsa::At>::OpConversionPattern;
-   LogicalResult matchAndRewrite(dsa::At atOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto loc = atOp->getLoc();
-      auto t = atOp.getType(0);
-      if (typeConverter->isLegal(t)) {
-         rewriter.startOpModification(atOp);
-         atOp->setOperands(adaptor.getOperands());
-         rewriter.finalizeOpModification(atOp);
-         return mlir::success();
+   using OpConversionPattern<db::LoadArrowOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(db::LoadArrowOp loadArrowOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = loadArrowOp->getLoc();
+      auto nullableType = mlir::dyn_cast_or_null<db::NullableType>(loadArrowOp.getType());
+      auto baseType = nullableType ? nullableType.getType() : loadArrowOp.getType();
+      auto convertedBaseType = typeConverter->convertType(baseType);
+      mlir::Value loaded;
+      auto array = adaptor.getArray();
+      auto offset = adaptor.getOffset();
+      //todo: add logic for other types (temporarily: also for some basic types, but especially high-level types defined by DB dialect)
+      if (baseType.isInteger(1)) {
+         loaded = rewriter.create<lingodb::compiler::dialect::arrow::LoadBoolOp>(loc, baseType, array, offset);
+      } else if (baseType.isInteger() || baseType.isF32() || baseType.isF64()) {
+         loaded = rewriter.create<lingodb::compiler::dialect::arrow::LoadFixedSizedOp>(loc, baseType, array, offset);
+      } else if (auto decimalType = mlir::dyn_cast_or_null<db::DecimalType>(baseType)) {
+         loaded = rewriter.create<lingodb::compiler::dialect::arrow::LoadFixedSizedOp>(loc, IntegerType::get(rewriter.getContext(), 128), array, offset);
+         if (convertedBaseType.getIntOrFloatBitWidth() != 128) {
+            loaded = rewriter.create<arith::TruncIOp>(loc, convertedBaseType, loaded);
+         }
+      } else if (auto dateType = mlir::dyn_cast_or_null<db::DateType>(baseType)) {
+         size_t multiplier;
+         if (dateType.getUnit() == db::DateUnitAttr::day) {
+            loaded = rewriter.create<lingodb::compiler::dialect::arrow::LoadFixedSizedOp>(loc, rewriter.getI32Type(), array, offset);
+            loaded = rewriter.create<arith::ExtSIOp>(loc, rewriter.getI64Type(), loaded);
+            multiplier = 86400000000000;
+
+         } else {
+            loaded = rewriter.create<lingodb::compiler::dialect::arrow::LoadFixedSizedOp>(loc, rewriter.getI64Type(), array, offset);
+            multiplier = 1000000;
+         }
+         mlir::Value multiplierConst = rewriter.create<mlir::arith::ConstantIntOp>(loc, multiplier, 64);
+         loaded = rewriter.create<mlir::arith::MulIOp>(loc, loaded, multiplierConst);
+      } else if (auto timestampType = mlir::dyn_cast_or_null<db::TimestampType>(baseType)) {
+         loaded = rewriter.create<lingodb::compiler::dialect::arrow::LoadFixedSizedOp>(loc, rewriter.getI64Type(), array, offset);
+         size_t multiplier = 1;
+         if (timestampType.getUnit() == db::TimeUnitAttr::second) {
+            multiplier = 1000000000;
+         } else if (timestampType.getUnit() == db::TimeUnitAttr::millisecond) {
+            multiplier = 1000000;
+         } else if (timestampType.getUnit() == db::TimeUnitAttr::microsecond) {
+            multiplier = 1000;
+         }
+         mlir::Value multiplierConst = rewriter.create<mlir::arith::ConstantIntOp>(loc, multiplier, 64);
+         loaded = rewriter.create<mlir::arith::MulIOp>(loc, loaded, multiplierConst);
+      } else if (mlir::isa<db::StringType>(baseType)) {
+         auto loadVarBinary = rewriter.create<lingodb::compiler::dialect::arrow::LoadVariableSizeBinaryOp>(loc, array, offset);
+         loaded = rewriter.create<util::CreateVarLen>(loc, util::VarLen32Type::get(rewriter.getContext()), loadVarBinary.getPtr(), loadVarBinary.getLength());
+      } else if (auto charType = mlir::dyn_cast_or_null<db::CharType>(baseType)) {
+         if (charType.getLen() <= 1) {
+            loaded = rewriter.create<lingodb::compiler::dialect::arrow::LoadFixedSizedOp>(loc, rewriter.getI32Type(), array, offset);
+         } else {
+            auto loadVarBinary = rewriter.create<lingodb::compiler::dialect::arrow::LoadVariableSizeBinaryOp>(loc, array, offset);
+            loaded = rewriter.create<util::CreateVarLen>(loc, util::VarLen32Type::get(rewriter.getContext()), loadVarBinary.getPtr(), loadVarBinary.getLength());
+         }
+      } else {
+         return mlir::failure();
       }
-      mlir::Type arrowPhysicalType = convertPhysicalSingle(t, *typeConverter);
-      llvm::SmallVector<mlir::Type> types;
-      types.push_back(arrowPhysicalType);
-      if (atOp.getValid()) {
-         types.push_back(rewriter.getI1Type());
+
+      if (nullableType) {
+         auto isValid = rewriter.create<lingodb::compiler::dialect::arrow::IsValidOp>(loc, array, offset);
+         mlir::Value isNull = rewriter.create<db::NotOp>(loc, isValid);
+         rewriter.replaceOpWithNewOp<util::PackOp>(loadArrowOp, mlir::ValueRange{isNull, loaded});
+      } else {
+         rewriter.replaceOp(loadArrowOp, loaded);
       }
-      std::vector<mlir::Value> values;
-      auto newAtOp = rewriter.create<dsa::At>(loc, types, adaptor.getCollection(), atOp.getPos());
-      mlir::Value nativeValue = newAtOp.getVal();
-      if (typeConverter->convertType(t) != nativeValue.getType()) {
-         nativeValue = rewriter.create<dsa::ArrowTypeTo>(loc, typeConverter->convertType(t), nativeValue);
-      }
-      values.push_back(nativeValue);
-      if (atOp.getValid()) {
-         values.push_back(newAtOp.getValid());
-      }
-      rewriter.replaceOp(atOp, values);
       return success();
    }
 };
 
-class AppendCBLowering : public ConversionPattern {
+class AppendArrowLowering : public OpConversionPattern<db::AppendArrowOp> {
    public:
-   explicit AppendCBLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, dsa::Append::getOperationName(), 2, context) {}
-
-   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      auto loc = op->getLoc();
-      dsa::AppendAdaptor adaptor(operands);
-      auto appendOp = mlir::cast<dsa::Append>(op);
-      if (!mlir::isa<dsa::ColumnBuilderType>(appendOp.getDs().getType())) {
-         return mlir::failure();
+   using OpConversionPattern<db::AppendArrowOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(db::AppendArrowOp appendArrowOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = appendArrowOp->getLoc();
+      auto nullableType = mlir::dyn_cast_or_null<db::NullableType>(appendArrowOp.getValue().getType());
+      auto builder = adaptor.getBuilder();
+      mlir::Value value = adaptor.getValue();
+      auto baseType = nullableType ? nullableType.getType() : appendArrowOp.getValue().getType();
+      auto convertedBaseType = typeConverter->convertType(baseType);
+      mlir::Value valid;
+      if (nullableType) {
+         auto res = rewriter.create<util::UnPackOp>(loc, adaptor.getValue());
+         value = res.getResult(1);
+         Value falseValue = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
+         valid = rewriter.create<arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::eq, res.getResult(0), falseValue);
       }
-      auto t = appendOp.getVal().getType();
-      if (typeConverter->isLegal(t)) {
-         rewriter.startOpModification(op);
-         appendOp->setOperands(operands);
-         rewriter.finalizeOpModification(op);
-         return mlir::success();
+      //todo: also support more base types here
+      if (baseType.isIndex()) {
+         rewriter.create<lingodb::compiler::dialect::arrow::AppendFixedSizedOp>(loc, builder, value, valid); //todo: necessary?
+      } else if (baseType.isInteger(1)) {
+         rewriter.create<lingodb::compiler::dialect::arrow::AppendBoolOp>(loc, builder, value, valid);
+      } else if (baseType.isInteger() || baseType.isF32() || baseType.isF64()) {
+         rewriter.create<lingodb::compiler::dialect::arrow::AppendFixedSizedOp>(loc, builder, value, valid);
+      } else if (auto decimalType = mlir::dyn_cast_or_null<db::DecimalType>(baseType)) {
+         if (convertedBaseType.getIntOrFloatBitWidth() != 128) {
+            value = rewriter.create<arith::ExtSIOp>(loc, IntegerType::get(rewriter.getContext(), 128), value);
+         }
+         rewriter.create<lingodb::compiler::dialect::arrow::AppendFixedSizedOp>(loc, builder, value, valid);
+      } else if (auto dateType = mlir::dyn_cast_or_null<db::DateType>(baseType)) {
+         size_t multiplier = dateType.getUnit() == db::DateUnitAttr::day ? 86400000000000 : 1000000;
+         mlir::Value multiplierConst = rewriter.create<mlir::arith::ConstantIntOp>(loc, multiplier, 64);
+         value = rewriter.create<mlir::arith::DivSIOp>(loc, value, multiplierConst);
+         if (dateType.getUnit() == db::DateUnitAttr::day) {
+            value = rewriter.create<arith::TruncIOp>(loc, rewriter.getI32Type(), value);
+         }
+         rewriter.create<lingodb::compiler::dialect::arrow::AppendFixedSizedOp>(loc, builder, value, valid);
+      } else if (auto timestampType = mlir::dyn_cast_or_null<db::TimestampType>(baseType)) {
+         size_t multiplier = 1;
+         if (timestampType.getUnit() == db::TimeUnitAttr::second) {
+            multiplier = 1000000000;
+         } else if (timestampType.getUnit() == db::TimeUnitAttr::millisecond) {
+            multiplier = 1000000;
+         } else if (timestampType.getUnit() == db::TimeUnitAttr::microsecond) {
+            multiplier = 1000;
+         }
+         mlir::Value multiplierConst = rewriter.create<mlir::arith::ConstantIntOp>(loc, multiplier, 64);
+         value = rewriter.create<mlir::arith::DivSIOp>(loc, value, multiplierConst);
+         rewriter.create<lingodb::compiler::dialect::arrow::AppendFixedSizedOp>(loc, builder, value, valid);
+      } else if (mlir::isa<db::StringType>(baseType)) {
+         rewriter.create<lingodb::compiler::dialect::arrow::AppendVariableSizeBinaryOp>(loc, builder, value, valid);
+      } else if (auto charType = mlir::dyn_cast_or_null<db::CharType>(baseType)) {
+         if (charType.getLen() <= 1) {
+            rewriter.create<lingodb::compiler::dialect::arrow::AppendFixedSizedOp>(loc, builder, value, valid);
+         } else {
+            rewriter.create<lingodb::compiler::dialect::arrow::AppendVariableSizeBinaryOp>(loc, builder, value, valid);
+         }
+      } else {
+         return failure();
       }
-      mlir::Type arrowPhysicalType = convertPhysicalSingle(t, *typeConverter);
-
-      mlir::Value val = adaptor.getVal();
-      if (val.getType() != arrowPhysicalType) {
-         val = rewriter.create<dsa::ArrowTypeFrom>(loc, arrowPhysicalType, val);
-      }
-      rewriter.create<dsa::Append>(loc, adaptor.getDs(), val, adaptor.getValid());
-
-      rewriter.eraseOp(op);
+      rewriter.eraseOp(appendArrowOp);
       return success();
    }
 };
@@ -210,6 +245,15 @@ class StringCastOpLowering : public OpConversionPattern<db::CastOp> {
             result = StringRuntime::toDate(rewriter, loc)({valueToCast})[0];
          } else if (mlir::isa<db::TimestampType>(scalarTargetType)) {
             result = StringRuntime::toTimestamp(rewriter, loc)({valueToCast})[0];
+         }else if (auto charType = mlir::dyn_cast_or_null<db::CharType>(scalarTargetType)) {
+            // chars with length 1 are stored as i32 and must converted, all other chars are already stored as strings
+            if (charType.getLen() <= 1) {
+               result = StringRuntime::toChar(rewriter, loc)({valueToCast})[0];
+            } else {
+               result = valueToCast;
+            }
+         } else {
+            return failure();
          }
       } else if (scalarSourceType.isInteger(1)) {
          result = StringRuntime::fromBool(rewriter, loc)({valueToCast})[0];
@@ -604,57 +648,57 @@ class NullOpLowering : public OpConversionPattern<db::NullOp> {
 };
 
 class ConstantLowering : public OpConversionPattern<db::ConstantOp> {
-   static std::tuple<arrow::Type::type, uint32_t, uint32_t> convertTypeToArrow(mlir::Type type) {
-      arrow::Type::type typeConstant = arrow::Type::type::NA;
+   static std::tuple<::arrow::Type::type, uint32_t, uint32_t> convertTypeToArrow(mlir::Type type) {
+      ::arrow::Type::type typeConstant = ::arrow::Type::type::NA;
       uint32_t param1 = 0, param2 = 0;
       if (isIntegerType(type, 1)) {
-         typeConstant = arrow::Type::type::BOOL;
+         typeConstant = ::arrow::Type::type::BOOL;
       } else if (auto intWidth = getIntegerWidth(type, false)) {
          switch (intWidth) {
-            case 8: typeConstant = arrow::Type::type::INT8; break;
-            case 16: typeConstant = arrow::Type::type::INT16; break;
-            case 32: typeConstant = arrow::Type::type::INT32; break;
-            case 64: typeConstant = arrow::Type::type::INT64; break;
+            case 8: typeConstant = ::arrow::Type::type::INT8; break;
+            case 16: typeConstant = ::arrow::Type::type::INT16; break;
+            case 32: typeConstant = ::arrow::Type::type::INT32; break;
+            case 64: typeConstant = ::arrow::Type::type::INT64; break;
          }
       } else if (auto uIntWidth = getIntegerWidth(type, true)) {
          switch (uIntWidth) {
-            case 8: typeConstant = arrow::Type::type::UINT8; break;
-            case 16: typeConstant = arrow::Type::type::UINT16; break;
-            case 32: typeConstant = arrow::Type::type::UINT32; break;
-            case 64: typeConstant = arrow::Type::type::UINT64; break;
+            case 8: typeConstant = ::arrow::Type::type::UINT8; break;
+            case 16: typeConstant = ::arrow::Type::type::UINT16; break;
+            case 32: typeConstant = ::arrow::Type::type::UINT32; break;
+            case 64: typeConstant = ::arrow::Type::type::UINT64; break;
          }
       } else if (auto decimalType = mlir::dyn_cast_or_null<db::DecimalType>(type)) {
-         typeConstant = arrow::Type::type::DECIMAL128;
+         typeConstant = ::arrow::Type::type::DECIMAL128;
          param1 = decimalType.getP();
          param2 = decimalType.getS();
       } else if (auto floatType = mlir::dyn_cast_or_null<mlir::FloatType>(type)) {
          switch (floatType.getWidth()) {
-            case 16: typeConstant = arrow::Type::type::HALF_FLOAT; break;
-            case 32: typeConstant = arrow::Type::type::FLOAT; break;
-            case 64: typeConstant = arrow::Type::type::DOUBLE; break;
+            case 16: typeConstant = ::arrow::Type::type::HALF_FLOAT; break;
+            case 32: typeConstant = ::arrow::Type::type::FLOAT; break;
+            case 64: typeConstant = ::arrow::Type::type::DOUBLE; break;
          }
       } else if (auto stringType = mlir::dyn_cast_or_null<db::StringType>(type)) {
-         typeConstant = arrow::Type::type::STRING;
+         typeConstant = ::arrow::Type::type::STRING;
       } else if (auto dateType = mlir::dyn_cast_or_null<db::DateType>(type)) {
          if (dateType.getUnit() == db::DateUnitAttr::day) {
-            typeConstant = arrow::Type::type::DATE32;
+            typeConstant = ::arrow::Type::type::DATE32;
          } else {
-            typeConstant = arrow::Type::type::DATE64;
+            typeConstant = ::arrow::Type::type::DATE64;
          }
       } else if (auto charType = mlir::dyn_cast_or_null<db::CharType>(type)) {
-         typeConstant = arrow::Type::type::FIXED_SIZE_BINARY;
+         typeConstant = ::arrow::Type::type::FIXED_SIZE_BINARY;
          param1 = charType.getLen();
       } else if (auto intervalType = mlir::dyn_cast_or_null<db::IntervalType>(type)) {
          if (intervalType.getUnit() == db::IntervalUnitAttr::months) {
-            typeConstant = arrow::Type::type::INTERVAL_MONTHS;
+            typeConstant = ::arrow::Type::type::INTERVAL_MONTHS;
          } else {
-            typeConstant = arrow::Type::type::INTERVAL_DAY_TIME;
+            typeConstant = ::arrow::Type::type::INTERVAL_DAY_TIME;
          }
       } else if (auto timestampType = mlir::dyn_cast_or_null<db::TimestampType>(type)) {
-         typeConstant = arrow::Type::type::TIMESTAMP;
+         typeConstant = ::arrow::Type::type::TIMESTAMP;
          param1 = static_cast<uint32_t>(timestampType.getUnit());
       }
-      assert(typeConstant != arrow::Type::type::NA);
+      assert(typeConstant != ::arrow::Type::type::NA);
       return {typeConstant, param1, param2};
    }
 
@@ -1050,7 +1094,7 @@ void DBToStdLoweringPass::runOnOperation() {
    });
    auto opIsWithoutDBTypes = [&](Operation* op) { return !hasDBType(typeConverter, op->getOperandTypes()) && !hasDBType(typeConverter, op->getResultTypes()); };
    target.addDynamicallyLegalDialect<scf::SCFDialect>(opIsWithoutDBTypes);
-   target.addDynamicallyLegalDialect<dsa::DSADialect>(opIsWithoutDBTypes);
+   target.addDynamicallyLegalDialect<lingodb::compiler::dialect::arrow::ArrowDialect>(opIsWithoutDBTypes);
    target.addDynamicallyLegalDialect<arith::ArithDialect>(opIsWithoutDBTypes);
 
    target.addLegalDialect<cf::ControlFlowDialect>();
@@ -1082,7 +1126,7 @@ void DBToStdLoweringPass::runOnOperation() {
       return convertTuple(tupleType, typeConverter);
    });
 
-   auto convertPhysical = [&](mlir::TupleType tuple) -> mlir::TupleType {
+   /*auto convertPhysical = [&](mlir::TupleType tuple) -> mlir::TupleType {
       std::vector<mlir::Type> types;
       for (auto t : tuple.getTypes()) {
          mlir::Type arrowPhysicalType = convertPhysicalSingle(t, typeConverter);
@@ -1102,8 +1146,8 @@ void DBToStdLoweringPass::runOnOperation() {
    });
    typeConverter.addConversion([&](dsa::ColumnType r) {
       return dsa::ColumnType::get(r.getContext(), convertPhysicalSingle(r.getType(), typeConverter));
-   });
-   typeConverter.addConversion([&](dsa::TableType r) { return dsa::TableType::get(r.getContext(), convertPhysical(r.getRowType())); });
+   });*/
+   //typeConverter.addConversion([&](dsa::TableType r) { return dsa::TableType::get(r.getContext(), convertPhysical(r.getRowType())); });
    RewritePatternSet patterns(&getContext());
 
    mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::func::FuncOp>(patterns, typeConverter);
@@ -1114,18 +1158,8 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<SimpleTypeConversionPattern<mlir::func::ConstantOp>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::func::CallIndirectOp>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::arith::SelectOp>>(typeConverter, &getContext());
-   patterns.insert<SimpleTypeConversionPattern<dsa::GetRecord>>(typeConverter, &getContext());
-   patterns.insert<SimpleTypeConversionPattern<dsa::GetRecordBatchLen>>(typeConverter, &getContext());
-   patterns.insert<SimpleTypeConversionPattern<dsa::Append>>(typeConverter, &getContext());
-   patterns.insert<SimpleTypeConversionPattern<dsa::DownCast>>(typeConverter, &getContext());
-   patterns.insert<SimpleTypeConversionPattern<dsa::CreateDS>>(typeConverter, &getContext());
-   //patterns.insert<SimpleTypeConversionPattern<dsa::YieldOp>>(typeConverter, &getContext());
-   patterns.insert<SimpleTypeConversionPattern<dsa::CreateTable>>(typeConverter, &getContext());
-   patterns.insert<SimpleTypeConversionPattern<dsa::Concat>>(typeConverter, &getContext());
-   patterns.insert<SimpleTypeConversionPattern<dsa::FinishColumn>>(typeConverter, &getContext());
-   patterns.insert<SimpleTypeConversionPattern<dsa::SetResultOp>>(typeConverter, &getContext());
-   patterns.insert<AtLowering>(typeConverter, &getContext());
-   patterns.insert<AppendCBLowering>(typeConverter, &getContext());
+   patterns.insert<LoadArrowOpLowering>(typeConverter, &getContext());
+   patterns.insert<AppendArrowLowering>(typeConverter, &getContext());
    //patterns.insert<SimpleTypeConversionPattern<dsa::ForOp>>(typeConverter, &getContext());
    patterns.insert<StringCmpOpLowering>(typeConverter, ctxt);
    patterns.insert<CharCmpOpLowering>(typeConverter, ctxt);

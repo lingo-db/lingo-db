@@ -1,6 +1,6 @@
 #ifndef LINGODB_RUNTIME_STORAGE_TABLESTORAGE_H
 #define LINGODB_RUNTIME_STORAGE_TABLESTORAGE_H
-#include "lingodb/runtime/RecordBatchInfo.h"
+#include "lingodb/runtime/ArrowView.h"
 #include "lingodb/scheduler/Task.h"
 
 #include <functional>
@@ -12,7 +12,7 @@ namespace lingodb::runtime {
 struct ScanConfig {
    bool parallel;
    std::vector<std::string> columns;
-   std::function<void(lingodb::runtime::RecordBatchInfo*)> cb;
+   std::function<void(lingodb::runtime::BatchView*)> cb;
 };
 class TableStorage {
    public:

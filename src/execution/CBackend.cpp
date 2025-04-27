@@ -40,6 +40,7 @@ class DefaultCBackend : public lingodb::execution::ExecutionBackend {
       std::ofstream outputFile(currPath + "/mlir-c-module.cpp");
       outputFile << "#include<cstdint>\n"
                     "#include<tuple>\n"
+                    "#include<bit>\n"
                     "#include<math.h>\n"
                     "#include \"lingodb/runtime/helpers.h\"\n"
                     "#include \"lingodb/runtime/Buffer.h\"\n"

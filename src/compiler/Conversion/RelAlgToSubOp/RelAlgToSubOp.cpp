@@ -3,7 +3,7 @@
 #include "lingodb/compiler/Conversion/RelAlgToSubOp/OrderedAttributes.h"
 #include "lingodb/compiler/Dialect/DB/IR/DBDialect.h"
 #include "lingodb/compiler/Dialect/DB/IR/DBOps.h"
-#include "lingodb/compiler/Dialect/DSA/IR/DSADialect.h"
+#include "lingodb/compiler/Dialect/Arrow/IR/ArrowDialect.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorDialect.h"
@@ -2953,7 +2953,7 @@ void RelalgToSubOpLoweringPass::runOnOperation() {
    target.addIllegalDialect<relalg::RelAlgDialect>();
    target.addLegalDialect<subop::SubOperatorDialect>();
    target.addLegalDialect<db::DBDialect>();
-   target.addLegalDialect<dsa::DSADialect>();
+   target.addLegalDialect<lingodb::compiler::dialect::arrow::ArrowDialect>();
 
    target.addLegalDialect<tuples::TupleStreamDialect>();
    target.addLegalDialect<func::FuncDialect>();

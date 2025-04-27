@@ -11,18 +11,7 @@
 --//CHECK:         return
 --//CHECK:     }
 --//CHECK: }
-
 select 1;
---//CHECK: module {
---//CHECK:     func.func @main() {
---//CHECK:         %{{.*}} = relalg.basetable {table_identifier = "test"} columns: {bool => @test::@bool({type = !db.nullable<i1>}), date32 => @test::@date32({type = !db.nullable<!db.date<day>>}), date64 => @test::@date64({type = !db.nullable<!db.timestamp<nanosecond>>}), decimal => @test::@decimal({type = !db.nullable<!db.decimal<5, 2>>}), float32 => @test::@float32({type = !db.nullable<f32>}), float64 => @test::@float64({type = !db.nullable<f64>}), int32 => @test::@int32({type = !db.nullable<i32>}), int64 => @test::@int64({type = !db.nullable<i64>}), str => @test::@str({type = !db.nullable<!db.string>})}
---//CHECK:         %{{.*}} = relalg.materialize %{{.*}} [@test::@str,@test::@float32,@test::@float64,@test::@decimal,@test::@int32,@test::@int64,@test::@bool,@test::@date32,@test::@date64] => ["str", "float32", "float64", "decimal", "int32", "int64", "bool", "date32", "date64"] : !subop.local_table<[str$0 : !db.nullable<!db.string>, float32$0 : !db.nullable<f32>, float64$0 : !db.nullable<f64>, decimal$0 : !db.nullable<!db.decimal<5, 2>>, int32$0 : !db.nullable<i32>, int64$0 : !db.nullable<i64>, bool$0 : !db.nullable<i1>, date32$0 : !db.nullable<!db.date<day>>, date64$0 : !db.nullable<!db.timestamp<nanosecond>>], ["str", "float32", "float64", "decimal", "int32", "int64", "bool", "date32", "date64"]>
---//CHECK:         subop.set_result 0 %{{.*}} : !subop.local_table<[str$0 : !db.nullable<!db.string>, float32$0 : !db.nullable<f32>, float64$0 : !db.nullable<f64>, decimal$0 : !db.nullable<!db.decimal<5, 2>>, int32$0 : !db.nullable<i32>, int64$0 : !db.nullable<i64>, bool$0 : !db.nullable<i1>, date32$0 : !db.nullable<!db.date<day>>, date64$0 : !db.nullable<!db.timestamp<nanosecond>>], ["str", "float32", "float64", "decimal", "int32", "int64", "bool", "date32", "date64"]>
---//CHECK:         return
---//CHECK:     }
---//CHECK: }
-
-select * from test;
 --//CHECK: module
 --//CHECK: %{{.*}} = db.add %{{.*}} : i32, %{{.*}} : i32
 select 3+2;
@@ -213,7 +202,7 @@ create table test(
 --//CHECK: %{{.*}} = relalg.materialize
 --//CHECK: subop.set_result 0
 --//CHECK: call @{{.*}}RelationHelper{{.*}}appendTableFromResult{{.*}}(%{{.*}}, %{{.*}}) : (!util.varlen32, i64) -> ()
-INSERT into test(str, float32, float64, decimal, int32, int64, bool, date32, date64) values ('str', 1.1, 1.1, 1.10, 1, 1, 1, '1966-01-02', '1996-01-02'), (null, null, null, null, null, null, null, null, null);
+INSERT into test(str, float32, float64, decimal, int32, int64, bool, date32, date64, char1, char20) values ('str', 1.1, 1.1, 1.10, 1, 1, 1, '1996-01-02', '1996-01-02 13:37','a','abcdefghijklmnopqrst'), (null, null, null, null, null, null, null, null, null, null, null);
 --//CHECK: module
 --//CHECK: %{{.*}} = util.varlen32_create_const "test"
 --//CHECK: %{{.*}} = util.varlen32_create_const "t.csv"

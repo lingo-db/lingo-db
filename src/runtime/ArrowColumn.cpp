@@ -14,6 +14,15 @@ std::shared_ptr<arrow::Array> cast(std::shared_ptr<arrow::Array> array, std::sha
    return arrow::MakeArray(arrayData);
 }
 //todo: avoid this
+std::shared_ptr<arrow::DataType> physicalType(std::shared_ptr<arrow::DataType> t) {
+   auto byteWidth = t->byte_width();
+   //non-fixed-width, or fixed-width< 1 byte (e.g., boolean)
+   if (byteWidth <= 0) {
+      return t;
+   } else {
+      return arrow::fixed_size_binary(byteWidth);
+   }
+}
 
 std::shared_ptr<arrow::DataType> createType(std::string name, uint32_t p1, uint32_t p2) {
    if (name == "int") {
@@ -91,7 +100,7 @@ ArrowColumnBuilder* ArrowColumnBuilder::create(VarLen32 type) {
 }
 
 ArrowColumnBuilder::ArrowColumnBuilder(std::shared_ptr<arrow::DataType> type) : type(type) {
-   builderUnique = arrow::MakeBuilder(GetPhysicalType(type)).ValueOrDie();
+   builderUnique = arrow::MakeBuilder(physicalType(type)).ValueOrDie();
    auto reserveOk = builderUnique->Reserve(20000).ok();
    assert(reserveOk);
    builder = builderUnique.get();
@@ -137,32 +146,14 @@ void ArrowColumnBuilder::addBool(bool isValid, bool value) {
       handleStatus(typedBuilder->Append(value));
    }
 }
-#define COLUMN_BUILDER_ADD_PRIMITIVE(name, blubb)                                              \
-   void ArrowColumnBuilder::add##name(bool isValid, arrow::blubb ::c_type val) {               \
-      next();                                                                                  \
-      auto* typedBuilder = reinterpret_cast<arrow::NumericBuilder<arrow::blubb>*>(builder);    \
-      if (!isValid) {                                                                          \
-         handleStatus(typedBuilder->AppendNull()); /*NOLINT (clang-diagnostic-unused-result)*/ \
-      } else {                                                                                 \
-         handleStatus(typedBuilder->Append(val)); /*NOLINT (clang-diagnostic-unused-result)*/  \
-      }                                                                                        \
-   }
 
-COLUMN_BUILDER_ADD_PRIMITIVE(Int8, Int8Type)
-COLUMN_BUILDER_ADD_PRIMITIVE(Int16, Int16Type)
-COLUMN_BUILDER_ADD_PRIMITIVE(Int32, Int32Type)
-COLUMN_BUILDER_ADD_PRIMITIVE(Int64, Int64Type)
-COLUMN_BUILDER_ADD_PRIMITIVE(Float32, FloatType)
-COLUMN_BUILDER_ADD_PRIMITIVE(Float64, DoubleType)
-
-void ArrowColumnBuilder::addDecimal(bool isValid, __int128 value) {
+void ArrowColumnBuilder::addFixedSized(bool isValid, uint8_t* value) {
    next();
-   auto* typedBuilder = reinterpret_cast<arrow::Decimal128Builder*>(builder);
+   auto* typedBuilder = reinterpret_cast<arrow::FixedSizeBinaryBuilder*>(builder);
    if (!isValid) {
       handleStatus(typedBuilder->AppendNull());
    } else {
-      arrow::Decimal128 decimalrep(arrow::BasicDecimal128(value >> 64, value));
-      handleStatus(typedBuilder->Append(decimalrep));
+      handleStatus(typedBuilder->Append(value));
    }
 }
 void ArrowColumnBuilder::addBinary(bool isValid, lingodb::runtime::VarLen32 string) {
@@ -173,15 +164,6 @@ void ArrowColumnBuilder::addBinary(bool isValid, lingodb::runtime::VarLen32 stri
    } else {
       std::string str = (string).str();
       handleStatus(typedBuilder->Append(string.getPtr(), string.getLen()));
-   }
-}
-void ArrowColumnBuilder::addFixedSized(bool isValid, int64_t val) {
-   next();
-   auto* typedBuilder = reinterpret_cast<arrow::FixedSizeBinaryBuilder*>(builder);
-   if (!isValid) {
-      handleStatus(typedBuilder->AppendNull());
-   } else {
-      handleStatus(typedBuilder->Append(reinterpret_cast<char*>(&val)));
    }
 }
 void ArrowColumnBuilder::addList(bool isValid) {

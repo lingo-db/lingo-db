@@ -384,6 +384,11 @@ lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::fromTimestamp(int64_
    return lingodb::runtime::VarLen32::fromString(asString);
 }
 
+int32_t lingodb::runtime::StringRuntime::toChar(VarLen32 str) {
+   assert(str.getLen() <= 4);
+   return str.first4;
+}
+
 extern "C" lingodb::runtime::VarLen32 createVarLen32(uint8_t* ptr, uint32_t len) { //NOLINT(clang-diagnostic-return-type-c-linkage)
    return lingodb::runtime::VarLen32(ptr, len);
 }
