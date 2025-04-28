@@ -1,7 +1,6 @@
-name: build+test (macOS)
+name: build+test (macOS 15 aarch64)
 
 on:
-  push:
   pull_request:
 
 jobs:
@@ -31,15 +30,16 @@ jobs:
           path: |
             /opt/homebrew
             ~/Library/Caches/Homebrew
-          key: brew-${{ runner.os }}-${{ hashFiles('.github/workflows/workflow-macos.yml') }}
+          key: brew-macos-15-${{ hashFiles('.github/workflows/workflow-macos-15-aarch64.yml') }}
           restore-keys: |
-            brew-${{ runner.os }}-
+            brew-macos-15-
 
       - name: Install dependencies with Homebrew
         run: |
           brew update
           brew install ccache cmake ninja llvm@20 catch2 lit
-          brew install apache-arrow --HEAD
+          brew tap lingo-db/homebrew https://github.com/lingo-db/homebrew.git
+          brew install lingo-db/homebrew/apache-arrow@20
           brew link --force llvm
 
       - name: Build
@@ -81,9 +81,9 @@ jobs:
           path: |
             /opt/homebrew
             ~/Library/Caches/Homebrew
-          key: brew-${{ runner.os }}-${{ hashFiles('.github/workflows/workflow-macos.yml') }}
+          key: brew-macos-15-${{ hashFiles('.github/workflows/workflow-macos-15-aarch64.yml') }}
           restore-keys: |
-            brew-${{ runner.os }}-
+            brew-macos-15-
 
       - name: Test
         run: |
@@ -117,9 +117,9 @@ jobs:
           path: |
             /opt/homebrew
             ~/Library/Caches/Homebrew
-          key: brew-${{ runner.os }}-${{ hashFiles('.github/workflows/workflow-macos.yml') }}
+          key: brew-macos-15-${{ hashFiles('.github/workflows/workflow-macos-15-aarch64.yml') }}
           restore-keys: |
-            brew-${{ runner.os }}-
+            brew-macos-15-
 
       - name: Test
         run: |
@@ -152,9 +152,9 @@ jobs:
           path: |
             /opt/homebrew
             ~/Library/Caches/Homebrew
-          key: brew-${{ runner.os }}-${{ hashFiles('.github/workflows/workflow-macos.yml') }}
+          key: brew-macos-15-${{ hashFiles('.github/workflows/workflow-macos-15-aarch64.yml') }}
           restore-keys: |
-            brew-${{ runner.os }}-
+            brew-macos-15-
 
       - name: Cache datasets
         id: cache-datasets
@@ -188,7 +188,7 @@ jobs:
       - name: Test
         run: |
           export ASAN_OPTIONS="detect_leaks=0 detect_container_overflow=0"
-          chmod +x ./build/lingodb-${{ matrix.build_type }}/sql
+          chmod +x ./build/lingodb-${{ matrix.build_type }}/sqlite-tester
 
           ./build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpchSf1.test ~/db/tpch-1
           ./build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpcdsSf1.test ~/db/tpcds-1
