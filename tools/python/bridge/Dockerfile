@@ -22,9 +22,9 @@ RUN  cmake --build build --target install -j$(nproc)
 
 FROM baseimg AS devimg
 COPY --from=buildllvm /built-llvm /built-llvm
-RUN wget https://dlcdn.apache.org/arrow/arrow-19.0.1/apache-arrow-19.0.1.tar.gz && tar -xf apache-arrow-19.0.1.tar.gz && rm apache-arrow-19.0.1.tar.gz
+RUN wget https://dlcdn.apache.org/arrow/arrow-20.0.0/apache-arrow-20.0.0.tar.gz && tar -xf apache-arrow-20.0.0.tar.gz && rm apache-arrow-20.0.0.tar.gz
 RUN mkdir /built-arrow
-RUN cd /apache-arrow-19.0.1/cpp && cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/built-arrow -DARROW_DEPENDENCY_SOURCE=BUNDLED -DARROW_BUILD_STATIC=ON -DARROW_CSV=ON -DARROW_COMPUTE=ON && cmake --build build --target install -j$(nproc) && cd .. && rm  -r /apache-arrow-19.0.1
+RUN cd /apache-arrow-20.0.0/cpp && cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/built-arrow -DARROW_DEPENDENCY_SOURCE=BUNDLED -DARROW_BUILD_STATIC=ON -DARROW_CSV=ON -DARROW_COMPUTE=ON && cmake --build build --target install -j$(nproc) && cd .. && rm  -r /apache-arrow-20.0.0
 RUN wget https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.0-rc1/llvm-project-20.1.0-rc1.src.tar.xz && tar -xf llvm-project-20.1.0-rc1.src.tar.xz && mv /llvm-project-20.1.0-rc1.src /llvm-src
 RUN wget https://archives.boost.io/release/1.83.0/source/boost_1_83_0.tar.gz && tar -xf boost_1_83_0.tar.gz && cd boost_1_83_0 && ./bootstrap.sh --prefix=/usr && ./b2 install --with-context && cd .. && rm -rf boost_1_83_0
 

@@ -29,7 +29,7 @@ include(FindZLIB)
 message("Using ZLIB: ${ZLIB_INCLUDE_DIRS}")
 message("Using Python3: ${Python3_EXECUTABLE}")
 
-find_package(Arrow 19 REQUIRED)
+find_package(Arrow 20 REQUIRED)
 
 option(ENABLE_GPU_BACKEND "enable GPU backend" OFF)
 option(ENABLE_TESTS "enable tests" ON)
