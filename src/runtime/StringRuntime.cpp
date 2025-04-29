@@ -99,7 +99,7 @@ bool lingodb::runtime::StringRuntime::startsWith(lingodb::runtime::VarLen32 str1
 //source https://github.com/apache/arrow/blob/41d115071587d68891b219cc137551d3ea9a568b/cpp/src/gandiva/gdv_function_stubs.cc
 //Apache-2.0 License
 #define CAST_NUMERIC_FROM_STRING(OUT_TYPE, ARROW_TYPE, TYPE_NAME)                                                                                 \
-   OUT_TYPE lingodb::runtime::StringRuntime::to##TYPE_NAME(lingodb::runtime::VarLen32 str) { /* NOLINT (clang-diagnostic-return-type-c-linkage)*/ \
+   OUT_TYPE lingodb::runtime::StringRuntime::to## TYPE_NAME(lingodb::runtime::VarLen32 str) { /* NOLINT (clang-diagnostic-return-type-c-linkage)*/ \
       char* data = (str).data();                                                                                                                  \
       int32_t len = (str).getLen();                                                                                                               \
       OUT_TYPE val = 0;                                                                                                                           \
@@ -142,7 +142,7 @@ __int128 lingodb::runtime::StringRuntime::toDecimal(lingodb::runtime::VarLen32 s
    return res;
 }
 #define CAST_NUMERIC_TO_STRING(IN_TYPE, ARROW_TYPE, TYPE_NAME)                                                                                       \
-   lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::from##TYPE_NAME(IN_TYPE value) { /* NOLINT (clang-diagnostic-return-type-c-linkage)*/ \
+   lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::from## TYPE_NAME(IN_TYPE value) { /* NOLINT (clang-diagnostic-return-type-c-linkage)*/ \
       arrow::internal::StringFormatter<ARROW_TYPE> formatter;                                                                                        \
       uint8_t* data = nullptr;                                                                                                                       \
       size_t len = 0;                                                                                                                                \
@@ -174,7 +174,7 @@ lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::fromChar(uint64_t va
 }
 
 #define STR_CMP(NAME, OP)                                                                                                  \
-   bool lingodb::runtime::StringRuntime::compare##NAME(lingodb::runtime::VarLen32 str1, lingodb::runtime::VarLen32 str2) { \
+   bool lingodb::runtime::StringRuntime::compare## NAME(lingodb::runtime::VarLen32 str1, lingodb::runtime::VarLen32 str2) { \
       return std::string_view(str1.data(), str1.getLen()) OP std::string_view(str2.data(), str2.getLen());                 \
    }
 
@@ -195,11 +195,84 @@ bool lingodb::runtime::StringRuntime::compareNEq(lingodb::runtime::VarLen32 str1
 EXPORT char* rt_varlen_to_ref(lingodb::runtime::VarLen32* varlen) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    return varlen->data();
 }
-lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::substr(lingodb::runtime::VarLen32 str, size_t from, size_t to) { // NOLINT (clang-diagnostic-return-type-c-linkage)
-   from -= 1;
-   to = std::min((size_t) str.getLen(), to);
-   if (from > to || str.getLen() < to) throw std::runtime_error("can not perform substring operation");
-   return lingodb::runtime::VarLen32::fromString(str.str().substr(from, to - from));
+
+int64_t lingodb::runtime::StringRuntime::len(VarLen32 str) {
+   char* data = str.data();
+   uint32_t byteLen = str.getLen();
+
+   // start with byteLen, subtract at every continuation (starting with b10xxxxxx)
+   uint32_t charLen = byteLen;
+
+   for (uint32_t i=0;i<byteLen;i++) {
+      const unsigned char c = data[i];
+      uint8_t shifted = c>>6;
+      charLen -= (shifted == 2);
+   }
+
+   return charLen;
+}
+
+size_t charIndexToByteIndex(lingodb::runtime::VarLen32 str, size_t charIndex, size_t knownByteIndex = 0, size_t knownCharIndex = 0) {
+
+   // TODO explain parameters template?
+   /*
+    * knownByteIndex and knownCharIndex: already known mappings from previous runs
+    * charIndex < len(str) length being in the utf-8 sense
+    * knownByteIndex should map to the first byte of the knownCharIndex
+    */
+
+   char* data = str.data();
+   uint32_t byteLen = str.getLen();
+
+
+
+   for (; knownByteIndex<byteLen; knownByteIndex++) {
+
+      const unsigned char c = data[knownByteIndex];
+      uint8_t shifted = c>>6;
+
+      // if not a continuation
+      if (shifted != 2) {
+         if (knownCharIndex == charIndex) {
+            return knownByteIndex;
+         }
+         knownCharIndex++;
+      }
+   }
+
+   return knownByteIndex; // returns the byteLength;
+
+}
+
+lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::substr(lingodb::runtime::VarLen32 str, size_t from, size_t len) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+
+   /*
+    * Legal values:
+    * - from goes from 1 to len
+    * - len goes from 0 to (strLen-from +1)
+    *
+    * if we get an illegal value, we convert it to the most sensible legal value before continuing computation
+    * we then convert the value of from to from-1 to work with c++ structures
+   */
+
+   size_t strLen = lingodb::runtime::StringRuntime::len(str);
+
+   from = std::min(
+         std::max(from, static_cast<size_t>(1)),
+         strLen
+      );
+
+   len = std::min(
+            std::max(static_cast<size_t>(0), len),
+            strLen- from +1
+      );
+
+   from --;
+
+   size_t byteFrom = charIndexToByteIndex(str, from);
+   size_t byteTo = charIndexToByteIndex(str, from+len, byteFrom, from);
+
+   return lingodb::runtime::VarLen32::fromString(str.str().substr(byteFrom, byteTo-byteFrom));
 }
 
 size_t lingodb::runtime::StringRuntime::findMatch(VarLen32 str, VarLen32 needle, size_t start, size_t end) {
@@ -226,21 +299,6 @@ void toUpper(char* str, size_t len) {
    }
 }
 } // namespace
-int64_t lingodb::runtime::StringRuntime::len(VarLen32 str) {
-   char* data = str.data();
-   uint32_t byteLen = str.getLen();
-
-   // start with byteLen, subtract at every continuation (starting with b10xxxxxx)
-   uint32_t charLen = byteLen;
-
-   for (uint32_t i=0;i<byteLen;i++) {
-      const unsigned char c = data[i];
-      uint8_t shifted = c>>6;
-      charLen -= (shifted == 2);
-   }
-
-   return charLen;
-}
 lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::toUpper(lingodb::runtime::VarLen32 str) {
    if (str.isShort()) {
       ::toUpper(str.data(), str.getLen());
