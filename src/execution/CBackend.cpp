@@ -20,9 +20,8 @@
 #include "dlfcn.h"
 #include "unistd.h"
 
-lingodb::utility::GlobalSetting<std::string> cBackendCompilerDriver("system.compilation.c_backend_compiler_driver", "c++");
-
 namespace {
+lingodb::utility::GlobalSetting<std::string> cBackendCompilerDriver("system.compilation.c_backend_compiler_driver", "c++");
 
 class DefaultCBackend : public lingodb::execution::ExecutionBackend {
    void execute(mlir::ModuleOp& moduleOp, lingodb::runtime::ExecutionContext* executionContext) override {

@@ -2,8 +2,8 @@
 #include "lingodb/runtime/helpers.h"
 #include "lingodb/scheduler/Tasks.h"
 #include "lingodb/utility/Tracer.h"
-#include <atomic>
 #include <algorithm>
+#include <atomic>
 #include <iostream>
 
 namespace {

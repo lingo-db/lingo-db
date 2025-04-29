@@ -218,7 +218,7 @@ int main(int argc, const char** argv) {
    cppStream << "#include \"" << currentFile << "\"\n";
 
    // 0 = success, 1 = failure, 2 = success
-   if(1 == tool.run(newFrontendActionFactory(&finder).get())) {
+   if (1 == tool.run(newFrontendActionFactory(&finder).get())) {
       std::cerr << "Error during clang tools execution. Aborting. " << std::endl;
       return 1;
    }

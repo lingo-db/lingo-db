@@ -5,8 +5,8 @@
 #include <initializer_list>
 #include <string>
 #include <vector>
-#include <string.h> // for memcpy
 
+#include <string.h> // for memcpy
 #include <sys/mman.h>
 
 #define EXPORT extern "C" __attribute__((visibility("default")))
