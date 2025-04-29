@@ -137,11 +137,15 @@ clean:
 
 lint: build/lingodb-debug/.stamp
 	cmake --build build/lingodb-debug --target build_includes
-	sed -i 's/-fno-lifetime-dse//g' build/lingodb-debug/compile_commands.json
+	@if [ "$(shell uname)" = "Darwin" ]; then \
+		sed -i '' 's/-fno-lifetime-dse//g' build/lingodb-debug/compile_commands.json; \
+	else \
+		sed -i 's/-fno-lifetime-dse//g' build/lingodb-debug/compile_commands.json; \
+	fi
 	python3 tools/scripts/run-clang-tidy.py -p $(dir $<) -quiet -header-filter="$(shell pwd)/include/.*" -exclude="arrow|vendored" -clang-tidy-binary=clang-tidy-20
 
 format:
-	find include \( -name '*.cpp' -o -name '*.h' \) -exec clang-format -i {} +
-	find src \( -name '*.cpp' -o -name '*.h' \) -exec clang-format -i {} +
-	find tools \( -name '*.cpp' -o -name '*.h' \) -exec clang-format -i {} +
-	find test \( -name '*.cpp' -o -name '*.h' \) -exec clang-format -i {} +
+	find include \( -name '*.cpp' -o -name '*.h' \) -exec clang-format-20 -i {} +
+	find src \( -name '*.cpp' -o -name '*.h' \) -exec clang-format-20 -i {} +
+	find tools \( -name '*.cpp' -o -name '*.h' \) -exec clang-format-20 -i {} +
+	find test \( -name '*.cpp' -o -name '*.h' \) -exec clang-format-20 -i {} +

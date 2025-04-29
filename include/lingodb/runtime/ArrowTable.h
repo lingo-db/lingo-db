@@ -9,7 +9,7 @@ class ArrowTable {
    std::shared_ptr<arrow::Table> table;
 
    public:
-   ArrowTable(std::shared_ptr<arrow::Table> table) : table(table){};
+   ArrowTable(std::shared_ptr<arrow::Table> table) : table(table) {};
    static ArrowTable* createEmpty();
    ArrowTable* addColumn(VarLen32 name, ArrowColumn* column);
    ArrowColumn* getColumn(VarLen32 name);

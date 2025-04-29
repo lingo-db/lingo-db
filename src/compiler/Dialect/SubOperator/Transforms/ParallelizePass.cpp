@@ -18,14 +18,13 @@
 namespace {
 using namespace lingodb::compiler::dialect;
 
-static constexpr bool IS_X86 =
+static constexpr bool isX86 =
 #ifdef __x86_64__
    true
 #else
    false
 #endif
-;
-
+   ;
 
 struct ProblematicOp {
    subop::SubOperator op;
@@ -271,7 +270,7 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                               }
                            } else if (auto scatterOp = mlir::dyn_cast_or_null<subop::ScatterOp>(problematicOp.op.getOperation())) {
                               auto stateAccessing = problematicOp.stateAccessing;
-                              if (IS_X86 && collisionGroup.ops.size() == 1) {
+                              if (isX86 && collisionGroup.ops.size() == 1) {
                                  // TODO: check if this is actually a sane optimization on x86
                                  markAsAtomic.insert(scatterOp);
                               } else if (auto lookupOp = mlir::dyn_cast_or_null<subop::LookupOp>(stateAccessing.getOperation())) {
