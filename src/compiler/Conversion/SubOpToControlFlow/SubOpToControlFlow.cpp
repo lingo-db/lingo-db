@@ -264,62 +264,165 @@ class EntryStorageHelper {
       assert(mlir::isa<mlir::IntegerType>(storageType.getTypes().back()));
       return rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(rewriter.getContext(), storageType.getTypes().back()), ref, storageType.getTypes().size() - 1);
    }
-   void storeValues(mlir::Value ref, std::unordered_map<std::string, mlir::Value> values, mlir::OpBuilder& rewriter, mlir::Location loc) {
-      ref = ensureRefType(ref, rewriter, loc);
 
-      mlir::Value nullBitSetRef;
-      mlir::Value nullBitSet;
-      if (nullBitsetType) {
-         nullBitSetRef = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(rewriter.getContext(), nullBitsetType), ref, nullBitSetPos);
-         nullBitSet = rewriter.create<mlir::arith::ConstantIntOp>(loc, 0, nullBitsetType);
-      }
-      for (auto i = 0ul; i < members.getTypes().size(); i++) {
-         auto name = mlir::cast<mlir::StringAttr>(members.getNames()[i]).str();
-         const MemberInfo& memberInfo = memberInfos.at(name);
-         auto valueToStore = values[name];
-         if (memberInfo.isNullable) {
-            mlir::Value nullBit = rewriter.create<db::IsNullOp>(loc, valueToStore);
-            mlir::Value shiftAmount = rewriter.create<mlir::arith::ConstantIntOp>(loc, memberInfo.nullBitOffset, nullBitsetType);
-            mlir::Value shiftedNullBit = rewriter.create<mlir::arith::ShLIOp>(loc, rewriter.create<mlir::arith::ExtUIOp>(loc, nullBitsetType, nullBit), shiftAmount);
-            valueToStore = rewriter.create<db::NullableGetVal>(loc, valueToStore);
-            nullBitSet = rewriter.create<mlir::arith::OrIOp>(loc, nullBitSet, shiftedNullBit);
+   class LazyValueMap {
+      std::unordered_map<std::string, mlir::Value> values;
+      // name -> (isNull: i1) mapping
+      std::unordered_map<std::string, mlir::Value> nullBitCache;
+      std::optional<mlir::Value> nullBitSet;
+      std::optional<mlir::Value> nullBitSetRef;
+      mlir::Value ref;
+      bool refIsRefType = false;
+
+      mlir::OpBuilder& rewriter;
+      mlir::Location loc;
+      const EntryStorageHelper& esh;
+      mlir::ArrayAttr relevantMembers;
+
+      public:
+      LazyValueMap(mlir::Value ref, mlir::OpBuilder& rewriter, mlir::Location loc, const EntryStorageHelper& esh, ArrayAttr relevantMembers) : ref(ref), rewriter(rewriter), loc(loc), esh(esh), relevantMembers(relevantMembers) {
+         if (!relevantMembers) {
+            this->relevantMembers = esh.members.getNames();
          }
-         auto memberRef = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(rewriter.getContext(), memberInfo.stored), ref, memberInfo.offset);
-         rewriter.create<util::StoreOp>(loc, valueToStore, memberRef, mlir::Value());
       }
-      if (nullBitsetType) {
-         rewriter.create<util::StoreOp>(loc, nullBitSet, nullBitSetRef, mlir::Value());
+      void set(const std::string& name, mlir::Value value) {
+         values[name] = std::move(value);
       }
-   }
-   std::unordered_map<std::string, mlir::Value> loadValues(mlir::Value ref, mlir::OpBuilder& rewriter, mlir::Location loc) {
-      ref = ensureRefType(ref, rewriter, loc);
-      std::unordered_map<std::string, mlir::Value> res;
-      mlir::Value nullBitSet;
-      if (nullBitsetType) {
-         mlir::Value nullBitSetRef = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(rewriter.getContext(), nullBitsetType), ref, nullBitSetPos);
-         nullBitSet = rewriter.create<util::LoadOp>(loc, nullBitSetRef);
+      mlir::Value& get(const std::string& name) {
+         assert(esh.memberInfos.contains(name) && "Member not found");
+         return values[name] = loadValue(name);
       }
-      for (auto i = 0ul; i < members.getTypes().size(); i++) {
-         auto name = mlir::cast<mlir::StringAttr>(members.getNames()[i]).str();
-         const MemberInfo& memberInfo = memberInfos.at(name);
-         auto memberRef = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(rewriter.getContext(), memberInfo.stored), ref, memberInfo.offset);
-         mlir::Value loadedValue = rewriter.create<util::LoadOp>(loc, memberRef);
-         if (memberInfo.isNullable) {
-            mlir::Value shiftedNullBit = rewriter.create<mlir::arith::ConstantIntOp>(loc, 1ull << memberInfo.nullBitOffset, nullBitsetType);
-            mlir::Value isNull = rewriter.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::eq, rewriter.create<mlir::arith::AndIOp>(loc, nullBitSet, shiftedNullBit), shiftedNullBit);
-            loadedValue = rewriter.create<db::AsNullableOp>(loc, db::NullableType::get(rewriter.getContext(), memberInfo.stored), loadedValue, isNull);
+
+      void store() {
+         ensureRefIsRefType();
+         bool emptyNullbitset = false;
+         if (esh.nullBitsetType) {
+            if (values.size() < esh.memberInfos.size()) {
+               // load null bit set if not already loaded (not loaded if only set() was called on the map)
+               // null bit set not required if all members are loaded
+               populateNullBitSet();
+            } else if (!nullBitSet) {
+               nullBitSetRef = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(rewriter.getContext(), esh.nullBitsetType), ref, esh.nullBitSetPos);
+               nullBitSet = rewriter.create<mlir::arith::ConstantIntOp>(loc, 0, esh.nullBitsetType);
+               emptyNullbitset = true;
+            }
          }
-         res[name] = loadedValue;
+         for (auto& [name, value] : values) {
+            const MemberInfo& memberInfo = esh.memberInfos.at(name);
+            if (memberInfo.isNullable) {
+               const mlir::Value nullBit = rewriter.create<db::IsNullOp>(loc, value);
+               const mlir::Value shiftAmount = rewriter.create<mlir::arith::ConstantIntOp>(loc, memberInfo.nullBitOffset, esh.nullBitsetType);
+               if (emptyNullbitset) {
+                  // the nullbitset is empty (= 0) => we can just set the bit
+                  const mlir::Value shiftedNullBit = rewriter.create<mlir::arith::ShLIOp>(loc, rewriter.create<mlir::arith::ExtUIOp>(loc, esh.nullBitsetType, nullBit), shiftAmount);
+                  nullBitSet = rewriter.create<mlir::arith::OrIOp>(loc, *nullBitSet, shiftedNullBit);
+               }
+               // did we already load this value? aka. can we reuse variables from the load phase?
+               else if (nullBitCache.contains(name)) {
+                  const mlir::Value isNull = nullBitCache.at(name);
+                  const mlir::Value replacementNullBit = rewriter.create<mlir::arith::XOrIOp>(loc, nullBit, isNull);
+                  const mlir::Value shiftedReplacementNullBit = rewriter.create<mlir::arith::ShLIOp>(loc, rewriter.create<mlir::arith::ExtUIOp>(loc, esh.nullBitsetType, replacementNullBit), shiftAmount);
+                  nullBitSet = rewriter.create<mlir::arith::XOrIOp>(loc, *nullBitSet, shiftedReplacementNullBit);
+               } else {
+                  // value not loaded yet. We need to surgically set the bit in the nullBitSet by masking the rest of the set
+                  const mlir::Value shiftedNullBit = rewriter.create<mlir::arith::ShLIOp>(loc, rewriter.create<mlir::arith::ExtUIOp>(loc, esh.nullBitsetType, nullBit), shiftAmount);
+                  // invertedShiftedClearBit masks the rest of the nullBitSet
+                  const mlir::Value invertedShiftedClearBit = rewriter.create<mlir::arith::ConstantIntOp>(loc, ~(1 << memberInfo.nullBitOffset), esh.nullBitsetType);
+                  nullBitSet = rewriter.create<mlir::arith::AndIOp>(loc, *nullBitSet, invertedShiftedClearBit);
+                  nullBitSet = rewriter.create<mlir::arith::OrIOp>(loc, *nullBitSet, shiftedNullBit);
+               }
+               value = rewriter.create<db::NullableGetVal>(loc, value);
+            }
+            // now, actually store the value (not just whether it's null)
+            auto memberRef = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(rewriter.getContext(), memberInfo.stored), ref, memberInfo.offset);
+            rewriter.create<util::StoreOp>(loc, value, memberRef, mlir::Value());
+         }
+         if (esh.nullBitsetType) {
+            rewriter.create<util::StoreOp>(loc, *nullBitSet, *nullBitSetRef, mlir::Value());
+         }
       }
-      return res;
-   }
-   mlir::TupleType getStorageType() {
+
+      struct Iterator {
+         LazyValueMap* lvm;
+         size_t index;
+
+         using iterator_category = std::input_iterator_tag;
+         using value_type = mlir::Value;
+         using difference_type = std::ptrdiff_t;
+         using pointer = mlir::Value*;
+         using reference = mlir::Value&;
+
+         Iterator& operator++() {
+            ++index;
+            return *this;
+         }
+
+         Iterator operator++(int) {
+            Iterator temp = *this;
+            ++(*this);
+            return temp;
+         }
+
+         bool operator==(const Iterator& other) const {
+            return lvm == other.lvm && index == other.index;
+         }
+
+         value_type operator*() const {
+            return lvm->loadValue(mlir::cast<mlir::StringAttr>(lvm->relevantMembers[index]).str());
+         }
+      };
+      static_assert(std::input_iterator<Iterator>);
+      friend Iterator;
+
+      Iterator begin() {
+         return Iterator(this, 0);
+      }
+
+      Iterator end() {
+         return Iterator(this, std::distance(relevantMembers.begin(), relevantMembers.end()));
+      }
+
+      private:
+      mlir::Value loadValue(const std::string& name) {
+         ensureRefIsRefType();
+         const MemberInfo& memberInfo = esh.memberInfos.at(name);
+         auto memberRef = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(rewriter.getContext(), memberInfo.stored), ref, memberInfo.offset);
+         mlir::Value value = rewriter.create<util::LoadOp>(loc, memberRef);
+         if (memberInfo.isNullable) {
+            populateNullBitSet();
+            assert(nullBitSet);
+            mlir::Value shiftedNullBit = rewriter.create<mlir::arith::ConstantIntOp>(loc, 1ull << memberInfo.nullBitOffset, esh.nullBitsetType);
+            mlir::Value isNull = rewriter.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::eq, rewriter.create<mlir::arith::AndIOp>(loc, *nullBitSet, shiftedNullBit), shiftedNullBit);
+            value = rewriter.create<db::AsNullableOp>(loc, db::NullableType::get(rewriter.getContext(), memberInfo.stored), value, isNull);
+            nullBitCache.emplace(name, isNull);
+         }
+         return value;
+      }
+
+      void populateNullBitSet() {
+         if (nullBitSet) {
+            return;
+         }
+         assert(esh.nullBitsetType && "NullBitSetType must be set if one of the fields is nullable.");
+         nullBitSetRef = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(rewriter.getContext(), esh.nullBitsetType), ref, esh.nullBitSetPos);
+         nullBitSet = rewriter.create<util::LoadOp>(loc, *nullBitSetRef);
+      }
+
+      void ensureRefIsRefType() {
+         if (!refIsRefType) {
+            ref = esh.ensureRefType(ref, rewriter, loc);
+            refIsRefType = true;
+         }
+      }
+   };
+
+   mlir::TupleType getStorageType() const {
       return storageType;
    }
-   util::RefType getRefType() {
+   util::RefType getRefType() const {
       return util::RefType::get(members.getContext(), getStorageType());
    }
-   mlir::Value ensureRefType(mlir::Value ref, mlir::OpBuilder& rewriter, mlir::Location loc) {
+   mlir::Value ensureRefType(mlir::Value ref, mlir::OpBuilder& rewriter, mlir::Location loc) const {
       auto refType = mlir::cast<util::RefType>(ref.getType());
       auto expectedType = getRefType();
       if (refType != expectedType) {
@@ -334,44 +437,36 @@ class EntryStorageHelper {
       }
       return result;
    }
-   std::vector<mlir::Value> loadValuesOrdered(mlir::Value ref, mlir::OpBuilder& rewriter, mlir::Location loc, ArrayAttr relevantMembers = {}) {
-      auto values = loadValues(ref, rewriter, loc);
-      if (!relevantMembers) {
-         relevantMembers = members.getNames();
-      }
-      std::vector<mlir::Value> res;
-      for (auto m : relevantMembers) {
-         res.push_back(values.at(mlir::cast<mlir::StringAttr>(m).str()));
-      }
-      return res;
+   LazyValueMap getValueMap(mlir::Value ref, mlir::OpBuilder& rewriter, mlir::Location loc, ArrayAttr relevantMembers = {}) {
+      return LazyValueMap(ref, rewriter, loc, *this, relevantMembers);
    }
    template <class L>
    void storeOrderedValues(mlir::Value ref, L list, mlir::OpBuilder& rewriter, mlir::Location loc) {
-      std::unordered_map<std::string, mlir::Value> toStore;
-      for (auto x : llvm::zip(members.getNames(), list)) {
-         toStore[mlir::cast<mlir::StringAttr>(std::get<0>(x)).str()] = std::get<1>(x);
+      auto values = getValueMap(ref, rewriter, loc);
+      for (size_t i = 0; i < members.getNames().size() && i < list.size(); ++i) {
+         values.set(mlir::cast<mlir::StringAttr>(members.getNames()[i]).str(), list[i]);
       }
-      storeValues(ref, toStore, rewriter, loc);
+      values.store();
    }
 
    void storeFromColumns(mlir::DictionaryAttr mapping, ColumnMapping& columnMapping, mlir::Value ref, mlir::OpBuilder& rewriter, mlir::Location loc) {
-      std::unordered_map<std::string, mlir::Value> toStore;
+      auto values = getValueMap(ref, rewriter, loc);
       for (auto x : mapping) {
-         toStore[x.getName().str()] = columnMapping.resolve(op, mlir::cast<tuples::ColumnRefAttr>(x.getValue()));
+         values.set(x.getName().str(), columnMapping.resolve(op, mlir::cast<tuples::ColumnRefAttr>(x.getValue())));
       }
-      storeValues(ref, toStore, rewriter, loc);
+      values.store();
    }
    void loadIntoColumns(mlir::DictionaryAttr mapping, ColumnMapping& columnMapping, mlir::Value ref, mlir::OpBuilder& rewriter, mlir::Location loc) {
-      auto values = loadValues(ref, rewriter, loc);
+      auto values = getValueMap(ref, rewriter, loc);
       for (auto x : mapping) {
          auto memberName = x.getName().str();
-         if (values.contains(memberName)) {
-            columnMapping.define(mlir::cast<tuples::ColumnDefAttr>(x.getValue()), values[memberName]);
+         if (memberInfos.contains(memberName)) {
+            columnMapping.define(mlir::cast<tuples::ColumnDefAttr>(x.getValue()), values.get(memberName));
          }
       }
    }
 };
-bool EntryStorageHelper::compressionEnabled = false;
+bool EntryStorageHelper::compressionEnabled = true;
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////// State management ///////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1405,10 +1500,10 @@ class CreateSegmentTreeViewLowering : public SubOpConversionPattern<subop::Creat
          rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
             Value dest = funcBody->getArgument(0);
             Value src = funcBody->getArgument(1);
-            auto sourceValues = sourceStorageHelper.loadValues(src, rewriter, loc);
+            auto sourceValues = sourceStorageHelper.getValueMap(src, rewriter, loc);
             std::vector<mlir::Value> args;
             for (auto relevantMember : createOp.getRelevantMembers()) {
-               args.push_back(sourceValues.at(mlir::cast<mlir::StringAttr>(relevantMember).str()));
+               args.push_back(sourceValues.get(mlir::cast<mlir::StringAttr>(relevantMember).str()));
             }
             Block* sortLambda = &createOp.getInitialFn().front();
             rewriter.inlineBlock<tuples::ReturnOpAdaptor>(sortLambda, args, [&](tuples::ReturnOpAdaptor adaptor) {
@@ -1424,8 +1519,8 @@ class CreateSegmentTreeViewLowering : public SubOpConversionPattern<subop::Creat
          Value right = funcBody->addArgument(ptrType, loc);
          combineFn.getBody().push_back(funcBody);
          rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
-            auto leftValues = viewStorageHelper.loadValuesOrdered(left, rewriter, loc);
-            auto rightValues = viewStorageHelper.loadValuesOrdered(right, rewriter, loc);
+            auto leftValues = viewStorageHelper.getValueMap(left, rewriter, loc);
+            auto rightValues = viewStorageHelper.getValueMap(right, rewriter, loc);
             std::vector<mlir::Value> args;
             args.insert(args.end(), leftValues.begin(), leftValues.end());
             args.insert(args.end(), rightValues.begin(), rightValues.end());
@@ -1469,8 +1564,8 @@ class CreateHeapLowering : public SubOpConversionPattern<subop::CreateHeapOp> {
       Value right = funcBody->addArgument(ptrType, loc);
       funcOp.getBody().push_back(funcBody);
       rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
-         auto leftVals = storageHelper.loadValuesOrdered(left, rewriter, loc, heapOp.getSortBy());
-         auto rightVals = storageHelper.loadValuesOrdered(right, rewriter, loc, heapOp.getSortBy());
+         auto leftVals = storageHelper.getValueMap(left, rewriter, loc, heapOp.getSortBy());
+         auto rightVals = storageHelper.getValueMap(right, rewriter, loc, heapOp.getSortBy());
          std::vector<mlir::Value> args;
          args.insert(args.end(), leftVals.begin(), leftVals.end());
          args.insert(args.end(), rightVals.begin(), rightVals.end());
@@ -1534,8 +1629,8 @@ class MergeThreadLocalSimpleState : public SubOpConversionPattern<subop::MergeOp
          Value right = funcBody->addArgument(ptrType, loc);
          combineFn.getBody().push_back(funcBody);
          rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
-            auto leftValues = storageHelper.loadValuesOrdered(left, rewriter, loc);
-            auto rightValues = storageHelper.loadValuesOrdered(right, rewriter, loc);
+            auto leftValues = storageHelper.getValueMap(left, rewriter, loc);
+            auto rightValues = storageHelper.getValueMap(right, rewriter, loc);
             std::vector<mlir::Value> args;
             args.insert(args.end(), leftValues.begin(), leftValues.end());
             args.insert(args.end(), rightValues.begin(), rightValues.end());
@@ -1595,8 +1690,8 @@ class MergeThreadLocalHashMap : public SubOpConversionPattern<subop::MergeOp> {
                left = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(context, kvType.getType(1)), left, 1);
                right = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(context, kvType.getType(1)), right, 1);
                Value dest = left;
-               auto leftValues = valStorageHelper.loadValuesOrdered(left, rewriter, loc);
-               auto rightValues = valStorageHelper.loadValuesOrdered(right, rewriter, loc);
+               auto leftValues = valStorageHelper.getValueMap(left, rewriter, loc);
+               auto rightValues = valStorageHelper.getValueMap(right, rewriter, loc);
                std::vector<mlir::Value> args;
                args.insert(args.end(), leftValues.begin(), leftValues.end());
                args.insert(args.end(), rightValues.begin(), rightValues.end());
@@ -1620,8 +1715,8 @@ class MergeThreadLocalHashMap : public SubOpConversionPattern<subop::MergeOp> {
          Value right = funcBody->addArgument(ptrType, loc);
          eqFn.getBody().push_back(funcBody);
          rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
-            auto leftKeys = keyStorageHelper.loadValuesOrdered(left, rewriter, loc);
-            auto rightKeys = keyStorageHelper.loadValuesOrdered(right, rewriter, loc);
+            auto leftKeys = keyStorageHelper.getValueMap(left, rewriter, loc);
+            auto rightKeys = keyStorageHelper.getValueMap(right, rewriter, loc);
             std::vector<mlir::Value> args;
             args.insert(args.end(), leftKeys.begin(), leftKeys.end());
             args.insert(args.end(), rightKeys.begin(), rightKeys.end());
@@ -1673,8 +1768,8 @@ class MergePreAggrHashMap : public SubOpConversionPattern<subop::MergeOp> {
                left = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(context, kvType.getType(1)), left, 1);
                right = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(context, kvType.getType(1)), right, 1);
                Value dest = left;
-               auto leftValues = valStorageHelper.loadValuesOrdered(left, rewriter, loc);
-               auto rightValues = valStorageHelper.loadValuesOrdered(right, rewriter, loc);
+               auto leftValues = valStorageHelper.getValueMap(left, rewriter, loc);
+               auto rightValues = valStorageHelper.getValueMap(right, rewriter, loc);
                std::vector<mlir::Value> args;
                args.insert(args.end(), leftValues.begin(), leftValues.end());
                args.insert(args.end(), rightValues.begin(), rightValues.end());
@@ -1698,8 +1793,8 @@ class MergePreAggrHashMap : public SubOpConversionPattern<subop::MergeOp> {
          Value right = funcBody->addArgument(ptrType, loc);
          eqFn.getBody().push_back(funcBody);
          rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
-            auto leftKeys = keyStorageHelper.loadValuesOrdered(left, rewriter, loc);
-            auto rightKeys = keyStorageHelper.loadValuesOrdered(right, rewriter, loc);
+            auto leftKeys = keyStorageHelper.getValueMap(left, rewriter, loc);
+            auto rightKeys = keyStorageHelper.getValueMap(right, rewriter, loc);
             std::vector<mlir::Value> args;
             args.insert(args.end(), leftKeys.begin(), leftKeys.end());
             args.insert(args.end(), rightKeys.begin(), rightKeys.end());
@@ -1734,8 +1829,8 @@ class SortLowering : public SubOpConversionPattern<subop::CreateSortedViewOp> {
       funcBody->addArguments(TypeRange({ptrType, ptrType}), {parentModule->getLoc(), parentModule->getLoc()});
       funcOp.getBody().push_back(funcBody);
       rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
-         auto leftVals = storageHelper.loadValuesOrdered(funcBody->getArgument(0), rewriter, sortOp->getLoc(), sortOp.getSortBy());
-         auto rightVals = storageHelper.loadValuesOrdered(funcBody->getArgument(1), rewriter, sortOp->getLoc(), sortOp.getSortBy());
+         auto leftVals = storageHelper.getValueMap(funcBody->getArgument(0), rewriter, sortOp->getLoc(), sortOp.getSortBy());
+         auto rightVals = storageHelper.getValueMap(funcBody->getArgument(1), rewriter, sortOp->getLoc(), sortOp.getSortBy());
          std::vector<mlir::Value> args;
          args.insert(args.end(), leftVals.begin(), leftVals.end());
          args.insert(args.end(), rightVals.begin(), rightVals.end());
@@ -2373,7 +2468,7 @@ class PureLookupHashMapLowering : public SubOpTupleStreamConsumerConversionPatte
       auto packed = rewriter.create<util::PackOp>(lookupOp->getLoc(), lookupKey);
 
       mlir::Value hash = rewriter.create<db::Hash>(lookupOp->getLoc(), packed); //todo: external hash
-      auto equalFnBuilder = [&lookupOp](mlir::OpBuilder& rewriter, std::vector<Value> left, std::vector<Value> right) -> Value {
+      auto equalFnBuilder = [&lookupOp](mlir::OpBuilder& rewriter, EntryStorageHelper::LazyValueMap left, std::vector<Value> right) -> Value {
          std::vector<mlir::Value> arguments;
          arguments.insert(arguments.end(), left.begin(), left.end());
          arguments.insert(arguments.end(), right.begin(), right.end());
@@ -2432,7 +2527,7 @@ class PureLookupHashMapLowering : public SubOpTupleStreamConsumerConversionPatte
                   loc, hashMatches, [&](OpBuilder& b, Location loc) {
                      Value kvAddress = rewriter.create<util::TupleElementPtrOp>(loc, kvPtrType, currEntryPtr, 2);
                      Value keyRef = rewriter.create<util::TupleElementPtrOp>(loc, keyPtrType, kvAddress, 0);
-                     auto keyValues=keyStorageHelper.loadValuesOrdered(keyRef,rewriter,loc);
+                     auto keyValues=keyStorageHelper.getValueMap(keyRef,rewriter,loc);
                      Value keyMatches = equalFnBuilder(b, keyValues, lookupKey);
                      auto ifOp2 = b.create<scf::IfOp>(
                         loc, keyMatches, [&](OpBuilder& b, Location loc) {
@@ -2484,7 +2579,7 @@ class PureLookupPreAggregationHtLowering : public SubOpTupleStreamConsumerConver
 
       mlir::Value hash = rewriter.create<db::Hash>(lookupOp->getLoc(), packed); //todo: external hash
       ASSERT_WITH_OP(!lookupOp.getEqFn().empty(), lookupOp, "LookupOp must have an equality function");
-      auto equalFnBuilder = [&lookupOp](mlir::OpBuilder& rewriter, std::vector<Value> left, std::vector<Value> right) -> Value {
+      auto equalFnBuilder = [&lookupOp](mlir::OpBuilder& rewriter, EntryStorageHelper::LazyValueMap left, std::vector<Value> right) -> Value {
          std::vector<mlir::Value> arguments;
          arguments.insert(arguments.end(), left.begin(), left.end());
          arguments.insert(arguments.end(), right.begin(), right.end());
@@ -2540,7 +2635,7 @@ class PureLookupPreAggregationHtLowering : public SubOpTupleStreamConsumerConver
                   loc, hashMatches, [&](OpBuilder& b, Location loc) {
                      Value kvAddress = rewriter.create<util::TupleElementPtrOp>(loc, kvPtrType, currEntryPtr, 2);
                      Value keyRef = rewriter.create<util::TupleElementPtrOp>(loc, keyPtrType, kvAddress, 0);
-                     auto keyValues=keyStorageHelper.loadValuesOrdered(keyRef,rewriter,loc);
+                     auto keyValues=keyStorageHelper.getValueMap(keyRef,rewriter,loc);
                      Value keyMatches = equalFnBuilder(b, keyValues, lookupKey);
                      auto ifOp2 = b.create<scf::IfOp>(
                         loc, keyMatches, [&](OpBuilder& b, Location loc) {
@@ -2590,7 +2685,7 @@ class LookupHashMultiMapLowering : public SubOpTupleStreamConsumerConversionPatt
       auto packed = rewriter.create<util::PackOp>(lookupOp->getLoc(), lookupKey);
 
       mlir::Value hash = rewriter.create<db::Hash>(lookupOp->getLoc(), packed); //todo: external hash
-      auto equalFnBuilder = [&lookupOp](mlir::OpBuilder& rewriter, std::vector<Value> left, std::vector<Value> right) -> Value {
+      auto equalFnBuilder = [&lookupOp](mlir::OpBuilder& rewriter, EntryStorageHelper::LazyValueMap left, std::vector<Value> right) -> Value {
          std::vector<mlir::Value> arguments;
          arguments.insert(arguments.end(), left.begin(), left.end());
          arguments.insert(arguments.end(), right.begin(), right.end());
@@ -2647,7 +2742,7 @@ class LookupHashMultiMapLowering : public SubOpTupleStreamConsumerConversionPatt
                auto ifOpH = b.create<scf::IfOp>(
                   loc, hashMatches, [&](OpBuilder& b, Location loc) {
                      Value keyRef = rewriter.create<util::TupleElementPtrOp>(loc, keyPtrType, currEntryPtr, 3);
-                     auto keyValues=keyStorageHelper.loadValuesOrdered(keyRef,rewriter,loc);
+                     auto keyValues=keyStorageHelper.getValueMap(keyRef,rewriter,loc);
                      Value keyMatches = equalFnBuilder(b, keyValues, lookupKey);
                      auto ifOp2 = b.create<scf::IfOp>(
                         loc,  keyMatches, [&](OpBuilder& b, Location loc) {
@@ -2695,7 +2790,7 @@ class InsertMultiMapLowering : public SubOpTupleStreamConsumerConversionPattern<
 
       mlir::Value hash = rewriter.create<db::Hash>(loc, packed); //todo: external hash
       mlir::Value hashTable = adaptor.getState();
-      auto equalFnBuilder = [&insertOp](mlir::OpBuilder& rewriter, std::vector<Value> left, std::vector<Value> right) -> Value {
+      auto equalFnBuilder = [&insertOp](mlir::OpBuilder& rewriter, EntryStorageHelper::LazyValueMap left, std::vector<Value> right) -> Value {
          std::vector<mlir::Value> arguments;
          arguments.insert(arguments.end(), left.begin(), left.end());
          arguments.insert(arguments.end(), right.begin(), right.end());
@@ -2753,7 +2848,7 @@ class InsertMultiMapLowering : public SubOpTupleStreamConsumerConversionPattern<
                auto ifOpH = b.create<scf::IfOp>(
                   loc, hashMatches, [&](OpBuilder& b, Location loc) {
                      Value keyRef=rewriter.create<util::TupleElementPtrOp>(loc, keyPtrType, currEntryPtr, 3);
-                     auto keyValues=keyStorageHelper.loadValuesOrdered(keyRef,rewriter,loc);
+                     auto keyValues=keyStorageHelper.getValueMap(keyRef,rewriter,loc);
                      Value keyMatches = equalFnBuilder(b, keyValues, lookupKey);
                      auto ifOp2 = b.create<scf::IfOp>(
                         loc, keyMatches, [&](OpBuilder& b, Location loc) {
@@ -2813,7 +2908,7 @@ class LookupPreAggrHtFragment : public SubOpTupleStreamConsumerConversionPattern
       auto packed = rewriter.create<util::PackOp>(lookupOp->getLoc(), lookupKey);
 
       mlir::Value hash = rewriter.create<db::Hash>(lookupOp->getLoc(), packed); //todo: external hash
-      auto equalFnBuilder = [&lookupOp](mlir::OpBuilder& rewriter, std::vector<Value> left, std::vector<Value> right) -> Value {
+      auto equalFnBuilder = [&lookupOp](mlir::OpBuilder& rewriter, EntryStorageHelper::LazyValueMap left, std::vector<Value> right) -> Value {
          std::vector<mlir::Value> arguments;
          arguments.insert(arguments.end(), left.begin(), left.end());
          arguments.insert(arguments.end(), right.begin(), right.end());
@@ -2867,7 +2962,7 @@ class LookupPreAggrHtFragment : public SubOpTupleStreamConsumerConversionPattern
                loc, hashMatches, [&](OpBuilder& b, Location loc) {
                   Value kvAddress = rewriter.create<util::TupleElementPtrOp>(loc, kvPtrType, currEntryPtr, 2);
                   Value keyRef = rewriter.create<util::TupleElementPtrOp>(loc, keyPtrType, kvAddress, 0);
-                  auto keyValues=keyStorageHelper.loadValuesOrdered(keyRef,rewriter,loc);
+                  auto keyValues=keyStorageHelper.getValueMap(keyRef,rewriter,loc);
                   Value keyMatches = equalFnBuilder(b, keyValues, lookupKey);
                   b.create<scf::YieldOp>(loc, mlir::ValueRange{keyMatches});
                }, [&](OpBuilder& b, Location loc) {  b.create<scf::YieldOp>(loc, falseValue);});
@@ -2908,7 +3003,7 @@ class LookupHashMapLowering : public SubOpTupleStreamConsumerConversionPattern<s
 
       mlir::Value hash = rewriter.create<db::Hash>(lookupOp->getLoc(), packed); //todo: external hash
       mlir::Value hashTable = adaptor.getState();
-      auto equalFnBuilder = [&lookupOp](mlir::OpBuilder& rewriter, std::vector<Value> left, std::vector<Value> right) -> Value {
+      auto equalFnBuilder = [&lookupOp](mlir::OpBuilder& rewriter, EntryStorageHelper::LazyValueMap left, std::vector<Value> right) -> Value {
          std::vector<mlir::Value> arguments;
          arguments.insert(arguments.end(), left.begin(), left.end());
          arguments.insert(arguments.end(), right.begin(), right.end());
@@ -2984,7 +3079,7 @@ class LookupHashMapLowering : public SubOpTupleStreamConsumerConversionPattern<s
                   loc, hashMatches, [&](OpBuilder& b, Location loc) {
                      Value kvAddress = rewriter.create<util::TupleElementPtrOp>(loc, kvPtrType, currEntryPtr, 2);
                      Value keyRef = rewriter.create<util::TupleElementPtrOp>(loc, keyPtrType, kvAddress, 0);
-                     auto keyValues=keyStorageHelper.loadValuesOrdered(keyRef,rewriter,loc);
+                     auto keyValues=keyStorageHelper.getValueMap(keyRef,rewriter,loc);
                      Value keyMatches = equalFnBuilder(b, keyValues, lookupKey);
                      auto ifOp2 = b.create<scf::IfOp>(
                         loc,  keyMatches, [&](OpBuilder& b, Location loc) {
@@ -3202,11 +3297,11 @@ class ContinuousRefScatterOpLowering : public SubOpTupleStreamConsumerConversion
       auto ptrType = storageHelper.getRefType();
       auto baseRef = rewriter.create<util::BufferGetRef>(scatterOp->getLoc(), ptrType, unpackedReference[1]);
       auto elementRef = rewriter.create<util::ArrayElementPtrOp>(scatterOp->getLoc(), ptrType, baseRef, unpackedReference[0]);
-      auto values = storageHelper.loadValues(elementRef, rewriter, scatterOp->getLoc());
+      auto values = storageHelper.getValueMap(elementRef, rewriter, scatterOp->getLoc());
       for (auto x : scatterOp.getMapping()) {
-         values[x.getName().str()] = mapping.resolve(scatterOp, mlir::cast<tuples::ColumnRefAttr>(x.getValue()));
+         values.set(x.getName().str(), mapping.resolve(scatterOp, mlir::cast<tuples::ColumnRefAttr>(x.getValue())));
       }
-      storageHelper.storeValues(elementRef, values, rewriter, scatterOp->getLoc());
+      values.store();
       rewriter.eraseOp(scatterOp);
       return success();
    }
@@ -3222,11 +3317,11 @@ class ScatterOpLowering : public SubOpTupleStreamConsumerConversionPattern<subop
       auto columns = referenceType.getMembers();
       EntryStorageHelper storageHelper(scatterOp, columns, referenceType.hasLock(), typeConverter);
       auto ref = mapping.resolve(scatterOp, scatterOp.getRef());
-      auto values = storageHelper.loadValues(ref, rewriter, scatterOp->getLoc());
+      auto values = storageHelper.getValueMap(ref, rewriter, scatterOp->getLoc());
       for (auto x : scatterOp.getMapping()) {
-         values[x.getName().str()] = mapping.resolve(scatterOp, mlir::cast<tuples::ColumnRefAttr>(x.getValue()));
+         values.set(x.getName().str(), mapping.resolve(scatterOp, mlir::cast<tuples::ColumnRefAttr>(x.getValue())));
       }
-      storageHelper.storeValues(ref, values, rewriter, scatterOp->getLoc());
+      values.store();
       rewriter.eraseOp(scatterOp);
       return success();
    }
@@ -3241,11 +3336,11 @@ class HashMultiMapScatterOp : public SubOpTupleStreamConsumerConversionPattern<s
       auto columns = hashMultiMapEntryRef.getHashMultimap().getValueMembers();
       EntryStorageHelper storageHelper(scatterOp, columns, hashMultiMapEntryRef.hasLock(), typeConverter);
       auto ref = rewriter.create<util::UnPackOp>(scatterOp.getLoc(), mapping.resolve(scatterOp, scatterOp.getRef())).getResult(1);
-      auto values = storageHelper.loadValues(ref, rewriter, scatterOp->getLoc());
+      auto values = storageHelper.getValueMap(ref, rewriter, scatterOp->getLoc());
       for (auto x : scatterOp.getMapping()) {
-         values[x.getName().str()] = mapping.resolve(scatterOp, mlir::cast<tuples::ColumnRefAttr>(x.getValue()));
+         values.set(x.getName().str(), mapping.resolve(scatterOp, mlir::cast<tuples::ColumnRefAttr>(x.getValue())));
       }
-      storageHelper.storeValues(ref, values, rewriter, scatterOp->getLoc());
+      values.store();
       rewriter.eraseOp(scatterOp);
       return success();
    }
@@ -3266,7 +3361,7 @@ class ReduceContinuousRefLowering : public SubOpTupleStreamConsumerConversionPat
       auto ptrType = storageHelper.getRefType();
       auto baseRef = rewriter.create<util::BufferGetRef>(reduceOp->getLoc(), ptrType, unpackedReference[1]);
       auto elementRef = rewriter.create<util::ArrayElementPtrOp>(reduceOp->getLoc(), ptrType, baseRef, unpackedReference[0]);
-      auto values = storageHelper.loadValues(elementRef, rewriter, reduceOp->getLoc());
+      auto values = storageHelper.getValueMap(elementRef, rewriter, reduceOp->getLoc());
       std::vector<mlir::Value> arguments;
       for (auto attr : reduceOp.getColumns()) {
          mlir::Value arg = mapping.resolve(reduceOp, mlir::cast<tuples::ColumnRefAttr>(attr));
@@ -3276,7 +3371,7 @@ class ReduceContinuousRefLowering : public SubOpTupleStreamConsumerConversionPat
          arguments.push_back(arg);
       }
       for (auto member : reduceOp.getMembers()) {
-         mlir::Value arg = values.at(mlir::cast<mlir::StringAttr>(member).str());
+         mlir::Value arg = values.get(mlir::cast<mlir::StringAttr>(member).str());
          if (arg.getType() != reduceOp.getRegion().getArgument(arguments.size()).getType()) {
             arg = rewriter.create<mlir::UnrealizedConversionCastOp>(reduceOp->getLoc(), reduceOp.getRegion().getArgument(arguments.size()).getType(), arg).getResult(0);
          }
@@ -3285,14 +3380,15 @@ class ReduceContinuousRefLowering : public SubOpTupleStreamConsumerConversionPat
 
       rewriter.inlineBlock<tuples::ReturnOpAdaptor>(&reduceOp.getRegion().front(), arguments, [&](tuples::ReturnOpAdaptor adaptor) {
          for (size_t i = 0; i < reduceOp.getMembers().size(); i++) {
-            auto& memberVal = values[mlir::cast<mlir::StringAttr>(reduceOp.getMembers()[i]).str()];
+            const std::string memberName = mlir::cast<mlir::StringAttr>(reduceOp.getMembers()[i]).str();
+            auto& memberVal = values.get(memberName);
             auto updatedVal = adaptor.getResults()[i];
             if (updatedVal.getType() != memberVal.getType()) {
                updatedVal = rewriter.create<mlir::UnrealizedConversionCastOp>(reduceOp->getLoc(), memberVal.getType(), updatedVal).getResult(0);
             }
             memberVal = updatedVal;
          }
-         storageHelper.storeValues(elementRef, values, rewriter, reduceOp->getLoc());
+         values.store();
          rewriter.eraseOp(reduceOp);
       });
 
@@ -3434,7 +3530,7 @@ class ReduceOpLowering : public SubOpTupleStreamConsumerConversionPattern<subop:
          auto valueRef = storageHelper.getPointer(ref, mlir::cast<mlir::StringAttr>(reduceOp.getMembers()[0]).str(), rewriter, reduceOp->getLoc());
          implementAtomicReduce(reduceOp, rewriter, valueRef, mapping);
       } else {
-         auto values = storageHelper.loadValues(ref, rewriter, reduceOp->getLoc());
+         auto values = storageHelper.getValueMap(ref, rewriter, reduceOp->getLoc());
          std::vector<mlir::Value> arguments;
          for (auto attr : reduceOp.getColumns()) {
             mlir::Value arg = mapping.resolve(reduceOp, mlir::cast<tuples::ColumnRefAttr>(attr));
@@ -3444,7 +3540,7 @@ class ReduceOpLowering : public SubOpTupleStreamConsumerConversionPattern<subop:
             arguments.push_back(arg);
          }
          for (auto member : reduceOp.getMembers()) {
-            mlir::Value arg = values.at(mlir::cast<mlir::StringAttr>(member).str());
+            mlir::Value arg = values.get(mlir::cast<mlir::StringAttr>(member).str());
             if (arg.getType() != reduceOp.getRegion().getArgument(arguments.size()).getType()) {
                arg = rewriter.create<mlir::UnrealizedConversionCastOp>(reduceOp->getLoc(), reduceOp.getRegion().getArgument(arguments.size()).getType(), arg).getResult(0);
             }
@@ -3453,14 +3549,15 @@ class ReduceOpLowering : public SubOpTupleStreamConsumerConversionPattern<subop:
 
          rewriter.inlineBlock<tuples::ReturnOpAdaptor>(&reduceOp.getRegion().front(), arguments, [&](tuples::ReturnOpAdaptor adaptor) {
             for (size_t i = 0; i < reduceOp.getMembers().size(); i++) {
-               auto& memberVal = values[mlir::cast<mlir::StringAttr>(reduceOp.getMembers()[i]).str()];
+               const std::string memberName = mlir::cast<mlir::StringAttr>(reduceOp.getMembers()[i]).str();
+               auto& memberVal = values.get(memberName);
                auto updatedVal = adaptor.getResults()[i];
                if (updatedVal.getType() != memberVal.getType()) {
                   updatedVal = rewriter.create<mlir::UnrealizedConversionCastOp>(reduceOp->getLoc(), memberVal.getType(), updatedVal).getResult(0);
                }
                memberVal = updatedVal;
             }
-            storageHelper.storeValues(ref, values, rewriter, reduceOp->getLoc());
+            values.store();
             rewriter.eraseOp(reduceOp);
          });
       }
@@ -3809,7 +3906,7 @@ class LoopLowering : public SubOpConversionPattern<subop::LoopOp> {
          std::vector<mlir::Value> res;
          auto simpleStateType = mlir::cast<subop::SimpleStateType>(continueOp.getOperandTypes()[0]);
          EntryStorageHelper storageHelper(loopOp, simpleStateType.getMembers(), simpleStateType.hasLock(), typeConverter);
-         auto shouldContinueBool = storageHelper.loadValues(nestedGroupResultMapping.lookup(continueOp.getOperand(0)), rewriter, loc)[continueOp.getCondMember().str()];
+         auto shouldContinueBool = storageHelper.getValueMap(nestedGroupResultMapping.lookup(continueOp.getOperand(0)), rewriter, loc).get(continueOp.getCondMember().str());
          res.push_back(shouldContinueBool);
          for (auto operand : continueOp->getOperands().drop_front()) {
             res.push_back(nestedGroupResultMapping.lookup(operand));
@@ -3918,7 +4015,6 @@ class LockLowering : public SubOpTupleStreamConsumerConversionPattern<subop::Loc
       return success();
    }
 };
-
 }; // namespace
 namespace {
 
