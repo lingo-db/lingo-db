@@ -542,6 +542,12 @@ void Scheduler::start() {
    scheduler = this;
    for (size_t i = 0; i < numWorkers; i++) {
       workerThreads.emplace_back([this, i] {
+#if defined(__APPLE__) && defined(__arm64__)
+         // on apple silicon: signal os to prefer performance cores for scheduling this thread
+         // https://developer.apple.com/library/archive/documentation/Performance/Conceptual/power_efficiency_guidelines_osx/PrioritizeWorkAtTheTaskLevel.html
+         // we silently ignore errors, since this setting is not mission-critical.
+         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+#endif
 #ifdef TRACER
          utility::Tracer::ensureThreadLocalTraceRecordList();
 #endif
@@ -635,6 +641,12 @@ void awaitChildTask(std::unique_ptr<Task> task) {
 }
 
 std::unique_ptr<SchedulerHandle> startScheduler(size_t numWorkers) {
+#if defined(__APPLE__) && defined(__arm64__)
+   // on apple silicon: set QOS_CLASS_USER_INTERACTIVE for main thread on scheduler startup
+   // we silently ignore errors here, since this setting is not mission-critical.
+   pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+#endif
+
    if (!scheduler) {
       // two ways of setting number of workers.
       // - if provided actual param for createScheduler, this will override LINGODB_PARALLELISM system var
