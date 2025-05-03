@@ -1,8 +1,11 @@
 #include "catch2/catch_all.hpp"
+
 #include <string>
 #include <vector>
 
 #include "lingodb/runtime/StringRuntime.h"
+
+#include <iostream>
 using namespace lingodb::runtime;
 
 // Testing Length -----------------------------------------------------------------------------------------------
@@ -23,7 +26,7 @@ TEST_CASE("Length:SingleByte") {
       for (std::size_t current = start; current < std::size(characters); current++) {
          testString += characters[current];
          VarLen32 str = VarLen32::fromString(testString);
-         REQUIRE(StringRuntime::len(str) == (size_t) current-start+1);
+         REQUIRE(StringRuntime::len(str) == (int64_t) (current-start+1));
       }
    }
 }
@@ -215,5 +218,33 @@ TEST_CASE("Substr:MultiByte") {
 
 }
 
+TEST_CASE("Substr:OutOfBounds") {
+   std::string testString = "The Answer to the Great Question... Of Life, the Universe and Everything... Is... Forty-two";
+   std::string testCase;
 
-// TODO test out of range
+   testCase = "Answer to ";
+   REQUIRE(StringRuntime::compareEq(StringRuntime::substr(VarLen32::fromString(testString), 5, 10), VarLen32::fromString(testCase)));
+
+   testCase = "The Answer to";
+   REQUIRE(StringRuntime::compareEq(StringRuntime::substr(VarLen32::fromString(testString), -1, 15), VarLen32::fromString(testCase)));
+
+   testCase = "The Answer to ";
+   REQUIRE(StringRuntime::compareEq(StringRuntime::substr(VarLen32::fromString(testString), 0, 15), VarLen32::fromString(testCase)));
+
+   testCase = "The Answer to the";
+   REQUIRE(StringRuntime::compareEq(StringRuntime::substr(VarLen32::fromString(testString), 1, 17), VarLen32::fromString(testCase)));
+
+   testCase = testString;
+   REQUIRE(StringRuntime::compareEq(StringRuntime::substr(VarLen32::fromString(testString), 1, 100), VarLen32::fromString(testCase)));
+   REQUIRE(StringRuntime::compareEq(StringRuntime::substr(VarLen32::fromString(testString), 1, 91), VarLen32::fromString(testCase)));
+
+   testCase = "";
+   REQUIRE(StringRuntime::compareEq(StringRuntime::substr(VarLen32::fromString(testString), 10, -1), VarLen32::fromString(testCase)));
+   REQUIRE(StringRuntime::compareEq(StringRuntime::substr(VarLen32::fromString(testString), 1, 0), VarLen32::fromString(testCase)));
+   REQUIRE(StringRuntime::compareEq(StringRuntime::substr(VarLen32::fromString(testString), 100, 0), VarLen32::fromString(testCase)));
+   REQUIRE(StringRuntime::compareEq(StringRuntime::substr(VarLen32::fromString(testString), 100, 10), VarLen32::fromString(testCase)));
+
+   testCase = "he Answer to the Great Question... Of Life, the Universe and Everything... Is... Forty-tw";
+   REQUIRE(StringRuntime::compareEq(StringRuntime::substr(VarLen32::fromString(testString), 2, 89), VarLen32::fromString(testCase)));
+
+}

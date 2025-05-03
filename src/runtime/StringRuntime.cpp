@@ -244,33 +244,33 @@ size_t charIndexToByteIndex(lingodb::runtime::VarLen32 str, size_t charIndex, si
 
 }
 
-lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::substr(lingodb::runtime::VarLen32 str, size_t from, size_t len) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::substr(lingodb::runtime::VarLen32 str, int64_t from, int64_t len) { // NOLINT (clang-diagnostic-return-type-c-linkage)
 
    /*
     * Legal values:
     * - from goes from 1 to len
     * - len goes from 0 to (strLen-from +1)
     *
-    * if we get an illegal value, we convert it to the most sensible legal value before continuing computation
+    * illegal indices "count" towards the length;
+    *    i.e. if we start at -1 with length 3 and the string has a length 10, the result has length 1
     * we then convert the value of from to from-1 to work with c++ structures
    */
 
    size_t strLen = lingodb::runtime::StringRuntime::len(str);
 
-   from = std::min(
-         std::max(from, static_cast<size_t>(1)),
-         strLen
+   size_t legalized_from = std::min(
+         std::max(from, static_cast<int64_t>(1)),
+         static_cast<int64_t>(strLen + 1) // strLen is still a legal value!
       );
 
-   len = std::min(
-            std::max(static_cast<size_t>(0), len),
-            strLen- from +1
-      );
+   size_t legalized_to = from + std::max(static_cast<int64_t>(0), len);
 
-   from --;
+   legalized_from --;
+   legalized_to --;
 
-   size_t byteFrom = charIndexToByteIndex(str, from);
-   size_t byteTo = charIndexToByteIndex(str, from+len, byteFrom, from);
+
+   size_t byteFrom = charIndexToByteIndex(str, legalized_from);
+   size_t byteTo = charIndexToByteIndex(str, legalized_to, byteFrom, legalized_from);
 
    return lingodb::runtime::VarLen32::fromString(str.str().substr(byteFrom, byteTo-byteFrom));
 }

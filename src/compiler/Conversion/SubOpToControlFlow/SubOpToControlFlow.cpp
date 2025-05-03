@@ -396,7 +396,7 @@ class AbstractSubOpConversionPattern {
    const PatternBenefit& getBenefit() const {
       return benefit;
    }
-   virtual ~AbstractSubOpConversionPattern(){};
+   virtual ~AbstractSubOpConversionPattern() {};
 };
 struct InFlightTupleStream {
    subop::InFlightOp inFlightOp;
@@ -747,7 +747,7 @@ class SubOpConversionPattern : public AbstractSubOpConversionPattern {
       return matchAndRewrite(mlir::cast<OpT>(op), adaptor, rewriter);
    }
    virtual LogicalResult matchAndRewrite(OpT op, OpAdaptor adaptor, SubOpRewriter& rewriter) const = 0;
-   virtual ~SubOpConversionPattern(){};
+   virtual ~SubOpConversionPattern() {};
 };
 
 template <class OpT, size_t B = 1>
@@ -771,7 +771,7 @@ class SubOpTupleStreamConsumerConversionPattern : public AbstractSubOpConversion
       });
    }
    virtual LogicalResult matchAndRewrite(OpT op, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const = 0;
-   virtual ~SubOpTupleStreamConsumerConversionPattern(){};
+   virtual ~SubOpTupleStreamConsumerConversionPattern() {};
 };
 
 static mlir::TupleType getHtKVType(subop::HashMapType t, mlir::TypeConverter& converter) {
