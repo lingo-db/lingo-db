@@ -5,7 +5,7 @@
 #include "lingodb/runtime/StringRuntime.h"
 using namespace lingodb::runtime;
 
-// Testing Length
+// Testing Length -----------------------------------------------------------------------------------------------
 
 // -- single byte
 TEST_CASE("Length:SingleByte") {
@@ -92,7 +92,7 @@ TEST_CASE("Length:MultiByte") {
 // -- Edge Unicode points
 TEST_CASE("Length:EdgePoints") {
    std::string edgePoints[] = {
-      // "\u0000", // TODO including this is fine, but it does not count towards length. Why?
+      std::string(1, '\0'),
       "\u007F",
       "\u0080",
       "\u07FF",
@@ -130,7 +130,7 @@ TEST_CASE("Length:EdgePoints") {
 }
 
 
-// Testing Substring
+// Testing Substring -----------------------------------------------------------------------------------------------
 
 static void testSubstringFromChar(std::string characters[], size_t length) {
    std::string testString = "";
