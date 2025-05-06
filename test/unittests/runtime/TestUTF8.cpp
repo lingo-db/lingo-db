@@ -12,13 +12,10 @@ using namespace lingodb::runtime;
 
 // -- single byte
 TEST_CASE("Length:SingleByte") {
-
    std::string characters[] = {
       "H", "e", "l", "l", "o", " ", "W", "o", "r", "l", "d",
       "D", "O", "N", "'", "T", "P", "A", "N", "I", "C",
-      "T", "i", "m", "e", "i", "s", "a", "n", "i", "l", "l", "u", "s", "i", "o", "n", ".", "L", "u", "n", "c", "h", "t", "i", "m", "e", "d", "o", "u", "b", "l", "y", "s", "o", "."
-   };
-
+      "T", "i", "m", "e", "i", "s", "a", "n", "i", "l", "l", "u", "s", "i", "o", "n", ".", "L", "u", "n", "c", "h", "t", "i", "m", "e", "d", "o", "u", "b", "l", "y", "s", "o", "."};
 
    for (std::size_t start = 0; start < std::size(characters); start++) {
       std::string testString = "";
@@ -26,7 +23,7 @@ TEST_CASE("Length:SingleByte") {
       for (std::size_t current = start; current < std::size(characters); current++) {
          testString += characters[current];
          VarLen32 str = VarLen32::fromString(testString);
-         REQUIRE(StringRuntime::len(str) == (int64_t) (current-start+1));
+         REQUIRE(StringRuntime::len(str) == (int64_t) (current - start + 1));
       }
    }
 }
@@ -102,36 +99,30 @@ TEST_CASE("Length:EdgePoints") {
       "\u0800",
       "\uFFFF",
       "\U00010000",
-      "\U0010FFFF"
-   };
+      "\U0010FFFF"};
 
-   struct TestCase{
+   struct TestCase {
       int length;
       std::string testString;
    };
 
    std::vector<TestCase> testCases = {
-      {0, ""}
-   };
+      {0, ""}};
 
-   for (std::string point: edgePoints) {
+   for (std::string point : edgePoints) {
       int length = testCases.size();
-      for (int i=0;i<length;i++) {
+      for (int i = 0; i < length; i++) {
          TestCase testCase = testCases[i];
-         testCases.push_back({
-            testCase.length + 1,
-            testCase.testString + point
-         });
+         testCases.push_back({testCase.length + 1,
+                              testCase.testString + point});
       }
    }
 
-   for (TestCase testCase: testCases) {
+   for (TestCase testCase : testCases) {
       VarLen32 str = VarLen32::fromString(testCase.testString);
       REQUIRE(StringRuntime::len(str) == testCase.length);
    }
-
 }
-
 
 // Testing Substring -----------------------------------------------------------------------------------------------
 
@@ -145,7 +136,7 @@ static void testSubstringFromChar(std::string characters[], size_t length) {
    std::vector<VarLen32> subStrings[length];
 
    for (std::size_t start = 0; start < length; start++) {
-      testString+=characters[start];
+      testString += characters[start];
       std::string subString = "";
       for (std::size_t current = start; current < length; current++) {
          subString += characters[current];
@@ -158,35 +149,28 @@ static void testSubstringFromChar(std::string characters[], size_t length) {
 
    for (std::size_t startingCharacter = 0; startingCharacter < length; startingCharacter++) {
       for (std::size_t end = 0; end < subStrings[startingCharacter].size(); end++) {
-
          VarLen32 subString = subStrings[startingCharacter][end];
          REQUIRE(StringRuntime::compareEq(
-         StringRuntime::substr(str, startingCharacter+1, end+1),
-         subString)
-         );
+            StringRuntime::substr(str, startingCharacter + 1, end + 1),
+            subString));
       }
    }
 }
 
 // -- single byte
 TEST_CASE("Substr:SingleByte") {
-
    // TODO convert to std::array
    std::string characters[] = {
       "H", "e", "l", "l", "o", " ", "W", "o", "r", "l", "d",
       "D", "O", "N", "'", "T", "P", "A", "N", "I", "C",
-      "T", "i", "m", "e", "i", "s", "a", "n", "i", "l", "l", "u", "s", "i", "o", "n", ".", "L", "u", "n", "c", "h", "t", "i", "m", "e", "d", "o", "u", "b", "l", "y", "s", "o", "."
-   };
+      "T", "i", "m", "e", "i", "s", "a", "n", "i", "l", "l", "u", "s", "i", "o", "n", ".", "L", "u", "n", "c", "h", "t", "i", "m", "e", "d", "o", "u", "b", "l", "y", "s", "o", "."};
 
    testSubstringFromChar(characters, std::size(characters));
-
 }
 
 // -- multibyte characters lengths: 2, 3, 4
 
 TEST_CASE("Substr:MultiByte") {
-
-
    std::string characters[] = {
       "\u0093", "\u0722", "\u0151", "\u0559", "\u05f9", "\u048b", "\u07ed", "\u04ac", "\u063a", "\u052c", "\u01ee", "\u01cb",
       "\u06a3", "\u03c7", "\u01b0", "\u062e", "\u0481", "\u01e7", "\u01a9", "\u0731", "\u023e", "\u051f", "\u00f6", "\u03b8",
@@ -211,11 +195,9 @@ TEST_CASE("Substr:MultiByte") {
       "\u01EF", "\u0588", "\u0075", "\u003A", "\u0033", "\u005C", "\uC45A", "\u7FA0", "\u059A", "\u07CD", "\u045C", "\u0648",
       "\u0053", "\uB00C", "\u017E", "\U00018707", "\u04D0", "\U000FDE46", "\U000B0A45", "\u0057", "\u0727", "\u022B", "\uA3BC",
       "\u0020", "\uA871", "\u003C", "\u0430", "\u0031", "\u038B", "\U00066A4F", "\u166B", "\u0159", "\u424F", "\U00039FC9",
-      "\u0073", "\u068D"
-   };
+      "\u0073", "\u068D"};
 
    testSubstringFromChar(characters, std::size(characters));
-
 }
 
 TEST_CASE("Substr:OutOfBounds") {
@@ -246,5 +228,110 @@ TEST_CASE("Substr:OutOfBounds") {
 
    testCase = "he Answer to the Great Question... Of Life, the Universe and Everything... Is... Forty-tw";
    REQUIRE(StringRuntime::compareEq(StringRuntime::substr(VarLen32::fromString(testString), 2, 89), VarLen32::fromString(testCase)));
+}
 
+// Testing Like -----------------------------------------------------------------------------------------------
+
+TEST_CASE("Like:Simple") {
+   VarLen32 testLike = VarLen32::fromString("Jos_!");
+
+   VarLen32 testCandidate;
+
+   testCandidate = VarLen32::fromString("Jose!");
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == true);
+
+   testCandidate = VarLen32::fromString("José!");
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == true);
+}
+
+TEST_CASE("Like:Combinations") {
+   VarLen32 testLike;
+   VarLen32 testCandidate;
+
+   // Multi-byte Wildcard
+   testLike = VarLen32::fromString("J_sé!");
+
+   testCandidate = VarLen32::fromString("José!");
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == true); // 'o' matches '_'
+
+   testCandidate = VarLen32::fromString("Jéssé!");
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == false); // two chars after J
+
+   // % Matching
+   testLike = VarLen32::fromString("J_sé!");
+
+   testCandidate = VarLen32::fromString("José!");
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == true); // 'o' matches '_'
+
+   testCandidate = VarLen32::fromString("Jéssé!");
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == false); // two chars after J
+
+   // Matching across boundaries
+
+   testLike = VarLen32::fromString("J%!");
+
+   testCandidate = VarLen32::fromString("José!");
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == true);
+
+   testCandidate = VarLen32::fromString("Jośę!");
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == true); // two multi-byte chars
+
+   testCandidate = VarLen32::fromString("J!");
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == true); // zero or more
+
+   // Combining Characters
+
+   testLike = VarLen32::fromString("Jo_%!");
+
+   testCandidate = VarLen32::fromString("Joé!"); // composed form
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == true);
+
+   testCandidate = VarLen32::fromString("Jo\u0065\u0301!"); // decomposed é (e + ́)
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == true); // if normalized
+
+   testCandidate = VarLen32::fromString("Joe!"); // ASCII e
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == true); // match either form
+
+   // UTF-8 Boundary with %
+
+   testLike = VarLen32::fromString("%é!");
+
+   testCandidate = VarLen32::fromString("José!");
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == true);
+
+   testCandidate = VarLen32::fromString("Jøse!");
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == false);
+
+   // Multiple _
+
+   testLike = VarLen32::fromString("____!");
+
+   testCandidate = VarLen32::fromString("José!");
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == true); // 4 codepoints
+
+   testCandidate = VarLen32::fromString("Jose!");
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == true); // ASCII only
+
+   testCandidate = VarLen32::fromString("Jósé!");
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == true); // 5 codepoints
+
+   // Start and End Anchors
+
+   testLike = VarLen32::fromString("%é");
+
+   testCandidate = VarLen32::fromString("Café");
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == true);
+
+   testCandidate = VarLen32::fromString("Cafe");
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == false);
+
+   // Non-Match Edge Cases
+
+   testLike = VarLen32::fromString("Jo%!");
+
+   testCandidate = VarLen32::fromString("Jóse"); // no '!'
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == false);
+
+   testCandidate = VarLen32::fromString("Jośé!!");
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == true);
 }
