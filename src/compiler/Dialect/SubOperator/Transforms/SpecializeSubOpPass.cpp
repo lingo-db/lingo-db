@@ -63,15 +63,19 @@ class MultiMapAsHashIndexedView : public mlir::RewritePattern {
             otherUses.push_back(u);
          }
       }
-      mlir::OpPrintingFlags flags;
-      flags.assumeVerified();
-      insertOp.getStream().print(llvm::outs(), flags);
-      insertOp.getStream().getType().print(llvm::outs());
-      auto generateOp = mlir::cast<subop::GenerateOp>(insertOp.getStream().getDefiningOp());
-      std::vector<subop::GenerateEmitOp> emitOps;
-      generateOp.getRegion().walk([&](subop::GenerateEmitOp emitOp) {
-         emitOps.push_back(emitOp);
-      });
+      if (auto generateOp = mlir::dyn_cast_or_null<subop::GenerateOp>(insertOp.getStream().getDefiningOp())) {
+         bool constEmit = false;
+         generateOp.getRegion().walk([&](subop::GenerateEmitOp emitOp) {
+            auto v = emitOp.getValues()[0];
+            auto c = mlir::dyn_cast_or_null<db::ConstantOp>(v.getDefiningOp());
+            if (c) {
+               constEmit = true;
+            }
+         });
+         if (constEmit) {
+            return mlir::failure();
+         }
+      }
 
       auto hashMember = memberManager.getUniqueMember("hash");
       auto linkMember = memberManager.getUniqueMember("link");
@@ -102,9 +106,6 @@ class MultiMapAsHashIndexedView : public mlir::RewritePattern {
          std::vector<mlir::Value> values;
          for (auto keyMemberName : multiMapType.getKeyMembers().getNames()) {
             auto keyColumnAttr = mlir::cast<tuples::ColumnRefAttr>(insertOp.getMapping().get(mlir::cast<mlir::StringAttr>(keyMemberName).strref()));
-            auto aa = buildHashHelper.access(keyColumnAttr, loc);
-            printf("\n*****\n");
-            aa.print(llvm::outs());
             values.push_back(buildHashHelper.access(keyColumnAttr, loc));
          }
          mlir::Value hashed = rewriter.create<db::Hash>(loc, rewriter.create<util::PackOp>(loc, values));
@@ -218,7 +219,7 @@ class MultiMapAsPerfectHashView : public mlir::RewritePattern {
    MultiMapAsPerfectHashView(mlir::MLIRContext* context, subop::ColumnUsageAnalysis& analysis)
       : RewritePattern(subop::GenericCreateOp::getOperationName(), 1, context), analysis(analysis) {}
    mlir::LogicalResult matchAndRewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
-      printf("!!! MultiMapAsHashIndexedView\n");
+      printf("!!! MultiMapAsPerfectHashView\n");
       auto& memberManager = getContext()->getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager();
       auto& columnManager = getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
 
@@ -246,59 +247,28 @@ class MultiMapAsPerfectHashView : public mlir::RewritePattern {
       }
       // TODO getFixed is not needed
       printf("*** multiMapType.getFixed() %d\n", multiMapType.getFixed());
-      mlir::OpPrintingFlags flags;
-      flags.assumeVerified();
-      insertOp.getStream().print(llvm::outs(), flags);
-      insertOp.getStream().getType().print(llvm::outs());
-      auto generateOp = mlir::cast<subop::GenerateOp>(insertOp.getStream().getDefiningOp());
-      std::vector<subop::GenerateEmitOp> emitOps;
-      generateOp.getRegion().walk([&](subop::GenerateEmitOp emitOp) {
-         emitOps.push_back(emitOp);
-      });
-
+      auto generateOp = mlir::dyn_cast_or_null<subop::GenerateOp>(insertOp.getStream().getDefiningOp());
+      if (!generateOp) {
+         return mlir::failure();
+      }
       bool insertConst = true;
       std::vector<std::string> constHashRaws;
-      // TODO it maybe not necessary go through all emitOps to check insertConst. only check emitOps[0] is const?
-      for (auto emitOp : emitOps) {
-         printf("\n-----\n");
-         emitOp.print(llvm::outs(), flags);
-
-         printf("\n  -----\n");
+      generateOp.getRegion().walk([&](subop::GenerateEmitOp emitOp) {
          auto v = emitOp.getValues()[0];
-         v.print(llvm::outs());
          auto c = mlir::dyn_cast_or_null<db::ConstantOp>(v.getDefiningOp());
          if (!c) {
             insertConst = false;
-            break;
          }
          auto strAttr = mlir::dyn_cast_or_null<mlir::StringAttr>(c.getValue());
          if (!strAttr) {
             insertConst = false;
-            break;
          }
          constHashRaws.push_back(strAttr.str());
-
-         
-         // for (auto it = emitOp.getOperandTypes().begin(); it != emitOp.getOperandTypes().end(); it ++) {
-         //    printf("\n  -----\n");
-         //    (*it).print(llvm::outs());
-         // }
-      }
-
+      });
+      // TODO it maybe not necessary go through all emitOps to check insertConst. only check emitOps[0] is const?
       if (!insertConst) {
          return mlir::failure();
       }
-      // if (insertConst) {
-      //    size_t htSize = constHashRaws.size() * 1.25;
-      //    std::vector<size_t> htPoses;
-      //    // TODO PHASE 1.
-      //    // auto perfectHashParams = perfectHashCalc(constHashRaws, htPoses, htSize);
-      //    // create CreateHashIndexedView. pass in buffer
-
-      //    // TODO PHASE 2. inside for (auto lookupOp : lookupOps) {
-      //    // replace rewriter.create<db::Hash> to 
-      //    //         rewriter.create<db::ParameterizedHash>(..., perfectHashParams);
-      // }
       auto view = lingodb::runtime::PerfectHashView::buildPerfectHash(constHashRaws);
       auto hashMember = memberManager.getUniqueMember("hash");
       auto linkMember = memberManager.getUniqueMember("link");
@@ -324,7 +294,7 @@ class MultiMapAsPerfectHashView : public mlir::RewritePattern {
             for (auto entry : lookupTableRaw) {
                mlir::Type stringType = db::StringType::get(rewriter.getContext());
                mlir::Value entryVal;
-               if (entry.has_value()) {
+               if (!entry.has_value()) {
                   entryVal = rewriter.create<db::NullOp>(op->getLoc(), rewriter.getNoneType());
                } else {
                   std::string stringVal = entry.value();
@@ -351,9 +321,12 @@ class MultiMapAsPerfectHashView : public mlir::RewritePattern {
             mlir::OpBuilder::InsertionGuard guard2(rewriter);
             rewriter.setInsertionPointToStart(generateBlock);
             generateOp.getRegion().push_back(generateBlock);
-            for (auto entry : g) {
-               mlir::Value entryVal = rewriter.create<db::ConstantOp>(op->getLoc(), rewriter.getI64Type(), rewriter.getI64IntegerAttr(entry));
-               rewriter.create<subop::GenerateEmitOp>(op->getLoc(), std::vector<mlir::Value>{entryVal});
+            for (size_t idx = 0; idx < g.size(); idx ++) {
+               auto displ = g[idx];
+               if (displ == -1) continue;
+               displ = displ + idx * 1 << 32;
+               mlir::Value displVal = rewriter.create<db::ConstantOp>(op->getLoc(), rewriter.getI64Type(), rewriter.getI64IntegerAttr(displ));
+               rewriter.create<subop::GenerateEmitOp>(op->getLoc(), std::vector<mlir::Value>{displVal});
             }
             rewriter.create<tuples::ReturnOp>(op->getLoc());
          }
@@ -395,13 +368,14 @@ class MultiMapAsPerfectHashView : public mlir::RewritePattern {
       auto auxBuffer = generateAuxValues(view->auxHashParams);
 
       mlir::Type hashIndexedViewType;
+      // TODO RENAME
       mlir::Value hashIndexedView;
       std::vector<mlir::Attribute> hashIndexedViewNames{multiMapType.getMembers().getNames().begin(), multiMapType.getMembers().getNames().end()};
       std::vector<mlir::Attribute> hashIndexedViewTypes{multiMapType.getMembers().getTypes().begin(), multiMapType.getMembers().getTypes().end()};
       {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPoint(insertOp);
-         hashIndexedViewType = subop::HashIndexedViewType::get(rewriter.getContext(), subop::StateMembersAttr::get(rewriter.getContext(), rewriter.getArrayAttr({rewriter.getStringAttr(hashMember)}), rewriter.getArrayAttr({mlir::TypeAttr::get(rewriter.getIndexType())})), subop::StateMembersAttr::get(getContext(), rewriter.getArrayAttr(hashIndexedViewNames), rewriter.getArrayAttr(hashIndexedViewTypes)));
+         hashIndexedViewType = subop::PerfectHashTableType::get(rewriter.getContext(), subop::StateMembersAttr::get(rewriter.getContext(), rewriter.getArrayAttr({rewriter.getStringAttr(hashMember)}), rewriter.getArrayAttr({mlir::TypeAttr::get(rewriter.getIndexType())})), subop::StateMembersAttr::get(getContext(), rewriter.getArrayAttr(hashIndexedViewNames), rewriter.getArrayAttr(hashIndexedViewTypes)));
          hashIndexedView = rewriter.create<subop::CreatePerfectHashView>(loc, hashIndexedViewType, lkbuffer, gbuffer, auxBuffer, hashMember, linkMember);
       }
       auto entryRefType = subop::LookupEntryRefType::get(rewriter.getContext(), mlir::cast<subop::LookupAbleState>(hashIndexedViewType));
@@ -424,16 +398,6 @@ class MultiMapAsPerfectHashView : public mlir::RewritePattern {
          auto [hashDefLookup, hashRefLookup] = createColumn(rewriter.getIndexType(), "hj", "hash");
          auto [lookupPredDef, lookupPredRef] = createColumn(rewriter.getI1Type(), "lookup", "pred");
          auto lookupKeys = lookupOp.getKeys();
-         subop::MapCreationHelper lookupHashHelper(rewriter.getContext());
-         lookupHashHelper.buildBlock(rewriter, [&](mlir::PatternRewriter& rewriter) {
-            std::vector<mlir::Value> values;
-            for (auto key : lookupKeys) {
-               auto keyColumnAttr = mlir::cast<tuples::ColumnRefAttr>(key);
-               values.push_back(lookupHashHelper.access(keyColumnAttr, loc));
-            }
-            mlir::Value hashed = rewriter.create<db::Hash>(loc, rewriter.create<util::PackOp>(loc, values));
-            rewriter.create<tuples::ReturnOp>(loc, mlir::ValueRange{hashed});
-         });
          auto [listDef, listRef] = createColumn(entryRefListType, "lookup", "list");
          auto lookupRef = lookupOp.getRef();
          std::vector<mlir::NamedAttribute> gatheredForEqFn;
@@ -445,8 +409,6 @@ class MultiMapAsPerfectHashView : public mlir::RewritePattern {
             gatheredForEqFn.push_back(rewriter.getNamedAttr(name, lookupKeyMemberDef));
             keyRefsForEqFn.push_back(lookupKeyMemberRef);
          }
-         auto mapOp = rewriter.create<subop::MapOp>(loc, lookupOp.getStream(), rewriter.getArrayAttr({hashDefLookup}), lookupHashHelper.getColRefs());
-         mapOp.getFn().push_back(lookupHashHelper.getMapBlock());
          subop::MapCreationHelper predFnHelper(rewriter.getContext());
          predFnHelper.buildBlock(rewriter, [&](mlir::PatternRewriter& rewriter) {
             mlir::IRMapping mapping;
@@ -462,7 +424,7 @@ class MultiMapAsPerfectHashView : public mlir::RewritePattern {
                rewriter.clone(op, mapping);
             }
          });
-         rewriter.replaceOpWithNewOp<subop::LookupOp>(lookupOp, tuples::TupleStreamType::get(rewriter.getContext()), mapOp.getResult(), hashIndexedView, rewriter.getArrayAttr({hashRefLookup}), listDef);
+         rewriter.replaceOpWithNewOp<subop::LookupOp>(lookupOp, tuples::TupleStreamType::get(rewriter.getContext()), lookupOp.getStream(), hashIndexedView, rewriter.getArrayAttr({hashRefLookup}), listDef);
 
          mlir::Value currentTuple;
          transformer.setCallBeforeFn([&](mlir::Operation* op) {
@@ -487,8 +449,9 @@ class MultiMapAsPerfectHashView : public mlir::RewritePattern {
          transformer.setCallAfterFn({});
       }
       rewriter.eraseOp(insertOp);
-      transformer.updateValue(state, buffer.getType());
-      rewriter.replaceOp(createOp, buffer);
+      // TODO
+      // transformer.updateValue(state, buffer.getType());
+      // rewriter.replaceOp(createOp, buffer);
       return mlir::success();
    }
 };
@@ -588,6 +551,7 @@ class SpecializeSubOpPass : public mlir::PassWrapper<SpecializeSubOpPass, mlir::
       mlir::RewritePatternSet patterns(&getContext());
       if (withOptimizations) {
          patterns.insert<MultiMapAsHashIndexedView>(&getContext(), columnUsageAnalysis);
+         patterns.insert<MultiMapAsPerfectHashView>(&getContext(), columnUsageAnalysis);
       }
       patterns.insert<MapAsHashMap>(&getContext(), columnUsageAnalysis);
       patterns.insert<MultiMapAsHashMultiMap>(&getContext(), columnUsageAnalysis);

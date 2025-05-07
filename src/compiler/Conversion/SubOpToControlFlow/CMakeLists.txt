@@ -7,6 +7,7 @@ add_mlir_conversion_library(MLIRSubOpToControlFlow
         ../../../lingodb/compiler/Conversion/SubOpToControlFlow
 
         DEPENDS
+        perfect-ht-rt-defs
         join-ht-rt-defs
         ht-rt-defs
         hmm-rt-defs

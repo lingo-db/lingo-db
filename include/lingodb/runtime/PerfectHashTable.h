@@ -3,8 +3,6 @@
 #include "lingodb/runtime/Buffer.h"
 #include "lingodb/runtime/helpers.h"
 #include "lingodb/runtime/StringRuntime.h"
-#include "mlir/IR/Value.h"
-#include "mlir/IR/Builders.h"
 
 namespace lingodb::runtime {
 class GrowingBuffer;
@@ -13,23 +11,11 @@ struct HashParams {
    uint32_t b;
 };
 
-// struct PerfectHashCombination {
-//    // TODO GrowingBuffer for int8_t
-//    std::vector<int8_t> g;                  // Displacement values
-//    // TODO GrowingBuffer for VarLen32
-//    std::vector<std::optional<std::string>> lookupTable;
-//    std::array<HashParams, 2> auxHashParams;  // Parameters for auxiliary hash functions
-//    size_t tableSize;                       // Size of the hash table (number of keys)
-//    size_t r;                               // Range for intermediate hash values
-// };
-
 // TODO RENAME
 struct LKEntry {
-   uint8_t content[];
-};
-struct GEntry {
-   size_t index;
-   size_t value;
+   bool empty;
+   uint64_t hashvalue;
+   VarLen32 key;
 };
 
 class PerfectHashView {
@@ -40,11 +26,13 @@ class PerfectHashView {
    // size_t tableSize;                       // Size of the hash table (number of keys)
    // size_t r;                               // Range for intermediate hash values
 public:
-   std::vector<LKEntry*> lookupTable;
+   std::vector<LKEntry> lookupTable;
    std::vector<size_t> g;                  // Displacement values
    HashParams auxHashParams[2];  // Parameters for auxiliary hash functions
-   size_t tableSize;                       // Size of the hash table (number of keys)
-   size_t r;
+   // Size of the hash table (number of keys). max 256
+   uint8_t tableSize;
+   // Size of displacement table. max 65536
+   uint16_t r;
    
    std::vector<std::optional<std::string>> lookupTableRaw;
 
@@ -55,11 +43,8 @@ public:
    PerfectHashView(const std::vector<std::string>& keySet) {
       tableSize = keySet.size();
       lookupTable.resize(tableSize);
-      // For FCH, r is typically set to m² where m is number of keys
-      r = std::max(size_t(16), tableSize * tableSize);
+      lookupTableRaw.resize(tableSize);
    }
-
-   mlir::Value lingodb::runtime::PerfectHashView::convertToMLIRValue(PerfectHashView& instance, mlir::OpBuilder& builder);
 
    // Build the perfect hash function
    static PerfectHashView* buildPerfectHash(const std::vector<std::string>& keySet);
@@ -70,13 +55,14 @@ public:
    size_t hash(const std::string& key) const;
 
    // Check if a key exists in the original key set
-   bool contains(lingodb::runtime::VarLen32 key) const {
-      size_t idx = hash(key);
-      if (idx >= tableSize) return false;
+   void* containHash(lingodb::runtime::VarLen32 key) {
+      size_t h = hash(key);
+      size_t idx = h % tableSize;
       
       // 直接检查查找表中的值是否匹配
       // TODO DELETE contains. LOOKUP logics in MLIR
-      return true;
+      return &lookupTable[idx];
+      // return true;
       // return !lookupTable[idx]->empty() && lingodb::runtime::StringRuntime::compareEq(lookupTable[idx].value(), key);
    }
 

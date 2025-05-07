@@ -12,6 +12,7 @@ add_library(runtime OBJECT
         Buffer.cpp
         SimpleState.cpp
         LazyJoinHashtable.cpp
+        PerfectHashTable.cpp
         SegmentTreeView.cpp
         Hashtable.cpp
         PreAggregationHashtable.cpp

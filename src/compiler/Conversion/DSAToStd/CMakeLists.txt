@@ -9,6 +9,7 @@ add_mlir_conversion_library(MLIRDSAToStd
 
         DEPENDS
         ds-it-rt-defs
+        perfect-ht-rt-defs
         join-ht-rt-defs
         ht-rt-defs
         ec-rt-defs

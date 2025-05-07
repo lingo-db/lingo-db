@@ -662,7 +662,8 @@ class ToJson {
          })
          .Case<subop::CreatePerfectHashView>([&](subop::CreatePerfectHashView op) {
             result["subop"] = "create_perfect_hash_view";
-            result["accesses"].push_back(getOperandReference(op.getSource(), resolveBlockArgs));
+            // TODO
+            result["accesses"].push_back(getOperandReference(op.getLk(), resolveBlockArgs));
             return result;
          })
          .Case<subop::CreateContinuousView>([&](subop::CreateContinuousView op) {

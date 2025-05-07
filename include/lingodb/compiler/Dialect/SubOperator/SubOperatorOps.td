@@ -186,6 +186,14 @@ def HashIndexedView : SubOperator_Type<"HashIndexedView", "hash_indexed_view", [
         StateMembersAttr getMembers();
      }];
 }
+def PerfectHashTable : SubOperator_Type<"PerfectHashTable", "perfect_hash_view", [State,LookupAbleState]> {
+    let summary = "sorted view type";
+    let parameters = (ins "StateMembersAttr":$keyMembers,"StateMembersAttr":$valueMembers );
+    let assemblyFormat = "`<` custom<StateMembers>($keyMembers) `,` custom<StateMembers>($valueMembers) `>`";
+     let extraClassDeclaration = [{
+        StateMembersAttr getMembers();
+     }];
+}
 
 def SegmentTreeView : SubOperator_Type<"SegmentTreeView", "segment_tree_view", [State,LookupAbleState]> {
     let summary = "segment tree view type";
@@ -616,9 +624,9 @@ def CreateHashIndexedView : SubOperator_Op<"create_hash_indexed_view", [SubOpera
       }];
 }
 def CreatePerfectHashView : SubOperator_Op<"create_perfect_hash_view", [SubOperator]> {
-    let arguments = (ins Buffer:$source,StrAttr: $hash_member, StrAttr: $link_member);
+    let arguments = (ins Buffer:$lk, Buffer:$g, Buffer:$aux, StrAttr: $hash_member, StrAttr: $link_member);
     let results = (outs HashIndexedView:$result);
-    let assemblyFormat = [{ $source `:` type($source) `hash` `(` $hash_member `)` `link` `(` $link_member `)` `->` type($result) attr-dict }];
+    let assemblyFormat = [{ $lk `:` type($lk) $g `:` type($g) $aux `:` type($aux) `hash` `(` $hash_member `)` `link` `(` $link_member `)` `->` type($result) attr-dict }];
       let extraClassDeclaration = [{
           std::vector<std::string> getWrittenMembers();
           std::vector<std::string> getReadMembers();
