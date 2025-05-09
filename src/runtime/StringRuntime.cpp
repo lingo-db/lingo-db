@@ -3,6 +3,8 @@
 #include "arrow/util/value_parsing.h"
 #include "lingodb/runtime/helpers.h"
 
+#include <llvm/IR/InlineAsm.h>
+
 #include <arrow/type.h>
 #include <arrow/util/decimal.h>
 
@@ -10,35 +12,46 @@
 // src: https://github.com/cmu-db/noisepage/blob/c2635d3360dd24a9f7a094b4b8bcd131d99f2d4b/src/execution/sql/operators/like_operators.cpp
 // (MIT License, Copyright (c) 2018 CMU Database Group)
 #define NextByte(p, plen) ((p)++, (plen)--)
+
+// can be combined with the NextChar in the StringRuntime, but would need iterativeLike to be rewritten
+static inline void NextChar(const char*& p, std::size_t& plen) {
+   // handle first byte and continuations
+   do {
+      p++;
+      plen--;
+   } while (plen > 0 &&
+            (static_cast<uint8_t>(*p) >> 6) == 2);
+}
+
 namespace {
 bool iterativeLike(const char* str, size_t strLen, const char* pattern, size_t patternLen, char escape) {
    const char *s = str, *p = pattern;
    std::size_t slen = strLen, plen = patternLen;
 
-   for (; plen > 0 && slen > 0; NextByte(p, plen)) {
+   for (; plen > 0 && slen > 0; NextChar(p, plen)) {
       if (*p == escape) {
          // Next pattern character must match exactly, whatever it is
-         NextByte(p, plen);
+         NextChar(p, plen);
 
          if (plen == 0 || *p != *s) {
             return false;
          }
 
-         NextByte(s, slen);
+         NextChar(s, slen);
       } else if (*p == '%') {
          // Any sequence of '%' wildcards can essentially be replaced by one '%'. Similarly, any
          // sequence of N '_'s will blindly consume N characters from the input string. Process the
          // pattern until we reach a non-wildcard character.
-         NextByte(p, plen);
+         NextChar(p, plen);
          while (plen > 0) {
             if (*p == '%') {
-               NextByte(p, plen);
+               NextChar(p, plen);
             } else if (*p == '_') {
                if (slen == 0) {
                   return false;
                }
-               NextByte(s, slen);
-               NextByte(p, plen);
+               NextChar(s, slen);
+               NextChar(p, plen);
             } else {
                break;
             }
@@ -50,7 +63,7 @@ bool iterativeLike(const char* str, size_t strLen, const char* pattern, size_t p
          }
 
          if (*p == escape) {
-            NextByte(p, plen);
+            NextChar(p, plen);
             if (plen == 0) {
                return false;
             }
@@ -60,23 +73,23 @@ bool iterativeLike(const char* str, size_t strLen, const char* pattern, size_t p
             if (iterativeLike(s, slen, p, plen, escape)) {
                return true;
             }
-            NextByte(s, slen);
+            NextChar(s, slen);
          }
          // No match
          return false;
       } else if (*p == '_') {
          // '_' wildcard matches a single character in the input
-         NextByte(s, slen);
+         NextChar(s, slen);
       } else if (*p == *s) {
          // Exact character match
-         NextByte(s, slen);
+         NextChar(s, slen);
       } else {
          // Unmatched!
          return false;
       }
    }
    while (plen > 0 && *p == '%') {
-      NextByte(p, plen);
+      NextChar(p, plen);
    }
    return slen == 0 && plen == 0;
 }
@@ -195,11 +208,96 @@ bool lingodb::runtime::StringRuntime::compareNEq(lingodb::runtime::VarLen32 str1
 EXPORT char* rt_varlen_to_ref(lingodb::runtime::VarLen32* varlen) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    return varlen->data();
 }
-lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::substr(lingodb::runtime::VarLen32 str, size_t from, size_t to) { // NOLINT (clang-diagnostic-return-type-c-linkage)
-   from -= 1;
-   to = std::min((size_t) str.getLen(), to);
-   if (from > to || str.getLen() < to) throw std::runtime_error("can not perform substring operation");
-   return lingodb::runtime::VarLen32::fromString(str.str().substr(from, to - from));
+
+int64_t lingodb::runtime::StringRuntime::len(VarLen32 str) {
+   char* data = str.data();
+   uint32_t byteLen = str.getLen();
+
+   // start with byteLen, subtract at every continuation (starting with b10xxxxxx)
+   uint32_t charLen = byteLen;
+
+   for (uint32_t i = 0; i < byteLen; i++) {
+      const unsigned char c = data[i];
+      uint8_t shifted = c >> 6;
+      charLen -= (shifted == 2);
+   }
+
+   return charLen;
+}
+
+size_t lingodb::runtime::StringRuntime::NextChar(VarLen32 str, size_t position) {
+   // handle first byte and continuations
+   char* data = str.data();
+   uint32_t byteLen = str.getLen();
+
+   do {
+      position++;
+   } while (position < byteLen &&
+            (static_cast<uint8_t>(data[position]) >> 6) == 2);
+
+   return position;
+}
+
+size_t lingodb::runtime::StringRuntime::charIndexToByteIndex(lingodb::runtime::VarLen32 str, size_t charIndex, size_t knownByteIndex = 0, size_t knownCharIndex = 0) {
+   // TODO explain parameters template?
+   /*
+    * considered the following: extract first bits, check number of values needed to jump from a memory table, do jump
+    * decided against it: the following implementation may be easier to vectorize
+    */
+
+   /*
+    * knownByteIndex and knownCharIndex: already known mappings from previous runs
+    * charIndex < len(str) length being in the utf-8 sense
+    * knownByteIndex should map to the first byte of the knownCharIndex
+    */
+
+   char* data = str.data();
+   uint32_t byteLen = str.getLen();
+
+   for (; knownByteIndex < byteLen; knownByteIndex++) {
+      const unsigned char c = data[knownByteIndex];
+      uint8_t shifted = c >> 6;
+
+      // if not a continuation
+      if (shifted != 2) {
+         if (knownCharIndex == charIndex) {
+            return knownByteIndex;
+         }
+         knownCharIndex++;
+      }
+   }
+
+   return knownByteIndex; // returns the byteLength;
+}
+
+lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::substr(lingodb::runtime::VarLen32 str, int64_t from, int64_t len) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+
+   /*
+    * Legal values:
+    * - from goes from 1 to len
+    * - len goes from 0 to (strLen-from +1)
+    *
+    * illegal indices "count" towards the length;
+    *    i.e. if we start at -1 with length 3 and the string has a length 10, the result has length 1
+    * we then convert the value of from to from-1 to work with c++ structures
+   */
+
+   size_t strLen = lingodb::runtime::StringRuntime::len(str);
+
+   size_t legalized_from = std::min(
+      std::max(from, static_cast<int64_t>(1)),
+      static_cast<int64_t>(strLen + 1) // strLen is still a legal value!
+   );
+
+   size_t legalized_to = from + std::max(static_cast<int64_t>(0), len);
+
+   legalized_from--;
+   legalized_to--;
+
+   size_t byteFrom = charIndexToByteIndex(str, legalized_from);
+   size_t byteTo = charIndexToByteIndex(str, legalized_to, byteFrom, legalized_from);
+
+   return lingodb::runtime::VarLen32::fromString(str.str().substr(byteFrom, byteTo - byteFrom));
 }
 
 size_t lingodb::runtime::StringRuntime::findMatch(VarLen32 str, VarLen32 needle, size_t start, size_t end) {
@@ -226,9 +324,6 @@ void toUpper(char* str, size_t len) {
    }
 }
 } // namespace
-int64_t lingodb::runtime::StringRuntime::len(VarLen32 str) {
-   return str.getLen();
-}
 lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::toUpper(lingodb::runtime::VarLen32 str) {
    if (str.isShort()) {
       ::toUpper(str.data(), str.getLen());
