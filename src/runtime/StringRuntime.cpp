@@ -3,6 +3,8 @@
 #include "arrow/util/value_parsing.h"
 #include "lingodb/runtime/helpers.h"
 
+#include <llvm/IR/InlineAsm.h>
+
 #include <arrow/type.h>
 #include <arrow/util/decimal.h>
 
@@ -11,14 +13,14 @@
 // (MIT License, Copyright (c) 2018 CMU Database Group)
 #define NextByte(p, plen) ((p)++, (plen)--)
 
+// can be combined with the NextChar in the StringRuntime, but would need iterativeLike to be rewritten
 static inline void NextChar(const char*& p, std::size_t& plen) {
-
    // handle first byte and continuations
    do {
-      p++; plen--;
-
+      p++;
+      plen--;
    } while (plen > 0 &&
-      (static_cast<uint8_t>(*p) >> 6) == 2);
+            (static_cast<uint8_t>(*p) >> 6) == 2);
 }
 
 namespace {
@@ -110,7 +112,7 @@ bool lingodb::runtime::StringRuntime::startsWith(lingodb::runtime::VarLen32 str1
 //source https://github.com/apache/arrow/blob/41d115071587d68891b219cc137551d3ea9a568b/cpp/src/gandiva/gdv_function_stubs.cc
 //Apache-2.0 License
 #define CAST_NUMERIC_FROM_STRING(OUT_TYPE, ARROW_TYPE, TYPE_NAME)                                                                                 \
-   OUT_TYPE lingodb::runtime::StringRuntime::to## TYPE_NAME(lingodb::runtime::VarLen32 str) { /* NOLINT (clang-diagnostic-return-type-c-linkage)*/ \
+   OUT_TYPE lingodb::runtime::StringRuntime::to##TYPE_NAME(lingodb::runtime::VarLen32 str) { /* NOLINT (clang-diagnostic-return-type-c-linkage)*/ \
       char* data = (str).data();                                                                                                                  \
       int32_t len = (str).getLen();                                                                                                               \
       OUT_TYPE val = 0;                                                                                                                           \
@@ -153,7 +155,7 @@ __int128 lingodb::runtime::StringRuntime::toDecimal(lingodb::runtime::VarLen32 s
    return res;
 }
 #define CAST_NUMERIC_TO_STRING(IN_TYPE, ARROW_TYPE, TYPE_NAME)                                                                                       \
-   lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::from## TYPE_NAME(IN_TYPE value) { /* NOLINT (clang-diagnostic-return-type-c-linkage)*/ \
+   lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::from##TYPE_NAME(IN_TYPE value) { /* NOLINT (clang-diagnostic-return-type-c-linkage)*/ \
       arrow::internal::StringFormatter<ARROW_TYPE> formatter;                                                                                        \
       uint8_t* data = nullptr;                                                                                                                       \
       size_t len = 0;                                                                                                                                \
@@ -185,7 +187,7 @@ lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::fromChar(uint64_t va
 }
 
 #define STR_CMP(NAME, OP)                                                                                                  \
-   bool lingodb::runtime::StringRuntime::compare## NAME(lingodb::runtime::VarLen32 str1, lingodb::runtime::VarLen32 str2) { \
+   bool lingodb::runtime::StringRuntime::compare##NAME(lingodb::runtime::VarLen32 str1, lingodb::runtime::VarLen32 str2) { \
       return std::string_view(str1.data(), str1.getLen()) OP std::string_view(str2.data(), str2.getLen());                 \
    }
 
@@ -214,18 +216,35 @@ int64_t lingodb::runtime::StringRuntime::len(VarLen32 str) {
    // start with byteLen, subtract at every continuation (starting with b10xxxxxx)
    uint32_t charLen = byteLen;
 
-   for (uint32_t i=0;i<byteLen;i++) {
+   for (uint32_t i = 0; i < byteLen; i++) {
       const unsigned char c = data[i];
-      uint8_t shifted = c>>6;
+      uint8_t shifted = c >> 6;
       charLen -= (shifted == 2);
    }
 
    return charLen;
 }
 
-size_t charIndexToByteIndex(lingodb::runtime::VarLen32 str, size_t charIndex, size_t knownByteIndex = 0, size_t knownCharIndex = 0) {
+size_t lingodb::runtime::StringRuntime::NextChar(VarLen32 str, size_t position) {
+   // handle first byte and continuations
+   char* data = str.data();
+   uint32_t byteLen = str.getLen();
 
+   do {
+      position++;
+   } while (position < byteLen &&
+            (static_cast<uint8_t>(data[position]) >> 6) == 2);
+
+   return position;
+}
+
+size_t lingodb::runtime::StringRuntime::charIndexToByteIndex(lingodb::runtime::VarLen32 str, size_t charIndex, size_t knownByteIndex = 0, size_t knownCharIndex = 0) {
    // TODO explain parameters template?
+   /*
+    * considered the following: extract first bits, check number of values needed to jump from a memory table, do jump
+    * decided against it: the following implementation may be easier to vectorize
+    */
+
    /*
     * knownByteIndex and knownCharIndex: already known mappings from previous runs
     * charIndex < len(str) length being in the utf-8 sense
@@ -235,12 +254,9 @@ size_t charIndexToByteIndex(lingodb::runtime::VarLen32 str, size_t charIndex, si
    char* data = str.data();
    uint32_t byteLen = str.getLen();
 
-
-
-   for (; knownByteIndex<byteLen; knownByteIndex++) {
-
+   for (; knownByteIndex < byteLen; knownByteIndex++) {
       const unsigned char c = data[knownByteIndex];
-      uint8_t shifted = c>>6;
+      uint8_t shifted = c >> 6;
 
       // if not a continuation
       if (shifted != 2) {
@@ -252,7 +268,6 @@ size_t charIndexToByteIndex(lingodb::runtime::VarLen32 str, size_t charIndex, si
    }
 
    return knownByteIndex; // returns the byteLength;
-
 }
 
 lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::substr(lingodb::runtime::VarLen32 str, int64_t from, int64_t len) { // NOLINT (clang-diagnostic-return-type-c-linkage)
@@ -270,20 +285,19 @@ lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::substr(lingodb::runt
    size_t strLen = lingodb::runtime::StringRuntime::len(str);
 
    size_t legalized_from = std::min(
-         std::max(from, static_cast<int64_t>(1)),
-         static_cast<int64_t>(strLen + 1) // strLen is still a legal value!
-      );
+      std::max(from, static_cast<int64_t>(1)),
+      static_cast<int64_t>(strLen + 1) // strLen is still a legal value!
+   );
 
    size_t legalized_to = from + std::max(static_cast<int64_t>(0), len);
 
-   legalized_from --;
-   legalized_to --;
-
+   legalized_from--;
+   legalized_to--;
 
    size_t byteFrom = charIndexToByteIndex(str, legalized_from);
    size_t byteTo = charIndexToByteIndex(str, legalized_to, byteFrom, legalized_from);
 
-   return lingodb::runtime::VarLen32::fromString(str.str().substr(byteFrom, byteTo-byteFrom));
+   return lingodb::runtime::VarLen32::fromString(str.str().substr(byteFrom, byteTo - byteFrom));
 }
 
 size_t lingodb::runtime::StringRuntime::findMatch(VarLen32 str, VarLen32 needle, size_t start, size_t end) {

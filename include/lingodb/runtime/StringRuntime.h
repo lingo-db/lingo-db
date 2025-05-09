@@ -14,6 +14,7 @@ struct StringRuntime {
    static bool endsWith(VarLen32 str, VarLen32 substr);
    static int64_t toInt(VarLen32 str);
    static int64_t len(VarLen32 str);
+   static size_t NextChar(VarLen32 str, size_t position);
    static float toFloat32(VarLen32 str);
    static double toFloat64(VarLen32 str);
    static __int128 toDecimal(VarLen32 str, int32_t reqScale);
@@ -27,6 +28,7 @@ struct StringRuntime {
    static VarLen32 fromFloat64(double);
    static VarLen32 fromChar(uint64_t, size_t bytes);
    static VarLen32 fromDecimal(__int128, int32_t scale);
+   static size_t charIndexToByteIndex(lingodb::runtime::VarLen32 str, size_t charIndex, size_t knownByteIndex, size_t knownCharIndex);
    static VarLen32 substr(VarLen32 str, int64_t from, int64_t len);
    static VarLen32 toUpper(VarLen32 str);
    static VarLen32 concat(VarLen32 a, VarLen32 b);
