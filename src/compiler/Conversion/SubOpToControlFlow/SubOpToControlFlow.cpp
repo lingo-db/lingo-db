@@ -2112,8 +2112,9 @@ class ScanPerfectHashTableListLowering : public SubOpConversionPattern<subop::Sc
       Value hashPtr = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(getContext(), rewriter.getIndexType()), castedPtr, 1);
       Value valuePtr = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(getContext(), tupleType), castedPtr, 2);
       mlir::Value currHash = rewriter.create<util::LoadOp>(loc, hashPtr, mlir::Value());
-      mlir::Value hashEq = rewriter.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::eq, currHash, hash);
-      mlir::Value notEmpty = rewriter.create<db::NotOp>(loc, emptyPtr);
+      mlir::Value hashEq = rewriter.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::eq, currHash, rewriter.create<arith::IndexCastOp>(loc, rewriter.getIndexType(), hash));
+      Value emptyVal = rewriter.create<util::LoadOp>(loc, emptyPtr, mlir::Value());
+      mlir::Value notEmpty = rewriter.create<db::NotOp>(loc, emptyVal);
       mlir::Value anded = rewriter.create<db::AndOp>(loc, std::vector<mlir::Value>{notEmpty, hashEq});
       rewriter.create<mlir::scf::IfOp>(
          loc, anded, [&](mlir::OpBuilder& builder1, mlir::Location loc) {
@@ -2386,8 +2387,16 @@ class LookupPerfectHahsTableLowering : public SubOpTupleStreamConsumerConversion
       auto loc = lookupOp->getLoc();
       mlir::Value key = mapping.resolve(lookupOp, lookupOp.getKeys())[0];
 
-      Value ptr = rt::PerfectHashView::containHash(rewriter, loc)({adaptor.getState(), key})[0];
-      Value matches = rewriter.create<util::PackOp>(loc, ValueRange{ptr, key});
+      // TODO VARLEN32 SIZE
+      auto i8PtrType = util::RefType::get(getContext(), rewriter.getI8Type());
+      Value arg1 = rewriter.create<util::AllocOp>(loc, util::RefType::get(i8PtrType), rewriter.create<mlir::arith::ConstantIndexOp>(loc, 16));
+      rewriter.create<util::StoreOp>(loc, key, arg1, mlir::Value());
+
+
+      Value hash = rt::PerfectHashView::computeHash(rewriter, loc)({adaptor.getState(), arg1})[0];
+
+      Value ptr = rt::PerfectHashView::containHash(rewriter, loc)({adaptor.getState(), hash})[0];
+      Value matches = rewriter.create<util::PackOp>(loc, ValueRange{ptr, hash});
 
       mapping.define(lookupOp.getRef(), matches);
       rewriter.replaceTupleStream(lookupOp, mapping);
@@ -3552,7 +3561,7 @@ class CreatePerfectHashViewLowering : public SubOpConversionPattern<subop::Creat
       // auto linkIsFirst = mlir::cast<mlir::StringAttr>(bufferType.getMembers().getNames()[0]).str() == createOp.getLinkMember();
       // auto hashIsSecond = mlir::cast<mlir::StringAttr>(bufferType.getMembers().getNames()[1]).str() == createOp.getHashMember();
       // if (!linkIsFirst || !hashIsSecond) return failure();
-      auto htView = rt::PerfectHashView::build(rewriter, createOp->getLoc())({adaptor.getLk(), adaptor.getG(), adaptor.getAux()})[0];
+      auto htView = rt::PerfectHashView::build(rewriter, createOp->getLoc())({adaptor.getLk(), adaptor.getG()})[0];
       printf("  <<<< CreatePerfectHashViewLowering replace\n");
       rewriter.replaceOp(createOp, htView);
       return success();

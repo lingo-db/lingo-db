@@ -3,6 +3,7 @@
 #include "lingodb/runtime/Buffer.h"
 #include "lingodb/runtime/helpers.h"
 #include "lingodb/runtime/StringRuntime.h"
+#include <cstring>
 
 namespace lingodb::runtime {
 class GrowingBuffer;
@@ -49,21 +50,33 @@ public:
    // Build the perfect hash function
    static PerfectHashView* buildPerfectHash(const std::vector<std::string>& keySet);
 
-   static PerfectHashView* build(FlexibleBuffer* lkbuffer, FlexibleBuffer* gvalues, FlexibleBuffer* auxvalues);
+   static PerfectHashView* build(FlexibleBuffer* lkbuffer, FlexibleBuffer* gvalues);
 
    // Hash function to map a key to its perfect hash index
    size_t hash(const std::string& key) const;
 
+   // size_t computeHash(lingodb::runtime::VarLen32 key) {
+   //    return hash(key);
+   // }
+   size_t computeHash(uint8_t* keyPtr) {
+      printf("~~~ computeHash %p\n", keyPtr);
+      if (keyPtr == nullptr) {
+         printf("~~~!! computeHash %p\n", keyPtr);
+      }
+      lingodb::runtime::VarLen32 key;
+      std::memcpy(&key, keyPtr, sizeof(key));
+      printf("~~~ computeHash %s\n", key.str().c_str());
+      return hash(key);
+   }
+
    // Check if a key exists in the original key set
-   void* containHash(lingodb::runtime::VarLen32 key) {
-      size_t h = hash(key);
+   void* containHash(size_t h) {
+      printf("~~~** containHash\n");
       size_t idx = h % tableSize;
       
       // 直接检查查找表中的值是否匹配
       // TODO DELETE contains. LOOKUP logics in MLIR
       return &lookupTable[idx];
-      // return true;
-      // return !lookupTable[idx]->empty() && lingodb::runtime::StringRuntime::compareEq(lookupTable[idx].value(), key);
    }
 
    // Get the number of keys in the hash table

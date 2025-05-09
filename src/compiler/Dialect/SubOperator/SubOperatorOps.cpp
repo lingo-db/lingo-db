@@ -1228,7 +1228,7 @@ std::vector<std::string> subop::CreateHashIndexedView::getReadMembers() {
    return {getHashMember().str()};
 }
 std::vector<std::string> subop::CreatePerfectHashView::getWrittenMembers() {
-   return {getLinkMember().str(), getHashMember().str()}; //todo: hack
+   return {getHashMember().str()}; //todo: hack
 }
 std::vector<std::string> subop::CreatePerfectHashView::getReadMembers() {
    return {getHashMember().str()};

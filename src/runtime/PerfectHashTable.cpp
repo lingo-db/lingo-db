@@ -28,18 +28,19 @@ size_t lingodb::runtime::PerfectHashView::hash(const std::string& key) const {
     return (h1 + g[h2]);
 }
 
-lingodb::runtime::PerfectHashView* lingodb::runtime::PerfectHashView::build(FlexibleBuffer* lkvalues, FlexibleBuffer* gvalues, FlexibleBuffer* auxvalues) {
+lingodb::runtime::PerfectHashView* lingodb::runtime::PerfectHashView::build(FlexibleBuffer* lkvalues, FlexibleBuffer* gvalues) {
     std::vector<std::string> empty;
     auto* ph = new PerfectHashView(empty);
     // TODO destroy
-    size_t aIdx = 0;
-    auxvalues->iterate([&](uint8_t* entryRawPtr) {
-        if (aIdx == 0) std::memcpy(&ph->auxHashParams[0].a, entryRawPtr, sizeof(uint32_t));
-        else if (aIdx == 1) std::memcpy(&ph->auxHashParams[0].b, entryRawPtr, sizeof(uint32_t));
-        else if (aIdx == 2) std::memcpy(&ph->auxHashParams[1].a, entryRawPtr, sizeof(uint32_t));
-        else if (aIdx == 3) std::memcpy(&ph->auxHashParams[1].b, entryRawPtr, sizeof(uint32_t));
-        aIdx++;
-    });
+    // size_t aIdx = 0;
+    // auxvalues->iterate([&](uint8_t* entryRawPtr) {
+    //     if (aIdx == 0) std::memcpy(&ph->auxHashParams[0].a, entryRawPtr, sizeof(uint32_t));
+    //     else if (aIdx == 1) std::memcpy(&ph->auxHashParams[0].b, entryRawPtr, sizeof(uint32_t));
+    //     else if (aIdx == 2) std::memcpy(&ph->auxHashParams[1].a, entryRawPtr, sizeof(uint32_t));
+    //     else if (aIdx == 3) std::memcpy(&ph->auxHashParams[1].b, entryRawPtr, sizeof(uint32_t));
+    //     aIdx++;
+    // });
+    printf("#### PerfectHashView::build %d %d\n", lkvalues->getLen(), gvalues->getLen());
     ph->tableSize = lkvalues->getLen();
     // For FCH, r is typically set to m² where m is number of keys
     ph->r = std::max(size_t(16), size_t(ph->tableSize) * size_t(ph->tableSize));
@@ -56,13 +57,22 @@ lingodb::runtime::PerfectHashView* lingodb::runtime::PerfectHashView::build(Flex
         ph->lookupTable.push_back(lk);
     });
 
-    ph->g.resize(ph->r, -1);
+    ph->g.resize(ph->r, std::numeric_limits<size_t>::max());
+
+    size_t aIdx = 0;
     gvalues->iterate([&](uint8_t* entryRawPtr) {
-        uint64_t displ;
-        std::memcpy(&displ, entryRawPtr, sizeof(displ));
-        uint16_t idx = displ / 1 << 32;
-        displ = displ - idx * 1 << 32;
-        ph->g[idx] = ph->g[displ];
+        if (aIdx == 0) std::memcpy(&ph->auxHashParams[0].a, entryRawPtr, sizeof(uint32_t));
+        else if (aIdx == 1) std::memcpy(&ph->auxHashParams[0].b, entryRawPtr, sizeof(uint32_t));
+        else if (aIdx == 2) std::memcpy(&ph->auxHashParams[1].a, entryRawPtr, sizeof(uint32_t));
+        else if (aIdx == 3) std::memcpy(&ph->auxHashParams[1].b, entryRawPtr, sizeof(uint32_t));
+        else {
+            uint64_t displ;
+            std::memcpy(&displ, entryRawPtr, sizeof(displ));
+            uint16_t idx = displ >> 32;
+            displ -= uint64_t(idx) << 32;
+            ph->g[idx] = ph->g[displ];
+        }
+        aIdx++;
     });
     return ph;
 }
@@ -81,7 +91,9 @@ lingodb::runtime::PerfectHashView* lingodb::runtime::PerfectHashView::buildPerfe
     PerfectHashView* ph = new PerfectHashView(keySet);
     // Initialize displacement array with default values
     auto& g = ph->g;
-    g.resize(ph->r, -1);
+    // For FCH, r is typically set to m² where m is number of keys
+    ph->r = std::max(size_t(16), size_t(ph->tableSize) * size_t(ph->tableSize));
+    g.resize(ph->r, std::numeric_limits<size_t>::max());
     
     // Used to track hash collisions during construction
     auto tableSize = ph->tableSize;
@@ -111,7 +123,7 @@ lingodb::runtime::PerfectHashView* lingodb::runtime::PerfectHashView::buildPerfe
             
             // If we couldn't resolve collisions, restart with new hash functions
             if (!found) {
-                std::fill(g.begin(), g.end(), -1);
+                std::fill(g.begin(), g.end(), std::numeric_limits<size_t>::max());
                 std::fill(occupied.begin(), occupied.end(), false);
                 LKEntry emptyLK;
                 emptyLK.empty = false;
