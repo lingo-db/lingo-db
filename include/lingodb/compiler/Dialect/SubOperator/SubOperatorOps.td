@@ -624,9 +624,9 @@ def CreateHashIndexedView : SubOperator_Op<"create_hash_indexed_view", [SubOpera
       }];
 }
 def CreatePerfectHashView : SubOperator_Op<"create_perfect_hash_view", [SubOperator]> {
-    let arguments = (ins Buffer:$lk, Buffer:$g);
+    let arguments = (ins Buffer:$lk, Buffer:$g, StrAttr: $lk_member, StrAttr: $g_member);
     let results = (outs PerfectHashTable:$result);
-    let assemblyFormat = [{ $lk `:` type($lk) $g `:` type($g) `->` type($result) attr-dict }];
+    let assemblyFormat = [{ $lk `:` type($lk) $g `:` type($g) `lk` `(` $lk_member `)` `g` `(` $g_member `)` `->` type($result) attr-dict }];
       let extraClassDeclaration = [{
           std::vector<std::string> getWrittenMembers();
           std::vector<std::string> getReadMembers();

@@ -59,20 +59,38 @@ public:
    //    return hash(key);
    // }
    size_t computeHash(uint8_t* keyPtr) {
-      printf("~~~ computeHash %p\n", keyPtr);
+      // printf("~~~ computeHash %p\n", keyPtr);
+      // return 0;
       if (keyPtr == nullptr) {
          printf("~~~!! computeHash %p\n", keyPtr);
       }
       lingodb::runtime::VarLen32 key;
       std::memcpy(&key, keyPtr, sizeof(key));
-      printf("~~~ computeHash %s\n", key.str().c_str());
-      return hash(key);
+      auto h = hash(key);
+      // printf("~~~ computeHash %s %lu\n", key.str().c_str(), h);
+      return h;
+
+      // lingodb::runtime::VarLen32 key;
+      // std::memcpy(&key, keyPtr, sizeof(key));
+      // size_t hash = 0;
+      // const uint32_t prime = 0x7FFFFFFF; // 2^31 - 1
+
+      // hash = (hash * auxHashParams[0].a + static_cast<uint8_t>(key.getPtr()[key.getLen()-1])) & prime;
+      // hash = (hash * auxHashParams[0].b) & prime;
+      // size_t h1 = hash % this->r;
+
+      // hash = 0;
+      // hash = (hash * auxHashParams[1].a + static_cast<uint8_t>(key.getPtr()[key.getLen()-1])) & prime;
+      // hash = (hash * auxHashParams[1].b) & prime;
+      // size_t h2 = hash % this->r;
+
+      // return (h1 + g[h2]);
    }
 
    // Check if a key exists in the original key set
    void* containHash(size_t h) {
-      printf("~~~** containHash\n");
       size_t idx = h % tableSize;
+      // printf("~~~** containHash %lu %lu %s %lu\n", h, idx, lookupTable[idx].key.str().c_str(), lookupTable[idx].hashvalue);
       
       // 直接检查查找表中的值是否匹配
       // TODO DELETE contains. LOOKUP logics in MLIR

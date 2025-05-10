@@ -359,7 +359,7 @@ class MultiMapAsPerfectHashView : public mlir::RewritePattern {
                tuples::TupleStreamType::get(rewriter.getContext())
             };
             for (size_t idx = 0; idx < g.size(); idx ++) {
-               if (g[idx] == std::numeric_limits<size_t>::max()) continue;
+               if (g[idx] == 0) continue;
                returnTypes.push_back(tuples::TupleStreamType::get(rewriter.getContext()));
             }
             auto generateOp = rewriter.create<subop::GenerateOp>(op->getLoc(), returnTypes, rewriter.getArrayAttr({gDef}));
@@ -370,6 +370,7 @@ class MultiMapAsPerfectHashView : public mlir::RewritePattern {
                generateOp.getRegion().push_back(generateBlock);
 
                auto entry0 = auxHashParams[0].a;
+               printf("*** entry0 %u\n", entry0);
                mlir::Value entryVal0 = rewriter.create<db::ConstantOp>(op->getLoc(), rewriter.getI64Type(), rewriter.getI64IntegerAttr(entry0));
                rewriter.create<subop::GenerateEmitOp>(op->getLoc(), std::vector<mlir::Value>{entryVal0});
 
@@ -387,7 +388,7 @@ class MultiMapAsPerfectHashView : public mlir::RewritePattern {
 
                for (size_t idx = 0; idx < g.size(); idx ++) {
                   auto displ = g[idx];
-                  if (displ == std::numeric_limits<size_t>::max()) continue;
+                  if (displ == 0) continue;
                   displ = displ + (idx << 32);
                   mlir::Value displVal = rewriter.create<db::ConstantOp>(op->getLoc(), rewriter.getI64Type(), rewriter.getI64IntegerAttr(displ));
                   rewriter.create<subop::GenerateEmitOp>(op->getLoc(), std::vector<mlir::Value>{displVal});

@@ -15,10 +15,11 @@ size_t lingodb::runtime::PerfectHashView::universalHash(const std::string& key, 
     size_t hash = 0;
     const uint32_t prime = 0x7FFFFFFF; // 2^31 - 1
     
-    for (char c : key) {
-        hash = (hash * params.a + static_cast<uint8_t>(c)) % prime;
-    }
-    hash = (hash * params.b) % prime;
+    // for (char c : key) {
+    //     hash = (hash * params.a + static_cast<uint8_t>(c)) & prime;
+    // }
+    hash = (hash * params.a + static_cast<uint8_t>(key[key.size()-1])) & prime;
+    hash = (hash * params.b) & prime;
     return hash % this->r;
 }
 
@@ -33,12 +34,12 @@ lingodb::runtime::PerfectHashView* lingodb::runtime::PerfectHashView::build(Flex
     std::vector<std::string> empty;
     auto* ph = new PerfectHashView(empty);
     // TODO destroy
-    printf("#### PerfectHashView::build %d %d\n", lkvalues->getLen(), gvalues->getLen());
+    // printf("#### PerfectHashView::build %d %d\n", lkvalues->getLen(), gvalues->getLen());
     ph->tableSize = lkvalues->getLen();
     // For FCH, r is typically set to m² where m is number of keys
     ph->r = std::max(size_t(16), size_t(ph->tableSize) * size_t(ph->tableSize));
-    ph->lookupTable.resize(ph->tableSize);
-    ph->g.resize(ph->r, std::numeric_limits<size_t>::max());
+    ph->lookupTable.reserve(ph->tableSize);
+    ph->g.resize(ph->r, 0);
 
     size_t aIdx = 0;
     gvalues->iterate([&](uint8_t* entryRawPtr) {
@@ -55,25 +56,19 @@ lingodb::runtime::PerfectHashView* lingodb::runtime::PerfectHashView::build(Flex
         }
         aIdx++;
     });
-    printf("  #### PerfectHashView::build 1\n");
 
     lkvalues->iterate([&](uint8_t* entryRawPtr) {
-        printf("  #### PerfectHashView::build lkvalues\n");
         LKEntry lk;
         if (entryRawPtr == nullptr) {
             lk.empty = true;
         } else {
             lk.empty = false;
-            printf("    #### PerfectHashView::build lkvalues b\n");
             std::memcpy(&lk.key, entryRawPtr, sizeof(lk.key));
-            printf("    #### PerfectHashView::build lkvalues a %s\n", lk.key.str().c_str());
             lk.hashvalue = ph->hash(lk.key.str());
-            printf("    #### PerfectHashView::build lkvalues h\n");
         }
         ph->lookupTable.push_back(lk);
     });
 
-    printf("  #### PerfectHashView::build done\n");
     return ph;
 }
 
@@ -82,22 +77,35 @@ lingodb::runtime::PerfectHashView* lingodb::runtime::PerfectHashView::buildPerfe
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_int_distribution<uint32_t> dist(1, 0x7FFFFFFE);
-    
-    // Initialize auxiliary hash functions with random parameters
-    std::vector<HashParams> auxHashParams(2);
-    auxHashParams[0] = {dist(gen), dist(gen)};
-    auxHashParams[1] = {dist(gen), dist(gen)};
-    
+    printf("~~~!! buildPerfectHash\n");
+
     PerfectHashView* ph = new PerfectHashView(keySet);
     // Initialize displacement array with default values
     auto& g = ph->g;
     // For FCH, r is typically set to m² where m is number of keys
     ph->r = std::max(size_t(16), size_t(ph->tableSize) * size_t(ph->tableSize));
-    g.resize(ph->r, std::numeric_limits<size_t>::max());
+    g.resize(ph->r, 0);
+
+    // Initialize auxiliary hash functions with random parameters
+    HashParams* auxHashParams = ph->auxHashParams;
+    auxHashParams[0] = {dist(gen), dist(gen)};
+    auxHashParams[1] = {dist(gen), dist(gen)};
     
     // Used to track hash collisions during construction
     auto tableSize = ph->tableSize;
     std::vector<bool> occupied(tableSize, false);
+
+    auto tryDisplacement = [&](size_t h1, size_t h2) {
+        int found = -1;
+        for (int d = 0; d < tableSize; ++d) {
+            found = (h1 + d) % tableSize;
+            if (!occupied[found]) {
+                found = d;
+                break;
+            }
+        }
+        return found;
+    };
     
     // Process each key to build the perfect hash function
     for (const auto& key : keySet) {
@@ -112,18 +120,15 @@ lingodb::runtime::PerfectHashView* lingodb::runtime::PerfectHashView::buildPerfe
         // If there's a collision, resolve it by adjusting g[h2]
         if (occupied[idx]) {
             // Try different values for g[h2] until collision is resolved
-            bool found = false;
-            for (int d = 0; d < tableSize && !found; ++d) {
-                g[h2] = d;
-                idx = (h1 + g[h2]) % tableSize;
-                if (!occupied[idx]) {
-                    found = true;
-                }
-            }
+            int found = tryDisplacement(h1, h2);
             
             // If we couldn't resolve collisions, restart with new hash functions
-            if (!found) {
-                std::fill(g.begin(), g.end(), std::numeric_limits<size_t>::max());
+            if (found != -1) {
+                g[h2] = found;
+                idx = (h1 + g[h2]) % tableSize;
+            }
+            else {
+                std::fill(g.begin(), g.end(), 0);
                 std::fill(occupied.begin(), occupied.end(), false);
                 LKEntry emptyLK;
                 emptyLK.empty = false;
@@ -139,6 +144,8 @@ lingodb::runtime::PerfectHashView* lingodb::runtime::PerfectHashView::buildPerfe
         // Mark this index as occupied
         occupied[idx] = true;
         ph->lookupTableRaw[idx] = key;
+        printf("~~~ idx %d, key %s\n", idx, key.c_str());
     }
+
     return ph;
 }
