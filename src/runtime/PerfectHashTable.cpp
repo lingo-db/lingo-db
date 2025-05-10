@@ -9,6 +9,7 @@
 #include <cassert>
 #include <cstring>
 
+// TODO INDENT
 // Universal hash function: h(x) = ((a*x + b) mod p) mod r
 size_t lingodb::runtime::PerfectHashView::universalHash(const std::string& key, const HashParams& params) const {
     size_t hash = 0;
@@ -32,31 +33,11 @@ lingodb::runtime::PerfectHashView* lingodb::runtime::PerfectHashView::build(Flex
     std::vector<std::string> empty;
     auto* ph = new PerfectHashView(empty);
     // TODO destroy
-    // size_t aIdx = 0;
-    // auxvalues->iterate([&](uint8_t* entryRawPtr) {
-    //     if (aIdx == 0) std::memcpy(&ph->auxHashParams[0].a, entryRawPtr, sizeof(uint32_t));
-    //     else if (aIdx == 1) std::memcpy(&ph->auxHashParams[0].b, entryRawPtr, sizeof(uint32_t));
-    //     else if (aIdx == 2) std::memcpy(&ph->auxHashParams[1].a, entryRawPtr, sizeof(uint32_t));
-    //     else if (aIdx == 3) std::memcpy(&ph->auxHashParams[1].b, entryRawPtr, sizeof(uint32_t));
-    //     aIdx++;
-    // });
     printf("#### PerfectHashView::build %d %d\n", lkvalues->getLen(), gvalues->getLen());
     ph->tableSize = lkvalues->getLen();
     // For FCH, r is typically set to m² where m is number of keys
     ph->r = std::max(size_t(16), size_t(ph->tableSize) * size_t(ph->tableSize));
     ph->lookupTable.resize(ph->tableSize);
-    lkvalues->iterate([&](uint8_t* entryRawPtr) {
-        LKEntry lk;
-        if (entryRawPtr == nullptr) {
-            lk.empty = true;
-        } else {
-            lk.empty = false;
-            std::memcpy(&lk.key, entryRawPtr, sizeof(lk.key));
-            lk.hashvalue = ph->hash(lk.key.str());
-        }
-        ph->lookupTable.push_back(lk);
-    });
-
     ph->g.resize(ph->r, std::numeric_limits<size_t>::max());
 
     size_t aIdx = 0;
@@ -74,6 +55,25 @@ lingodb::runtime::PerfectHashView* lingodb::runtime::PerfectHashView::build(Flex
         }
         aIdx++;
     });
+    printf("  #### PerfectHashView::build 1\n");
+
+    lkvalues->iterate([&](uint8_t* entryRawPtr) {
+        printf("  #### PerfectHashView::build lkvalues\n");
+        LKEntry lk;
+        if (entryRawPtr == nullptr) {
+            lk.empty = true;
+        } else {
+            lk.empty = false;
+            printf("    #### PerfectHashView::build lkvalues b\n");
+            std::memcpy(&lk.key, entryRawPtr, sizeof(lk.key));
+            printf("    #### PerfectHashView::build lkvalues a %s\n", lk.key.str().c_str());
+            lk.hashvalue = ph->hash(lk.key.str());
+            printf("    #### PerfectHashView::build lkvalues h\n");
+        }
+        ph->lookupTable.push_back(lk);
+    });
+
+    printf("  #### PerfectHashView::build done\n");
     return ph;
 }
 

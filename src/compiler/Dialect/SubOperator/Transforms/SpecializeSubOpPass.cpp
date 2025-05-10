@@ -272,7 +272,6 @@ class MultiMapAsPerfectHashView : public mlir::RewritePattern {
       if (!insertConst) {
          return mlir::failure();
       }
-      printf("&&& constHashRaws %d\n", constHashRaws.size());
       auto view = lingodb::runtime::PerfectHashView::buildPerfectHash(constHashRaws);
       auto hashMember = memberManager.getUniqueMember("hash");
       // auto linkMember = memberManager.getUniqueMember("link");
@@ -286,9 +285,9 @@ class MultiMapAsPerfectHashView : public mlir::RewritePattern {
          rewriter.setInsertionPoint(createOp);
       }
       mlir::Value lkbuffer;
+      auto lkMember = memberManager.getUniqueMember("lk");
       auto generateLKValues = [&](std::vector<std::optional<std::string>>& lookupTableRaw) {
          mlir::Type stringType = db::StringType::get(rewriter.getContext());
-         auto lkMember = memberManager.getUniqueMember("lk");
          auto [lkDef, lkRef] = createColumn(stringType, "constlk", "lk");
 
          std::vector<mlir::Attribute> memNames{rewriter.getStringAttr(lkMember)};
@@ -304,7 +303,9 @@ class MultiMapAsPerfectHashView : public mlir::RewritePattern {
             mlir::OpBuilder::InsertionGuard guard(rewriter);
             rewriter.setInsertionPoint(insertOp);
             std::vector<mlir::Type> returnTypes{tuples::TupleStreamType::get(rewriter.getContext())};
-            returnTypes.push_back(tuples::TupleStreamType::get(rewriter.getContext()));
+            for (auto entry : lookupTableRaw) {
+               returnTypes.push_back(tuples::TupleStreamType::get(rewriter.getContext()));
+            }
             auto generateOp = rewriter.create<subop::GenerateOp>(op->getLoc(), returnTypes, rewriter.getArrayAttr({lkDef}));
             {
                auto* generateBlock = new mlir::Block;
@@ -334,10 +335,9 @@ class MultiMapAsPerfectHashView : public mlir::RewritePattern {
       generateLKValues(view->lookupTableRaw);
 
       mlir::Value gbuffer;
+      auto gMember = memberManager.getUniqueMember("g");
       auto generateGValues = [&](std::vector<size_t> g, lingodb::runtime::HashParams auxHashParams[2]) {
-         mlir::Type stringType = db::StringType::get(rewriter.getContext());
-         auto gMember = memberManager.getUniqueMember("g");
-         auto [gDef, gRef] = createColumn(stringType, "constg", "g");
+         auto [gDef, gRef] = createColumn(rewriter.getI64Type(), "constg", "g");
 
          std::vector<mlir::Attribute> memNames{rewriter.getStringAttr(gMember)};
          std::vector<mlir::Attribute> memTypes{mlir::TypeAttr::get(rewriter.getI64Type())};
@@ -351,8 +351,17 @@ class MultiMapAsPerfectHashView : public mlir::RewritePattern {
          {
             mlir::OpBuilder::InsertionGuard guard(rewriter);
             rewriter.setInsertionPoint(insertOp);
-            std::vector<mlir::Type> returnTypes{tuples::TupleStreamType::get(rewriter.getContext())};
-            returnTypes.push_back(tuples::TupleStreamType::get(rewriter.getContext()));
+            std::vector<mlir::Type> returnTypes{
+               tuples::TupleStreamType::get(rewriter.getContext()),
+               tuples::TupleStreamType::get(rewriter.getContext()),
+               tuples::TupleStreamType::get(rewriter.getContext()),
+               tuples::TupleStreamType::get(rewriter.getContext()),
+               tuples::TupleStreamType::get(rewriter.getContext())
+            };
+            for (size_t idx = 0; idx < g.size(); idx ++) {
+               if (g[idx] == std::numeric_limits<size_t>::max()) continue;
+               returnTypes.push_back(tuples::TupleStreamType::get(rewriter.getContext()));
+            }
             auto generateOp = rewriter.create<subop::GenerateOp>(op->getLoc(), returnTypes, rewriter.getArrayAttr({gDef}));
             {
                auto* generateBlock = new mlir::Block;
@@ -403,7 +412,7 @@ class MultiMapAsPerfectHashView : public mlir::RewritePattern {
          hashIndexedViewType = subop::PerfectHashTableType::get(rewriter.getContext(), subop::StateMembersAttr::get(rewriter.getContext(), rewriter.getArrayAttr({rewriter.getStringAttr(hashMember)}), rewriter.getArrayAttr({mlir::TypeAttr::get(rewriter.getIndexType())})), subop::StateMembersAttr::get(getContext(), rewriter.getArrayAttr(hashIndexedViewNames), rewriter.getArrayAttr(hashIndexedViewTypes)));
          printf("&&& lkbuffer.type &&&\n");
          lkbuffer.getType().dump();
-         hashIndexedView = rewriter.create<subop::CreatePerfectHashView>(loc, hashIndexedViewType, lkbuffer, gbuffer);
+         hashIndexedView = rewriter.create<subop::CreatePerfectHashView>(loc, hashIndexedViewType, lkbuffer, gbuffer, lkMember, gMember);
       }
       auto entryRefType = subop::LookupEntryRefType::get(rewriter.getContext(), mlir::cast<subop::LookupAbleState>(hashIndexedViewType));
       auto entryRefListType = subop::ListType::get(rewriter.getContext(), entryRefType);
