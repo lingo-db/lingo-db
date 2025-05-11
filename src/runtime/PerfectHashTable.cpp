@@ -10,26 +10,6 @@
 #include <cstring>
 
 // TODO INDENT
-// Universal hash function: h(x) = ((a*x + b) mod p) mod r
-size_t lingodb::runtime::PerfectHashView::universalHash(const std::string& key, const HashParams& params) const {
-    size_t hash = 0;
-    const uint32_t prime = 0x7FFFFFFF; // 2^31 - 1
-    
-    // for (char c : key) {
-    //     hash = (hash * params.a + static_cast<uint8_t>(c)) & prime;
-    // }
-    hash = (hash * params.a + static_cast<uint8_t>(key[key.size()-1])) & prime;
-    hash = (hash * params.b) & prime;
-    return hash % this->r;
-}
-
-// Hash function to map a key to its perfect hash index
-size_t lingodb::runtime::PerfectHashView::hash(const std::string& key) const {
-    size_t h1 = universalHash(key, auxHashParams[0]);
-    size_t h2 = universalHash(key, auxHashParams[1]);
-    return (h1 + g[h2]);
-}
-
 lingodb::runtime::PerfectHashView* lingodb::runtime::PerfectHashView::build(FlexibleBuffer* lkvalues, FlexibleBuffer* gvalues) {
     std::vector<std::string> empty;
     auto* ph = new PerfectHashView(empty);
@@ -64,7 +44,10 @@ lingodb::runtime::PerfectHashView* lingodb::runtime::PerfectHashView::build(Flex
         } else {
             lk.empty = false;
             std::memcpy(&lk.key, entryRawPtr, sizeof(lk.key));
-            lk.hashvalue = ph->hash(lk.key.str());
+            size_t h1 = ph->universalHash(lk.key.str(), ph->auxHashParams[0], false);
+            size_t h2 = ph->universalHash(lk.key.str(), ph->auxHashParams[1], true);
+
+            lk.hashvalue = h1 + ph->g[h2];
         }
         ph->lookupTable.push_back(lk);
     });
@@ -77,7 +60,6 @@ lingodb::runtime::PerfectHashView* lingodb::runtime::PerfectHashView::buildPerfe
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_int_distribution<uint32_t> dist(1, 0x7FFFFFFE);
-    printf("~~~!! buildPerfectHash\n");
 
     PerfectHashView* ph = new PerfectHashView(keySet);
     // Initialize displacement array with default values
@@ -111,8 +93,8 @@ lingodb::runtime::PerfectHashView* lingodb::runtime::PerfectHashView::buildPerfe
     for (const auto& key : keySet) {
         
         // Calculate the two auxiliary hashes
-        uint64_t h1 = ph->universalHash(key, auxHashParams[0]);
-        uint64_t h2 = ph->universalHash(key, auxHashParams[1]);
+        size_t h1 = ph->universalHash(key, auxHashParams[0], false);
+        size_t h2 = ph->universalHash(key, auxHashParams[1], true);
         
         // Calculate the FCH index: (h1 + g[h2]) % tableSize
         size_t idx = (h1 + g[h2]) % tableSize;
@@ -144,7 +126,6 @@ lingodb::runtime::PerfectHashView* lingodb::runtime::PerfectHashView::buildPerfe
         // Mark this index as occupied
         occupied[idx] = true;
         ph->lookupTableRaw[idx] = key;
-        printf("~~~ idx %d, key %s\n", idx, key.c_str());
     }
 
     return ph;

@@ -2112,7 +2112,7 @@ class ScanPerfectHashTableListLowering : public SubOpConversionPattern<subop::Sc
       Value hashPtr = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(getContext(), rewriter.getIndexType()), castedPtr, 1);
       Value valuePtr = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(getContext(), tupleType), castedPtr, 2);
       mlir::Value currHash = rewriter.create<util::LoadOp>(loc, hashPtr, mlir::Value());
-      mlir::Value hashEq = rewriter.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::eq, currHash, rewriter.create<arith::IndexCastOp>(loc, rewriter.getIndexType(), hash));
+      mlir::Value hashEq = rewriter.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::eq, currHash, hash);
       Value emptyVal = rewriter.create<util::LoadOp>(loc, emptyPtr, mlir::Value());
       mlir::Value notEmpty = rewriter.create<db::NotOp>(loc, emptyVal);
       mlir::Value anded = rewriter.create<db::AndOp>(loc, std::vector<mlir::Value>{notEmpty, hashEq});
@@ -2392,10 +2392,24 @@ class LookupPerfectHahsTableLowering : public SubOpTupleStreamConsumerConversion
       Value arg1 = rewriter.create<util::AllocOp>(loc, util::RefType::get(i8PtrType), rewriter.create<mlir::arith::ConstantIndexOp>(loc, 16));
       rewriter.create<util::StoreOp>(loc, key, arg1, mlir::Value());
 
-
+      // TODO IR instead of call
       Value hash = rt::PerfectHashView::computeHash(rewriter, loc)({adaptor.getState(), arg1})[0];
-
       Value ptr = rt::PerfectHashView::containHash(rewriter, loc)({adaptor.getState(), hash})[0];
+      hash = rewriter.create<arith::IndexCastOp>(loc, rewriter.getIndexType(), hash);
+
+      // auto htType = util::RefType::get(context, util::RefType::get(context, rewriter.getI8Type()));
+      // Value castedPointer = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(context, TupleType::get(context, {htType})), adaptor.getState());
+      // auto loaded = rewriter.create<util::LoadOp>(loc, mlir::cast<util::RefType>(castedPointer.getType()).getElementType(), castedPointer, Value());
+      // auto unpacked = rewriter.create<util::UnPackOp>(loc, loaded);
+      // Value ht = unpacked.getResult(0);
+      // Value buckedPos = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
+      // Value ptr = rewriter.create<util::LoadOp>(loc, util::RefType::get(getContext(), rewriter.getI8Type()), ht, buckedPos);
+      // Value hash = rewriter.create<arith::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getIntegerAttr(rewriter.getI64Type(), 0));
+      // Value one = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
+      // Value castedPtr = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(getContext(), mlir::TupleType::get(getContext(), {rewriter.getI1Type(), rewriter.getIndexType()})), ptr);
+      // Value hashPtr = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(getContext(), rewriter.getIndexType()), castedPtr, 1);
+      // mlir::Value hash = rewriter.create<util::LoadOp>(loc, hashPtr, mlir::Value());
+
       Value matches = rewriter.create<util::PackOp>(loc, ValueRange{ptr, hash});
 
       mapping.define(lookupOp.getRef(), matches);
