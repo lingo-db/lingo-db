@@ -2105,8 +2105,6 @@ class ScanPerfectHashTableListLowering : public SubOpConversionPattern<subop::Sc
 
       auto referenceType = mlir::cast<subop::ListType>(scanOp.getList().getType()).getT();
       auto tupleType = mlir::TupleType::get(getContext(), unpackTypes(referenceType.getMembers().getTypes()));
-      printf("\n--- tupleType ---\n");
-      tupleType.dump();
       Value castedPtr = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(getContext(), mlir::TupleType::get(getContext(), {rewriter.getI1Type(), rewriter.getIndexType(), tupleType})), ptr);
       Value emptyPtr = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(getContext(), rewriter.getI1Type()), castedPtr, 0);
       Value hashPtr = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(getContext(), rewriter.getIndexType()), castedPtr, 1);
@@ -2379,7 +2377,7 @@ class LookupHashIndexedViewLowering : public SubOpTupleStreamConsumerConversionP
       return mlir::success();
    }
 };
-class LookupPerfectHahsTableLowering : public SubOpTupleStreamConsumerConversionPattern<subop::LookupOp> {
+class LookupPerfectHashTableLowering : public SubOpTupleStreamConsumerConversionPattern<subop::LookupOp> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::LookupOp>::SubOpTupleStreamConsumerConversionPattern;
    LogicalResult matchAndRewrite(subop::LookupOp lookupOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
@@ -2387,28 +2385,33 @@ class LookupPerfectHahsTableLowering : public SubOpTupleStreamConsumerConversion
       auto loc = lookupOp->getLoc();
       mlir::Value key = mapping.resolve(lookupOp, lookupOp.getKeys())[0];
 
-      // TODO VARLEN32 SIZE
-      auto i8PtrType = util::RefType::get(getContext(), rewriter.getI8Type());
-      Value arg1 = rewriter.create<util::AllocOp>(loc, util::RefType::get(i8PtrType), rewriter.create<mlir::arith::ConstantIndexOp>(loc, 16));
-      rewriter.create<util::StoreOp>(loc, key, arg1, mlir::Value());
+      // TODO AllocOp SLOW. USE IR INSTEAD OF computeHash
+      // auto i8PtrType = util::RefType::get(getContext(), rewriter.getI8Type());
+      // Value arg1 = rewriter.create<util::AllocOp>(loc, util::RefType::get(i8PtrType), rewriter.create<mlir::arith::ConstantIndexOp>(loc, 16));
+      // rewriter.create<util::StoreOp>(loc, key, arg1, mlir::Value());
+      // Value hash = rt::PerfectHashView::computeHash(rewriter, loc)({adaptor.getState(), arg1})[0];
+      // Value ptr = rt::PerfectHashView::containHash(rewriter, loc)({adaptor.getState(), hash})[0];
+      // hash = rewriter.create<arith::IndexCastOp>(loc, rewriter.getIndexType(), hash);
 
-      // TODO IR instead of call
-      Value hash = rt::PerfectHashView::computeHash(rewriter, loc)({adaptor.getState(), arg1})[0];
-      Value ptr = rt::PerfectHashView::containHash(rewriter, loc)({adaptor.getState(), hash})[0];
-      hash = rewriter.create<arith::IndexCastOp>(loc, rewriter.getIndexType(), hash);
-
+      // TODO this is a WIP IR solution
       // auto htType = util::RefType::get(context, util::RefType::get(context, rewriter.getI8Type()));
       // Value castedPointer = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(context, TupleType::get(context, {htType})), adaptor.getState());
       // auto loaded = rewriter.create<util::LoadOp>(loc, mlir::cast<util::RefType>(castedPointer.getType()).getElementType(), castedPointer, Value());
       // auto unpacked = rewriter.create<util::UnPackOp>(loc, loaded);
-      // Value ht = unpacked.getResult(0);
-      // Value buckedPos = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
-      // Value ptr = rewriter.create<util::LoadOp>(loc, util::RefType::get(getContext(), rewriter.getI8Type()), ht, buckedPos);
-      // Value hash = rewriter.create<arith::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getIntegerAttr(rewriter.getI64Type(), 0));
-      // Value one = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
+      // // Value ht = unpacked.getResult(0);
+      // // Value ptr = rewriter.create<util::LoadOp>(loc, util::RefType::get(getContext(), rewriter.getI8Type()), ht, buckedPos);
+      // Value ptr = unpacked.getResult(0);
+      // // Value buckedPos = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
+      // // Value hash = rewriter.create<arith::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getIntegerAttr(rewriter.getI64Type(), 0));
+      // // Value one = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
       // Value castedPtr = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(getContext(), mlir::TupleType::get(getContext(), {rewriter.getI1Type(), rewriter.getIndexType()})), ptr);
       // Value hashPtr = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(getContext(), rewriter.getIndexType()), castedPtr, 1);
       // mlir::Value hash = rewriter.create<util::LoadOp>(loc, hashPtr, mlir::Value());
+
+      // TODO DELETE THIS DRY RUN
+      Value ptr = rt::PerfectHashView::dryRun(rewriter, loc)({adaptor.getState()})[0];
+      Value hash = rt::PerfectHashView::dryRunHash(rewriter, loc)({adaptor.getState()})[0];
+      hash = rewriter.create<arith::IndexCastOp>(loc, rewriter.getIndexType(), hash);
 
       Value matches = rewriter.create<util::PackOp>(loc, ValueRange{ptr, hash});
 
@@ -3553,14 +3556,12 @@ class ReduceOpLowering : public SubOpTupleStreamConsumerConversionPattern<subop:
 class CreateHashIndexedViewLowering : public SubOpConversionPattern<subop::CreateHashIndexedView> {
    using SubOpConversionPattern<subop::CreateHashIndexedView>::SubOpConversionPattern;
    LogicalResult matchAndRewrite(subop::CreateHashIndexedView createOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
-      printf("<<<< CreateHashIndexedViewLowering\n");
       auto bufferType = mlir::dyn_cast<subop::BufferType>(createOp.getSource().getType());
       if (!bufferType) return failure();
       auto linkIsFirst = mlir::cast<mlir::StringAttr>(bufferType.getMembers().getNames()[0]).str() == createOp.getLinkMember();
       auto hashIsSecond = mlir::cast<mlir::StringAttr>(bufferType.getMembers().getNames()[1]).str() == createOp.getHashMember();
       if (!linkIsFirst || !hashIsSecond) return failure();
       auto htView = rt::HashIndexedView::build(rewriter, createOp->getLoc())({adaptor.getSource()})[0];
-      printf("  <<<< CreateHashIndexedViewLowering replace\n");
       rewriter.replaceOp(createOp, htView);
       return success();
    }
@@ -3568,7 +3569,6 @@ class CreateHashIndexedViewLowering : public SubOpConversionPattern<subop::Creat
 class CreatePerfectHashViewLowering : public SubOpConversionPattern<subop::CreatePerfectHashView> {
    using SubOpConversionPattern<subop::CreatePerfectHashView>::SubOpConversionPattern;
    LogicalResult matchAndRewrite(subop::CreatePerfectHashView createOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
-      printf("<<<< CreatePerfectHashViewLowering\n");
       auto bufferType = mlir::dyn_cast<subop::BufferType>(createOp.getLk().getType());
       if (!bufferType) return failure();
       // TODO CHECK
@@ -3576,7 +3576,6 @@ class CreatePerfectHashViewLowering : public SubOpConversionPattern<subop::Creat
       // auto hashIsSecond = mlir::cast<mlir::StringAttr>(bufferType.getMembers().getNames()[1]).str() == createOp.getHashMember();
       // if (!linkIsFirst || !hashIsSecond) return failure();
       auto htView = rt::PerfectHashView::build(rewriter, createOp->getLoc())({adaptor.getLk(), adaptor.getG()})[0];
-      printf("  <<<< CreatePerfectHashViewLowering replace\n");
       rewriter.replaceOp(createOp, htView);
       return success();
    }
@@ -4080,7 +4079,7 @@ void handleExecutionStepCPU(subop::ExecutionStepOp step, subop::ExecutionGroupOp
    rewriter.insertPattern<ScanListLowering>(typeConverter, ctxt);
    //PerfectHahsView
    rewriter.insertPattern<CreatePerfectHashViewLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<LookupPerfectHahsTableLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<LookupPerfectHashTableLowering>(typeConverter, ctxt);
    rewriter.insertPattern<ScanPerfectHashTableListLowering>(typeConverter, ctxt);
    //ContinuousView
    rewriter.insertPattern<CreateContinuousViewLowering>(typeConverter, ctxt);
