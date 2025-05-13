@@ -52,8 +52,10 @@ public:
    static PerfectHashView* build(FlexibleBuffer* lkbuffer, FlexibleBuffer* gvalues);
 
    // Universal hash function: h(x) = ((a*x + b) mod p) mod r
-   size_t universalHash(const char* keyPtr, size_t keyLen, const HashParams& params, bool trim) const {
-      size_t hash = 0;
+   size_t universalHash(const char* keyPtr, size_t keyLen, const HashParams& params, bool trim) const;
+
+   size_t fastHash(const char* keyPtr, size_t keyLen, const HashParams& params1, const HashParams& params2) const {
+      size_t hash1 = 0, hash2 = 0;
       const uint32_t prime = 0x7FFFFFFF; // 2^31 - 1
 
       // // 4 bytes as a unit to compute hash
@@ -61,31 +63,33 @@ public:
       for (; i < keyLen - 4; i += 4) {
          uint32_t c;
          std::memcpy(&c, keyPtr+i, sizeof(uint32_t));
-         hash = (hash * params.a + c) & prime;
+         hash1 = (hash1 * params1.a + c) & prime;
+         hash2 = (hash2 * params2.a + c) & prime;
       }
 
-      // // deal with not mutiply of 4 part
+      // deal with not mutiply of 4 part
       size_t restLen = keyLen - i;
       if (restLen == 3) {
          uint32_t c;
          std::memcpy(&c, keyPtr+i, sizeof(uint32_t));
          c &= 0x00FFFFFF;
-         hash = (hash * params.a + c) & prime;
+         hash1 = (hash1 * params1.a + c) & prime;
+         hash2 = (hash2 * params2.a + c) & prime;
       } else if (restLen == 2) {
          uint16_t c;
          std::memcpy(&c, keyPtr+i, sizeof(uint16_t));
-         hash = (hash * params.a + c) & prime;
+         hash1 = (hash1 * params1.a + c) & prime;
+         hash2 = (hash2 * params2.a + c) & prime;
          restLen -= 2;
       } else if (restLen == 1) {
          uint8_t c = static_cast<uint8_t>(*(keyPtr+restLen));
-         hash = (hash * params.a + c) & prime;
+         hash1 = (hash1 * params1.a + c) & prime;
+         hash2 = (hash2 * params2.a + c) & prime;
       }
+      hash1 = (hash1 * params1.b) & prime;
+      hash2 = (hash2 * params2.b) & prime;
 
-      hash = (hash * params.b) & prime;
-      if  (trim) {
-         return hash % this->r;
-      }
-      return hash;
+      return hash1 + g[hash2 % this->r];
    }
 
    size_t computeHash(uint8_t* keyPtr) {
@@ -101,17 +105,6 @@ public:
       lingodb::runtime::VarLen32& key = *(reinterpret_cast<lingodb::runtime::VarLen32*>(keyPtr));
       size_t h1 = universalHash(key.data(), key.getLen(), auxHashParams[0], false);
       size_t h2 = universalHash(key.data(), key.getLen(), auxHashParams[1], true);
-
-      // static bool flag;
-      // if (key.str() == "Clerk#000000536" && !flag) {
-      //    flag = true;
-      //    size_t h = h1 + g[h2];
-      //    size_t idx = h % tableSize;
-      //    auto entry = lookupTable[idx];
-      //    printf("### key %lu %lu %lu entry: %lu\n", h, tableSize, idx, entry.hashvalue);
-
-      //    printf("aux %u %u %u %u \n", auxHashParams[0].a, auxHashParams[0].b, auxHashParams[1].a, auxHashParams[1].b);
-      // }
 
       return h1 + g[h2];
    }
@@ -130,10 +123,11 @@ public:
       if (dryRunkey.getLen() == 0) {
          dryRunkey = lingodb::runtime::VarLen32::fromString("Clerk#000000536");
       }
-      size_t h1 = universalHash(dryRunkey.data(), dryRunkey.getLen(), auxHashParams[0], false);
-      size_t h2 = universalHash(dryRunkey.data(), dryRunkey.getLen(), auxHashParams[1], true);
+      // size_t h1 = universalHash(dryRunkey.data(), dryRunkey.getLen(), auxHashParams[0], false);
+      // size_t h2 = universalHash(dryRunkey.data(), dryRunkey.getLen(), auxHashParams[1], true);
 
-      size_t h = h1 + g[h2];
+      // size_t h = h1 + g[h2];
+      size_t h = fastHash(dryRunkey.data(), dryRunkey.getLen(), auxHashParams[0], auxHashParams[1]);
 
       static LKEntry* first;
       static LKEntry* second;
@@ -142,18 +136,19 @@ public:
             if (!lookupTable[i].empty) {
                if (!first) first = &lookupTable[i];
                else {
-                  printf("<<<< dryRun %d\n", i);
                   second = &lookupTable[i];
+                  printf("<<<< dryRun %d %lu %s\n", i, second->hashvalue, second->key.str().c_str());
                   break;
                }
             }
          }
       }
 
-      // if (h % 50 != 0) {
-      //    return second;
-      // }
-      return first;
+      if (h != std::numeric_limits<size_t>::max()) {
+         return first;
+      }
+      return second;
+      // return first;
    }
 
    size_t dryRunHash() {
@@ -162,7 +157,7 @@ public:
          for (int i = 0; i < tableSize; i ++) {
             if (!lookupTable[i].empty) {
                first = &lookupTable[i];
-               printf("<<<< dryRunHash %d\n", i);
+               printf("<<<< dryRunHash %d %lu %s\n", i, first->hashvalue, first->key.str().c_str());
                break;
             }
          }

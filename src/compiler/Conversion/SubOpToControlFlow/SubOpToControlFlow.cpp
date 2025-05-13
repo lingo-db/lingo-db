@@ -2413,6 +2413,12 @@ class LookupPerfectHashTableLowering : public SubOpTupleStreamConsumerConversion
       Value hash = rt::PerfectHashView::dryRunHash(rewriter, loc)({adaptor.getState()})[0];
       hash = rewriter.create<arith::IndexCastOp>(loc, rewriter.getIndexType(), hash);
 
+      // TODO DELETE THIS DRY RUN ONE CALL
+      // Value ptr = rt::PerfectHashView::dryRun(rewriter, loc)({adaptor.getState()})[0];
+      // Value castedPtr = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(getContext(), mlir::TupleType::get(getContext(), {rewriter.getI1Type(), rewriter.getIndexType()})), ptr);
+      // Value hashPtr = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(getContext(), rewriter.getIndexType()), castedPtr, 1);
+      // mlir::Value hash = rewriter.create<util::LoadOp>(loc, hashPtr, mlir::Value());
+
       Value matches = rewriter.create<util::PackOp>(loc, ValueRange{ptr, hash});
 
       mapping.define(lookupOp.getRef(), matches);
