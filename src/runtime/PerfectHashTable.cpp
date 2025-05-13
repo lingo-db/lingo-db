@@ -13,34 +13,34 @@ size_t lingodb::runtime::PerfectHashView::universalHash(const char* keyPtr, size
     size_t hash = 0;
     const uint32_t prime = 0x7FFFFFFF; // 2^31 - 1
 
-    // // 4 bytes as a unit to compute hash
-    // int i = 0;
-    // for (; i < keyLen - 4; i += 4) {
-    //     uint32_t c;
-    //     std::memcpy(&c, keyPtr+i, sizeof(uint32_t));
-    //     hash = (hash * params.a + c) & prime;
-    // }
-
-    // // deal with not mutiply of 4 part
-    // size_t restLen = keyLen - i;
-    // if (restLen == 3) {
-    //     uint32_t c;
-    //     std::memcpy(&c, keyPtr+i, sizeof(uint32_t));
-    //     c &= 0x00FFFFFF;
-    //     hash = (hash * params.a + c) & prime;
-    // } else if (restLen == 2) {
-    //     uint16_t c;
-    //     std::memcpy(&c, keyPtr+i, sizeof(uint16_t));
-    //     hash = (hash * params.a + c) & prime;
-    //     restLen -= 2;
-    // } else if (restLen == 1) {
-    //     uint8_t c = static_cast<uint8_t>(*(keyPtr+restLen));
-    //     hash = (hash * params.a + c) & prime;
-    // }
-    for (int i = 0; i < keyLen; i ++) {
-        uint8_t c = keyPtr[i];
+    // 4 bytes as a unit to compute hash
+    int i = 0;
+    for (; i < keyLen - 4; i += 4) {
+        uint32_t c;
+        std::memcpy(&c, keyPtr+i, sizeof(uint32_t));
         hash = (hash * params.a + c) & prime;
     }
+
+    // deal with not mutiply of 4 part
+    size_t restLen = keyLen - i;
+    if (restLen == 3) {
+        uint32_t c;
+        std::memcpy(&c, keyPtr+i, sizeof(uint32_t));
+        c &= 0x00FFFFFF;
+        hash = (hash * params.a + c) & prime;
+    } else if (restLen == 2) {
+        uint16_t c;
+        std::memcpy(&c, keyPtr+i, sizeof(uint16_t));
+        hash = (hash * params.a + c) & prime;
+        restLen -= 2;
+    } else if (restLen == 1) {
+        uint8_t c = static_cast<uint8_t>(*(keyPtr+restLen));
+        hash = (hash * params.a + c) & prime;
+    }
+    // for (int i = 0; i < keyLen; i ++) {
+    //     uint8_t c = keyPtr[i];
+    //     hash = (hash * params.a + c) & prime;
+    // }
 
     hash = (hash * params.b) & prime;
     if  (trim) {
