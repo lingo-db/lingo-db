@@ -2649,12 +2649,13 @@ class GroupJoinLowering : public OpConversionPattern<relalg::GroupJoinOp> {
       std::vector<mlir::Attribute> reduceNames;
       std::vector<mlir::Attribute> types;
       std::vector<mlir::Type> valueTypes;
+      std::vector<mlir::Location> valueLocations;
       std::vector<NamedAttribute> defMapping;
       std::vector<NamedAttribute> additionalColsDefMapping;
       std::vector<size_t> additionalColsMemberIdx;
       std::vector<Attribute> additionalColsRefs;
       std::vector<mlir::Type> additionalColsTypes;
-      std::vector<mlir::Location> valueLocations;
+      std::vector<mlir::Location> additionalColsLocations;
       tuples::ColumnRefAttr marker;
       std::string markerMember;
       if (groupJoinOp.getBehavior() == relalg::GroupJoinBehavior::inner) {
@@ -2662,10 +2663,10 @@ class GroupJoinLowering : public OpConversionPattern<relalg::GroupJoinOp> {
          names.push_back(rewriter.getStringAttr(markerMember));
          types.push_back(mlir::TypeAttr::get(rewriter.getI1Type()));
          valueTypes.push_back(rewriter.getI1Type());
+         valueLocations.push_back(loc);
          auto [def, ref] = createColumn(rewriter.getI1Type(), "groupjoin", "marker");
          marker = ref;
          defMapping.push_back(rewriter.getNamedAttr(markerMember, def));
-         valueLocations.push_back(loc);
       }
       for (auto* c : additionalColumns.getAttrs()) {
          auto memberName = getUniqueMember(getContext(), "gjval");
@@ -2677,8 +2678,9 @@ class GroupJoinLowering : public OpConversionPattern<relalg::GroupJoinOp> {
          additionalColsMemberIdx.push_back(names.size() - 1);
          additionalColsRefs.push_back(colManager.createRef(c));
          valueTypes.push_back(c->type);
-         additionalColsTypes.push_back(c->type);
          valueLocations.push_back(loc);
+         additionalColsTypes.push_back(c->type);
+         additionalColsLocations.push_back(loc);
       }
 
       for (auto aggrFn : distAggrFuncs) {
@@ -2688,8 +2690,8 @@ class GroupJoinLowering : public OpConversionPattern<relalg::GroupJoinOp> {
          types.push_back(mlir::TypeAttr::get(aggrFn->getStateType()));
          auto def = aggrFn->getDestAttribute();
          defMapping.push_back(rewriter.getNamedAttr(memberName, def));
-         valueLocations.push_back(loc);
          valueTypes.push_back(aggrFn->getStateType());
+         valueLocations.push_back(loc);
       }
       auto stateMembers = subop::StateMembersAttr::get(context, mlir::ArrayAttr::get(context, names), mlir::ArrayAttr::get(context, types));
       auto leftKeys = relalg::OrderedAttributes::fromRefArr(groupJoinOp.getLeftCols());
@@ -2736,7 +2738,7 @@ class GroupJoinLowering : public OpConversionPattern<relalg::GroupJoinOp> {
       {
          mlir::Block* reduceBlock = new Block;
          mlir::OpBuilder::InsertionGuard guard(rewriter);
-         reduceBlock->addArguments(additionalColsTypes, valueLocations);
+         reduceBlock->addArguments(additionalColsTypes, additionalColsLocations);
          reduceBlock->addArguments(valueTypes, valueLocations);
          rewriter.setInsertionPointToStart(reduceBlock);
          std::vector<mlir::Value> storeVals;

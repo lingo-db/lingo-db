@@ -97,7 +97,7 @@ class CBAppendLowering : public OpConversionPattern<dsa::Append> {
          }
       } else if (mlir::isa<dsa::ArrowStringType>(arrowType)) {
          ArrowColumnBuilder::addBinary(rewriter, loc)({builderVal, isValid, val});
-      } else if (auto fixedWidthType = mlir::dyn_cast_or_null<dsa::ArrowFixedSizedBinaryType>(arrowType)) {
+      } else if (mlir::isa<dsa::ArrowFixedSizedBinaryType>(arrowType)) {
          ArrowColumnBuilder::addFixedSized(rewriter, loc)({builderVal, isValid, val});
       } else if (mlir::isa<dsa::ArrowDecimalType>(arrowType)) {
          ArrowColumnBuilder::addDecimal(rewriter, loc)({builderVal, isValid, val});

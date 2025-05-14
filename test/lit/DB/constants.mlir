@@ -1,6 +1,6 @@
 // RUN: run-mlir %s | FileCheck %s
 
-//CHECK: char<2>("AB")
+//CHECK: char<1>("A")
 //CHECK: int(10)
 //CHECK: int(10)
 //CHECK: bool(true)
@@ -35,7 +35,7 @@
 //CHECK: decimal(1.00000000000000000)
  module {
  	func.func @main () {
- 	     %char_const = db.constant ( "AB" ) : !db.char<2>
+ 	     %char_const = db.constant ( "A" ) : !db.char<1>
  		 %int32_const = db.constant ( 10 ) : i32
  		 %int64_const = db.constant ( 10 ) : i64
  		 %bool_true_const = db.constant ( 1 ) : i1
@@ -70,7 +70,7 @@
 		 %float32_div= db.div %float32_const : f32, %float32_const : f32
 		 %float64_div= db.div %float64_const : f64, %float64_const : f64
 		 %decimal2_div = db.div %decimal2_const : !db.decimal<15,2>, %decimal2_const : !db.decimal<15,2>
-         db.runtime_call "DumpValue" (%char_const) : (!db.char<2>) -> ()
+         db.runtime_call "DumpValue" (%char_const) : (!db.char<1>) -> ()
  		 db.runtime_call "DumpValue" (%int32_const) : (i32) -> ()
  		 db.runtime_call "DumpValue" (%int64_const) : (i64) -> ()
  		 db.runtime_call "DumpValue" (%bool_true_const) : (i1) -> ()
