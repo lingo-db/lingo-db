@@ -147,18 +147,8 @@ void DSAToStdLoweringPass::runOnOperation() {
       return util::RefType::get(&getContext(), IntegerType::get(&getContext(), 8));
    });
    typeConverter.addConversion([&](::dsa::ArrowFixedSizedBinaryType t) {
-      if (t.getByteWidth() > 8) return mlir::Type();
-      size_t bits = 0;
-      if (t.getByteWidth() == 1) {
-         bits = 8;
-      } else if (t.getByteWidth() == 2) {
-         bits = 16;
-      } else if (t.getByteWidth() <= 4) {
-         bits = 32;
-      } else {
-         bits = 64;
-      }
-      return (Type) mlir::IntegerType::get(ctxt, bits);
+      if (t.getByteWidth() > 4) return static_cast<Type>(util::VarLen32Type::get(&getContext()));
+      return static_cast<Type>(mlir::IntegerType::get(ctxt, 32));
    });
    typeConverter.addConversion([&](dsa::ArrowStringType type) {
       return util::VarLen32Type::get(&getContext());

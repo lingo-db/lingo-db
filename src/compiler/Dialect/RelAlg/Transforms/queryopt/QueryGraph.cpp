@@ -107,7 +107,8 @@ std::unique_ptr<lingodb::compiler::support::eval::expr> relalg::buildEvalExpr(ml
          }
       } else if (auto charType = mlir::dyn_cast_or_null<db::CharType>(type)) {
          typeConstant = arrow::Type::type::FIXED_SIZE_BINARY;
-         param1 = charType.getBytes();
+         // we need to multiply by 4 to get the maximum number of required bytes (4 bytes per character utf-8)
+         param1 = charType.getLen() * 4;
       } else if (auto intervalType = mlir::dyn_cast_or_null<db::IntervalType>(type)) {
          if (intervalType.getUnit() == db::IntervalUnitAttr::months) {
             typeConstant = arrow::Type::type::INTERVAL_MONTHS;

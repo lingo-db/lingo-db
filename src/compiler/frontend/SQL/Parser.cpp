@@ -46,7 +46,7 @@ struct TranslationContext {
    }
    void mapAttribute(ResolverScope& scope, std::string name, const tuples::Column* attr) {
       definedAttributes.top().push_back({name, attr});
-      resolver.insertIntoScope(&scope, name, attr);
+      resolver.insertIntoScope(&scope, std::move(name), attr);
    }
    const tuples::Column* getAttribute(std::string name) {
       const auto* res = resolver.lookup(name);
@@ -393,10 +393,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
                   }
                   case T_String: {
                      std::string stringVal = constVal.val_.str_;
-                     t = db::StringType::get(builder.getContext());
-                     if (stringVal.size() <= 8 && stringVal.size() > 0) {
-                        t = db::CharType::get(builder.getContext(), stringVal.size());
-                     }
+                     t = db::CharType::get(builder.getContext(), stringVal.size());
                      value = builder.getStringAttr(stringVal);
                      break;
                   }
@@ -549,8 +546,8 @@ mlir::Value frontend::sql::Parser::translateRangeVar(mlir::OpBuilder& builder, R
       auto attrDef = attrManager.createDef(scopeName, c.getColumnName());
       attrDef.getColumn().type = createTypeForColumn(builder.getContext(), c);
       columns.push_back(builder.getNamedAttr(c.getColumnName(), attrDef));
-      context.mapAttribute(scope, c.getColumnName(), &attrDef.getColumn()); //todo check for existing and overwrite...
-      context.mapAttribute(scope, alias + "." + c.getColumnName(), &attrDef.getColumn());
+      context.mapAttribute(scope, std::string{c.getColumnName()}, &attrDef.getColumn()); //todo check for existing and overwrite...
+      context.mapAttribute(scope, alias + "." + std::string{c.getColumnName()}, &attrDef.getColumn());
    }
    return builder.create<relalg::BaseTableOp>(builder.getUnknownLoc(), tuples::TupleStreamType::get(builder.getContext()), relation, builder.getDictionaryAttr(columns));
 }
@@ -562,7 +559,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
    // WITH ...
    if (stmt->with_clause_) {
       for (auto* cell = stmt->with_clause_->ctes_->head; cell != nullptr; cell = cell->next) {
-         auto* cte = reinterpret_cast<CommonTableExpr*>(cell->data.ptr_value);
+         auto* cte = static_cast<CommonTableExpr*>(cell->data.ptr_value);
          assert(cte->ctequery_->type == T_SelectStmt);
          mlir::Value subQuery;
          TargetInfo targetInfo;
@@ -906,9 +903,7 @@ mlir::Value frontend::sql::Parser::translateExpression(mlir::OpBuilder& builder,
             case T_String: {
                std::string stringVal = constVal.val_.str_;
                mlir::Type stringType = db::StringType::get(builder.getContext());
-               if (stringVal.size() <= 8 && stringVal.size() > 0) {
-                  stringType = db::CharType::get(builder.getContext(), stringVal.size());
-               }
+               stringType = db::CharType::get(builder.getContext(), stringVal.size());
                return builder.create<db::ConstantOp>(loc, stringType, builder.getStringAttr(stringVal));
             }
             case T_Float: {
@@ -1390,11 +1385,7 @@ lingodb::catalog::Type frontend::sql::Parser::createType(std::string datatypeNam
       return lingodb::catalog::Type::f64();
    }
    if (datatypeName == "char") {
-      if (std::get<size_t>(typeModifiers[0]) > 8) {
-         return lingodb::catalog::Type::stringType();
-      } else {
-         return lingodb::catalog::Type::charType(std::get<size_t>(typeModifiers[0]));
-      }
+      return lingodb::catalog::Type::charType(std::get<size_t>(typeModifiers[0]));
    }
    if (datatypeName == "date") {
       return lingodb::catalog::Type(lingodb::catalog::LogicalTypeId::DATE, std::make_shared<lingodb::catalog::DateTypeInfo>(lingodb::catalog::DateTypeInfo::DateUnit::DAY));
@@ -1499,9 +1490,9 @@ void frontend::sql::Parser::translateInsertStmt(mlir::OpBuilder& builder, Insert
       }
       auto rel = maybeRel.value();
       std::unordered_map<std::string, mlir::Type> tableColumnTypes;
-      for (auto& c : rel->getColumns()) {
+      for (const auto& c : rel->getColumns()) {
          auto type = createTypeForColumn(builder.getContext(), c);
-         tableColumnTypes[c.getColumnName()] = type;
+         tableColumnTypes.emplace(c.getColumnName(), type);
       }
       std::vector<std::string> insertColNames;
       if (stmt->cols_) {

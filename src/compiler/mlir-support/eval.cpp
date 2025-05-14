@@ -1,4 +1,5 @@
 #include "lingodb/compiler/mlir-support/eval.h"
+#include "lingodb/compiler/mlir-support/parsing.h"
 
 #include <arrow/api.h>
 #include <arrow/compute/api.h>
@@ -130,7 +131,7 @@ std::unique_ptr<expr> createLiteral(std::variant<int64_t, double, std::string> p
       case arrow::Type::type::STRING: return pack(arrow::compute::literal(std::make_shared<arrow::StringScalar>(std::get<std::string>(parsed))));
       case arrow::Type::type::FIXED_SIZE_BINARY: {
          std::shared_ptr<arrow::Buffer> bytes = arrow::AllocateResizableBuffer(tp1).ValueOrDie();
-         int64_t val = std::get<int64_t>(parsed);
+         const auto val = std::get<int64_t>(toI64(parsed));
          memcpy(bytes->mutable_data(), &val, std::min(sizeof(val), static_cast<size_t>(tp1)));
          return pack(arrow::compute::literal(std::make_shared<arrow::FixedSizeBinaryScalar>(bytes, arrow::fixed_size_binary(tp1))));
       }

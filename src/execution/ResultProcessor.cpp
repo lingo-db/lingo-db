@@ -52,9 +52,9 @@ void printTable(const std::shared_ptr<arrow::Table>& table) {
       std::cout << std::setw(30) << table->schema()->field(positions.size())->name() << "  |";
       convertHex.push_back(table->schema()->field(positions.size())->type()->id() == arrow::Type::FIXED_SIZE_BINARY);
       rowSep += std::string(33, '-');
-      std::stringstream sstr;
-      arrow::PrettyPrint(*c.get(), options, &sstr); //NOLINT (clang-diagnostic-unused-result)
-      columnReps.push_back(sstr.str());
+      std::string str;
+      arrow::PrettyPrint(*c.get(), options, &str); //NOLINT (clang-diagnostic-unused-result)
+      columnReps.push_back(str);
       positions.push_back(0);
    }
    std::cout << std::endl
@@ -64,7 +64,9 @@ void printTable(const std::shared_ptr<arrow::Table>& table) {
       cont = false;
       bool skipNL = false;
       for (size_t column = 0; column < columnReps.size(); column++) {
-         char lastHex = 0;
+         char32_t currChar = U'\0';
+         uint8_t currCharSize = 0;
+
          bool first = true;
          std::stringstream out;
          while (positions[column] < columnReps[column].size()) {
@@ -81,23 +83,36 @@ void printTable(const std::shared_ptr<arrow::Table>& table) {
             if (curr == '\n') {
                break;
             } else {
-               if (convertHex[column]) {
-                  if (isxdigit(curr)) {
-                     if (lastHex == 0) {
-                        first = false;
-                        lastHex = curr;
-                     } else {
-                        char converted = (hexval(lastHex) << 4 | hexval(curr));
-                        out << converted;
-                        lastHex = 0;
-                     }
-                  } else {
-                     first = false;
-                     out << curr;
-                  }
+               first = false;
+               if (convertHex[column] && isxdigit(curr)) {
+                  if (currCharSize % 2 == 0)
+                     currChar |= hexval(curr) << (currCharSize++ * 4 + 4);
+                  else
+                     currChar |= hexval(curr) << (currCharSize++ * 4 - 4);
+               } else if ((curr & (1 << 7)) == (1 << 7)) {
+                  const auto extendedCurr = static_cast<char32_t>(curr) & 0xFF;
+                  currChar |= static_cast<char32_t>(extendedCurr << (currCharSize * 4));
+                  currCharSize += 2;
                } else {
-                  first = false;
+                  if (currChar != U'\0') {
+                     for (size_t i = 0; i < currCharSize / 2; i++) {
+                        const char slice = reinterpret_cast<char*>(&currChar)[i];
+                        if (slice != 0) {
+                           out << slice;
+                        }
+                     }
+                     currChar = U'\0';
+                     currCharSize = 0;
+                  }
                   out << curr;
+               }
+            }
+         }
+         if (currChar != U'\0') {
+            for (size_t i = 0; i < currCharSize / 2; i++) {
+               const char slice = reinterpret_cast<char*>(&currChar)[i];
+               if (slice != 0) {
+                  out << slice;
                }
             }
          }

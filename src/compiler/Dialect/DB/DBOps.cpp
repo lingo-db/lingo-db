@@ -81,7 +81,7 @@ std::tuple<arrow::Type::type, uint32_t, uint32_t> convertTypeToArrow(mlir::Type 
       }
    } else if (auto charType = mlir::dyn_cast_or_null<db::CharType>(type)) {
       typeConstant = arrow::Type::type::STRING;
-      param1 = charType.getBytes();
+      param1 = charType.getLen();
    } else if (auto intervalType = mlir::dyn_cast_or_null<db::IntervalType>(type)) {
       if (intervalType.getUnit() == db::IntervalUnitAttr::months) {
          typeConstant = arrow::Type::type::INTERVAL_MONTHS;
