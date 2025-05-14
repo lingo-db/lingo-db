@@ -69,8 +69,8 @@ def DB_CharType : DB_Type<"Char","char"> {
         Fixed-size array of chars.
     }];
 
-    let parameters = (ins "unsigned":$bytes);
-    let assemblyFormat="`<` $bytes `>` ";
+    let parameters = (ins "unsigned":$len);
+    let assemblyFormat="`<` $len `>` ";
 }
 
 def DB_DateUnit_DAY  : I64EnumAttrCase<"day", 0>;

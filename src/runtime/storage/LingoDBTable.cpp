@@ -180,8 +180,12 @@ std::shared_ptr<arrow::DataType> toPhysicalType(lingodb::catalog::Type t) {
                return arrow::month_interval();
          }
       }
-      case TypeId::CHAR:
-         return arrow::fixed_size_binary(t.getInfo<lingodb::catalog::CharTypeInfo>()->getLength());
+      case TypeId::CHAR: {
+         if (t.getInfo<lingodb::catalog::CharTypeInfo>()->getLength() == 1) {
+            return arrow::fixed_size_binary(4);
+         }
+         return arrow::utf8();
+      }
       case TypeId::STRING:
          return arrow::utf8();
       default:

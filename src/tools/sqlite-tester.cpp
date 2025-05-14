@@ -67,7 +67,9 @@ struct ResultHasher : public execution::ResultProcessor {
       while (cont) {
          cont = false;
          for (size_t column = 0; column < columnReps.size(); column++) {
-            char lastHex = 0;
+            char32_t currChar = U'\0';
+            uint8_t currCharSize = 0;
+
             bool first = true;
             bool afterComma = false;
             size_t digits = 0;
@@ -106,17 +108,13 @@ struct ResultHasher : public execution::ResultProcessor {
                         out << curr;
                      }
                   } else if (convertHex[column]) {
+                     first = false;
                      if (std::isxdigit(curr)) {
-                        if (lastHex == 0) {
-                           first = false;
-                           lastHex = curr;
-                        } else {
-                           char converted = (hexval(lastHex) << 4 | hexval(curr));
-                           out << converted;
-                           lastHex = 0;
-                        }
+                        if (currCharSize % 2 == 0)
+                           currChar |= hexval(curr) << (currCharSize++ * 4 + 4);
+                        else
+                           currChar |= hexval(curr) << (currCharSize++ * 4 - 4);
                      } else {
-                        first = false;
                         out << curr;
                      }
                   } else {
@@ -124,6 +122,10 @@ struct ResultHasher : public execution::ResultProcessor {
                      out << curr;
                   }
                }
+            }
+            if (currChar != U'\0') {
+               assert(currChar <= 0xFF && "Only ASCII characters supported for sqlite testing");
+               out << static_cast<char>(currChar);
             }
             if (!first) {
                toHash.push_back(out.str());
@@ -386,6 +388,7 @@ int main(int argc, char** argv) {
    auto scheduler = scheduler::startScheduler();
    auto lines = filterLines(readTestFile(argv[1]));
    size_t line = 0;
+   bool first = true;
    while (line < lines.size()) {
       auto parts = split(lines[line]);
       if (parts.empty()) {
@@ -396,6 +399,10 @@ int main(int argc, char** argv) {
          runStatement(*session, lines, line);
       }
       if (parts[0] == "query") {
+         if (first) {
+            first = false;
+            continue;
+         }
          runQuery(*session, lines, line);
       }
       if (parts[0] == "hash-threshold") {

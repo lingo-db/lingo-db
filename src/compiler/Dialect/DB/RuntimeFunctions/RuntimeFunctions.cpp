@@ -134,12 +134,13 @@ mlir::Value constLikeImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArg
 }
 mlir::Value dumpValuesImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, const mlir::TypeConverter* typeConverter, mlir::Location loc) {
    using namespace mlir;
-   auto i128Type = IntegerType::get(rewriter.getContext(), 128);
-   auto i64Type = IntegerType::get(rewriter.getContext(), 64);
-   auto nullableType = mlir::dyn_cast_or_null<db::NullableType>(originalArgumentTypes[0]);
-   auto baseType = getBaseType(originalArgumentTypes[0]);
+   const auto i128Type = IntegerType::get(rewriter.getContext(), 128);
+   const auto i64Type = IntegerType::get(rewriter.getContext(), 64);
+   const auto i32Type = IntegerType::get(rewriter.getContext(), 32);
+   const auto f64Type = Float64Type::get(rewriter.getContext());
+   const auto nullableType = mlir::dyn_cast_or_null<db::NullableType>(originalArgumentTypes[0]);
+   const auto baseType = getBaseType(originalArgumentTypes[0]);
 
-   auto f64Type = Float64Type::get(rewriter.getContext());
    Value isNull;
    Value val;
    if (nullableType) {
@@ -198,9 +199,9 @@ mlir::Value dumpValuesImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredAr
    } else if (mlir::isa<db::StringType>(baseType)) {
       DumpRuntime::dumpString(rewriter, loc)({isNull, val});
    } else if (auto charType = mlir::dyn_cast_or_null<db::CharType>(baseType)) {
-      Value numBytes = rewriter.create<arith::ConstantOp>(loc, rewriter.getI64IntegerAttr(charType.getBytes()));
-      if (charType.getBytes() < 5) {
-         val = rewriter.create<arith::ExtSIOp>(loc, i64Type, val);
+      Value numBytes = rewriter.create<arith::ConstantOp>(loc, rewriter.getI64IntegerAttr(charType.getLen()));
+      if (charType.getLen() <= 1 && val.getType() != i32Type) {
+         val = rewriter.create<arith::ExtSIOp>(loc, i32Type, val);
       }
       DumpRuntime::dumpChar(rewriter, loc)({isNull, val, numBytes});
    }

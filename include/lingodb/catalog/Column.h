@@ -12,6 +12,7 @@ class Column {
    Column(std::string columnName, Type type, bool isNullable) : columnName(columnName), logicalType(type), isNullable(isNullable) {}
 
    Type getLogicalType() const { return logicalType; }
+   // TODO: instead of copying the column name, this should return a std::string_view
    std::string getColumnName() const { return columnName; }
    bool getIsNullable() const { return isNullable; }
    void serialize(utility::Serializer& serializer) const;
