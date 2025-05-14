@@ -141,7 +141,7 @@ class ToJson {
             return "str";
          })
          .Case<db::CharType>([](db::CharType charType) {
-            return "char" + std::to_string(charType.getBytes());
+            return "char" + std::to_string(charType.getLen());
          })
          .Case<mlir::FloatType>([](mlir::FloatType floatType) {
             return "float" + std::to_string(floatType.getWidth());
