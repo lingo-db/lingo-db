@@ -14,6 +14,7 @@ struct StringRuntime {
    static bool endsWith(VarLen32 str, VarLen32 substr);
    static int64_t toInt(VarLen32 str);
    static int64_t len(VarLen32 str);
+   static size_t nextChar(VarLen32 str, size_t position);
    static float toFloat32(VarLen32 str);
    static double toFloat64(VarLen32 str);
    static __int128 toDecimal(VarLen32 str, int32_t reqScale);

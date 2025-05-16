@@ -7,7 +7,7 @@ module {
         %pattern = db.constant ( "str%" ) : !db.string
         %pattern2 = db.constant ( "%o%t%" ) : !db.string
         %pattern3 = db.constant ( "%str" ) : !db.string
-        %pattern4 = db.constant ( "...." ) : !db.string
+        %pattern4 = db.constant ( "____" ) : !db.string
 
         %from = db.constant( 1 ) : i32
         %to = db.constant( 2 ) : i32
@@ -104,6 +104,130 @@ module {
         //CHECK: string("1.0000001")
         %21 = db.cast %decimal : !db.decimal<10,7> -> !db.string
         db.runtime_call "DumpValue" (%21) : (!db.string) -> ()
+
+
+        // Like:Simple
+        %like8 = db.constant("Jos_!") : !db.string
+
+        %c1 = db.constant("Jose!") : !db.string
+        %r1 = db.runtime_call "Like"(%c1, %like8) : (!db.string, !db.string) -> (i1)
+        db.runtime_call "DumpValue"(%r1) : (i1) -> ()
+        //CHECK: bool(true)
+
+        %c2 = db.constant("José!") : !db.string
+        %r2 = db.runtime_call "Like"(%c2, %like8) : (!db.string, !db.string) -> (i1)
+        db.runtime_call "DumpValue"(%r2) : (i1) -> ()
+        //CHECK: bool(true)
+
+        // Like:Combinations
+
+        // Multi-byte Wildcard
+        %like9 = db.constant("J_sé!") : !db.string
+
+        %c3 = db.constant("José!") : !db.string
+        %r3 = db.runtime_call "Like"(%c3, %like9) : (!db.string, !db.string) -> (i1)
+        db.runtime_call "DumpValue"(%r3) : (i1) -> ()
+        //CHECK: bool(true)
+
+        %c4 = db.constant("Jéssé!") : !db.string
+        %r4 = db.runtime_call "Like"(%c4, %like9) : (!db.string, !db.string) -> (i1)
+        db.runtime_call "DumpValue"(%r4) : (i1) -> ()
+        //CHECK: bool(false)
+
+        // Matching across boundaries
+        %like10 = db.constant("J%!") : !db.string
+
+        %c5 = db.constant("José!") : !db.string
+        %r5 = db.runtime_call "Like"(%c5, %like10) : (!db.string, !db.string) -> (i1)
+        db.runtime_call "DumpValue"(%r5) : (i1) -> ()
+        //CHECK: bool(true)
+
+        %c6 = db.constant("Jośę!") : !db.string
+        %r6 = db.runtime_call "Like"(%c6, %like10) : (!db.string, !db.string) -> (i1)
+        db.runtime_call "DumpValue"(%r6) : (i1) -> ()
+        //CHECK: bool(true)
+
+        %c7 = db.constant("J!") : !db.string
+        %r7 = db.runtime_call "Like"(%c7, %like10) : (!db.string, !db.string) -> (i1)
+        db.runtime_call "DumpValue"(%r7) : (i1) -> ()
+        //CHECK: bool(true)
+
+        // Combining Characters
+        %like11 = db.constant("Jo_%!") : !db.string
+
+        %c8 = db.constant("Joé!") : !db.string
+        %r8 = db.runtime_call "Like"(%c8, %like11) : (!db.string, !db.string) -> (i1)
+        db.runtime_call "DumpValue"(%r8) : (i1) -> ()
+        //CHECK: bool(true)
+
+        %c9 = db.constant("Joé!") : !db.string
+        %r9 = db.runtime_call "Like"(%c9, %like11) : (!db.string, !db.string) -> (i1)
+        db.runtime_call "DumpValue"(%r9) : (i1) -> ()
+        //CHECK: bool(true)
+
+        %c10 = db.constant("Joe!") : !db.string
+        %r10 = db.runtime_call "Like"(%c10, %like11) : (!db.string, !db.string) -> (i1)
+        db.runtime_call "DumpValue"(%r10) : (i1) -> ()
+        //CHECK: bool(true)
+
+        // UTF-8 Boundary with %
+        %like12 = db.constant("%é!") : !db.string
+
+        %c11 = db.constant("José!") : !db.string
+        %r11 = db.runtime_call "Like"(%c11, %like12) : (!db.string, !db.string) -> (i1)
+        db.runtime_call "DumpValue"(%r11) : (i1) -> ()
+        //CHECK: bool(true)
+
+        %c12 = db.constant("Jøse!") : !db.string
+        %r12 = db.runtime_call "Like"(%c12, %like12) : (!db.string, !db.string) -> (i1)
+        db.runtime_call "DumpValue"(%r12) : (i1) -> ()
+        //CHECK: bool(false)
+
+        // Multiple _
+        %like13 = db.constant("____!") : !db.string
+
+        %c13 = db.constant("José!") : !db.string
+        %r13 = db.runtime_call "Like"(%c13, %like13) : (!db.string, !db.string) -> (i1)
+        db.runtime_call "DumpValue"(%r13) : (i1) -> ()
+        //CHECK: bool(true)
+
+        %c14 = db.constant("Jose!") : !db.string
+        %r14 = db.runtime_call "Like"(%c14, %like13) : (!db.string, !db.string) -> (i1)
+        db.runtime_call "DumpValue"(%r14) : (i1) -> ()
+        //CHECK: bool(true)
+
+        %c15 = db.constant("Jósé!") : !db.string
+        %r15 = db.runtime_call "Like"(%c15, %like13) : (!db.string, !db.string) -> (i1)
+        db.runtime_call "DumpValue"(%r15) : (i1) -> ()
+        //CHECK: bool(true)
+
+        // Start and End Anchors
+        %like14 = db.constant("%é") : !db.string
+
+        %c16 = db.constant("Café") : !db.string
+        %r16 = db.runtime_call "Like"(%c16, %like14) : (!db.string, !db.string) -> (i1)
+        db.runtime_call "DumpValue"(%r16) : (i1) -> ()
+        //CHECK: bool(true)
+
+        %c17 = db.constant("Cafe") : !db.string
+        %r17 = db.runtime_call "Like"(%c17, %like14) : (!db.string, !db.string) -> (i1)
+        db.runtime_call "DumpValue"(%r17) : (i1) -> ()
+        //CHECK: bool(false)
+
+        // Non-Match Edge Cases
+        %like15 = db.constant("Jo%!"): !db.string
+
+        %c18 = db.constant("Jóse") : !db.string
+        %r18 = db.runtime_call "Like"(%c18, %like15) : (!db.string, !db.string) -> (i1)
+        db.runtime_call "DumpValue"(%r18) : (i1) -> ()
+        //CHECK: bool(false)
+
+        %c19 = db.constant("Jośé!!") : !db.string
+        %r19 = db.runtime_call "Like"(%c19, %like15) : (!db.string, !db.string) -> (i1)
+        db.runtime_call "DumpValue"(%r19) : (i1) -> ()
+        //CHECK: bool(true)
+
+
         return
     }
 }

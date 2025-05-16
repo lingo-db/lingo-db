@@ -241,6 +241,20 @@ bool lingodb::runtime::StringRuntime::compareNEq(lingodb::runtime::VarLen32 str1
 EXPORT char* rt_varlen_to_ref(lingodb::runtime::VarLen32* varlen) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    return varlen->data();
 }
+
+size_t lingodb::runtime::StringRuntime::nextChar(lingodb::runtime::VarLen32 str, size_t position) {
+   // handle first byte and continuations
+   char* data = str.data();
+   uint32_t byteLen = str.getLen();
+
+   do {
+      position++;
+   } while (position < byteLen &&
+            (static_cast<uint8_t>(data[position]) >> 6) == 2);
+
+   return position;
+}
+
 int64_t lingodb::runtime::StringRuntime::len(VarLen32 str) {
    char* data = str.data();
    uint32_t byteLen = str.getLen();
