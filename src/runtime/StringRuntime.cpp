@@ -83,6 +83,40 @@ bool iterativeLike(const char* str, size_t strLen, const char* pattern, size_t p
 } // namespace
 //end taken from noisepage
 
+namespace {
+
+size_t charIndexToByteIndex(lingodb::runtime::VarLen32& str, size_t charIndex, size_t knownByteIndex = 0, size_t knownCharIndex = 0) {
+   /*
+    * considered the following: extract first bits, check number of values needed to jump from a memory table, do jump
+    * decided against it: the following implementation may be easier to vectorize
+    */
+
+   /*
+    * knownByteIndex and knownCharIndex: already known mappings from previous runs
+    * charIndex < len(str) length being in the utf-8 sense
+    * knownByteIndex should map to the first byte of the knownCharIndex
+    */
+
+   char* data = str.data();
+   uint32_t byteLen = str.getLen();
+
+   for (; knownByteIndex < byteLen; knownByteIndex++) {
+      const unsigned char c = data[knownByteIndex];
+      uint8_t shifted = c >> 6;
+
+      // if not a continuation
+      if (shifted != 2) {
+         if (knownCharIndex == charIndex) {
+            return knownByteIndex;
+         }
+         knownCharIndex++;
+      }
+   }
+
+   return knownByteIndex; // returns the byteLength;
+}
+} // namespace
+
 bool lingodb::runtime::StringRuntime::like(lingodb::runtime::VarLen32 str1, lingodb::runtime::VarLen32 str2) {
    return iterativeLike((str1).data(), (str1).getLen(), (str2).data(), (str2).getLen(), '\\');
 }
@@ -195,11 +229,6 @@ bool lingodb::runtime::StringRuntime::compareNEq(lingodb::runtime::VarLen32 str1
 EXPORT char* rt_varlen_to_ref(lingodb::runtime::VarLen32* varlen) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    return varlen->data();
 }
-lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::substr(lingodb::runtime::VarLen32 str, size_t from, size_t to) { // NOLINT (clang-diagnostic-return-type-c-linkage)
-   from -= 1;
-   to = std::min((size_t) str.getLen(), to);
-   if (from > to || str.getLen() < to) throw std::runtime_error("can not perform substring operation");
-   return lingodb::runtime::VarLen32::fromString(str.str().substr(from, to - from));
 int64_t lingodb::runtime::StringRuntime::len(VarLen32 str) {
    char* data = str.data();
    uint32_t byteLen = str.getLen();
@@ -215,6 +244,35 @@ int64_t lingodb::runtime::StringRuntime::len(VarLen32 str) {
 
    return charLen;
 }
+
+lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::substr(lingodb::runtime::VarLen32 str, int64_t from, int64_t len) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+
+   /*
+    * Legal values:
+    * - from goes from 1 to len
+    * - len goes from 0 to (strLen-from +1)
+    *
+    * illegal indices "count" towards the length;
+    *    i.e. if we start at -1 with length 3 and the string has a length 10, the result has length 1
+    * we then convert the value of from to from-1 to work with c++ structures
+   */
+
+   // length should not be negative
+   int64_t legalizedLength = std::max(static_cast<int64_t>(0), len);
+   // from should start at position 1.
+   // from greater than size() will be truncated to size() by charIndexToByteIndex
+   size_t legalizedFrom = std::max(from, static_cast<int64_t>(1));
+   // legalizedTo should be at least legalizedFrom (outputting an empty string).
+   // Note we work with the non-legalized from here, as semantically we can pass through empty indices before arriving at the actual string
+   size_t legalizedTo = std::max(from + legalizedLength, static_cast<int64_t>(legalizedFrom));
+
+   legalizedFrom--;
+   legalizedTo--;
+
+   size_t byteFrom = charIndexToByteIndex(str, legalizedFrom);
+   size_t byteTo = charIndexToByteIndex(str, legalizedTo, byteFrom, legalizedFrom);
+
+   return lingodb::runtime::VarLen32::fromString(str.str().substr(byteFrom, byteTo - byteFrom));
 }
 
 size_t lingodb::runtime::StringRuntime::findMatch(VarLen32 str, VarLen32 needle, size_t start, size_t end) {
