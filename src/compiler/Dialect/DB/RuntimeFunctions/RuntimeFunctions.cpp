@@ -93,12 +93,13 @@ mlir::Value constLikeImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArg
          if (pattern[pos] == '\\') {
             currentSubPattern += pattern[pos + 1];
             pos += 2;
-         } else if (pattern[pos] == '.') {
+         } else if (pattern[pos] == '_') {
             //match current pattern
             lastMatchEnd = matchPart(rewriter, loc, lastMatchEnd, currentSubPattern, str, end);
-            mlir::Value one = rewriter.create<arith::ConstantIndexOp>(loc, 1);
 
-            lastMatchEnd = rewriter.create<arith::AddIOp>(loc, lastMatchEnd, one);
+            auto nextChar = StringRuntime::nextChar(rewriter, loc)(mlir::ValueRange{str, lastMatchEnd})[0];
+            lastMatchEnd = rewriter.create<mlir::arith::IndexCastOp>(loc, rewriter.getIndexType(), nextChar);
+
             currentSubPattern = "";
             //lastMatchEnd+=1
             pos += 1;
