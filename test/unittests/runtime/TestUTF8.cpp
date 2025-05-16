@@ -283,3 +283,146 @@ TEST_CASE("Substr:OutOfBounds") {
 
    cleanUp(testString);
 }
+
+// Testing Like -----------------------------------------------------------------------------------------------
+
+TEST_CASE("Like:Simple") {
+   VarLen32 testLike = VarLen32::fromString("Jos_!");
+
+   VarLen32 testCandidate = VarLen32::fromString("Jose!");
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == true);
+   cleanUp(testCandidate);
+
+   testCandidate = VarLen32::fromString("José!");
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == true);
+   cleanUp(testCandidate);
+
+   cleanUp(testLike);
+}
+
+TEST_CASE("Like:Combinations") {
+   VarLen32 testLike;
+   VarLen32 testCandidate;
+
+   // Multi-byte Wildcard
+   testLike = VarLen32::fromString("J_sé!");
+
+   testCandidate = VarLen32::fromString("José!");
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == true); // 'o' matches '_'
+   cleanUp(testCandidate);
+
+   testCandidate = VarLen32::fromString("Jéssé!");
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == false); // two chars after J
+   cleanUp(testCandidate);
+
+   cleanUp(testCandidate);
+
+   // % Matching
+   testLike = VarLen32::fromString("J_sé!");
+
+   testCandidate = VarLen32::fromString("José!");
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == true); // 'o' matches '_'
+   cleanUp(testCandidate);
+
+   testCandidate = VarLen32::fromString("Jéssé!");
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == false); // two chars after J
+   cleanUp(testCandidate);
+
+   cleanUp(testLike);
+
+   // Matching across boundaries
+
+   testLike = VarLen32::fromString("J%!");
+
+   testCandidate = VarLen32::fromString("José!");
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == true);
+   cleanUp(testCandidate);
+
+   testCandidate = VarLen32::fromString("Jośę!");
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == true); // two multi-byte chars
+   cleanUp(testCandidate);
+
+   testCandidate = VarLen32::fromString("J!");
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == true); // zero or more
+   cleanUp(testCandidate);
+
+   cleanUp(testLike);
+
+   // Combining Characters
+
+   testLike = VarLen32::fromString("Jo_%!");
+
+   testCandidate = VarLen32::fromString("Joé!"); // composed form
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == true);
+   cleanUp(testCandidate);
+
+   testCandidate = VarLen32::fromString("Jo\u0065\u0301!"); // decomposed é (e + ́)
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == true); // if normalized
+   cleanUp(testCandidate);
+
+   testCandidate = VarLen32::fromString("Joe!"); // ASCII e
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == true); // match either form
+   cleanUp(testCandidate);
+
+   cleanUp(testLike);
+
+   // UTF-8 Boundary with %
+
+   testLike = VarLen32::fromString("%é!");
+
+   testCandidate = VarLen32::fromString("José!");
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == true);
+   cleanUp(testCandidate);
+
+   testCandidate = VarLen32::fromString("Jøse!");
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == false);
+   cleanUp(testCandidate);
+
+   cleanUp(testLike);
+
+   // Multiple _
+
+   testLike = VarLen32::fromString("____!");
+
+   testCandidate = VarLen32::fromString("José!");
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == true); // 4 codepoints
+   cleanUp(testCandidate);
+
+   testCandidate = VarLen32::fromString("Jose!");
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == true); // ASCII only
+   cleanUp(testCandidate);
+
+   testCandidate = VarLen32::fromString("Jósé!");
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == true); // 5 codepoints
+   cleanUp(testCandidate);
+
+   cleanUp(testLike);
+
+   // Start and End Anchors
+
+   testLike = VarLen32::fromString("%é");
+
+   testCandidate = VarLen32::fromString("Café");
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == true);
+   cleanUp(testCandidate);
+
+   testCandidate = VarLen32::fromString("Cafe");
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == false);
+   cleanUp(testCandidate);
+
+   cleanUp(testLike);
+
+   // Non-Match Edge Cases
+
+   testLike = VarLen32::fromString("Jo%!");
+
+   testCandidate = VarLen32::fromString("Jóse"); // no '!'
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == false);
+   cleanUp(testCandidate);
+
+   testCandidate = VarLen32::fromString("Jośé!!");
+   REQUIRE(StringRuntime::like(testCandidate, testLike) == true);
+   cleanUp(testCandidate);
+
+   cleanUp(testLike);
+}

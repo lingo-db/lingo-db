@@ -10,35 +10,47 @@
 // src: https://github.com/cmu-db/noisepage/blob/c2635d3360dd24a9f7a094b4b8bcd131d99f2d4b/src/execution/sql/operators/like_operators.cpp
 // (MIT License, Copyright (c) 2018 CMU Database Group)
 #define NextByte(p, plen) ((p)++, (plen)--)
+
 namespace {
+
+// can be combined with the NextChar in the StringRuntime, but would need iterativeLike to be rewritten
+void nextChar(const char*& p, std::size_t& plen) {
+   // handle first byte and continuations
+   do {
+      p++;
+      plen--;
+   } while (plen > 0 &&
+            (static_cast<uint8_t>(*p) >> 6) == 2);
+}
+
 bool iterativeLike(const char* str, size_t strLen, const char* pattern, size_t patternLen, char escape) {
    const char *s = str, *p = pattern;
    std::size_t slen = strLen, plen = patternLen;
 
-   for (; plen > 0 && slen > 0; NextByte(p, plen)) {
+   for (; plen > 0 && slen > 0; nextChar(p, plen)) {
       if (*p == escape) {
          // Next pattern character must match exactly, whatever it is
-         NextByte(p, plen);
+         nextChar(p, plen);
 
          if (plen == 0 || *p != *s) {
             return false;
          }
 
-         NextByte(s, slen);
+         nextChar(s, slen);
       } else if (*p == '%') {
          // Any sequence of '%' wildcards can essentially be replaced by one '%'. Similarly, any
          // sequence of N '_'s will blindly consume N characters from the input string. Process the
          // pattern until we reach a non-wildcard character.
-         NextByte(p, plen);
+         nextChar(p, plen);
          while (plen > 0) {
             if (*p == '%') {
-               NextByte(p, plen);
+               nextChar(p, plen);
             } else if (*p == '_') {
                if (slen == 0) {
                   return false;
                }
-               NextByte(s, slen);
-               NextByte(p, plen);
+               nextChar(s, slen);
+               nextChar(p, plen);
             } else {
                break;
             }
@@ -50,7 +62,7 @@ bool iterativeLike(const char* str, size_t strLen, const char* pattern, size_t p
          }
 
          if (*p == escape) {
-            NextByte(p, plen);
+            nextChar(p, plen);
             if (plen == 0) {
                return false;
             }
@@ -60,23 +72,23 @@ bool iterativeLike(const char* str, size_t strLen, const char* pattern, size_t p
             if (iterativeLike(s, slen, p, plen, escape)) {
                return true;
             }
-            NextByte(s, slen);
+            nextChar(s, slen);
          }
          // No match
          return false;
       } else if (*p == '_') {
          // '_' wildcard matches a single character in the input
-         NextByte(s, slen);
+         nextChar(s, slen);
       } else if (*p == *s) {
          // Exact character match
-         NextByte(s, slen);
+         nextChar(s, slen);
       } else {
          // Unmatched!
          return false;
       }
    }
    while (plen > 0 && *p == '%') {
-      NextByte(p, plen);
+      nextChar(p, plen);
    }
    return slen == 0 && plen == 0;
 }
