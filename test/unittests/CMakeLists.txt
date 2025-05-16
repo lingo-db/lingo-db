@@ -7,6 +7,7 @@ add_executable(tester
         catalog/TestTypes.cpp
         catalog/TestMetaData.cpp
         catalog/TestCatalogEntries.cpp
+        runtime/TestUTF8.cpp
         storage/TestStorage.cpp
         utility/TestSerialization.cpp
 )

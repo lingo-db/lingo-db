@@ -170,7 +170,7 @@ lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::fromDecimal(__int128
 lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::fromChar(uint64_t val, size_t bytes) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    char* data = new char[bytes];
    memcpy(data, &val, bytes);
-   return lingodb::runtime::VarLen32((uint8_t*) data, bytes);
+   return lingodb::runtime::VarLen32(reinterpret_cast<uint8_t*>(data), bytes);
 }
 
 #define STR_CMP(NAME, OP)                                                                                                  \
@@ -200,6 +200,21 @@ lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::substr(lingodb::runt
    to = std::min((size_t) str.getLen(), to);
    if (from > to || str.getLen() < to) throw std::runtime_error("can not perform substring operation");
    return lingodb::runtime::VarLen32::fromString(str.str().substr(from, to - from));
+int64_t lingodb::runtime::StringRuntime::len(VarLen32 str) {
+   char* data = str.data();
+   uint32_t byteLen = str.getLen();
+
+   // start with byteLen, subtract at every continuation (starting with b10xxxxxx)
+   uint32_t charLen = byteLen;
+
+   for (uint32_t i = 0; i < byteLen; i++) {
+      const unsigned char c = data[i];
+      uint8_t shifted = c >> 6;
+      charLen -= (shifted == 2);
+   }
+
+   return charLen;
+}
 }
 
 size_t lingodb::runtime::StringRuntime::findMatch(VarLen32 str, VarLen32 needle, size_t start, size_t end) {
@@ -226,9 +241,6 @@ void toUpper(char* str, size_t len) {
    }
 }
 } // namespace
-int64_t lingodb::runtime::StringRuntime::len(VarLen32 str) {
-   return str.getLen();
-}
 lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::toUpper(lingodb::runtime::VarLen32 str) {
    if (str.isShort()) {
       ::toUpper(str.data(), str.getLen());
@@ -237,7 +249,7 @@ lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::toUpper(lingodb::run
       char* copied = new char[str.getLen()];
       memcpy(copied, str.data(), str.getLen());
       ::toUpper(copied, str.getLen());
-      return lingodb::runtime::VarLen32((uint8_t*) copied, str.getLen());
+      return lingodb::runtime::VarLen32(reinterpret_cast<uint8_t*>(copied), str.getLen());
    }
 }
 lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::concat(lingodb::runtime::VarLen32 a, lingodb::runtime::VarLen32 b) {
@@ -251,7 +263,7 @@ lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::concat(lingodb::runt
       char* copied = new char[totalLength];
       memcpy(copied, a.data(), a.getLen());
       memcpy(&copied[a.getLen()], b.data(), b.getLen());
-      return lingodb::runtime::VarLen32((uint8_t*) copied, totalLength);
+      return lingodb::runtime::VarLen32(reinterpret_cast<uint8_t*>(copied), totalLength);
    }
 }
 int64_t lingodb::runtime::StringRuntime::toDate(lingodb::runtime::VarLen32 str) {
