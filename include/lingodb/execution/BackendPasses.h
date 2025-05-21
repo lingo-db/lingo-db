@@ -3,7 +3,6 @@
 #include <memory>
 #include <mlir/Pass/Pass.h>
 namespace lingodb::execution {
-std::unique_ptr<mlir::Pass> createEnforceCABI();
 std::unique_ptr<mlir::Pass> createDecomposeTuplePass();
 void registerBackendPasses();
 } // namespace lingodb::execution

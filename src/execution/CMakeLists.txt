@@ -1,4 +1,4 @@
-set(EXECUTION_FILES ResultProcessor.cpp EnforceCABIPass.cpp Frontend.cpp LLVMBackends.cpp Execution.cpp BackendPasses.cpp CEmitter.cpp CBackend.cpp BareFunctions.cpp Instrumentation.cpp)
+set(EXECUTION_FILES ResultProcessor.cpp Frontend.cpp LLVMBackends.cpp Execution.cpp BackendPasses.cpp CEmitter.cpp CBackend.cpp BareFunctions.cpp Instrumentation.cpp)
 
 if (ENABLE_GPU_BACKEND)
     find_library(CUDA_RUNTIME_LIBRARY cuda HINTS ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES} REQUIRED)
@@ -37,4 +37,3 @@ else ()
 endif (COMPILE_FOR_PERF)
 message("compile defs: ${COMPILE_DEFS}")
 target_compile_definitions(runner PRIVATE ${COMPILE_DEFS})
-

@@ -42,6 +42,16 @@ mlir::func::CallOp lingodb::compiler::dialect::util::FunctionHelper::call(mlir::
       mlir::OpBuilder::InsertionGuard insertionGuard(builder);
       builder.setInsertionPointToStart(fnHelper.parentModule.getBody());
       funcOp = builder.create<mlir::func::FuncOp>(fnHelper.parentModule.getLoc(), function.getMangledName(), builder.getFunctionType(function.getParameterTypes()(builder.getContext()), function.getResultTypes()(builder.getContext())), builder.getStringAttr("private"), mlir::ArrayAttr{}, mlir::ArrayAttr{});
+
+      // add zeroext to boolean parameters for conversion i1 (llvm) -> bool (C++)
+      for (unsigned i = 0; i < funcOp.getNumArguments(); ++i) {
+         auto argType = funcOp.getFunctionType().getInput(i);
+         if (auto intType = mlir::dyn_cast<mlir::IntegerType>(argType)) {
+            if (intType.getWidth() == 1) {
+               funcOp.setArgAttr(i, "llvm.zeroext", builder.getUnitAttr());
+            }
+         }
+      }
    }
    assert(values.size() == funcOp.getFunctionType().getNumInputs());
    std::vector<mlir::Value> convertedValues;
