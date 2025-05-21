@@ -39,7 +39,7 @@ class TableMetaDataProvider {
    public:
    virtual const Sample& getSample() const = 0;
    virtual std::vector<std::string> getColumnNames() const = 0;
-   virtual const ColumnStatistics& getColumnStatistics(std::string column) const = 0;
+   virtual const ColumnStatistics& getColumnStatistics(std::string_view column) const = 0;
    virtual size_t getNumRows() const = 0;
    virtual std::vector<std::string> getPrimaryKey() const = 0;
    virtual std::vector<std::pair<std::string, std::vector<std::string>>> getIndices() const = 0;

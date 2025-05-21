@@ -70,7 +70,7 @@ std::shared_ptr<LingoDBTableCatalogEntry> LingoDBTableCatalogEntry::createFromCr
    return res;
 }
 
-const ColumnStatistics& LingoDBTableCatalogEntry::getColumnStatistics(std::string column) const {
+const ColumnStatistics& LingoDBTableCatalogEntry::getColumnStatistics(std::string_view column) const {
    return impl->getColumnStatistics(column);
 }
 size_t LingoDBTableCatalogEntry::getNumRows() const {
