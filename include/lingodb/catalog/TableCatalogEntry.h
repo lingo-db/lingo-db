@@ -30,14 +30,14 @@ class TableCatalogEntry : public CatalogEntry, public TableMetaDataProvider {
    std::vector<std::string> getColumnNames() const override {
       std::vector<std::string> columnNames;
       for (const auto& column : columns) {
-         columnNames.push_back(column.getColumnName());
+         columnNames.emplace_back(column.getColumnName());
       }
       return columnNames;
    }
-   const std::vector<Column>& getColumns() const { return columns; }
+   std::vector<Column> getColumns() const { return columns; }
    std::vector<std::string> getPrimaryKey() const override { return primaryKey; }
    std::vector<std::pair<std::string, std::vector<std::string>>> getIndices() const override;
-   void addIndex(std::string indexName) { indices.push_back(indexName); }
+   void addIndex(std::string indexName) { indices.emplace_back(std::move(indexName)); }
    virtual runtime::TableStorage& getTableStorage() = 0;
 };
 
@@ -51,7 +51,7 @@ class LingoDBTableCatalogEntry : public TableCatalogEntry {
    void serializeEntry(lingodb::utility::Serializer& serializer) const override;
    static std::shared_ptr<LingoDBTableCatalogEntry> deserialize(lingodb::utility::Deserializer& deserializer);
    const Sample& getSample() const override;
-   const ColumnStatistics& getColumnStatistics(std::string column) const override;
+   const ColumnStatistics& getColumnStatistics(std::string_view column) const override;
    size_t getNumRows() const override;
    ~LingoDBTableCatalogEntry() override = default;
    runtime::TableStorage& getTableStorage() override;

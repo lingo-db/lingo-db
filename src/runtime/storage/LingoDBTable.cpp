@@ -224,7 +224,7 @@ LingoDBTable::TableChunk::TableChunk(std::shared_ptr<arrow::RecordBatch> data, s
 std::unique_ptr<LingoDBTable> LingoDBTable::create(const catalog::CreateTableDef& def) {
    arrow::FieldVector fields;
    for (auto c : def.columns) {
-      fields.push_back(std::make_shared<arrow::Field>(c.getColumnName(), toPhysicalType(c.getLogicalType())));
+      fields.push_back(std::make_shared<arrow::Field>(std::string{c.getColumnName()}, toPhysicalType(c.getLogicalType())));
    }
    auto arrowSchema = std::make_shared<arrow::Schema>(fields);
    return std::make_unique<LingoDBTable>(def.name + ".arrow", arrowSchema);
@@ -267,11 +267,13 @@ void LingoDBTable::append(const std::vector<std::shared_ptr<arrow::RecordBatch>>
    }
    flush();
 }
-const catalog::ColumnStatistics& LingoDBTable::getColumnStatistics(std::string column) const {
+const catalog::ColumnStatistics& LingoDBTable::getColumnStatistics(std::string_view column) const {
    if (!columnStatistics.contains(column)) {
       throw std::runtime_error("MetaData: Column not found");
    }
-   return columnStatistics.at(column);
+   // the "at" is only available heterogeneously from C++26 onwards
+   // https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2023/p2363r5.html
+   return columnStatistics.at(std::string{column});
 }
 void LingoDBTable::flush() {
    if (!persist) return;
@@ -279,8 +281,9 @@ void LingoDBTable::flush() {
    storeTable(dbDir + "/" + fileName, schema, tableData);
 }
 
-std::shared_ptr<arrow::DataType> LingoDBTable::getColumnStorageType(const std::string& columnName) const {
-   auto field = schema->GetFieldByName(columnName);
+std::shared_ptr<arrow::DataType> LingoDBTable::getColumnStorageType(std::string_view columnName) const {
+   // this unnecessary to-string-allocation must be fixed in arrow. for now, we use this workaround
+   auto field = schema->GetFieldByName(std::string{columnName});
    if (!field) {
       throw std::runtime_error("column not found");
    }
@@ -452,7 +455,7 @@ std::unique_ptr<LingoDBTable> LingoDBTable::deserialize(lingodb::utility::Deseri
    arrow::ipc::DictionaryMemo dictMemo;
    auto bufferReader = arrow::io::BufferReader::FromString(schemaData);
    auto schema = arrow::ipc::ReadSchema(bufferReader.get(), &dictMemo).ValueOrDie();
-   auto columnStatistics = deserializer.readProperty<std::unordered_map<std::string, catalog::ColumnStatistics>>(4);
+   auto columnStatistics = deserializer.readProperty<LingoDBTable::ColumnStatisticsMap>(4);
    auto numRows = deserializer.readProperty<size_t>(5);
    return std::make_unique<LingoDBTable>(fileName, schema, numRows, sample, columnStatistics);
 }
