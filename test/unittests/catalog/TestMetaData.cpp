@@ -75,7 +75,7 @@ class MockTableMetaDataProvider : public TableMetaDataProvider {
    size_t getNumRows() const override { return numRows; }
    std::vector<std::string> getPrimaryKey() const override { return primaryKey; }
    std::vector<std::string> getColumnNames() const override { return columnNames; }
-   const ColumnStatistics& getColumnStatistics(std::string column) const override {
+   const ColumnStatistics& getColumnStatistics(std::string_view column) const override {
       for (size_t i = 0; i < columnNames.size(); i++) {
          if (columnNames[i] == column) {
             return *columnStatistics[i];

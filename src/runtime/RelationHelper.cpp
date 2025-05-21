@@ -89,14 +89,14 @@ void RelationHelper::copyFromIntoTable(lingodb::runtime::VarLen32 tableName, lin
       auto& storage = relation.value()->getTableStorage();
       std::vector<std::string> fixedSizeBinaryColumns;
       for (auto n : relation.value()->getColumnNames()) {
-         readOptions.column_names.push_back(n);
+         readOptions.column_names.emplace_back(n);
          auto arrowType = storage.getColumnStorageType(n);
          // we store db::char<1> as arrow::fixed_size_binary<4> in the table storage, but arrow CSV reader doesn't allow reading fixed_size_binary<4> for single chars in the csv
          if (arrowType->id() == arrow::Type::FIXED_SIZE_BINARY) {
             fixedSizeBinaryColumns.emplace_back(n);
             arrowType = arrow::utf8();
          }
-         convertOptions.column_types.insert({n, arrowType});
+         convertOptions.column_types.emplace(n, arrowType);
       }
 
       // Instantiate TableReader from input stream and options
