@@ -70,7 +70,40 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
          tuples::ColumnRefAttr markAttrRef = attributeManager.createRef(scopeName, attributeName);
          builder.setInsertionPoint(op);
          auto replacement = builder.create<tuples::GetColumnOp>(loc, builder.getI1Type(), markAttrRef, surroundingOperator.getLambdaRegion().getArgument(0));
+         std::vector<mlir::Value> logicalUsers;
+         std::function<void(mlir::Operation*)> checkUser = [&](mlir::Operation* op) {
+            for (auto user : op->getUsers()) {
+               auto orOp = mlir::dyn_cast_or_null<db::OrOp>(*user);
+               if (orOp) {
+                  logicalUsers.push_back(orOp);
+                  checkUser(orOp);
+               }
+               auto andOp = mlir::dyn_cast_or_null<db::AndOp>(*user);
+               if (andOp) {
+                  logicalUsers.push_back(andOp);
+                  checkUser(andOp);
+               }
+               auto notOp = mlir::dyn_cast_or_null<db::NotOp>(*user);
+               if (notOp) {
+                  logicalUsers.push_back(notOp);
+                  checkUser(notOp);
+               }
+            }
+         };
+         checkUser(op);
          op->replaceAllUsesWith(replacement);
+         for (auto user : logicalUsers) {
+            bool notNull = true;
+            auto* op = user.getDefiningOp();
+            for (auto val : op->getOperands()) {
+               if (val.getType() != builder.getI1Type()) {
+                  notNull = false;
+               }
+            }
+            if (notNull) {
+               op->getResult(0).setType(builder.getI1Type());
+            }
+         }
          op->erase();
          surroundingOperator->setOperand(0, markJoin->getResult(0));
       }
@@ -125,7 +158,41 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
             surroundingOperator->setOperand(0, treeVal);
          } else if (auto existsop = mlir::dyn_cast_or_null<relalg::ExistsOp>(op)) {
             handleScalarBoolOp(existsop->getLoc(), surroundingOperator, op, mlir::cast<Operator>(existsop.getRel().getDefiningOp()), [](auto) {});
-         } else if (auto inop = mlir::dyn_cast_or_null<relalg::InOp>(op)) {
+         }
+         else if (auto inop = mlir::dyn_cast_or_null<db::OneOfOp>(op)) {
+            OpBuilder builder(surroundingOperator);
+            auto vals = inop.getVals();
+            std::vector<mlir::Attribute> rows;
+            for (auto v : vals) {
+               auto c = mlir::dyn_cast_or_null<db::ConstantOp>(v.getDefiningOp());
+               if (!c) {
+                  return;
+               }
+               rows.push_back(builder.getArrayAttr({c.getValue()}));
+            }
+
+            static size_t constRelId = 0;
+            std::string symName = "implConstrel" + std::to_string(constRelId++);;
+            std::string columnName = "const0";
+            auto attrDef = attributeManager.createDef(symName, columnName);
+            attrDef.getColumn().type = (*vals.begin()).getType();
+            auto constRel = builder.create<relalg::ConstRelationOp>(builder.getUnknownLoc(), builder.getArrayAttr(std::vector<mlir::Attribute>{attrDef}), builder.getArrayAttr(rows));
+
+            const auto* attr = *constRel.getAvailableColumns().begin();
+            auto searchInAttr = attributeManager.createRef(attr);
+            handleScalarBoolOp(inop->getLoc(), surroundingOperator, op, constRel, [&](PredicateOperator predicateOperator) {
+               predicateOperator.addPredicate([&](Value tuple, OpBuilder& builder) {
+                  mlir::IRMapping mapping;
+                  mapping.map(surroundingOperator.getLambdaArgument(), predicateOperator.getPredicateArgument());
+                  relalg::detail::inlineOpIntoBlock(inop.getVal().getDefiningOp(), surroundingOperator.getOperation(), &predicateOperator.getPredicateBlock(), mapping);
+                  auto val = mapping.lookup(inop.getVal());
+                  auto otherVal = builder.create<tuples::GetColumnOp>(inop->getLoc(), searchInAttr.getColumn().type, searchInAttr, tuple);
+                  Value predicate = builder.create<db::CmpOp>(inop->getLoc(), db::DBCmpPredicate::eq, val, otherVal);
+                  return predicate;
+               });
+            });
+         }
+         else if (auto inop = mlir::dyn_cast_or_null<relalg::InOp>(op)) {
             Operator relOperator = mlir::cast<Operator>(inop.getRel().getDefiningOp());
             //get attribute of relation to search in
             const auto* attr = *relOperator.getAvailableColumns().begin();

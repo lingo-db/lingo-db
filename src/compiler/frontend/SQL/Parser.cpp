@@ -937,13 +937,31 @@ mlir::Value frontend::sql::Parser::translateExpression(mlir::OpBuilder& builder,
          if (expr->kind_ == AEXPR_IN) {
             auto* list = reinterpret_cast<List*>(expr->rexpr_);
             std::vector<mlir::Value> values;
+            std::vector<mlir::Value> nonConsts;
             for (auto* cell = list->head; cell != nullptr; cell = cell->next) {
                auto* node = reinterpret_cast<Node*>(cell->data.ptr_value);
-               values.push_back(translateExpression(builder, node, context));
+               auto expr = translateExpression(builder, node, context);
+               auto c = mlir::dyn_cast_or_null<db::ConstantOp>(expr.getDefiningOp());
+               if (c) {
+                  values.push_back(c);
+               } else {
+                  nonConsts.push_back(expr);
+               }
             }
+
             auto val = translateExpression(builder, expr->lexpr_, context);
+            db::OneOfOp colOneOf;
+            if (nonConsts.size() > 0) {
+               nonConsts.insert(nonConsts.begin(), val);
+               colOneOf = builder.create<db::OneOfOp>(loc, SQLTypeInference::toCommonBaseTypes(builder, nonConsts));
+            }
+            if (values.size() == 0) return colOneOf;
+
             values.insert(values.begin(), val);
-            return builder.create<db::OneOfOp>(loc, SQLTypeInference::toCommonBaseTypes(builder, values));
+            auto oneof = builder.create<db::OneOfOp>(loc, SQLTypeInference::toCommonBaseTypes(builder, values));
+            if (nonConsts.size() == 0) return oneof;
+
+            return builder.create<db::OrOp>(builder.getUnknownLoc(), mlir::ValueRange{colOneOf, oneof});
          }
          if (expr->kind_ == AEXPR_BETWEEN || expr->kind_ == AEXPR_NOT_BETWEEN) {
             mlir::Value val = translateExpression(builder, expr->lexpr_, context);

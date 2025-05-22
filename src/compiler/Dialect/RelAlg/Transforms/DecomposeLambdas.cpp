@@ -72,6 +72,8 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
             return;
          }
       }
+      // if there is only one scope, reuse selection and no need to do SelectionOp creations for each scope.
+      if (availableScopes.size() == 1) return;
       for (auto scope : availableScopes) {
          bool availableInAll = true;
          for (auto& m : restrictions) {
