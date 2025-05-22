@@ -912,7 +912,7 @@ class CPULLVMProfilingBackend : public execution::ExecutionBackend {
       mlir::registerLLVMDialectTranslation(*moduleOp->getContext());
 #ifdef __x86_64__
       LLVMInitializeX86AsmParser();
-#elif __arm64__
+#elif defined(__arm64__) || defined(__aarch64__)
       LLVMInitializeAArch64AsmParser();
 #endif
       llvm::InitializeNativeTarget();
