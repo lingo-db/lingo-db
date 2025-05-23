@@ -213,10 +213,20 @@ lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::fromDecimal(__int128
    return lingodb::runtime::VarLen32::fromString(str);
 }
 
-lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::fromChar(uint64_t val, size_t bytes) { // NOLINT (clang-diagnostic-return-type-c-linkage)
-   char* data = new char[bytes];
-   memcpy(data, &val, bytes);
-   return lingodb::runtime::VarLen32(reinterpret_cast<uint8_t*>(data), bytes);
+lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::fromChar(uint32_t val) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+   char data[4];
+   memcpy(data, &val, 4);
+   size_t len;
+   if ((val & (1 << 7)) == 0) {
+      len = 1;
+   } else if ((val & (1 << 5)) == 0) {
+      len = 2;
+   } else if ((val & (1 << 4)) == 0) {
+      len = 3;
+   } else {
+      len = 4;
+   }
+   return lingodb::runtime::VarLen32(reinterpret_cast<uint8_t*>(data), len);
 }
 
 #define STR_CMP(NAME, OP)                                                                                                  \

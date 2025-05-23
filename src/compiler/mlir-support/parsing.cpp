@@ -77,15 +77,6 @@ std::variant<int64_t, double, std::string> parseDate(std::variant<int64_t, doubl
    int64_t date64 = parsed * 24 * 60 * 60 * 1000000000ll;
    return date64;
 }
-std::variant<int64_t, double, std::string> toI64(std::variant<int64_t, double, std::string> val) {
-   if (std::holds_alternative<std::string>(val)) {
-      int64_t res = 0;
-      auto str = std::get<std::string>(val);
-      memcpy(&res, str.data(), std::min(sizeof(res), str.size()));
-      return res;
-   }
-   return val;
-}
 std::variant<int64_t, double, std::string> parseTimestamp(std::variant<int64_t, double, std::string> val, support::TimeUnit unit) {
    if (!std::holds_alternative<std::string>(val)) {
       throw std::runtime_error("can not parse timestamp");
@@ -122,6 +113,15 @@ std::variant<int64_t, double, std::string> parseInterval(std::variant<int64_t, d
 }
 } // namespace
 
+std::variant<int64_t, double, std::string> support::toI64(std::variant<int64_t, double, std::string> val) {
+   if (std::holds_alternative<std::string>(val)) {
+      int64_t res = 0;
+      auto str = std::get<std::string>(val);
+      memcpy(&res, str.data(), std::min(sizeof(res), str.size()));
+      return res;
+   }
+   return val;
+}
 std::pair<uint64_t, uint64_t> support::getDecimalScaleMultiplier(int32_t scale) {
    auto decimalrep = arrow::Decimal128::GetScaleMultiplier(scale);
    return {decimalrep.low_bits(), (uint64_t) decimalrep.high_bits()};
@@ -157,7 +157,7 @@ std::variant<int64_t, double, std::string> support::parse(std::variant<int64_t, 
       case arrow::Type::type::HALF_FLOAT:
       case arrow::Type::type::FLOAT:
       case arrow::Type::type::DOUBLE: return parseDouble(val);
-      case arrow::Type::type::FIXED_SIZE_BINARY: return toI64(parseString(val));
+      case arrow::Type::type::FIXED_SIZE_BINARY: return parseString(val);
       case arrow::Type::type::DECIMAL128: return parseString(val, true);
       case arrow::Type::type::STRING: return parseString(val, true);
       case arrow::Type::type::DATE32: return parseDate(val, false);

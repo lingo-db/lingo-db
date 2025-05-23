@@ -82,10 +82,11 @@ mlir::Type convertPhysicalSingle(mlir::Type t, const TypeConverter& typeConverte
       arrowPhysicalType = dsa::ArrowDecimalType::get(ctxt, decimalType.getP(), decimalType.getS());
    } else if (auto dateType = mlir::dyn_cast_or_null<db::DateType>(t)) {
       arrowPhysicalType = dateType.getUnit() == db::DateUnitAttr::day ? (mlir::Type) dsa::ArrowDate32Type::get(t.getContext()) : (mlir::Type) dsa::ArrowDate64Type::get(t.getContext());
-   } else if (mlir::isa<db::StringType>(t)) {
+   } else if (mlir::isa<util::VarLen32Type>(arrowPhysicalType)) {
       arrowPhysicalType = dsa::ArrowStringType::get(t.getContext());
    } else if (auto charType = mlir::dyn_cast_or_null<db::CharType>(t)) {
-      arrowPhysicalType = dsa::ArrowFixedSizedBinaryType::get(t.getContext(), charType.getBytes());
+      assert(charType.getLen() <= 1 && "at this point, all char arrays longer than 1 should already be converted to strings");
+      arrowPhysicalType = dsa::ArrowFixedSizedBinaryType::get(t.getContext(), 4 * charType.getLen());
    } else if (auto timestampType = mlir::dyn_cast_or_null<db::TimestampType>(t)) {
       switch (timestampType.getUnit()) {
          case db::TimeUnitAttr::second:
@@ -220,8 +221,12 @@ class StringCastOpLowering : public OpConversionPattern<db::CastOp> {
          auto scale = rewriter.create<arith::ConstantOp>(loc, rewriter.getI32Type(), rewriter.getI32IntegerAttr(decimalSourceType.getS()));
          result = StringRuntime::fromDecimal(rewriter, loc)({valueToCast, scale})[0];
       } else if (auto charType = mlir::dyn_cast_or_null<db::CharType>(scalarSourceType)) {
-         auto bytes = rewriter.create<arith::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(charType.getBytes()));
-         result = StringRuntime::fromChar(rewriter, loc)({valueToCast, bytes})[0];
+         // chars with length 1 are stored as i32 and must converted, all other chars are already stored as strings
+         if (charType.getLen() <= 1) {
+            result = StringRuntime::fromChar(rewriter, loc)({valueToCast})[0];
+         } else {
+            result = valueToCast;
+         }
       } else if (mlir::isa<db::DateType>(scalarSourceType)) {
          result = StringRuntime::fromDate(rewriter, loc)({valueToCast})[0];
       } else if (mlir::isa<db::TimestampType>(scalarSourceType)) {
@@ -246,11 +251,11 @@ class CharCmpOpLowering : public OpConversionPattern<db::CmpOp> {
       if (!charType) {
          return failure();
       }
-      if (cmpOp.getPredicate() == db::DBCmpPredicate::eq) {
+      if (charType.getLen() <= 1 && cmpOp.getPredicate() == db::DBCmpPredicate::eq) {
          rewriter.replaceOpWithNewOp<arith::CmpIOp>(cmpOp, mlir::arith::CmpIPredicate::eq, adaptor.getLeft(), adaptor.getRight());
          return success();
       }
-      if (cmpOp.getPredicate() == db::DBCmpPredicate::neq) {
+      if (charType.getLen() <= 1 && cmpOp.getPredicate() == db::DBCmpPredicate::neq) {
          rewriter.replaceOpWithNewOp<arith::CmpIOp>(cmpOp, mlir::arith::CmpIPredicate::ne, adaptor.getLeft(), adaptor.getRight());
          return success();
       }
@@ -633,7 +638,7 @@ class ConstantLowering : public OpConversionPattern<db::ConstantOp> {
          }
       } else if (auto charType = mlir::dyn_cast_or_null<db::CharType>(type)) {
          typeConstant = arrow::Type::type::FIXED_SIZE_BINARY;
-         param1 = charType.getBytes();
+         param1 = charType.getLen();
       } else if (auto intervalType = mlir::dyn_cast_or_null<db::IntervalType>(type)) {
          if (intervalType.getUnit() == db::IntervalUnitAttr::months) {
             typeConstant = arrow::Type::type::INTERVAL_MONTHS;
@@ -672,13 +677,16 @@ class ConstantLowering : public OpConversionPattern<db::ConstantOp> {
             rewriter.replaceOpWithNewOp<arith::ConstantOp>(constantOp, stdType, rewriter.getIntegerAttr(stdType, APInt(mlir::cast<mlir::IntegerType>(stdType).getWidth(), parts)));
             return success();
          } else {
+            if (mlir::isa<db::CharType>(type)) {
+               parseResult = lingodb::compiler::support::toI64(parseResult);
+            }
             rewriter.replaceOpWithNewOp<arith::ConstantOp>(constantOp, stdType, rewriter.getIntegerAttr(stdType, std::get<int64_t>(parseResult)));
             return success();
          }
       } else if (auto floatType = mlir::dyn_cast_or_null<FloatType>(stdType)) {
          rewriter.replaceOpWithNewOp<arith::ConstantOp>(constantOp, stdType, rewriter.getFloatAttr(stdType, std::get<double>(parseResult)));
          return success();
-      } else if (mlir::isa<db::StringType>(type)) {
+      } else if (mlir::isa<util::VarLen32Type>(stdType)) {
          std::string str = std::get<std::string>(parseResult);
 
          rewriter.replaceOpWithNewOp<util::CreateConstVarLen>(constantOp, util::VarLen32Type::get(rewriter.getContext()), rewriter.getStringAttr(str));
@@ -1007,18 +1015,10 @@ void DBToStdLoweringPass::runOnOperation() {
       }
    });
    typeConverter.addConversion([&](::db::CharType t) {
-      if (t.getBytes() > 8) return mlir::Type();
-      size_t bits = 0;
-      if (t.getBytes() == 1) {
-         bits = 8;
-      } else if (t.getBytes() == 2) {
-         bits = 16;
-      } else if (t.getBytes() <= 4) {
-         bits = 32;
-      } else {
-         bits = 64;
-      }
-      return (Type) mlir::IntegerType::get(ctxt, bits);
+      if (t.getLen() > 1) return static_cast<Type>(util::VarLen32Type::get(ctxt));
+      // https://github.com/lingo-db/lingo-db/issues/107
+      // represent char<1> with an i32 (max character length in UTF-8 is 4 bytes) and longer char types with !util.varlen32 like strings.
+      return static_cast<Type>(mlir::IntegerType::get(ctxt, 32));
    });
    typeConverter.addConversion([&](::db::StringType t) {
       return util::VarLen32Type::get(ctxt);
