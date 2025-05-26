@@ -78,6 +78,7 @@ jobs:
         id: cache-brew
         uses: actions/cache@v3
         with:
+          fail-on-cache-miss: True
           path: |
             /opt/homebrew
             ~/Library/Caches/Homebrew
@@ -114,6 +115,7 @@ jobs:
         id: cache-brew
         uses: actions/cache@v3
         with:
+          fail-on-cache-miss: True
           path: |
             /opt/homebrew
             ~/Library/Caches/Homebrew
@@ -149,6 +151,7 @@ jobs:
         id: cache-brew
         uses: actions/cache@v3
         with:
+          fail-on-cache-miss: True
           path: |
             /opt/homebrew
             ~/Library/Caches/Homebrew
