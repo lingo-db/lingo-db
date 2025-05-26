@@ -1,4 +1,4 @@
-FROM ubuntu:noble AS baseimg
+FROM ubuntu:noble AS devimg
 RUN apt-get update && apt-get -y install software-properties-common wget
 RUN add-apt-repository "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-20 main"
 RUN wget https://apache.jfrog.io/artifactory/arrow/$(lsb_release --id --short | tr 'A-Z' 'a-z')/apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb && apt install -y -V ./apache-arrow-apt-source-latest-$(lsb_release --codename  --short).deb && rm *.deb

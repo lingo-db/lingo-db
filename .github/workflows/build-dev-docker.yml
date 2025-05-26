@@ -31,8 +31,10 @@ jobs:
           context: tools/docker/
           file: tools/docker/Dockerfile
           push: true
-          tags: ghcr.io/lingo-db/lingodb-dev:${{ github.sha }}
-          target: baseimg
+          tags: |
+            ghcr.io/lingo-db/lingodb-dev:${{ github.sha }}
+            ${{ github.ref == 'refs/heads/main' && 'ghcr.io/lingo-db/lingodb-dev:latest' || '' }}
+          target: devimg
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@v2
         with:
