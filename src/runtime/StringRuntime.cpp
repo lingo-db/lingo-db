@@ -240,7 +240,7 @@ STR_CMP(Gt, >)
 STR_CMP(Gte, >=)
 
 bool lingodb::runtime::StringRuntime::compareEq(lingodb::runtime::VarLen32 str1, lingodb::runtime::VarLen32 str2) {
-   if (str1.getLen() != str2.getLen()) return false;
+   assert(str1.getLen() == str2.getLen() && "String length equality must be checked before calling compareEq");
    return std::string_view(str1.data(), str1.getLen()) == std::string_view(str2.data(), str2.getLen());
 }
 bool lingodb::runtime::StringRuntime::compareNEq(lingodb::runtime::VarLen32 str1, lingodb::runtime::VarLen32 str2) {

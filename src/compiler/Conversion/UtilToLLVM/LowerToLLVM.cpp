@@ -301,6 +301,7 @@ class VarLenCmpLowering : public OpConversionPattern<util::VarLenCmp> {
       Value last64Left = rewriter.create<LLVM::TruncOp>(loc, rewriter.getI64Type(), rewriter.create<LLVM::LShrOp>(loc, adaptor.getLeft(), shiftAmount));
       Value last64Right = rewriter.create<LLVM::TruncOp>(loc, rewriter.getI64Type(), rewriter.create<LLVM::LShrOp>(loc, adaptor.getRight(), shiftAmount));
       Value first64Right = rewriter.create<LLVM::TruncOp>(loc, rewriter.getI64Type(), adaptor.getRight());
+      // this both compares the lengths and the first 4 chars of the string
       Value first64Eq = rewriter.create<LLVM::ICmpOp>(loc, LLVM::ICmpPredicate::eq, first64Left, first64Right);
       Value last64Eq = rewriter.create<LLVM::ICmpOp>(loc, LLVM::ICmpPredicate::eq, last64Left, last64Right);
       Value totalEq = rewriter.create<LLVM::AndOp>(loc, last64Eq, first64Eq);
