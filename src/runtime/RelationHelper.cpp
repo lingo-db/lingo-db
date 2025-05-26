@@ -65,12 +65,21 @@ void RelationHelper::copyFromIntoTable(lingodb::runtime::VarLen32 tableName, lin
       std::shared_ptr<arrow::io::InputStream> input = inputFile;
 
       auto readOptions = arrow::csv::ReadOptions::Defaults();
-
       auto parseOptions = arrow::csv::ParseOptions::Defaults();
       parseOptions.delimiter = delimiter.str().front();
-      if (escape.getLen() > 0) {
-         parseOptions.escape_char = escape.str().front();
-         parseOptions.escaping = true;
+      if (size_t escapeStringLen = escape.getLen(); escapeStringLen > 0) {
+         if (escapeStringLen > 1) {
+            throw std::runtime_error("escape character must be a single character");
+         }
+         const char escapeChar = escape.str().front();
+         if (escapeChar == '"') {
+            parseOptions.escaping = false;
+            parseOptions.double_quote = true;
+         } else {
+            parseOptions.escape_char = escapeChar;
+            parseOptions.escaping = true;
+            parseOptions.double_quote = false;
+         }
       }
       parseOptions.newlines_in_values = true;
       auto convertOptions = arrow::csv::ConvertOptions::Defaults();
