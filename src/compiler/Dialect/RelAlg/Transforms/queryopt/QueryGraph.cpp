@@ -7,8 +7,8 @@
 
 #include <arrow/record_batch.h>
 
-using namespace lingodb::compiler::dialect;
-void relalg::QueryGraph::print(llvm::raw_ostream& out) {
+namespace lingodb::compiler::dialect::relalg {
+void QueryGraph::print(llvm::raw_ostream& out) {
    out << "QueryGraph:{\n";
    out << "Nodes: [\n";
    for (auto& n : nodes) {
@@ -54,7 +54,8 @@ void relalg::QueryGraph::print(llvm::raw_ostream& out) {
    out << "]\n";
    out << "}\n";
 }
-std::unique_ptr<lingodb::compiler::support::eval::expr> relalg::buildEvalExpr(mlir::Value val, std::unordered_map<const tuples::Column*, std::string>& mapping) {
+
+std::unique_ptr<lingodb::compiler::support::eval::expr> buildEvalExpr(mlir::Value val, std::unordered_map<const tuples::Column*, std::string>& mapping) {
    auto* op = val.getDefiningOp();
    if (!op) return support::eval::createInvalid();
    if (auto constantOp = mlir::dyn_cast_or_null<db::ConstantOp>(op)) {
@@ -108,6 +109,7 @@ std::unique_ptr<lingodb::compiler::support::eval::expr> relalg::buildEvalExpr(ml
       } else if (auto charType = mlir::dyn_cast_or_null<db::CharType>(type)) {
          typeConstant = arrow::Type::type::FIXED_SIZE_BINARY;
          // we need to multiply by 4 to get the maximum number of required bytes (4 bytes per character utf-8)
+         assert(charType.getLen() <= 1 && "CharType length can be maximum 1");
          param1 = charType.getLen() * 4;
       } else if (auto intervalType = mlir::dyn_cast_or_null<db::IntervalType>(type)) {
          if (intervalType.getUnit() == db::IntervalUnitAttr::months) {
@@ -125,7 +127,7 @@ std::unique_ptr<lingodb::compiler::support::eval::expr> relalg::buildEvalExpr(ml
       return support::eval::createLiteral(parseResult, std::make_tuple(typeConstant, param1, param2));
    } else if (auto attrRefOp = mlir::dyn_cast_or_null<tuples::GetColumnOp>(op)) {
       return support::eval::createAttrRef(mapping.at(&attrRefOp.getAttr().getColumn()));
-   } else if (auto cmpOp = mlir::dyn_cast_or_null<relalg::CmpOpInterface>(op)) {
+   } else if (auto cmpOp = mlir::dyn_cast_or_null<CmpOpInterface>(op)) {
       auto left = cmpOp.getLeft();
       auto right = cmpOp.getRight();
       if (cmpOp.isEqualityPred(false)) {
@@ -174,28 +176,40 @@ std::unique_ptr<lingodb::compiler::support::eval::expr> relalg::buildEvalExpr(ml
             return support::eval::createLike(buildEvalExpr(runtimeCall.getArgs()[0], mapping), mlir::cast<mlir::StringAttr>(constantOp.getValue()).str());
          }
       }
+   } else if (auto castOp = mlir::dyn_cast_or_null<db::CastOp>(op)) {
+      const auto fromType = getBaseType(castOp.getVal().getType());
+      const auto toType = getBaseType(castOp.getRes().getType());
+      auto fromExpr = buildEvalExpr(castOp.getVal(), mapping);
+      if (fromType == toType) {
+         return fromExpr;
+      }
+      if (const auto charType = mlir::dyn_cast_or_null<db::CharType>(fromType); charType && mlir::isa<db::StringType>(toType)) {
+         assert(charType.getLen() > 1 && "Expected char<1> that are to be compared to str to be converted to string type instead of db::cast-ed");
+         // char types with len > 1 are stored as strings in the arrow format => we don't need to cast them
+         return fromExpr;
+      }
    }
-   //val.dump();
+   // val.dump();
    return support::eval::createInvalid();
 }
 namespace {
-std::optional<double> estimateUsingSample(relalg::QueryGraph::Node& n) {
+std::optional<double> estimateUsingSample(QueryGraph::Node& n) {
    if (!n.op) return {};
    if (n.additionalPredicates.empty()) return {};
-   if (auto baseTableOp = mlir::dyn_cast_or_null<relalg::BaseTableOp>(n.op.getOperation())) {
+   if (auto baseTableOp = mlir::dyn_cast_or_null<BaseTableOp>(n.op.getOperation())) {
       std::unordered_map<const tuples::Column*, std::string> mapping;
       for (auto c : baseTableOp.getColumns()) {
          mapping[&mlir::cast<tuples::ColumnDefAttr>(c.getValue()).getColumn()] = c.getName().str();
       }
-      auto meta = mlir::dyn_cast_or_null<relalg::TableMetaDataAttr>(baseTableOp->getAttr("meta"));
+      auto meta = mlir::dyn_cast_or_null<TableMetaDataAttr>(baseTableOp->getAttr("meta"));
       if (!meta) return {};
       auto sample = meta.getMeta()->getSample();
       if (!sample) return {};
       std::vector<std::unique_ptr<lingodb::compiler::support::eval::expr>> expressions;
       for (auto pred : n.additionalPredicates) {
-         if (auto selOp = mlir::dyn_cast_or_null<relalg::SelectionOp>(pred.getOperation())) {
+         if (auto selOp = mlir::dyn_cast_or_null<SelectionOp>(pred.getOperation())) {
             auto v = mlir::cast<tuples::ReturnOp>(selOp.getPredicateBlock().getTerminator()).getResults()[0];
-            expressions.push_back(relalg::buildEvalExpr(v, mapping)); //todo: ignore failing ones?
+            expressions.push_back(buildEvalExpr(v, mapping)); //todo: ignore failing ones?
          }
       }
       auto optionalCount = lingodb::compiler::support::eval::countResults(sample.getSampleData(), lingodb::compiler::support::eval::createAnd(expressions));
@@ -207,9 +221,9 @@ std::optional<double> estimateUsingSample(relalg::QueryGraph::Node& n) {
 
    return {};
 }
-double getRows(relalg::QueryGraph::Node& n) {
-   if (auto baseTableOp = mlir::dyn_cast_or_null<relalg::BaseTableOp>(n.op.getOperation())) {
-      auto meta = mlir::dyn_cast_or_null<relalg::TableMetaDataAttr>(baseTableOp->getAttr("meta"));
+double getRows(QueryGraph::Node& n) {
+   if (auto baseTableOp = mlir::dyn_cast_or_null<BaseTableOp>(n.op.getOperation())) {
+      auto meta = mlir::dyn_cast_or_null<TableMetaDataAttr>(baseTableOp->getAttr("meta"));
       if (meta) {
          auto numRows = meta.getMeta()->getNumRows();
          baseTableOp->setAttr("rows", mlir::FloatAttr::get(mlir::Float64Type::get(n.op.getContext()), numRows));
@@ -226,12 +240,12 @@ double getRows(relalg::QueryGraph::Node& n) {
    return 1;
 }
 } // namespace
-relalg::ColumnSet relalg::QueryGraph::getPKey(relalg::QueryGraph::Node& n) {
+ColumnSet QueryGraph::getPKey(QueryGraph::Node& n) {
    if (!n.op) return {};
-   if (auto baseTableOp = mlir::dyn_cast_or_null<relalg::BaseTableOp>(n.op.getOperation())) {
-      auto meta = mlir::dyn_cast_or_null<relalg::TableMetaDataAttr>(baseTableOp->getAttr("meta"));
+   if (auto baseTableOp = mlir::dyn_cast_or_null<BaseTableOp>(n.op.getOperation())) {
+      auto meta = mlir::dyn_cast_or_null<TableMetaDataAttr>(baseTableOp->getAttr("meta"));
       if (meta) {
-         relalg::ColumnSet attributes;
+         ColumnSet attributes;
          std::unordered_map<std::string, const tuples::Column*> mapping;
          for (auto c : baseTableOp.getColumns()) {
             mapping[c.getName().str()] = &mlir::cast<tuples::ColumnDefAttr>(c.getValue()).getColumn();
@@ -246,13 +260,13 @@ relalg::ColumnSet relalg::QueryGraph::getPKey(relalg::QueryGraph::Node& n) {
    return {};
 }
 
-void relalg::QueryGraph::estimate() {
+void QueryGraph::estimate() {
    for (auto& node : nodes) {
       node.selectivity = 1;
       if (node.op) {
          node.rows = getRows(node);
          auto availableLeft = node.op.getAvailableColumns();
-         relalg::ColumnSet availableRight;
+         ColumnSet availableRight;
          std::vector<Predicate> predicates;
          for (auto pred : node.additionalPredicates) {
             addPredicates(predicates, pred, availableLeft, availableRight);
@@ -291,7 +305,7 @@ void relalg::QueryGraph::estimate() {
       }
    }
 }
-double relalg::QueryGraph::calculateSelectivity(SelectionEdge& edge, NodeSet left, NodeSet right) {
+double QueryGraph::calculateSelectivity(SelectionEdge& edge, NodeSet left, NodeSet right) {
    if (edge.required.count() == 2 && left.any() && right.any()) return edge.selectivity;
    auto key = left & edge.required;
    if (edge.cachedSel.contains(key)) {
@@ -301,7 +315,7 @@ double relalg::QueryGraph::calculateSelectivity(SelectionEdge& edge, NodeSet lef
    edge.cachedSel[key] = selectivity;
    return selectivity;
 }
-double relalg::QueryGraph::estimateSelectivity(Operator op, NodeSet left, NodeSet right) {
+double QueryGraph::estimateSelectivity(Operator op, NodeSet left, NodeSet right) {
    auto availableLeft = getAttributesForNodeSet(left);
    auto availableRight = getAttributesForNodeSet(right);
    std::vector<Predicate> predicates;
@@ -311,14 +325,14 @@ double relalg::QueryGraph::estimateSelectivity(Operator op, NodeSet left, NodeSe
    std::vector<std::pair<double, ColumnSet>> pkeysRight;
    iterateNodes(left, [&](auto node) {
       if (node.op) {
-         if (auto baseTableOp = mlir::dyn_cast_or_null<relalg::BaseTableOp>(node.op.getOperation())) {
+         if (auto baseTableOp = mlir::dyn_cast_or_null<BaseTableOp>(node.op.getOperation())) {
             pkeysLeft.push_back({node.rows, getPKey(node)});
          }
       }
    });
    iterateNodes(right, [&](auto node) {
       if (node.op) {
-         if (auto baseTableOp = mlir::dyn_cast_or_null<relalg::BaseTableOp>(node.op.getOperation())) {
+         if (auto baseTableOp = mlir::dyn_cast_or_null<BaseTableOp>(node.op.getOperation())) {
             pkeysRight.push_back({node.rows, getPKey(node)});
          }
       }
@@ -355,3 +369,4 @@ double relalg::QueryGraph::estimateSelectivity(Operator op, NodeSet left, NodeSe
    }
    return selectivity;
 }
+} // namespace lingodb::compiler::dialect::relalg

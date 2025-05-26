@@ -288,15 +288,30 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
       return mapOp.getResult();
    }
 
-   size_t estimatedEvaluationCost(mlir::Value v) {
+   static size_t estimatedEvaluationCost(const mlir::Value v) {
       if (auto* definingOp = v.getDefiningOp()) {
          return llvm::TypeSwitch<mlir::Operation*, size_t>(definingOp)
-            .Case([&](db::ConstantOp) {
+            .Case([&](const db::ConstantOp) {
                return 0;
+            })
+            .Case([&](db::CastOp castOp) {
+               const auto from = castOp.getVal();
+               const auto fromType = getBaseType(from.getType());
+               const auto to = castOp.getRes();
+               const auto toType = getBaseType(to.getType());
+               if (fromType == toType) {
+                  return estimatedEvaluationCost(from);
+               }
+               if (mlir::isa<db::CharType>(fromType) && mlir::isa<db::StringType>(toType)) {
+                  // assume the char -> str conversion is free
+                  return estimatedEvaluationCost(from);
+               }
+               // fallthrough
+               return static_cast<size_t>(1000);
             })
             .Case([&](db::OrOp orOp) {
                size_t res = orOp.getVals().size();
-               for (auto val : orOp.getVals()) {
+               for (const auto val : orOp.getVals()) {
                   res += estimatedEvaluationCost(val);
                }
                return res;
@@ -311,8 +326,8 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                }
             })
             .Case([&](relalg::CmpOpInterface cmpOp) {
-               auto t = cmpOp.getLeft().getType();
-               auto childCost = estimatedEvaluationCost(cmpOp.getLeft()) + estimatedEvaluationCost(cmpOp.getRight());
+               const auto t = cmpOp.getLeft().getType();
+               const auto childCost = estimatedEvaluationCost(cmpOp.getLeft()) + estimatedEvaluationCost(cmpOp.getRight());
                if (mlir::isa<db::StringType>(getBaseType(t))) {
                   return 10 + childCost;
                } else {
@@ -320,15 +335,15 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                }
             })
             .Case([&](db::BetweenOp cmpOp) {
-               auto t = cmpOp.getLower().getType();
-               auto childCost = estimatedEvaluationCost(cmpOp.getVal()) + estimatedEvaluationCost(cmpOp.getLower()) + estimatedEvaluationCost(cmpOp.getUpper());
+               const auto t = cmpOp.getLower().getType();
+               const auto childCost = estimatedEvaluationCost(cmpOp.getVal()) + estimatedEvaluationCost(cmpOp.getLower()) + estimatedEvaluationCost(cmpOp.getUpper());
                if (mlir::isa<db::StringType>(getBaseType(t))) {
                   return 20 + childCost;
                } else {
                   return 2 + childCost;
                }
             })
-            .Default([&](mlir::Operation* op) {
+            .Default([&](const mlir::Operation* op) {
                return 1000;
             });
       } else {

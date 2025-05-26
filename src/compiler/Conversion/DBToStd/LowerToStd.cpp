@@ -287,6 +287,7 @@ class StringCmpOpLowering : public OpConversionPattern<db::CmpOp> {
       switch (cmpOp.getPredicate()) {
          case db::DBCmpPredicate::eq: {
             auto varlenCmp = rewriter.create<util::VarLenCmp>(cmpOp->getLoc(), rewriter.getI1Type(), rewriter.getI1Type(), left, right);
+            // TODO: this should be speculated to be **false** to move longer string comparisons out of the hot path
             res = rewriter.create<mlir::scf::IfOp>(
                              cmpOp->getLoc(), varlenCmp.getNeedsDetailedEval(), [&](mlir::OpBuilder& builder, mlir::Location loc) {
                                                          auto rtCmp=StringRuntime::compareEq(rewriter, cmpOp->getLoc())({left, right})[0];
