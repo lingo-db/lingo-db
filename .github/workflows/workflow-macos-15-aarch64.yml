@@ -20,7 +20,7 @@ jobs:
         id: ccache
         uses: actions/cache@v4
         with:
-          path: $HOME/.ccache
+          path: ~/.ccache
           key: ccache-${{ matrix.build_type }}-build-build-macos-15
 
       - name: Cache Homebrew packages
@@ -44,10 +44,10 @@ jobs:
 
       - name: Build
         run: |
-          mkdir -p $HOME/.ccache
+          mkdir -p ~/.ccache
           export CXX="ccache /opt/homebrew/opt/llvm/bin/clang++"
           export CC="ccache /opt/homebrew/opt/llvm/bin/clang"
-          export CCACHE_DIR="${HOME}/.ccache"
+          export CCACHE_DIR="~/.ccache"
           export CMAKE_PREFIX_PATH="/opt/homebrew/"
 
           make clean
