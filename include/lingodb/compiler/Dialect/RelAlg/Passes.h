@@ -14,7 +14,7 @@ class Catalog;
 namespace lingodb::compiler::dialect {
 namespace relalg {
 std::unique_ptr<mlir::Pass> createExtractNestedOperatorsPass();
-std::unique_ptr<mlir::Pass> createDecomposeLambdasPass();
+std::unique_ptr<mlir::Pass> createDecomposeLambdasPass(bool deriveExtraConditions = false);
 std::unique_ptr<mlir::Pass> createInferNotNullConditionsPass();
 std::unique_ptr<mlir::Pass> createColumnFoldingPass();
 std::unique_ptr<mlir::Pass> createImplicitToExplicitJoinsPass();
