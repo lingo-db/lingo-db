@@ -37,10 +37,10 @@ jobs:
       - name: Install dependencies with Homebrew
         run: |
           brew update
-          brew install ccache cmake ninja llvm@20 catch2 lit
+          brew install ccache cmake ninja llvm@20 catch2 lit bzip2 libffi libedit libxml2 brotli zlib
+          brew link --force ccache cmake ninja llvm@20 catch2 lit bzip2 libffi libedit libxml2 brotli zlib
           brew tap lingo-db/homebrew https://github.com/lingo-db/homebrew.git
           brew install lingo-db/homebrew/apache-arrow@20
-          brew link --force llvm
 
       - name: Build
         run: |
