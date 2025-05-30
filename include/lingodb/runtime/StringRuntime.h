@@ -26,7 +26,7 @@ struct StringRuntime {
    static VarLen32 fromInt(int64_t);
    static VarLen32 fromFloat32(float);
    static VarLen32 fromFloat64(double);
-   static VarLen32 fromChar(uint64_t, size_t bytes);
+   static VarLen32 fromChar(uint32_t);
    static VarLen32 fromDecimal(__int128, int32_t scale);
    static VarLen32 substr(VarLen32 str, int64_t from, int64_t len);
    static VarLen32 toUpper(VarLen32 str);

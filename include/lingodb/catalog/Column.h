@@ -9,10 +9,10 @@ class Column {
    bool isNullable;
 
    public:
-   Column(std::string columnName, Type type, bool isNullable) : columnName(columnName), logicalType(type), isNullable(isNullable) {}
+   Column(std::string columnName, Type type, bool isNullable) : columnName(std::move(columnName)), logicalType(std::move(type)), isNullable(isNullable) {}
 
-   Type getLogicalType() const { return logicalType; }
-   std::string getColumnName() const { return columnName; }
+   const Type& getLogicalType() const { return logicalType; }
+   std::string_view getColumnName() const { return columnName; }
    bool getIsNullable() const { return isNullable; }
    void serialize(utility::Serializer& serializer) const;
    static Column deserialize(utility::Deserializer& deserializer);

@@ -9,6 +9,7 @@
 #include "lingodb/runtime/ArrowTable.h"
 #include "lingodb/runtime/storage/TableStorage.h"
 #include "lingodb/utility/Serialization.h"
+#include <arrow/builder.h>
 #include <arrow/csv/api.h>
 #include <arrow/io/api.h>
 #include <lingodb/catalog/Defs.h>
@@ -65,21 +66,37 @@ void RelationHelper::copyFromIntoTable(lingodb::runtime::VarLen32 tableName, lin
       std::shared_ptr<arrow::io::InputStream> input = inputFile;
 
       auto readOptions = arrow::csv::ReadOptions::Defaults();
-
       auto parseOptions = arrow::csv::ParseOptions::Defaults();
       parseOptions.delimiter = delimiter.str().front();
-      if (escape.getLen() > 0) {
-         parseOptions.escape_char = escape.str().front();
-         parseOptions.escaping = true;
+      if (size_t escapeStringLen = escape.getLen(); escapeStringLen > 0) {
+         if (escapeStringLen > 1) {
+            throw std::runtime_error("escape character must be a single character");
+         }
+         const char escapeChar = escape.str().front();
+         if (escapeChar == '"') {
+            parseOptions.escaping = false;
+            parseOptions.double_quote = true;
+         } else {
+            parseOptions.escape_char = escapeChar;
+            parseOptions.escaping = true;
+            parseOptions.double_quote = false;
+         }
       }
       parseOptions.newlines_in_values = true;
       auto convertOptions = arrow::csv::ConvertOptions::Defaults();
       convertOptions.null_values.push_back("");
       convertOptions.strings_can_be_null = true;
       auto& storage = relation.value()->getTableStorage();
+      std::vector<std::string> fixedSizeBinaryColumns;
       for (auto n : relation.value()->getColumnNames()) {
-         readOptions.column_names.push_back(n);
-         convertOptions.column_types.insert({n, storage.getColumnStorageType(n)});
+         readOptions.column_names.emplace_back(n);
+         auto arrowType = storage.getColumnStorageType(n);
+         // we store db::char<1> as arrow::fixed_size_binary<4> in the table storage, but arrow CSV reader doesn't allow reading fixed_size_binary<4> for single chars in the csv
+         if (arrowType->id() == arrow::Type::FIXED_SIZE_BINARY) {
+            fixedSizeBinaryColumns.emplace_back(n);
+            arrowType = arrow::utf8();
+         }
+         convertOptions.column_types.emplace(n, arrowType);
       }
 
       // Instantiate TableReader from input stream and options
@@ -100,6 +117,38 @@ void RelationHelper::copyFromIntoTable(lingodb::runtime::VarLen32 tableName, lin
          // (for example a CSV syntax error or failed type conversion)
       }
       std::shared_ptr<arrow::Table> table = *maybeTable;
+
+      // correct single char columns from arrow::utf8 to arrow::fixed_size_binary<4>
+      for (auto n : fixedSizeBinaryColumns) {
+         auto column = table->GetColumnByName(n);
+         auto fsbBuilder = std::make_unique<arrow::FixedSizeBinaryBuilder>(arrow::fixed_size_binary(4), arrow::default_memory_pool());
+         std::array<uint8_t, 4> buf;
+
+         auto chunks = column->chunks();
+         for (const auto& chunk : chunks) {
+            const auto chunkStrArray = std::static_pointer_cast<arrow::StringArray>(chunk);
+            for (int64_t i = 0; i < chunkStrArray->length(); i++) {
+               const std::string_view str = chunkStrArray->GetView(i);
+               if (str.empty()) {
+                  if (!fsbBuilder->AppendNull().ok()) {
+                     throw std::runtime_error("failed to append null fixed-size binary data");
+                  }
+               } else {
+                  buf.fill(0);
+                  std::ranges::copy(str.begin(), str.end(), buf.begin());
+                  if (!fsbBuilder->Append(buf).ok()) {
+                     throw std::runtime_error("failed to append fixed-size binary data");
+                  }
+               }
+            }
+         }
+         const auto fsbArray = fsbBuilder->Finish().ValueOrDie();
+         const auto newColumnChunked = std::make_shared<arrow::ChunkedArray>(fsbArray);
+
+         auto field = arrow::field(n, arrow::fixed_size_binary(4));
+         table = table->SetColumn(table->schema()->GetFieldIndex(n), field, newColumnChunked).ValueOrDie();
+      }
+
       appendToTable(session, tableName.str(), table);
       catalog->persist();
    } else {

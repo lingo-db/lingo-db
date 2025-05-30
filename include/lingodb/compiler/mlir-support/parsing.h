@@ -17,6 +17,7 @@ enum TimeUnit {
 std::pair<uint64_t, uint64_t> getDecimalScaleMultiplier(int32_t scale);
 std::pair<uint64_t, uint64_t> parseDecimal(std::string str, int32_t scale);
 std::variant<int64_t, double, std::string> parse(std::variant<int64_t, double, std::string> val, arrow::Type::type type, uint32_t param1 = 0, uint32_t param2 = 0);
+std::variant<int64_t, double, std::string> toI64(std::variant<int64_t, double, std::string> val);
 
 } // end namespace lingodb::compiler::support
 

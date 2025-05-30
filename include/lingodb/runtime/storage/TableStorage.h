@@ -16,7 +16,7 @@ struct ScanConfig {
 };
 class TableStorage {
    public:
-   virtual std::shared_ptr<arrow::DataType> getColumnStorageType(const std::string& columnName) const = 0;
+   virtual std::shared_ptr<arrow::DataType> getColumnStorageType(std::string_view columnName) const = 0;
    virtual std::unique_ptr<scheduler::Task> createScanTask(const ScanConfig& scanConfig) = 0;
    virtual void append(const std::vector<std::shared_ptr<arrow::RecordBatch>>& toAppend) = 0;
    virtual size_t nextRowId() = 0;

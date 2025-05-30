@@ -1,12 +1,13 @@
 #ifndef LINGODB_RUNTIME_STORAGE_LINGODBTABLE_H
 #define LINGODB_RUNTIME_STORAGE_LINGODBTABLE_H
+
 #include "TableStorage.h"
 #include "lingodb/catalog/TableCatalogEntry.h"
 
 #include <functional>
 #include <string>
-namespace lingodb::runtime {
 
+namespace lingodb::runtime {
 class LingoDBTable : public TableStorage {
    public:
    class TableChunk {
@@ -37,13 +38,20 @@ class LingoDBTable : public TableStorage {
    catalog::Sample sample;
    std::shared_ptr<arrow::Schema> schema;
    std::vector<TableChunk> tableData;
-   std::unordered_map<std::string, catalog::ColumnStatistics> columnStatistics;
+
+   struct TransparentStringHasher : std::hash<std::string>, std::hash<std::string_view> {
+      using is_transparent = void;
+      using std::hash<std::string>::operator();
+      using std::hash<std::string_view>::operator();
+   };
+   using ColumnStatisticsMap = std::unordered_map<std::string, catalog::ColumnStatistics, TransparentStringHasher, std::equal_to<>>;
+   ColumnStatisticsMap columnStatistics;
    size_t numRows;
    bool loaded = false;
    //todo: somehow we must be aware of the indices that are built on this table, and update them...
    public:
    LingoDBTable(std::string fileName, std::shared_ptr<arrow::Schema> schema);
-   LingoDBTable(std::string fileName, std::shared_ptr<arrow::Schema> schema, size_t numRows, catalog::Sample sample, std::unordered_map<std::string, catalog::ColumnStatistics> columnStatistics) : persist(false), fileName(std::move(fileName)), sample(std::move(sample)), schema(std::move(schema)), columnStatistics(std::move(columnStatistics)), numRows(numRows) {}
+   LingoDBTable(std::string fileName, std::shared_ptr<arrow::Schema> schema, size_t numRows, catalog::Sample sample, ColumnStatisticsMap columnStatistics) : persist(false), fileName(std::move(fileName)), sample(std::move(sample)), schema(std::move(schema)), columnStatistics(std::move(columnStatistics)), numRows(numRows) {}
    void setPersist(bool persist) {
       this->persist = persist;
       if (persist) {
@@ -58,7 +66,7 @@ class LingoDBTable : public TableStorage {
    const catalog::Sample& getSample() const {
       return sample;
    }
-   const catalog::ColumnStatistics& getColumnStatistics(std::string column) const;
+   const catalog::ColumnStatistics& getColumnStatistics(std::string_view column) const;
    size_t getNumRows() const {
       return numRows;
    }
@@ -79,7 +87,7 @@ class LingoDBTable : public TableStorage {
    static std::unique_ptr<LingoDBTable> create(const catalog::CreateTableDef& def);
    std::pair<const TableChunk*, size_t> getByRowId(size_t rowId) const;
 
-   std::shared_ptr<arrow::DataType> getColumnStorageType(const std::string& columnName) const override;
+   std::shared_ptr<arrow::DataType> getColumnStorageType(std::string_view columnName) const override;
 };
 } // namespace lingodb::runtime
 

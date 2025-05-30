@@ -77,7 +77,7 @@ template <class T>
 concept IsUnorderedMap = requires(T& t) {
    typename T::mapped_type; // Ensure T has an `value_type`
    typename T::key_type; // Ensure T has an `key_type`
-   requires std::same_as<T, std::unordered_map<typename T::key_type, typename T::mapped_type>>;
+   requires std::same_as<T, std::unordered_map<typename T::key_type, typename T::mapped_type, typename T::hasher, typename T::key_equal>>;
 };
 class Serializer {
    ByteWriter& writer;
@@ -136,8 +136,8 @@ class Serializer {
          writeValue(v);
       }
    }
-   template <class K, class V>
-   void writeValue(const std::unordered_map<K, V>& value) {
+   template <class K, class V, class H, class E>
+   void writeValue(const std::unordered_map<K, V, H, E>& value) {
       writeValue(value.size());
       for (const auto& [k, v] : value) {
          writeValue(k);
