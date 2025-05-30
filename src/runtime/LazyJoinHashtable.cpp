@@ -25,7 +25,7 @@ lingodb::runtime::HashIndexedView* lingodb::runtime::HashIndexedView::build(ling
       Entry* current = slot.load();
       Entry* newEntry;
       do {
-         entry->next = current;
+         entry->next = lingodb::runtime::untag(current);
          newEntry = lingodb::runtime::tag(entry, current, hash);
       } while (!slot.compare_exchange_weak(current, newEntry));
    });
