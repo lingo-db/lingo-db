@@ -23,9 +23,11 @@ class DecomposeInnerJoin : public mlir::RewritePattern {
 };
 class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-decompose-lambdas"; }
+   bool deriveExtraConditions;
 
    public:
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(DecomposeLambdas)
+   DecomposeLambdas(bool deriveExtraConditions) : deriveExtraConditions(deriveExtraConditions) {}
 
    bool checkRestriction(std::string& str, mlir::Value v) {
       auto* op = v.getDefiningOp();
@@ -114,9 +116,11 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
             decomposeSelection(operand, tree);
          }
       } else {
-         if (auto orOp = dyn_cast_or_null<db::OrOp>(v.getDefiningOp())) {
-            //todo: fix potential dominator problem...
-            deriveRestrictionsFromOr(orOp, tree);
+         if (deriveExtraConditions) {
+            if (auto orOp = dyn_cast_or_null<db::OrOp>(v.getDefiningOp())) {
+               //todo: fix potential dominator problem...
+               deriveRestrictionsFromOr(orOp, tree);
+            }
          }
          OpBuilder builder(currentSel);
          mlir::IRMapping mapping;
@@ -256,4 +260,4 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
 };
 } // end anonymous namespace
 
-std::unique_ptr<mlir::Pass> relalg::createDecomposeLambdasPass() { return std::make_unique<DecomposeLambdas>(); }
+std::unique_ptr<mlir::Pass> relalg::createDecomposeLambdasPass(bool deriveExtraConditions) { return std::make_unique<DecomposeLambdas>(deriveExtraConditions); }

@@ -135,13 +135,18 @@ static mlir::Value map(mlir::Value stream, mlir::ConversionPatternRewriter& rewr
 }
 static mlir::Value translateSelection(mlir::Value stream, mlir::Region& predicate, mlir::ConversionPatternRewriter& rewriter, mlir::Location loc) {
    auto terminator = mlir::cast<tuples::ReturnOp>(predicate.front().getTerminator());
-   if (terminator.getResults().empty()) {
-      auto [markAttrDef, markAttrRef] = createColumn(rewriter.getI1Type(), "map", "predicate");
-      auto mapped = map(stream, rewriter, loc, rewriter.getArrayAttr(markAttrDef), [](mlir::ConversionPatternRewriter& rewriter, subop::MapCreationHelper& helper, mlir::Location loc) {
-         return std::vector<mlir::Value>{rewriter.create<db::ConstantOp>(loc, rewriter.getI1Type(), rewriter.getIntegerAttr(rewriter.getI1Type(), 1))};
-      });
-      return rewriter.create<subop::FilterOp>(loc, mapped, subop::FilterSemantic::all_true, rewriter.getArrayAttr(markAttrRef));
-
+   bool isTrivialSel = false;
+   if (terminator->getNumOperands() == 1) {
+      if (auto constOp = mlir::dyn_cast_or_null<arith::ConstantOp>(terminator->getOperand(0).getDefiningOp())) {
+         if (auto boolAttr = mlir::dyn_cast_or_null<mlir::BoolAttr>(constOp.getValue())) {
+            if (boolAttr.getValue()) {
+               isTrivialSel = true;
+            }
+         }
+      }
+   }
+   if (terminator.getResults().empty() || isTrivialSel) {
+      return stream;
    } else {
       auto& predicateBlock = predicate.front();
       if (auto returnOp = mlir::dyn_cast_or_null<tuples::ReturnOp>(predicateBlock.getTerminator())) {
@@ -1012,6 +1017,7 @@ mlir::Block* createEqFn(mlir::ConversionPatternRewriter& rewriter, mlir::ArrayAt
       cmps.push_back(compared);
    }
    mlir::Value anded = rewriter.create<db::AndOp>(loc, cmps);
+
    if (mlir::isa<db::NullableType>(anded.getType())) {
       anded = rewriter.create<db::DeriveTruth>(loc, anded);
    }
