@@ -2174,7 +2174,7 @@ class ScanListLowering : public SubOpConversionPattern<subop::ScanListOp> {
 
          Value nextPtr = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(getContext(), i8PtrType), castedPtr, 0);
          mlir::Value next = rewriter.create<util::LoadOp>(loc, nextPtr, mlir::Value());
-         next = rewriter.create<util::FilterTaggedPtr>(loc, next.getType(), next, hash);
+         //next = rewriter.create<util::FilterTaggedPtr>(loc, next.getType(), next, hash);
          rewriter.create<mlir::scf::YieldOp>(loc, next);
       });
 
