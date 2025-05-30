@@ -1016,8 +1016,13 @@ mlir::Block* createEqFn(mlir::ConversionPatternRewriter& rewriter, mlir::ArrayAt
       mlir::Value compared = rewriter.create<db::CmpOp>(loc, useIsa ? db::DBCmpPredicate::isa : db::DBCmpPredicate::eq, l, r);
       cmps.push_back(compared);
    }
-   mlir::Value anded = rewriter.create<db::AndOp>(loc, cmps);
-
+   mlir::Value anded;
+   if (cmps.size() == 1) {
+      anded = cmps[0];
+   } else {
+      // If we have more than one comparison, we need to combine them
+      anded = rewriter.create<db::AndOp>(loc, cmps);
+   }
    if (mlir::isa<db::NullableType>(anded.getType())) {
       anded = rewriter.create<db::DeriveTruth>(loc, anded);
    }

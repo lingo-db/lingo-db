@@ -29,7 +29,14 @@ static std::pair<tuples::ColumnDefAttr, tuples::ColumnRefAttr> createColumn(mlir
    ra.type = type;
    return {markAttrDef, columnManager.createRef(&ra)};
 }
-
+mlir::Value hashKeys(std::vector<mlir::Value> keys, mlir::OpBuilder& rewriter, mlir::Location loc) {
+   if (keys.size() == 1) {
+      return rewriter.create<db::Hash>(loc, keys[0]);
+   } else {
+      auto packed = rewriter.create<util::PackOp>(loc, keys);
+      return rewriter.create<db::Hash>(loc, packed);
+   }
+}
 class MultiMapAsHashIndexedView : public mlir::RewritePattern {
    const subop::ColumnUsageAnalysis& analysis;
 
@@ -94,7 +101,7 @@ class MultiMapAsHashIndexedView : public mlir::RewritePattern {
             auto keyColumnAttr = mlir::cast<tuples::ColumnRefAttr>(insertOp.getMapping().get(mlir::cast<mlir::StringAttr>(keyMemberName).strref()));
             values.push_back(buildHashHelper.access(keyColumnAttr, loc));
          }
-         mlir::Value hashed = rewriter.create<db::Hash>(loc, rewriter.create<util::PackOp>(loc, values));
+         mlir::Value hashed = hashKeys(values, rewriter, loc);
          mlir::Value inValidLink = rewriter.create<util::InvalidRefOp>(loc, linkType);
          rewriter.create<tuples::ReturnOp>(loc, mlir::ValueRange{hashed, inValidLink});
       });
@@ -137,7 +144,7 @@ class MultiMapAsHashIndexedView : public mlir::RewritePattern {
                auto keyColumnAttr = mlir::cast<tuples::ColumnRefAttr>(key);
                values.push_back(lookupHashHelper.access(keyColumnAttr, loc));
             }
-            mlir::Value hashed = rewriter.create<db::Hash>(loc, rewriter.create<util::PackOp>(loc, values));
+            mlir::Value hashed = hashKeys(values, rewriter, loc);
             rewriter.create<tuples::ReturnOp>(loc, mlir::ValueRange{hashed});
          });
          auto [listDef, listRef] = createColumn(entryRefListType, "lookup", "list");

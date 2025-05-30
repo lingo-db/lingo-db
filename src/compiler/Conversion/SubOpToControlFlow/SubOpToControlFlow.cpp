@@ -616,6 +616,7 @@ class SubOpRewriter {
       builder.setInsertionPointToStart(block);
       return fn(*this);
    }
+
    template <typename OpTy, typename... Args>
    OpTy create(Location location, Args&&... args) {
       OpTy res = builder.create<OpTy>(location, std::forward<Args>(args)...);
@@ -2327,8 +2328,16 @@ class FilterLowering : public SubOpTupleStreamConsumerConversionPattern<subop::F
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::FilterOp>::SubOpTupleStreamConsumerConversionPattern;
    LogicalResult matchAndRewrite(subop::FilterOp filterOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
-      mlir::Value cond = rewriter.create<db::AndOp>(filterOp.getLoc(), mapping.resolve(filterOp, filterOp.getConditions()));
-      cond = rewriter.create<db::DeriveTruth>(filterOp.getLoc(), cond);
+      auto providedVals = mapping.resolve(filterOp, filterOp.getConditions());
+      mlir::Value cond;
+      if (providedVals.size() == 1) {
+         cond = providedVals[0];
+      } else {
+         cond = rewriter.create<db::AndOp>(filterOp.getLoc(), providedVals);
+      }
+      if (!cond.getType().isInteger(1)) {
+         cond = rewriter.create<db::DeriveTruth>(filterOp.getLoc(), cond);
+      }
       if (filterOp.getFilterSemantic() == subop::FilterSemantic::none_true) {
          cond = rewriter.create<db::NotOp>(filterOp->getLoc(), cond);
       }
@@ -2455,7 +2464,14 @@ class LookupSegmentTreeViewLowering : public SubOpTupleStreamConsumerConversionP
       return mlir::success();
    }
 };
-
+mlir::Value hashKeys(std::vector<mlir::Value> keys, OpBuilder& rewriter, Location loc) {
+   if (keys.size() == 1) {
+      return rewriter.create<db::Hash>(loc, keys[0]);
+   } else {
+      auto packed = rewriter.create<util::PackOp>(loc, keys);
+      return rewriter.create<db::Hash>(loc, packed);
+   }
+}
 class PureLookupHashMapLowering : public SubOpTupleStreamConsumerConversionPattern<subop::LookupOp> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::LookupOp>::SubOpTupleStreamConsumerConversionPattern;
@@ -2465,9 +2481,7 @@ class PureLookupHashMapLowering : public SubOpTupleStreamConsumerConversionPatte
       EntryStorageHelper keyStorageHelper(lookupOp, htStateType.getKeyMembers(), false, typeConverter);
       EntryStorageHelper valStorageHelper(lookupOp, htStateType.getValueMembers(), htStateType.hasLock(), typeConverter);
       auto lookupKey = mapping.resolve(lookupOp, lookupOp.getKeys());
-      auto packed = rewriter.create<util::PackOp>(lookupOp->getLoc(), lookupKey);
-
-      mlir::Value hash = rewriter.create<db::Hash>(lookupOp->getLoc(), packed); //todo: external hash
+      mlir::Value hash = hashKeys(lookupKey, rewriter, lookupOp->getLoc());
       auto equalFnBuilder = [&lookupOp](mlir::OpBuilder& rewriter, EntryStorageHelper::LazyValueMap left, std::vector<Value> right) -> Value {
          std::vector<mlir::Value> arguments;
          arguments.insert(arguments.end(), left.begin(), left.end());
@@ -2575,9 +2589,8 @@ class PureLookupPreAggregationHtLowering : public SubOpTupleStreamConsumerConver
       EntryStorageHelper keyStorageHelper(lookupOp, htStateType.getKeyMembers(), false, typeConverter);
       EntryStorageHelper valStorageHelper(lookupOp, htStateType.getValueMembers(), htStateType.hasLock(), typeConverter);
       auto lookupKey = mapping.resolve(lookupOp, lookupOp.getKeys());
-      auto packed = rewriter.create<util::PackOp>(lookupOp->getLoc(), lookupKey);
 
-      mlir::Value hash = rewriter.create<db::Hash>(lookupOp->getLoc(), packed); //todo: external hash
+      mlir::Value hash = hashKeys(lookupKey, rewriter, lookupOp->getLoc());
       ASSERT_WITH_OP(!lookupOp.getEqFn().empty(), lookupOp, "LookupOp must have an equality function");
       auto equalFnBuilder = [&lookupOp](mlir::OpBuilder& rewriter, EntryStorageHelper::LazyValueMap left, std::vector<Value> right) -> Value {
          std::vector<mlir::Value> arguments;
@@ -2682,9 +2695,8 @@ class LookupHashMultiMapLowering : public SubOpTupleStreamConsumerConversionPatt
       EntryStorageHelper keyStorageHelper(lookupOp, hashMultiMapType.getKeyMembers(), false, typeConverter);
       EntryStorageHelper valStorageHelper(lookupOp, hashMultiMapType.getValueMembers(), hashMultiMapType.hasLock(), typeConverter);
       auto lookupKey = mapping.resolve(lookupOp, lookupOp.getKeys());
-      auto packed = rewriter.create<util::PackOp>(lookupOp->getLoc(), lookupKey);
 
-      mlir::Value hash = rewriter.create<db::Hash>(lookupOp->getLoc(), packed); //todo: external hash
+      mlir::Value hash = hashKeys(lookupKey, rewriter, lookupOp->getLoc());
       auto equalFnBuilder = [&lookupOp](mlir::OpBuilder& rewriter, EntryStorageHelper::LazyValueMap left, std::vector<Value> right) -> Value {
          std::vector<mlir::Value> arguments;
          arguments.insert(arguments.end(), left.begin(), left.end());
@@ -2786,9 +2798,8 @@ class InsertMultiMapLowering : public SubOpTupleStreamConsumerConversionPattern<
       EntryStorageHelper valStorageHelper(insertOp, htStateType.getValueMembers(), htStateType.hasLock(), typeConverter);
       auto loc = insertOp->getLoc();
       std::vector<mlir::Value> lookupKey = keyStorageHelper.resolve(insertOp, insertOp.getMapping(), mapping);
-      auto packed = rewriter.create<util::PackOp>(loc, lookupKey);
 
-      mlir::Value hash = rewriter.create<db::Hash>(loc, packed); //todo: external hash
+      mlir::Value hash = hashKeys(lookupKey, rewriter, loc);
       mlir::Value hashTable = adaptor.getState();
       auto equalFnBuilder = [&insertOp](mlir::OpBuilder& rewriter, EntryStorageHelper::LazyValueMap left, std::vector<Value> right) -> Value {
          std::vector<mlir::Value> arguments;
@@ -2905,9 +2916,7 @@ class LookupPreAggrHtFragment : public SubOpTupleStreamConsumerConversionPattern
       EntryStorageHelper keyStorageHelper(lookupOp, fragmentType.getKeyMembers(), false, typeConverter);
       EntryStorageHelper valStorageHelper(lookupOp, fragmentType.getValueMembers(), fragmentType.hasLock(), typeConverter);
       auto lookupKey = mapping.resolve(lookupOp, lookupOp.getKeys());
-      auto packed = rewriter.create<util::PackOp>(lookupOp->getLoc(), lookupKey);
-
-      mlir::Value hash = rewriter.create<db::Hash>(lookupOp->getLoc(), packed); //todo: external hash
+      mlir::Value hash = hashKeys(lookupKey, rewriter, lookupOp->getLoc());
       auto equalFnBuilder = [&lookupOp](mlir::OpBuilder& rewriter, EntryStorageHelper::LazyValueMap left, std::vector<Value> right) -> Value {
          std::vector<mlir::Value> arguments;
          arguments.insert(arguments.end(), left.begin(), left.end());
@@ -2999,9 +3008,8 @@ class LookupHashMapLowering : public SubOpTupleStreamConsumerConversionPattern<s
       EntryStorageHelper keyStorageHelper(lookupOp, htStateType.getKeyMembers(), false, typeConverter);
       EntryStorageHelper valStorageHelper(lookupOp, htStateType.getValueMembers(), htStateType.hasLock(), typeConverter);
       auto lookupKey = mapping.resolve(lookupOp, lookupOp.getKeys());
-      auto packed = rewriter.create<util::PackOp>(lookupOp->getLoc(), lookupKey);
 
-      mlir::Value hash = rewriter.create<db::Hash>(lookupOp->getLoc(), packed); //todo: external hash
+      mlir::Value hash = hashKeys(lookupKey, rewriter, lookupOp->getLoc());
       mlir::Value hashTable = adaptor.getState();
       auto equalFnBuilder = [&lookupOp](mlir::OpBuilder& rewriter, EntryStorageHelper::LazyValueMap left, std::vector<Value> right) -> Value {
          std::vector<mlir::Value> arguments;
