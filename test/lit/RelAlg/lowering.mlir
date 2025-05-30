@@ -174,12 +174,10 @@
 //CHECK: %{{.*}} = subop.create !subop.multimap<[member$0 : i64], []>
 //CHECK: subop.insert [[LEFT]]%{{.*}}  : !subop.multimap<[member$0 : i64], []> {@t::@col1 => member$0} eq: ([%arg0],[%arg1]) {
 //CHECK:   %{{.*}} = db.compare eq %arg0 : i64, %arg1 : i64
-//CHECK:   %{{.*}} = db.and %{{.*}} : i1
 //CHECK:   tuples.return %{{.*}} : i1
 //CHECK: }
 //CHECK: %{{.*}} = subop.lookup [[RIGHT]]%{{.*}} [@t_u_2::@col1] : !subop.multimap<[member$0 : i64], []> @lookup::@list({type = !subop.list<!subop.multi_map_entry_ref<<[member$0 : i64], []>>>})eq: ([%arg0],[%arg1]) {
 //CHECK:   %{{.*}} = db.compare eq %arg0 : i64, %arg1 : i64
-//CHECK:   %{{.*}} = db.and %{{.*}} : i1
 //CHECK:   tuples.return %{{.*}} : i1
 //CHECK: }
 //CHECK: %{{.*}} = subop.nested_map %{{.*}} [@lookup::@list] (%arg0, %arg1) {
@@ -211,12 +209,10 @@
 //CHECK: %{{.*}} = subop.create !subop.multimap<[member$0 : i64], []>
 //CHECK: subop.insert [[RIGHT]]%{{.*}}  : !subop.multimap<[member$0 : i64], []> {@t_u_2::@col1 => member$0} eq: ([%arg0],[%arg1]) {
 //CHECK:   %{{.*}} = db.compare eq %arg0 : i64, %arg1 : i64
-//CHECK:   %{{.*}} = db.and %{{.*}} : i1
 //CHECK:   tuples.return %{{.*}} : i1
 //CHECK: }
 //CHECK: %{{.*}} = subop.lookup [[LEFT]]%{{.*}} [@t::@col1] : !subop.multimap<[member$0 : i64], []> @lookup::@list({type = !subop.list<!subop.multi_map_entry_ref<<[member$0 : i64], []>>>})eq: ([%arg0],[%arg1]) {
 //CHECK:   %{{.*}} = db.compare eq %arg0 : i64, %arg1 : i64
-//CHECK:   %{{.*}} = db.and %{{.*}} : i1
 //CHECK:   tuples.return %{{.*}} : i1
 //CHECK: }
 //CHECK: %{{.*}} = subop.nested_map %{{.*}} [@lookup::@list] (%arg0, %arg1) {
@@ -260,12 +256,10 @@
 //CHECK: %{{.*}} = subop.create !subop.multimap<[member$0 : i64], []>
 //CHECK: subop.insert [[RIGHT]]%{{.*}}  : !subop.multimap<[member$0 : i64], []> {@t_u_2::@col1 => member$0} eq: ([%arg0],[%arg1]) {
 //CHECK:   %{{.*}} = db.compare eq %arg0 : i64, %arg1 : i64
-//CHECK:   %{{.*}} = db.and %{{.*}} : i1
 //CHECK:   tuples.return %{{.*}} : i1
 //CHECK: }
 //CHECK: %{{.*}} = subop.lookup [[LEFT]]%{{.*}} [@t::@col1] : !subop.multimap<[member$0 : i64], []> @lookup::@list({type = !subop.list<!subop.multi_map_entry_ref<<[member$0 : i64], []>>>})eq: ([%arg0],[%arg1]) {
 //CHECK:   %{{.*}} = db.compare eq %arg0 : i64, %arg1 : i64
-//CHECK:   %{{.*}} = db.and %{{.*}} : i1
 //CHECK:   tuples.return %{{.*}} : i1
 //CHECK: }
 //CHECK: %{{.*}} = subop.nested_map %{{.*}} [@lookup::@list] (%arg0, %arg1) {
@@ -313,12 +307,10 @@
 //CHECK: }
 //CHECK: subop.insert %{{.*}}%{{.*}}  : !subop.multimap<[member$0 : i64], [member$1 : i64, flag$0 : i1]> {@materialized::@marker => flag$0, @t::@col1 => member$0, @t_u_2::@col1 => member$1} eq: ([%arg0],[%arg1]) {
 //CHECK:   %{{.*}} = db.compare eq %arg0 : i64, %arg1 : i64
-//CHECK:   %{{.*}} = db.and %{{.*}} : i1
 //CHECK:   tuples.return %{{.*}} : i1
 //CHECK: }
 //CHECK: %{{.*}} = subop.lookup [[RIGHT]]%{{.*}} [@t_u_2::@col1] : !subop.multimap<[member$0 : i64], [member$1 : i64, flag$0 : i1]> @lookup::@list({type = !subop.list<!subop.multi_map_entry_ref<<[member$0 : i64], [member$1 : i64, flag$0 : i1]>>>})eq: ([%arg0],[%arg1]) {
 //CHECK:   %{{.*}} = db.compare eq %arg0 : i64, %arg1 : i64
-//CHECK:   %{{.*}} = db.and %{{.*}} : i1
 //CHECK:   tuples.return %{{.*}} : i1
 //CHECK: }
 //CHECK: %{{.*}} = subop.nested_map %{{.*}} [@lookup::@list] (%arg0, %arg1) {
