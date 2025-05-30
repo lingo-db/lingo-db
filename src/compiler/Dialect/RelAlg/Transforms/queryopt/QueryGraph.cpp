@@ -107,10 +107,13 @@ std::unique_ptr<lingodb::compiler::support::eval::expr> buildEvalExpr(mlir::Valu
             typeConstant = arrow::Type::type::DATE64;
          }
       } else if (auto charType = mlir::dyn_cast_or_null<db::CharType>(type)) {
-         typeConstant = arrow::Type::type::FIXED_SIZE_BINARY;
          // we need to multiply by 4 to get the maximum number of required bytes (4 bytes per character utf-8)
-         assert(charType.getLen() <= 1 && "CharType length can be maximum 1");
-         param1 = charType.getLen() * 4;
+         if (charType.getLen() <= 1) {
+            typeConstant = arrow::Type::type::FIXED_SIZE_BINARY;
+            param1 = charType.getLen() * 4;
+         } else {
+            typeConstant = arrow::Type::type::STRING;
+         }
       } else if (auto intervalType = mlir::dyn_cast_or_null<db::IntervalType>(type)) {
          if (intervalType.getUnit() == db::IntervalUnitAttr::months) {
             typeConstant = arrow::Type::type::INTERVAL_MONTHS;
