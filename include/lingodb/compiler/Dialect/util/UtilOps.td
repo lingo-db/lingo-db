@@ -202,6 +202,7 @@ let results =(outs Variadic<AnyType>:$vals);
 let assemblyFormat = "$tuple `:` type($tuple) attr-dict `->` type($vals)";
     let hasVerifier=1;
 let hasCanonicalizeMethod = 1;
+  let hasFolder = 1;
 let builders = [
         OpBuilder<(ins "mlir::Value":$tuple), [{
     build($_builder, $_state, tuple.getType().cast<TupleType>().getTypes(), tuple);
@@ -221,5 +222,6 @@ let arguments = (ins TupleOf<[AnyType]>:$tuple, I32Attr:$offset);
 let results =(outs AnyType: $val);
 let assemblyFormat = "$tuple `[` $offset `]` `:` `(`type($tuple)`)` `->` type($val) attr-dict";
 let hasCanonicalizeMethod = 1;
+ let hasFolder = 1;
 }
 #endif// OPS

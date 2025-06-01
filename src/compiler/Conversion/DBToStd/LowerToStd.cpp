@@ -370,9 +370,10 @@ class AndOpLowering : public OpConversionPattern<db::AndOp> {
          Value currNull;
          Value currVal;
          if (currNullable) {
-            auto unPackOp = rewriter.create<util::UnPackOp>(loc, adaptor.getVals()[i]);
-            currNull = unPackOp.getVals()[0];
-            currVal = unPackOp.getVals()[1];
+            llvm::SmallVector<mlir::Value> unpacked;
+            rewriter.createOrFold<util::UnPackOp>(unpacked, loc, adaptor.getVals()[i]);
+            currNull = unpacked[0];
+            currVal = unpacked[1];
          } else {
             currVal = adaptor.getVals()[i];
          }
@@ -423,9 +424,10 @@ class OrOpLowering : public OpConversionPattern<db::OrOp> {
          Value currNull;
          Value currVal;
          if (currNullable) {
-            auto unPackOp = rewriter.create<util::UnPackOp>(loc, adaptor.getVals()[i]);
-            currNull = unPackOp.getVals()[0];
-            currVal = unPackOp.getVals()[1];
+            llvm::SmallVector<mlir::Value> unpacked;
+            rewriter.createOrFold<util::UnPackOp>(unpacked, loc, adaptor.getVals()[i]);
+            currNull = unpacked[0];
+            currVal = unpacked[1];
          } else {
             currVal = adaptor.getVals()[i];
          }
@@ -557,10 +559,11 @@ class IsNullOpLowering : public OpConversionPattern<db::IsNullOp> {
    using OpConversionPattern<db::IsNullOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(db::IsNullOp isNullOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       if (mlir::isa<db::NullableType>(isNullOp.getVal().getType())) {
-         auto unPackOp = rewriter.create<util::UnPackOp>(isNullOp->getLoc(), adaptor.getVal());
-         rewriter.replaceOp(isNullOp, unPackOp.getVals()[0]);
+         llvm::SmallVector<mlir::Value> unpacked;
+         rewriter.createOrFold<util::UnPackOp>(unpacked, isNullOp.getLoc(), adaptor.getVal());
+         rewriter.replaceOp(isNullOp, unpacked[0]);
       } else {
-         rewriter.replaceOp(isNullOp, adaptor.getVal());
+         rewriter.replaceOp(isNullOp, adaptor.getVal()); //todo: is this correct?
       }
       return success();
    }
@@ -569,8 +572,9 @@ class NullableGetValOpLowering : public OpConversionPattern<db::NullableGetVal> 
    public:
    using OpConversionPattern<db::NullableGetVal>::OpConversionPattern;
    LogicalResult matchAndRewrite(db::NullableGetVal op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto unPackOp = rewriter.create<util::UnPackOp>(op->getLoc(), adaptor.getVal());
-      rewriter.replaceOp(op, unPackOp.getVals()[1]);
+      llvm::SmallVector<mlir::Value> unpacked;
+      rewriter.createOrFold<util::UnPackOp>(unpacked, op.getLoc(), adaptor.getVal());
+      rewriter.replaceOp(op, unpacked[1]);
       return success();
    }
 };
@@ -947,23 +951,25 @@ class HashLowering : public ConversionPattern {
          return combineHashes(builder, loc, hash, totalHash);
       } else if (auto tupleType = mlir::dyn_cast_or_null<mlir::TupleType>(v.getType())) {
          if (auto originalTupleType = mlir::dyn_cast_or_null<mlir::TupleType>(originalType)) {
-            auto unpacked = builder.create<util::UnPackOp>(loc, v);
+            llvm::SmallVector<mlir::Value> unpacked;
+            builder.createOrFold<util::UnPackOp>(unpacked, loc, v);
             size_t i = 0;
-            for (auto v : unpacked->getResults()) {
+            for (auto v : unpacked) {
                totalHash = hashImpl(builder, loc, v, totalHash, originalTupleType.getType(i++));
             }
             return totalHash;
          } else if (mlir::isa<db::NullableType>(originalType)) {
-            auto unpacked = builder.create<util::UnPackOp>(loc, v);
+            llvm::SmallVector<mlir::Value> unpacked;
+            builder.createOrFold<util::UnPackOp>(unpacked, loc, v);
 
             mlir::Value totalHashUpdated = builder.create<mlir::scf::IfOp>(
-                                                     loc, unpacked.getResult(0), [totalHashBefore = totalHash](mlir::OpBuilder& builder, mlir::Location loc) {
+                                                     loc, unpacked[0], [totalHashBefore = totalHash](mlir::OpBuilder& builder, mlir::Location loc) {
                                                          mlir::Value totalHash=totalHashBefore;
                                                         if (!totalHash) {
                                                            totalHash = builder.create<arith::ConstantOp>(loc, builder.getIndexType(), builder.getIndexAttr(0));
                                                         }
                                                builder.create<mlir::scf::YieldOp>(loc,totalHash); }, [&](mlir::OpBuilder& builder, mlir::Location loc) {
-                                               mlir::Value hashedIfNotNull = hashImpl(builder, loc, unpacked.getResult(1), totalHash, getBaseType(originalType));
+                                               mlir::Value hashedIfNotNull = hashImpl(builder, loc, unpacked[1], totalHash, getBaseType(originalType));
 
                                                builder.create<mlir::scf::YieldOp>(loc,hashedIfNotNull); })
                                               .getResult(0);

@@ -64,6 +64,17 @@ using namespace lingodb::compiler::dialect;
    op.emitOpError("must be buffer type");
    return failure();
 }
+
+LogicalResult util::UnPackOp::fold(FoldAdaptor adaptor, SmallVectorImpl<OpFoldResult>& results) {
+   auto tuple = getTuple();
+   if (auto* tupleCreationOp = tuple.getDefiningOp()) {
+      if (auto packOp = mlir::dyn_cast_or_null<util::PackOp>(tupleCreationOp)) {
+         results.append(packOp.getVals().begin(), packOp.getVals().end());
+         return success();
+      }
+   }
+   return failure();
+}
 LogicalResult util::UnPackOp::canonicalize(util::UnPackOp unPackOp, mlir::PatternRewriter& rewriter) {
    auto tuple = unPackOp.getTuple();
    if (auto* tupleCreationOp = tuple.getDefiningOp()) {
@@ -76,7 +87,7 @@ LogicalResult util::UnPackOp::canonicalize(util::UnPackOp unPackOp, mlir::Patter
    vals.reserve(unPackOp.getNumResults());
    for (unsigned i = 0; i < unPackOp.getNumResults(); i++) {
       auto ty = unPackOp.getResultTypes()[i];
-      vals.push_back(rewriter.create<util::GetTupleOp>(unPackOp.getLoc(), ty, tuple, i));
+      vals.push_back(rewriter.createOrFold<util::GetTupleOp>(unPackOp.getLoc(), ty, tuple, i));
    }
    rewriter.replaceOp(unPackOp.getOperation(), vals);
    return success();
@@ -89,8 +100,8 @@ LogicalResult util::GetTupleOp::canonicalize(util::GetTupleOp op, mlir::PatternR
          return success();
       }
       if (auto selOp = mlir::dyn_cast_or_null<mlir::arith::SelectOp>(tupleCreationOp)) {
-         auto sel1 = rewriter.create<util::GetTupleOp>(op.getLoc(), op.getVal().getType(), selOp.getTrueValue(), op.getOffset());
-         auto sel2 = rewriter.create<util::GetTupleOp>(op.getLoc(), op.getVal().getType(), selOp.getFalseValue(), op.getOffset());
+         auto sel1 = rewriter.createOrFold<util::GetTupleOp>(op.getLoc(), op.getVal().getType(), selOp.getTrueValue(), op.getOffset());
+         auto sel2 = rewriter.createOrFold<util::GetTupleOp>(op.getLoc(), op.getVal().getType(), selOp.getFalseValue(), op.getOffset());
          rewriter.replaceOpWithNewOp<mlir::arith::SelectOp>(op, selOp.getCondition(), sel1, sel2);
          return success();
       }
@@ -113,6 +124,16 @@ LogicalResult util::GetTupleOp::canonicalize(util::GetTupleOp op, mlir::PatternR
    return failure();
 }
 
+OpFoldResult util::GetTupleOp::fold(FoldAdaptor adaptor) {
+   auto tuple = getTuple();
+   if (auto* tupleCreationOp = tuple.getDefiningOp()) {
+      if (auto packOp = mlir::dyn_cast_or_null<util::PackOp>(tupleCreationOp)) {
+         return packOp.getOperand(getOffset());
+      }
+   }
+   return {};
+}
+
 LogicalResult util::StoreOp::canonicalize(util::StoreOp op, mlir::PatternRewriter& rewriter) {
    if (auto ty = mlir::dyn_cast_or_null<mlir::TupleType>(op.getVal().getType())) {
       auto base = op.getRef();
@@ -121,7 +142,7 @@ LogicalResult util::StoreOp::canonicalize(util::StoreOp op, mlir::PatternRewrite
       }
       for (size_t i = 0; i < ty.size(); i++) {
          auto elemRefTy = util::RefType::get(ty.getType(i));
-         auto gt = rewriter.create<util::GetTupleOp>(op.getLoc(), ty.getType(i), op.getVal(), i);
+         auto gt = rewriter.createOrFold<util::GetTupleOp>(op.getLoc(), ty.getType(i), op.getVal(), i);
          auto tep = rewriter.create<util::TupleElementPtrOp>(op.getLoc(), elemRefTy, base, i);
          rewriter.create<util::StoreOp>(op.getLoc(), gt, tep, Value());
       }
