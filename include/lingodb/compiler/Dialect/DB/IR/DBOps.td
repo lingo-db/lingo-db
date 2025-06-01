@@ -178,6 +178,7 @@ def DB_IsNullOp : DB_Op<"isnull", [Pure]> {
     let arguments = (ins NullableType:$val);
     let results = (outs I1:$result);
     let assemblyFormat = "$val `:` type($val) attr-dict";
+     let hasFolder = 1;
 }
 
 def DB_NullableGetVal : DB_Op<"nullable_get_val", [Pure,DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
@@ -195,6 +196,8 @@ def DB_NullableGetVal : DB_Op<"nullable_get_val", [Pure,DeclareOpInterfaceMethod
             return success();
         }
     }];
+         let hasFolder = 1;
+
 }
 
 def DB_RuntimeCall : DB_Op<"runtime_call", [DB_MayNeedNullWrap,DB_MaySupportInvalidValues]> {

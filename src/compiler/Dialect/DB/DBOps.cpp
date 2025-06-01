@@ -359,6 +359,26 @@ LogicalResult db::OrOp::canonicalize(db::OrOp orOp, mlir::PatternRewriter& rewri
    }
    return failure();
 }
+OpFoldResult db::IsNullOp::fold(FoldAdaptor adaptor) {
+   auto nullableVal = getVal();
+   if (!mlir::isa<db::NullableType>(nullableVal.getType())) {
+      return mlir::BoolAttr::get(getContext(), false);
+   } else if (auto asNullableOp = mlir::dyn_cast_or_null<db::AsNullableOp>(nullableVal.getDefiningOp())) {
+      if (asNullableOp.getNull()) {
+         return asNullableOp.getNull();
+      } else {
+         return mlir::BoolAttr::get(getContext(), false);
+      }
+   }
+   return {};
+}
+OpFoldResult db::NullableGetVal::fold(FoldAdaptor adaptor) {
+   auto nullableVal = getVal();
+   if (auto asNullableOp = mlir::dyn_cast_or_null<db::AsNullableOp>(nullableVal.getDefiningOp())) {
+      return asNullableOp.getVal();
+   }
+   return {};
+}
 LogicalResult db::AndOp::canonicalize(db::AndOp andOp, mlir::PatternRewriter& rewriter) {
    llvm::DenseSet<mlir::Value> rawValues;
    llvm::DenseMap<mlir::Value, std::vector<db::CmpOp>> cmps;

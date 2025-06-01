@@ -3981,7 +3981,6 @@ class SetTrackedCountLowering : public SubOpConversionPattern<subop::SetTrackedC
    using SubOpConversionPattern<subop::SetTrackedCountOp>::SubOpConversionPattern;
    LogicalResult matchAndRewrite(subop::SetTrackedCountOp setTrackedCountOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
       auto loc = setTrackedCountOp->getLoc();
-
       // Get resultId
       mlir::Value resultId = rewriter.create<mlir::arith::ConstantIntOp>(loc, setTrackedCountOp.getResultId(), mlir::IntegerType::get(rewriter.getContext(), 32));
 
