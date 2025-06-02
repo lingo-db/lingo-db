@@ -178,8 +178,8 @@ def SortedView : SubOperator_Type<"SortedView", "sorted_view", [State]> {
 }
 def HashIndexedView : SubOperator_Type<"HashIndexedView", "hash_indexed_view", [State,LookupAbleState]> {
     let summary = "sorted view type";
-    let parameters = (ins "StateMembersAttr":$keyMembers,"StateMembersAttr":$valueMembers );
-    let assemblyFormat = "`<` custom<StateMembers>($keyMembers) `,` custom<StateMembers>($valueMembers) `>`";
+    let parameters = (ins "StateMembersAttr":$keyMembers,"StateMembersAttr":$valueMembers, "bool":$compareHashForLookup);
+    let assemblyFormat = "`<` custom<StateMembers>($keyMembers) `,` custom<StateMembers>($valueMembers) `,` $compareHashForLookup `>`";
      let extraClassDeclaration = [{
         StateMembersAttr getMembers();
      }];
