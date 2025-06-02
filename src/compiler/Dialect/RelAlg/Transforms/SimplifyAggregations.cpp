@@ -378,6 +378,31 @@ class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir
                aggregationOp.getResult().replaceAllUsesExcept(newmap.getResult(), newmap);
             }
          });
+      getOperation().walk([&](relalg::AggregationOp aggregationOp) {
+         mlir::Value numRows;
+         auto streamArg = aggregationOp.getAggrFunc().getArgument(0);
+         auto terminator = mlir::cast<tuples::ReturnOp>(aggregationOp.getAggrFunc().front().getTerminator());
+         for (auto& returned : terminator->getOpOperands()) {
+            auto currOp = returned.get().getDefiningOp();
+            if (auto countRowsOp = mlir::dyn_cast_or_null<relalg::CountRowsOp>(currOp)) {
+               if (countRowsOp.getRel() == streamArg) {
+                  if (numRows) {
+                     returned.set(numRows);
+                  } else {
+                     numRows = returned.get();
+                  }
+               }
+            } else if (auto aggrFuncOp = mlir::dyn_cast_or_null<relalg::AggrFuncOp>(currOp)) {
+               if (aggrFuncOp.getRel() == streamArg && aggrFuncOp.getFn() == relalg::AggrFunc::count && !mlir::isa<db::NullableType>(aggrFuncOp.getAttr().getColumn().type)) {
+                  if (numRows) {
+                     returned.set(numRows);
+                  } else {
+                     numRows = returned.get();
+                  }
+               }
+            }
+         }
+      });
    }
 };
 } // end anonymous namespace
