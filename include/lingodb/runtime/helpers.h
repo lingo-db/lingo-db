@@ -12,6 +12,7 @@
 #define EXPORT extern "C" __attribute__((visibility("default")))
 #define INLINE __attribute__((always_inline))
 namespace lingodb::runtime {
+alignas(4096) extern uint16_t bloomMasks[2048];
 
 struct MemoryHelper {
    static uint8_t* resize(uint8_t* old, size_t oldNumBytes, size_t newNumBytes) {
@@ -187,30 +188,25 @@ struct FixedSizedBuffer {
 };
 template <typename T>
 T* tag(T* ptr, T* previousPtr, size_t hash) {
-   constexpr uint64_t ptrMask = 0x0000ffffffffffffull;
-   constexpr uint64_t tagMask = 0xffff000000000000ull;
-   size_t asInt = reinterpret_cast<size_t>(ptr);
-   size_t previousAsInt = reinterpret_cast<size_t>(previousPtr);
-   size_t previousTag = previousAsInt & tagMask;
-   size_t currentTag = hash & tagMask;
-   auto tagged = (asInt & ptrMask) | previousTag | currentTag;
-   auto* res = reinterpret_cast<T*>(tagged);
+   auto asInt = reinterpret_cast<uintptr_t>(ptr);
+   uint16_t previousTag = reinterpret_cast<uintptr_t>(previousPtr);
+   uint16_t currentTag = bloomMasks[hash >> (64 - 11)];
+   auto* res = reinterpret_cast<T*>(asInt << 16 | (currentTag | previousTag));
    return res;
 }
 template <typename T>
+bool matchesTag(T* ptr, size_t hash) {
+   uint16_t entry = reinterpret_cast<uintptr_t>(ptr);
+   uint16_t tag = bloomMasks[hash >> (64 - 11)];
+   return !(tag & ~entry);
+}
+template <typename T>
 T* filterTagged(T* ptr, size_t hash) {
-   constexpr uint64_t ptrMask = 0x0000ffffffffffffull;
-   constexpr uint64_t tagMask = 0xffff000000000000ull;
-   size_t asInt = reinterpret_cast<size_t>(ptr);
-   size_t requiredTag = hash & tagMask;
-   size_t currentTag = hash & tagMask;
-   return ((currentTag | requiredTag) == currentTag) ? reinterpret_cast<T*>(asInt & ptrMask) : nullptr;
+   return matchesTag(ptr, hash) ? untag(ptr) : nullptr;
 }
 template <typename T>
 T* untag(T* ptr) {
-   constexpr size_t ptrMask = 0x0000ffffffffffffull;
-   size_t asInt = reinterpret_cast<size_t>(ptr);
-   return reinterpret_cast<T*>(asInt & ptrMask);
+   return reinterpret_cast<T*>(reinterpret_cast<uintptr_t>(ptr) >> 16);
 }
 } // end namespace lingodb::runtime
 #endif // LINGODB_RUNTIME_HELPERS_H

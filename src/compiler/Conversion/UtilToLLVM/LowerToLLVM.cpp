@@ -506,23 +506,38 @@ class BufferGetMemRefOpLowering : public OpConversionPattern<util::BufferGetMemR
    }
 };
 
-class FilterTaggedPtrLowering : public OpConversionPattern<util::FilterTaggedPtr> {
+class PtrTagMatchesLowering : public OpConversionPattern<util::PtrTagMatches> {
    public:
-   using OpConversionPattern<util::FilterTaggedPtr>::OpConversionPattern;
-   LogicalResult matchAndRewrite(util::FilterTaggedPtr op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+   using OpConversionPattern<util::PtrTagMatches>::OpConversionPattern;
+   LogicalResult matchAndRewrite(util::PtrTagMatches op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto loc = op->getLoc();
-      auto tagMask = rewriter.create<mlir::LLVM::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(0xffff000000000000ull));
-      auto ptrMask = rewriter.create<mlir::LLVM::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(0x0000ffffffffffffull));
-      Value maskedHash = rewriter.create<LLVM::AndOp>(loc, adaptor.getHash(), tagMask);
-      Value ptrAsInt = rewriter.create<LLVM::PtrToIntOp>(loc, rewriter.getI64Type(), adaptor.getRef());
-      Value maskedPtr = rewriter.create<LLVM::AndOp>(loc, ptrAsInt, ptrMask);
-      maskedPtr = rewriter.create<LLVM::IntToPtrOp>(loc, adaptor.getRef().getType(), maskedPtr);
-      Value ored = rewriter.create<LLVM::OrOp>(loc, ptrAsInt, maskedHash);
-      Value contained = rewriter.create<LLVM::ICmpOp>(loc, LLVM::ICmpPredicate::eq, ored, ptrAsInt);
-      Value nullPtr = rewriter.create<mlir::LLVM::ZeroOp>(loc, adaptor.getRef().getType());
+      //optain lookup table:
+      // if there is not yet a llvm.mlir global with name bloomMasks than create it in module (external linkage, no value)
+      auto moduleOp = op->getParentOfType<ModuleOp>();
+      auto globalOp = moduleOp.lookupSymbol<mlir::LLVM::GlobalOp>("bloomMasks");
+      if (!globalOp) {
+         OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(moduleOp.getBody());
+         //Type global_type, /*optional*/bool constant, ::llvm::StringRef sym_name, ::mlir::LLVM::Linkage linkage
+         globalOp = rewriter.create<mlir::LLVM::GlobalOp>(loc, mlir::LLVM::LLVMArrayType::get(rewriter.getI16Type(), 2048), true, mlir::LLVM::Linkage::External, "bloomMasks", mlir::Attribute());
+      }
+      //load the bloom mask from global
+      mlir::Value bloomMaskPtr = rewriter.create<mlir::LLVM::AddressOfOp>(loc, globalOp);
 
-      Value filtered = rewriter.create<LLVM::SelectOp>(loc, contained, maskedPtr, nullPtr);
-      rewriter.replaceOp(op, filtered);
+      //take the top 11 bytes from hash value by shifting (64-11) bits to the right
+      Value shiftAmount = rewriter.create<mlir::LLVM::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(53));
+      Value slot = rewriter.create<LLVM::LShrOp>(loc, adaptor.getHash(), shiftAmount);
+      //tag = bloomMasks[slot]
+      Value tagPtr = rewriter.create<LLVM::GEPOp>(loc, bloomMaskPtr.getType(), rewriter.getI16Type(), bloomMaskPtr, ValueRange{slot});
+      Value tag = rewriter.create<LLVM::LoadOp>(loc, rewriter.getI16Type(), tagPtr);
+      //entry: (uint16_t)ptr
+      Value entry = rewriter.create<LLVM::PtrToIntOp>(loc, rewriter.getI16Type(), adaptor.getRef());
+      //return ! (tag & ~ entry)
+      Value negatedEntry = rewriter.create<LLVM::XOrOp>(loc, entry, rewriter.create<LLVM::ConstantOp>(loc, rewriter.getI16Type(), rewriter.getI16IntegerAttr(0xffff)));
+      Value anded = rewriter.create<LLVM::AndOp>(loc, tag, negatedEntry);
+      Value isMatch = rewriter.create<LLVM::ICmpOp>(loc, LLVM::ICmpPredicate::eq, anded, rewriter.create<LLVM::ConstantOp>(loc, rewriter.getI16Type(), rewriter.getI16IntegerAttr(0)));
+      rewriter.replaceOp(op, isMatch);
+
       return success();
    }
 };
@@ -531,25 +546,12 @@ class UnTagPtrLowering : public OpConversionPattern<util::UnTagPtr> {
    using OpConversionPattern<util::UnTagPtr>::OpConversionPattern;
    LogicalResult matchAndRewrite(util::UnTagPtr op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto loc = op->getLoc();
-      auto ptrMask = rewriter.create<mlir::LLVM::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(0x0000ffffffffffffull));
       Value ptrAsInt = rewriter.create<LLVM::PtrToIntOp>(loc, rewriter.getI64Type(), adaptor.getRef());
-      Value maskedPtr = rewriter.create<LLVM::AndOp>(loc, ptrAsInt, ptrMask);
-      maskedPtr = rewriter.create<LLVM::IntToPtrOp>(loc, adaptor.getRef().getType(), maskedPtr);
-      rewriter.replaceOp(op, maskedPtr);
-      return success();
-   }
-};
-class TagPtrLowering : public OpConversionPattern<util::TagPtr> {
-   public:
-   using OpConversionPattern<util::TagPtr>::OpConversionPattern;
-   LogicalResult matchAndRewrite(util::TagPtr op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto loc = op->getLoc();
-      auto tagMask = rewriter.create<mlir::LLVM::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(0xffff000000000000ull));
-      Value maskedHash = rewriter.create<LLVM::AndOp>(loc, adaptor.getHash(), tagMask);
-      Value ptrAsInt = rewriter.create<LLVM::PtrToIntOp>(loc, rewriter.getI64Type(), adaptor.getRef());
-      Value ored = rewriter.create<LLVM::OrOp>(loc, ptrAsInt, maskedHash);
-      rewriter.replaceOpWithNewOp<LLVM::IntToPtrOp>(op, adaptor.getRef().getType(), ored);
-
+      //shift 16 bits to right
+      Value shiftAmount = rewriter.create<mlir::LLVM::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(16));
+      Value ptrWithoutTag = rewriter.create<LLVM::LShrOp>(loc, ptrAsInt, shiftAmount);
+      ptrWithoutTag = rewriter.create<LLVM::IntToPtrOp>(loc, adaptor.getRef().getType(), ptrWithoutTag);
+      rewriter.replaceOp(op, ptrWithoutTag);
       return success();
    }
 };
@@ -598,8 +600,7 @@ void util::populateUtilToLLVMConversionPatterns(LLVMTypeConverter& typeConverter
    patterns.add<HashCombineLowering>(typeConverter, patterns.getContext());
    patterns.add<Hash64Lowering>(typeConverter, patterns.getContext());
    patterns.add<HashVarLenLowering>(typeConverter, patterns.getContext());
-   patterns.add<FilterTaggedPtrLowering>(typeConverter, patterns.getContext());
-   patterns.add<TagPtrLowering>(typeConverter, patterns.getContext());
+   patterns.add<PtrTagMatchesLowering>(typeConverter, patterns.getContext());
    patterns.add<UnTagPtrLowering>(typeConverter, patterns.getContext());
    patterns.add<BufferCreateOpLowering>(typeConverter, patterns.getContext());
    patterns.add<BufferGetMemRefOpLowering>(typeConverter, patterns.getContext());

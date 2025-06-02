@@ -73,20 +73,15 @@ def HashCombine : Util_Op<"hash_combine",[Pure]> {
     let results = (outs Index:$hash);
     let assemblyFormat = "$h1 `,` $h2 attr-dict";
 }
-def TagPtr : Util_Op<"tag_ptr",[Pure]> {
-    let arguments = (ins RefType:$ref,Index:$hash);
-    let results = (outs RefType:$res);
-    let assemblyFormat = "$hash `,` $ref `:` type($ref) `->` type($res) attr-dict";
-}
 def UnTagPtr : Util_Op<"untag_ptr",[Pure]> {
     let arguments = (ins RefType:$ref);
     let results = (outs RefType:$res);
     let assemblyFormat = "$ref `:` type($ref) `->` type($res) attr-dict";
 }
-def FilterTaggedPtr : Util_Op<"filter_tagged_ptr",[Pure]> {
+def PtrTagMatches : Util_Op<"ptr_tag_matches",[Pure]> {
     let arguments = (ins RefType:$ref,Index:$hash);
-    let results = (outs RefType:$res);
-    let assemblyFormat = "$hash `,` $ref `:` type($ref) `->` type($res) attr-dict";
+    let results = (outs I1:$matches);
+    let assemblyFormat = "$hash `,` $ref `:` type($ref) attr-dict";
 }
 def AllocOp  : Util_Op<"alloc"> {
 let arguments = (ins Optional<Index>:$size);
