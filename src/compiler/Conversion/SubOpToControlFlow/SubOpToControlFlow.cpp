@@ -2162,16 +2162,20 @@ class ScanListLowering : public SubOpConversionPattern<subop::ScanListOp> {
          auto i8PtrType = util::RefType::get(getContext(), rewriter.getI8Type());
          Value castedPtr = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(getContext(), mlir::TupleType::get(getContext(), {i8PtrType, rewriter.getIndexType(), tupleType})), afterPtr);
          Value valuePtr = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(getContext(), tupleType), castedPtr, 2);
-         Value hashPtr = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(getContext(), rewriter.getIndexType()), castedPtr, 1);
-         mlir::Value currHash = rewriter.create<util::LoadOp>(loc, hashPtr, mlir::Value());
-         mlir::Value hashEq = rewriter.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::eq, currHash, hash);
-         rewriter.create<mlir::scf::IfOp>(
-            loc, hashEq, [&](mlir::OpBuilder& builder1, mlir::Location loc) {
-               mapping.define(scanOp.getElem(), valuePtr);
-               rewriter.replaceTupleStream(scanOp, mapping);
-               builder1.create<mlir::scf::YieldOp>(loc);
-            });
-
+         if (hashIndexedViewType.getCompareHashForLookup()) {
+            Value hashPtr = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(getContext(), rewriter.getIndexType()), castedPtr, 1);
+            mlir::Value currHash = rewriter.create<util::LoadOp>(loc, hashPtr, mlir::Value());
+            mlir::Value hashEq = rewriter.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::eq, currHash, hash);
+            rewriter.create<mlir::scf::IfOp>(
+               loc, hashEq, [&](mlir::OpBuilder& builder1, mlir::Location loc) {
+                  mapping.define(scanOp.getElem(), valuePtr);
+                  rewriter.replaceTupleStream(scanOp, mapping);
+                  builder1.create<mlir::scf::YieldOp>(loc);
+               });
+         } else {
+            mapping.define(scanOp.getElem(), valuePtr);
+            rewriter.replaceTupleStream(scanOp, mapping);
+         }
          Value nextPtr = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(getContext(), i8PtrType), castedPtr, 0);
          mlir::Value next = rewriter.create<util::LoadOp>(loc, nextPtr, mlir::Value());
          //next = rewriter.create<util::FilterTaggedPtr>(loc, next.getType(), next, hash);
