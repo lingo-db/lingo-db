@@ -20,6 +20,7 @@ extern "C" void dumpBool(bool b) {
 void lingodb::execution::visitBareFunctions(const std::function<void(std::string, void*)>& fn) {
    fn("createVarLen32", reinterpret_cast<void*>(&createVarLen32));
    fn("hashVarLenData", reinterpret_cast<void*>(&hashVarLenData));
+   fn("bloomMasks", reinterpret_cast<void*>(lingodb::runtime::bloomMasks));
    fn("dumpString", reinterpret_cast<void*>(&dumpString));
    fn("dumpI64", reinterpret_cast<void*>(&dumpI64));
    fn("dumpF64", reinterpret_cast<void*>(&dumpF64));

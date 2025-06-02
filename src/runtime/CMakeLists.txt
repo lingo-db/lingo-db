@@ -1,4 +1,5 @@
 add_library(runtime OBJECT
+        helpers.cpp
         Tracing.cpp
         ArrowColumn.cpp
         ArrowTable.cpp

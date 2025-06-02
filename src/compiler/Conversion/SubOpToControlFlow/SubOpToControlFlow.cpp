@@ -2142,45 +2142,47 @@ class ScanListLowering : public SubOpConversionPattern<subop::ScanListOp> {
       auto unpacked = rewriter.create<util::UnPackOp>(loc, adaptor.getList());
       auto ptr = unpacked.getResult(0);
       auto hash = unpacked.getResult(1);
+      auto initialValid = unpacked.getResult(2);
       auto iteratorType = ptr.getType();
       auto referenceType = mlir::cast<subop::ListType>(scanOp.getList().getType()).getT();
-
-      auto whileOp = rewriter.create<mlir::scf::WhileOp>(loc, iteratorType, ptr);
-      Block* before = new Block;
-      Block* after = new Block;
-      whileOp.getBefore().push_back(before);
-      whileOp.getAfter().push_back(after);
-
-      mlir::Value beforePtr = before->addArgument(iteratorType, loc);
-      mlir::Value afterPtr = after->addArgument(iteratorType, loc);
-      rewriter.atStartOf(before, [&](SubOpRewriter& rewriter) {
-         mlir::Value cond = rewriter.create<util::IsRefValidOp>(loc, rewriter.getI1Type(), beforePtr);
-         rewriter.create<mlir::scf::ConditionOp>(loc, cond, beforePtr);
-      });
-      rewriter.atStartOf(after, [&](SubOpRewriter& rewriter) {
-         auto tupleType = mlir::TupleType::get(getContext(), unpackTypes(referenceType.getMembers().getTypes()));
-         auto i8PtrType = util::RefType::get(getContext(), rewriter.getI8Type());
-         Value castedPtr = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(getContext(), mlir::TupleType::get(getContext(), {i8PtrType, rewriter.getIndexType(), tupleType})), afterPtr);
-         Value valuePtr = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(getContext(), tupleType), castedPtr, 2);
-         if (hashIndexedViewType.getCompareHashForLookup()) {
-            Value hashPtr = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(getContext(), rewriter.getIndexType()), castedPtr, 1);
-            mlir::Value currHash = rewriter.create<util::LoadOp>(loc, hashPtr, mlir::Value());
-            mlir::Value hashEq = rewriter.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::eq, currHash, hash);
-            rewriter.create<mlir::scf::IfOp>(
-               loc, hashEq, [&](mlir::OpBuilder& builder1, mlir::Location loc) {
+      rewriter.create<mlir::scf::IfOp>(
+         loc, initialValid, [&](mlir::OpBuilder& builder1, mlir::Location loc) {
+            auto whileOp = rewriter.create<mlir::scf::WhileOp>(loc, iteratorType, ptr);
+            Block* before = new Block;
+            Block* after = new Block;
+            whileOp.getBefore().push_back(before);
+            whileOp.getAfter().push_back(after);
+            rewriter.create<scf::YieldOp>(loc);
+            mlir::Value beforePtr = before->addArgument(iteratorType, loc);
+            mlir::Value afterPtr = after->addArgument(iteratorType, loc);
+            rewriter.atStartOf(before, [&](SubOpRewriter& rewriter) {
+               auto tupleType = mlir::TupleType::get(getContext(), unpackTypes(referenceType.getMembers().getTypes()));
+               auto i8PtrType = util::RefType::get(getContext(), rewriter.getI8Type());
+               Value castedPtr = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(getContext(), mlir::TupleType::get(getContext(), {i8PtrType, rewriter.getIndexType(), tupleType})), beforePtr);
+               Value valuePtr = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(getContext(), tupleType), castedPtr, 2);
+               if (hashIndexedViewType.getCompareHashForLookup()) {
+                  Value hashPtr = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(getContext(), rewriter.getIndexType()), castedPtr, 1);
+                  mlir::Value currHash = rewriter.create<util::LoadOp>(loc, hashPtr, mlir::Value());
+                  mlir::Value hashEq = rewriter.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::eq, currHash, hash);
+                  rewriter.create<mlir::scf::IfOp>(
+                     loc, hashEq, [&](mlir::OpBuilder& builder1, mlir::Location loc) {
+                        mapping.define(scanOp.getElem(), valuePtr);
+                        rewriter.replaceTupleStream(scanOp, mapping);
+                        builder1.create<mlir::scf::YieldOp>(loc);
+                     });
+               } else {
                   mapping.define(scanOp.getElem(), valuePtr);
                   rewriter.replaceTupleStream(scanOp, mapping);
-                  builder1.create<mlir::scf::YieldOp>(loc);
-               });
-         } else {
-            mapping.define(scanOp.getElem(), valuePtr);
-            rewriter.replaceTupleStream(scanOp, mapping);
-         }
-         Value nextPtr = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(getContext(), i8PtrType), castedPtr, 0);
-         mlir::Value next = rewriter.create<util::LoadOp>(loc, nextPtr, mlir::Value());
-         //next = rewriter.create<util::FilterTaggedPtr>(loc, next.getType(), next, hash);
-         rewriter.create<mlir::scf::YieldOp>(loc, next);
-      });
+               }
+               Value nextPtr = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(getContext(), i8PtrType), castedPtr, 0);
+               mlir::Value next = rewriter.create<util::LoadOp>(loc, nextPtr, mlir::Value());
+               mlir::Value cond = rewriter.create<util::IsRefValidOp>(loc, rewriter.getI1Type(), next);
+               rewriter.create<mlir::scf::ConditionOp>(loc, cond, next);
+            });
+            rewriter.atStartOf(after, [&](SubOpRewriter& rewriter) {
+               rewriter.create<mlir::scf::YieldOp>(loc, afterPtr);
+            });
+         });
 
       return success();
    }
@@ -2436,8 +2438,9 @@ class LookupHashIndexedViewLowering : public SubOpTupleStreamConsumerConversionP
       Value buckedPos = rewriter.create<arith::AndIOp>(loc, htMask, hash);
       Value ptr = rewriter.create<util::LoadOp>(loc, util::RefType::get(getContext(), rewriter.getI8Type()), ht, buckedPos);
       //optimization
-      ptr = rewriter.create<util::FilterTaggedPtr>(loc, ptr.getType(), ptr, hash);
-      Value matches = rewriter.create<util::PackOp>(loc, ValueRange{ptr, hash});
+      Value refValid = rewriter.create<util::PtrTagMatches>(loc, rewriter.getI1Type(), ptr, hash);
+      ptr = rewriter.create<util::UnTagPtr>(loc, ptr.getType(), ptr);
+      Value matches = rewriter.create<util::PackOp>(loc, ValueRange{ptr, hash, refValid});
 
       mapping.define(lookupOp.getRef(), matches);
       rewriter.replaceTupleStream(lookupOp, mapping);
@@ -2522,22 +2525,24 @@ class PureLookupHashMapLowering : public SubOpTupleStreamConsumerConversionPatte
       // ptr = &hashtable[position]
       Type bucketPtrType = util::RefType::get(context, entryType);
       Value ptr = rewriter.create<util::LoadOp>(loc, bucketPtrType, ht, position);
-      ptr = rewriter.create<util::FilterTaggedPtr>(loc, ptr.getType(), ptr, hashed);
-
-      auto whileOp = rewriter.create<scf::WhileOp>(loc, bucketPtrType, ValueRange({ptr}));
-      Block* before = new Block;
-      whileOp.getBefore().push_back(before);
-      before->addArgument(bucketPtrType, loc);
-      Block* after = new Block;
-      whileOp.getAfter().push_back(after);
-      after->addArgument(bucketPtrType, loc);
-      rewriter.atStartOf(before, [&](SubOpRewriter& rewriter) {
-         Value currEntryPtr = rewriter.create<util::UnTagPtr>(loc, before->getArgument(0).getType(), before->getArgument(0));
-         Value ptr = currEntryPtr;
-         //    if (*ptr != nullptr){
-         Value cmp = rewriter.create<util::IsRefValidOp>(loc, rewriter.getI1Type(), currEntryPtr);
-         auto ifOp = rewriter.create<scf::IfOp>(
-            loc, cmp, [&](OpBuilder& b, Location loc) {
+      Value tagMatches = rewriter.create<util::PtrTagMatches>(loc, rewriter.getI1Type(), ptr, hashed);
+      ptr = rewriter.create<util::UnTagPtr>(loc, ptr.getType(), ptr);
+      auto ifOpOuter = rewriter.create<mlir::scf::IfOp>(
+         loc, tagMatches, [&](mlir::OpBuilder& builder1, mlir::Location loc) {
+            auto whileOp = rewriter.create<scf::WhileOp>(loc, bucketPtrType, ValueRange({ptr}));
+            Block* before = new Block;
+            whileOp.getBefore().push_back(before);
+            before->addArgument(bucketPtrType, loc);
+            Block* after = new Block;
+            whileOp.getAfter().push_back(after);
+            after->addArgument(bucketPtrType, loc);
+            rewriter.atStartOf(before, [&](SubOpRewriter& rewriter) {
+               Value currEntryPtr = before->getArgument(0);
+               Value ptr = currEntryPtr;
+               //    if (*ptr != nullptr){
+               Value cmp = rewriter.create<util::IsRefValidOp>(loc, rewriter.getI1Type(), currEntryPtr);
+               auto ifOp = rewriter.create<scf::IfOp>(
+                  loc, cmp, [&](OpBuilder& b, Location loc) {
                Value hashAddress=rewriter.create<util::TupleElementPtrOp>(loc, idxPtrType, currEntryPtr, 1);
                Value entryHash = rewriter.create<util::LoadOp>(loc, idxType, hashAddress);
                Value hashMatches = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, entryHash,hashed);
@@ -2568,15 +2573,20 @@ class PureLookupHashMapLowering : public SubOpTupleStreamConsumerConversionPatte
                      b.create<scf::YieldOp>(loc, ValueRange{trueValue, newPtr });});
                b.create<scf::YieldOp>(loc, ifOpH.getResults()); }, [&](OpBuilder& b, Location loc) { b.create<scf::YieldOp>(loc, ValueRange{falseValue, ptr}); });
 
-         Value done = ifOp.getResult(0);
-         Value newPtr = ifOp.getResult(1);
-         rewriter.create<scf::ConditionOp>(loc, done, ValueRange({newPtr}));
-      });
-      rewriter.atStartOf(after, [&](SubOpRewriter& rewriter) {
-         rewriter.create<scf::YieldOp>(loc, after->getArguments());
-      });
+               Value done = ifOp.getResult(0);
+               Value newPtr = ifOp.getResult(1);
+               rewriter.create<scf::ConditionOp>(loc, done, ValueRange({newPtr}));
+            });
+            rewriter.atStartOf(after, [&](SubOpRewriter& rewriter) {
+               rewriter.create<scf::YieldOp>(loc, after->getArguments());
+            });
+            rewriter.create<scf::YieldOp>(loc, ValueRange{whileOp.getResult(0)}); },
+         [&](mlir::OpBuilder& builder1, mlir::Location loc) {
+            Value invalidPtr = rewriter.create<util::InvalidRefOp>(loc, bucketPtrType);
+            rewriter.create<scf::YieldOp>(loc, ValueRange{invalidPtr});
+         });
 
-      Value currEntryPtr = whileOp.getResult(0);
+      Value currEntryPtr = ifOpOuter.getResult(0);
       currEntryPtr = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(getContext(), rewriter.getI8Type()), currEntryPtr);
       mapping.define(lookupOp.getRef(), currEntryPtr);
       rewriter.replaceTupleStream(lookupOp, mapping);
@@ -2626,70 +2636,77 @@ class PureLookupPreAggregationHtLowering : public SubOpTupleStreamConsumerConver
       Value htMask = unpacked[1];
       Value position = rewriter.create<arith::AndIOp>(loc, htMask, rewriter.create<arith::ShRUIOp>(loc, hashed, rewriter.create<mlir::arith::ConstantIndexOp>(loc, 6)));
       Value ptr = rewriter.create<util::LoadOp>(loc, bucketPtrType, ht, position);
-      ptr = rewriter.create<util::FilterTaggedPtr>(loc, ptr.getType(), ptr, hashed);
-
+      Value tagMatches = rewriter.create<util::PtrTagMatches>(loc, rewriter.getI1Type(), ptr, hashed);
+      ptr = rewriter.create<util::UnTagPtr>(loc, ptr.getType(), ptr);
       Value trueValue = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
       Value falseValue = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
+      auto ifOpOuter = rewriter.create<mlir::scf::IfOp>(
+         loc, tagMatches, [&](mlir::OpBuilder& builder1, mlir::Location loc) {
+            auto whileOp = rewriter.create<scf::WhileOp>(loc, bucketPtrType, ValueRange({ptr}));
+            Block* before = new Block;
+            whileOp.getBefore().push_back(before);
+            before->addArgument(bucketPtrType, loc);
+            Block* after = new Block;
+            whileOp.getAfter().push_back(after);
+            after->addArgument(bucketPtrType, loc);
+            rewriter.atStartOf(before, [&](SubOpRewriter& rewriter) {
+               Value currEntryPtr = before->getArgument(0);
+               Value ptr = currEntryPtr;
+               //    if (*ptr != nullptr){
+               Value cmp = rewriter.create<util::IsRefValidOp>(loc, rewriter.getI1Type(), currEntryPtr);
+               auto ifOp = rewriter.create<scf::IfOp>(
+                  loc, cmp, [&](OpBuilder& b, Location loc) {
+                     Value hashAddress=rewriter.create<util::TupleElementPtrOp>(loc, idxPtrType, currEntryPtr, 1);
+                     Value entryHash = rewriter.create<util::LoadOp>(loc, idxType, hashAddress);
+                     Value hashMatches = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, entryHash,hashed);
+                     auto ifOpH = b.create<scf::IfOp>(
+                        loc, hashMatches, [&](OpBuilder& b, Location loc) {
+                           Value kvAddress = rewriter.create<util::TupleElementPtrOp>(loc, kvPtrType, currEntryPtr, 2);
+                           Value keyRef = rewriter.create<util::TupleElementPtrOp>(loc, keyPtrType, kvAddress, 0);
+                           auto keyValues=keyStorageHelper.getValueMap(keyRef,rewriter,loc);
+                           Value keyMatches = equalFnBuilder(b, keyValues, lookupKey);
+                           auto ifOp2 = b.create<scf::IfOp>(
+                              loc, keyMatches, [&](OpBuilder& b, Location loc) {
 
-      auto whileOp = rewriter.create<scf::WhileOp>(loc, bucketPtrType, ValueRange({ptr}));
-      Block* before = new Block;
-      whileOp.getBefore().push_back(before);
-      before->addArgument(bucketPtrType, loc);
-      Block* after = new Block;
-      whileOp.getAfter().push_back(after);
-      after->addArgument(bucketPtrType, loc);
-      rewriter.atStartOf(before, [&](SubOpRewriter& rewriter) {
-         Value currEntryPtr = rewriter.create<util::UnTagPtr>(loc, before->getArgument(0).getType(), before->getArgument(0));
-         Value ptr = currEntryPtr;
-         //    if (*ptr != nullptr){
-         Value cmp = rewriter.create<util::IsRefValidOp>(loc, rewriter.getI1Type(), currEntryPtr);
-         auto ifOp = rewriter.create<scf::IfOp>(
-            loc, cmp, [&](OpBuilder& b, Location loc) {
-               Value hashAddress=rewriter.create<util::TupleElementPtrOp>(loc, idxPtrType, currEntryPtr, 1);
-               Value entryHash = rewriter.create<util::LoadOp>(loc, idxType, hashAddress);
-               Value hashMatches = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, entryHash,hashed);
-               auto ifOpH = b.create<scf::IfOp>(
-                  loc, hashMatches, [&](OpBuilder& b, Location loc) {
-                     Value kvAddress = rewriter.create<util::TupleElementPtrOp>(loc, kvPtrType, currEntryPtr, 2);
-                     Value keyRef = rewriter.create<util::TupleElementPtrOp>(loc, keyPtrType, kvAddress, 0);
-                     auto keyValues=keyStorageHelper.getValueMap(keyRef,rewriter,loc);
-                     Value keyMatches = equalFnBuilder(b, keyValues, lookupKey);
-                     auto ifOp2 = b.create<scf::IfOp>(
-                        loc, keyMatches, [&](OpBuilder& b, Location loc) {
 
-
-                           b.create<scf::YieldOp>(loc, ValueRange{falseValue, ptr}); }, [&](OpBuilder& b, Location loc) {
+                                 b.create<scf::YieldOp>(loc, ValueRange{falseValue, ptr}); }, [&](OpBuilder& b, Location loc) {
+                                 Value nextPtrAddr=rewriter.create<util::TupleElementPtrOp>(loc, i8PtrPtrType, currEntryPtr, 0);
+                                 //          ptr = &entry.next
+                                 Value newEntryPtr=b.create<util::LoadOp>(loc,nextPtrAddr,mlir::Value());
+                                 Value newPtr=b.create<util::GenericMemrefCastOp>(loc, bucketPtrType,newEntryPtr);
+                                 //          yield ptr,done=false
+                                 b.create<scf::YieldOp>(loc, ValueRange{trueValue, newPtr }); });
+                           b.create<scf::YieldOp>(loc, ifOp2.getResults());
+                        }, [&](OpBuilder& b, Location loc) {
                            Value nextPtrAddr=rewriter.create<util::TupleElementPtrOp>(loc, i8PtrPtrType, currEntryPtr, 0);
                            //          ptr = &entry.next
                            Value newEntryPtr=b.create<util::LoadOp>(loc,nextPtrAddr,mlir::Value());
                            Value newPtr=b.create<util::GenericMemrefCastOp>(loc, bucketPtrType,newEntryPtr);
                            //          yield ptr,done=false
-                           b.create<scf::YieldOp>(loc, ValueRange{trueValue, newPtr }); });
-                     b.create<scf::YieldOp>(loc, ifOp2.getResults());
-                  }, [&](OpBuilder& b, Location loc) {
-                     Value nextPtrAddr=rewriter.create<util::TupleElementPtrOp>(loc, i8PtrPtrType, currEntryPtr, 0);
-                     //          ptr = &entry.next
-                     Value newEntryPtr=b.create<util::LoadOp>(loc,nextPtrAddr,mlir::Value());
-                     Value newPtr=b.create<util::GenericMemrefCastOp>(loc, bucketPtrType,newEntryPtr);
-                     //          yield ptr,done=false
-                     b.create<scf::YieldOp>(loc, ValueRange{trueValue, newPtr });});
-               b.create<scf::YieldOp>(loc, ifOpH.getResults()); }, [&](OpBuilder& b, Location loc) { b.create<scf::YieldOp>(loc, ValueRange{falseValue, ptr}); });
+                           b.create<scf::YieldOp>(loc, ValueRange{trueValue, newPtr });});
+                     b.create<scf::YieldOp>(loc, ifOpH.getResults()); }, [&](OpBuilder& b, Location loc) { b.create<scf::YieldOp>(loc, ValueRange{falseValue, ptr}); });
 
-         Value done = ifOp.getResult(0);
-         Value newPtr = ifOp.getResult(1);
-         rewriter.create<scf::ConditionOp>(loc, done, ValueRange({newPtr}));
-      });
-      rewriter.atStartOf(after, [&](SubOpRewriter& rewriter) {
-         rewriter.create<scf::YieldOp>(loc, after->getArguments());
-      });
+               Value done = ifOp.getResult(0);
+               Value newPtr = ifOp.getResult(1);
+               rewriter.create<scf::ConditionOp>(loc, done, ValueRange({newPtr}));
+            });
+            rewriter.atStartOf(after, [&](SubOpRewriter& rewriter) {
+               rewriter.create<scf::YieldOp>(loc, after->getArguments());
+            });
+            rewriter.create<scf::YieldOp>(loc, ValueRange{whileOp.getResult(0)}); },
+         [&](mlir::OpBuilder& builder1, mlir::Location loc) {
+            Value invalidPtr = rewriter.create<util::InvalidRefOp>(loc, bucketPtrType);
+            rewriter.create<scf::YieldOp>(loc, ValueRange{invalidPtr});
+         });
 
-      Value currEntryPtr = whileOp.getResult(0);
+      Value currEntryPtr = ifOpOuter.getResult(0);
       currEntryPtr = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(getContext(), rewriter.getI8Type()), currEntryPtr);
       mapping.define(lookupOp.getRef(), currEntryPtr);
       rewriter.replaceTupleStream(lookupOp, mapping);
       return mlir::success();
    }
 };
+
 class LookupHashMultiMapLowering : public SubOpTupleStreamConsumerConversionPattern<subop::LookupOp> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::LookupOp>::SubOpTupleStreamConsumerConversionPattern;
@@ -2735,7 +2752,10 @@ class LookupHashMultiMapLowering : public SubOpTupleStreamConsumerConversionPatt
       // ptr = &hashtable[position]
       Type bucketPtrType = util::RefType::get(context, entryType);
       Value ptr = rewriter.create<util::LoadOp>(loc, bucketPtrType, ht, position);
-      ptr = rewriter.create<util::FilterTaggedPtr>(loc, ptr.getType(), ptr, hashed);
+      Value tagMatches = rewriter.create<util::PtrTagMatches>(loc, rewriter.getI1Type(), ptr, hashed);
+      ptr = rewriter.create<util::UnTagPtr>(loc, ptr.getType(), ptr);
+      auto ifOpOuter = rewriter.create<mlir::scf::IfOp>(
+         loc, tagMatches, [&](mlir::OpBuilder& builder1, mlir::Location loc) {
 
       auto whileOp = rewriter.create<scf::WhileOp>(loc, bucketPtrType, ValueRange({ptr}));
       Block* before = new Block;
@@ -2786,7 +2806,13 @@ class LookupHashMultiMapLowering : public SubOpTupleStreamConsumerConversionPatt
       rewriter.atStartOf(after, [&](SubOpRewriter& rewriter) {
          rewriter.create<scf::YieldOp>(loc, after->getArguments());
       });
-      Value currEntryPtr = whileOp.getResult(0);
+            rewriter.create<scf::YieldOp>(loc, ValueRange{whileOp.getResult(0)}); },
+         [&](mlir::OpBuilder& builder1, mlir::Location loc) {
+            Value invalidPtr = rewriter.create<util::InvalidRefOp>(loc, bucketPtrType);
+            rewriter.create<scf::YieldOp>(loc, ValueRange{invalidPtr});
+         });
+
+      Value currEntryPtr = ifOpOuter.getResult(0);
       mapping.define(lookupOp.getRef(), currEntryPtr);
       rewriter.replaceTupleStream(lookupOp, mapping);
       return mlir::success();
@@ -2839,7 +2865,8 @@ class InsertMultiMapLowering : public SubOpTupleStreamConsumerConversionPattern<
       // ptr = &hashtable[position]
       Type bucketPtrType = util::RefType::get(context, entryType);
       Value firstPtr = rewriter.create<util::LoadOp>(loc, bucketPtrType, ht, position);
-      firstPtr = rewriter.create<util::FilterTaggedPtr>(loc, firstPtr.getType(), firstPtr, hashed);
+      Value tagMatches = rewriter.create<util::PtrTagMatches>(loc, rewriter.getI1Type(), firstPtr, hashed);
+      firstPtr = rewriter.create<arith::SelectOp>(loc, tagMatches, rewriter.create<util::UnTagPtr>(loc, firstPtr.getType(), firstPtr), rewriter.create<util::InvalidRefOp>(loc, bucketPtrType));
 
       auto whileOp = rewriter.create<scf::WhileOp>(loc, bucketPtrType, ValueRange({firstPtr}));
       Block* before = new Block;
@@ -2911,6 +2938,7 @@ class InsertMultiMapLowering : public SubOpTupleStreamConsumerConversionPattern<
       return mlir::success();
    }
 };
+
 class LookupPreAggrHtFragment : public SubOpTupleStreamConsumerConversionPattern<subop::LookupOrInsertOp> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::LookupOrInsertOp>::SubOpTupleStreamConsumerConversionPattern;
@@ -3003,6 +3031,7 @@ class LookupPreAggrHtFragment : public SubOpTupleStreamConsumerConversionPattern
       return mlir::success();
    }
 };
+
 class LookupHashMapLowering : public SubOpTupleStreamConsumerConversionPattern<subop::LookupOrInsertOp> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::LookupOrInsertOp>::SubOpTupleStreamConsumerConversionPattern;
@@ -3066,7 +3095,8 @@ class LookupHashMapLowering : public SubOpTupleStreamConsumerConversionPattern<s
       // ptr = &hashtable[position]
       Type bucketPtrType = util::RefType::get(context, entryType);
       Value firstPtr = rewriter.create<util::LoadOp>(loc, bucketPtrType, ht, position);
-      firstPtr = rewriter.create<util::FilterTaggedPtr>(loc, firstPtr.getType(), firstPtr, hashed);
+      Value tagMatches = rewriter.create<util::PtrTagMatches>(loc, rewriter.getI1Type(), firstPtr, hashed);
+      firstPtr = rewriter.create<arith::SelectOp>(loc, tagMatches, rewriter.create<util::UnTagPtr>(loc, firstPtr.getType(), firstPtr), rewriter.create<util::InvalidRefOp>(loc, firstPtr.getType()));
 
       auto whileOp = rewriter.create<scf::WhileOp>(loc, bucketPtrType, ValueRange({firstPtr}));
       Block* before = new Block;
@@ -3077,7 +3107,7 @@ class LookupHashMapLowering : public SubOpTupleStreamConsumerConversionPattern<s
       whileOp.getAfter().push_back(after);
 
       rewriter.atStartOf(before, [&](SubOpRewriter& rewriter) {
-         Value ptr = rewriter.create<util::UnTagPtr>(loc, before->getArgument(0).getType(), before->getArgument(0));
+         Value ptr = before->getArgument(0);
 
          Value currEntryPtr = ptr;
          //    if (*ptr != nullptr){
@@ -3140,6 +3170,7 @@ class LookupHashMapLowering : public SubOpTupleStreamConsumerConversionPattern<s
       return mlir::success();
    }
 };
+
 class LookupExternalHashIndexLowering : public SubOpTupleStreamConsumerConversionPattern<subop::LookupOp> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::LookupOp>::SubOpTupleStreamConsumerConversionPattern;
