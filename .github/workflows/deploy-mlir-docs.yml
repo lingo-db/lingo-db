@@ -39,8 +39,17 @@ jobs:
           mkdir -p docs-repo/docs/ForDevelopers/MLIR/Dialects
           cp -r build/lingodb-debug/docs/* docs-repo/docs/ForDevelopers/MLIR/Dialects/
 
-      - name: Show diff of docs repository
+      - name: Git Add and show diff
         run: |
           cd docs-repo
+          git add docs/ForDevelopers/MLIR/Dialects/
           git status
           git diff
+
+      - name: Commit and push changes to docs repository
+        run: |
+          cd docs-repo
+          git config user.name "Docs Action Bot"
+          git config user.email "docs-bot@lingo-db.com"
+          git commit -m "Update MLIR dialect documentation" || echo "No changes to commit"
+          git push origin generated-docs
