@@ -12,6 +12,9 @@ def convert_markdown_to_html(input_file, output_file):
 
     # Iterate through each line in the input file
     for line in lines:
+        if line.strip() =="[TOC]":
+            # Skip the [TOC] line
+            continue
         # Check if we are entering a markdown block
         if "{{% markdown %}}" in line:
             in_markdown_block = True
