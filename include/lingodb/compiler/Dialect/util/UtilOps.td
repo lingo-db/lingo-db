@@ -136,7 +136,7 @@ let results=(outs BufferType:$res);
 let assemblyFormat = "$ptr `:` type($ptr) `,` $len `->` type($res) attr-dict";
 }
 def BufferGetMemRefOp : Util_Op<"buffer_get_memref",[Pure]> {
-    let summary = "create a memref<?xi8> with dimension info to the buffer";
+    let summary = "create a `memref<?xi8>` with dimension info to the buffer";
     let arguments = (ins BufferType:$buffer);
     let results = (outs Arg<MemRefRankOf<[I8], [1]>>:$memref);
     let assemblyFormat = "$buffer `:`  type($buffer) `->` type($memref) attr-dict";

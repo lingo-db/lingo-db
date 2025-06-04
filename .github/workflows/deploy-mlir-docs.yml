@@ -1,0 +1,55 @@
+name: Generate and Deploy MLIR Docs
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  generate-docs:
+    container: ghcr.io/lingo-db/lingodb-dev:c26a3fc2f7789da61d04b7e416915a530b70db2d
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout main repository
+        uses: actions/checkout@v3
+
+      - name: Generate documentation
+        run: |
+          make build/lingodb-debug/.stamp
+          cd build/lingodb-debug/
+          cmake --build . --target mlir-doc
+          cd ../..
+
+      - name: Fix generated documentation
+        run: |
+          bash tools/fix-doc/fix-doc.sh build/lingodb-debug/docs/
+
+      - name: Clone docs repository
+        run: |
+          git clone https://x-access-token:${{ secrets.DOCS_DEPLOY_TOKEN }}@github.com/lingo-db/lingo-db.github.io.git docs-repo
+          cd docs-repo
+          git fetch
+          git checkout generated-docs || git checkout -b generated-docs
+          cd ..
+
+      - name: Copy generated docs
+        run: |
+          rm -rf docs-repo/docs/ForDevelopers/MLIR/Dialects
+          mkdir -p docs-repo/docs/ForDevelopers/MLIR/Dialects
+          cp -r build/lingodb-debug/docs/* docs-repo/docs/ForDevelopers/MLIR/Dialects/
+
+      - name: Git Add and show diff
+        run: |
+          cd docs-repo
+          git add docs/ForDevelopers/MLIR/Dialects/
+          git status
+          git diff
+
+      - name: Commit and push changes to docs repository
+        run: |
+          cd docs-repo
+          git config user.name "Docs Action Bot"
+          git config user.email "docs-bot@lingo-db.com"
+          git commit -m "Update MLIR dialect documentation" || echo "No changes to commit"
+          git push origin generated-docs
