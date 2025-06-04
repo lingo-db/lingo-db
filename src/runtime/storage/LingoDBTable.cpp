@@ -1,6 +1,6 @@
 #include "lingodb/runtime/storage/LingoDBTable.h"
 #include "lingodb/catalog/Defs.h"
-//#include "lingodb/runtime/RecordBatchInfo.h"
+#include "lingodb/runtime/ArrowView.h"
 #include "lingodb/scheduler/Tasks.h"
 #include "lingodb/utility/Serialization.h"
 #include "lingodb/utility/Tracer.h"
@@ -16,14 +16,12 @@
 #include <iostream>
 #include <random>
 #include <ranges>
-#include <lingodb/runtime/ArrowView.h>
 namespace {
 namespace utility = lingodb::utility;
 static utility::Tracer::Event processMorsel("DataSourceIteration", "processMorsel");
 
 static utility::Tracer::Event processMorselSingle("DataSourceIteration", "processMorselSingle");
 
-static utility::Tracer::Event cleanupTLS("DataSourceIteration", "cleanup");
 std::vector<lingodb::runtime::LingoDBTable::TableChunk> loadTable(std::string name) {
    auto inputFile = arrow::io::ReadableFile::Open(name).ValueOrDie();
    auto batchReader = arrow::ipc::RecordBatchFileReader::Open(inputFile).ValueOrDie();
@@ -225,7 +223,7 @@ LingoDBTable::TableChunk::TableChunk(std::shared_ptr<arrow::RecordBatch> data, s
    }
    for (auto colId = 0; colId < data->num_columns(); colId++) {
       auto arrayData = data->column(colId)->data();
-      columnInfo.push_back(ArrayView{.length = arrayData->length, .null_count = arrayData->null_count, .offset = arrayData->offset, .n_buffers = static_cast<int64_t>(arrayData->buffers.size()), .n_children = static_cast<int64_t>(arrayData->child_data.size()), .buffers = &buffers[bufferStart.at(colId)], .children = nullptr});
+      columnInfo.push_back(ArrayView{.length = arrayData->length, .nullCount = arrayData->null_count, .offset = arrayData->offset, .nBuffers = static_cast<int64_t>(arrayData->buffers.size()), .nChildren = static_cast<int64_t>(arrayData->child_data.size()), .buffers = &buffers[bufferStart.at(colId)], .children = nullptr});
    }
 }
 

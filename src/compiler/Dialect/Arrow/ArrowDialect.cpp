@@ -4,7 +4,7 @@
 #include <mlir/Transforms/InliningUtils.h>
 using namespace mlir;
 
-struct DSAInlinerInterface : public DialectInlinerInterface {
+struct ArrowInlinerInterface : public DialectInlinerInterface {
    using DialectInlinerInterface::DialectInlinerInterface;
    bool isLegalToInline(Operation*, Region*, bool, IRMapping&) const final override {
       return true;
@@ -18,7 +18,7 @@ void lingodb::compiler::dialect::arrow::ArrowDialect::initialize() {
 #define GET_OP_LIST
 #include "lingodb/compiler/Dialect/Arrow/IR/ArrowOps.cpp.inc"
       >();
-   addInterfaces<DSAInlinerInterface>();
+   addInterfaces<ArrowInlinerInterface>();
    registerTypes();
 }
 #include "lingodb/compiler/Dialect/Arrow/IR/ArrowOpsDialect.cpp.inc"

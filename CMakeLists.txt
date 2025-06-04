@@ -134,7 +134,7 @@ add_subdirectory(src/compiler/Dialect/Arrow)
 add_subdirectory(src/compiler/Dialect/util)
 
 add_subdirectory(src/compiler/Conversion/DBToStd)
-add_subdirectory(src/compiler/Conversion/DSAToStd)
+add_subdirectory(src/compiler/Conversion/ArrowToStd)
 add_subdirectory(src/compiler/Conversion/RelAlgToSubOp)
 add_subdirectory(src/compiler/Conversion/SubOpToControlFlow)
 

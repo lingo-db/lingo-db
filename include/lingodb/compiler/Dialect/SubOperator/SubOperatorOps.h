@@ -1,8 +1,8 @@
 #ifndef LINGODB_COMPILER_DIALECT_SUBOPERATOR_SUBOPERATOROPS_H
 #define LINGODB_COMPILER_DIALECT_SUBOPERATOR_SUBOPERATOROPS_H
 
-#include "lingodb/compiler/Dialect/DB/IR/DBTypes.h"
 #include "lingodb/compiler/Dialect/Arrow/IR/ArrowTypes.h"
+#include "lingodb/compiler/Dialect/DB/IR/DBTypes.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorInterfaces.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOpsAttributes.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOpsEnums.h.inc"
