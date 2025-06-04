@@ -54,7 +54,7 @@ static TupleType convertTuple(TupleType tupleType, TypeConverter& typeConverter)
 }
 template <class Fn>
 static void createAtArrayCreation(ConversionPatternRewriter& rewriter, mlir::Value array, const Fn& fn) {
-   if (auto creationOp = array.getDefiningOp()) {
+   if (auto* creationOp = array.getDefiningOp()) {
       mlir::OpBuilder::InsertionGuard guard(rewriter);
       rewriter.setInsertionPointAfter(creationOp);
       fn(rewriter);
@@ -176,7 +176,6 @@ class BuilderAppendFixedSizedLowering : public OpConversionPattern<arrow::Append
    public:
    using OpConversionPattern<arrow::AppendFixedSizedOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(arrow::AppendFixedSizedOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto intType = op.getValue().getType();
       auto loc = op.getLoc();
       auto builderVal = adaptor.getBuilder();
       auto isValid = adaptor.getValid();
@@ -204,7 +203,6 @@ class BuilderAppendBoolLowering : public OpConversionPattern<arrow::AppendBoolOp
    public:
    using OpConversionPattern<arrow::AppendBoolOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(arrow::AppendBoolOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto intType = op.getValue().getType();
       auto loc = op.getLoc();
       auto builderVal = adaptor.getBuilder();
       auto isValid = adaptor.getValid();
@@ -223,7 +221,6 @@ class BuilderAppendVariableSizeBinaryLowering : public OpConversionPattern<arrow
    public:
    using OpConversionPattern<arrow::AppendVariableSizeBinaryOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(arrow::AppendVariableSizeBinaryOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto intType = op.getValue().getType();
       auto loc = op.getLoc();
       auto builderVal = adaptor.getBuilder();
       auto isValid = adaptor.getValid();
@@ -271,35 +268,35 @@ void ArrowToStdLoweringPass::runOnOperation() {
    target.addIllegalDialect<arrow::ArrowDialect>();
    TypeConverter typeConverter;
    typeConverter.addConversion([&](mlir::Type type) { return type; });
-   static auto hasDSAType = [](TypeConverter& converter, TypeRange types) -> bool {
+   static auto hasArrowType = [](TypeConverter& converter, TypeRange types) -> bool {
       return llvm::any_of(types, [&converter](mlir::Type t) { auto converted = converter.convertType(t);return converted&&converted!=t; });
    };
-   auto opIsWithoutDSATypes = [&](Operation* op) { return !hasDSAType(typeConverter, op->getOperandTypes()) && !hasDSAType(typeConverter, op->getResultTypes()); };
-   target.addDynamicallyLegalDialect<scf::SCFDialect>(opIsWithoutDSATypes);
-   target.addDynamicallyLegalDialect<arith::ArithDialect>(opIsWithoutDSATypes);
+   auto opIsWithoutArrowTypes = [&](Operation* op) { return !hasArrowType(typeConverter, op->getOperandTypes()) && !hasArrowType(typeConverter, op->getResultTypes()); };
+   target.addDynamicallyLegalDialect<scf::SCFDialect>(opIsWithoutArrowTypes);
+   target.addDynamicallyLegalDialect<arith::ArithDialect>(opIsWithoutArrowTypes);
 
    target.addLegalDialect<cf::ControlFlowDialect>();
 
-   target.addDynamicallyLegalDialect<util::UtilDialect>(opIsWithoutDSATypes);
+   target.addDynamicallyLegalDialect<util::UtilDialect>(opIsWithoutArrowTypes);
    target.addDynamicallyLegalOp<mlir::func::FuncOp>([&](mlir::func::FuncOp op) {
-      auto isLegal = !hasDSAType(typeConverter, op.getFunctionType().getInputs()) &&
-         !hasDSAType(typeConverter, op.getFunctionType().getResults());
+      auto isLegal = !hasArrowType(typeConverter, op.getFunctionType().getInputs()) &&
+         !hasArrowType(typeConverter, op.getFunctionType().getResults());
       return isLegal;
    });
    target.addDynamicallyLegalOp<func::ConstantOp>([&](func::ConstantOp op) {
       if (auto functionType = mlir::dyn_cast_or_null<mlir::FunctionType>(op.getType())) {
-         auto isLegal = !hasDSAType(typeConverter, functionType.getInputs()) &&
-            !hasDSAType(typeConverter, functionType.getResults());
+         auto isLegal = !hasArrowType(typeConverter, functionType.getInputs()) &&
+            !hasArrowType(typeConverter, functionType.getResults());
          return isLegal;
       } else {
          return true;
       }
    });
-   target.addDynamicallyLegalOp<func::CallOp, func::CallIndirectOp, func::ReturnOp>(opIsWithoutDSATypes);
+   target.addDynamicallyLegalOp<func::CallOp, func::CallIndirectOp, func::ReturnOp>(opIsWithoutArrowTypes);
 
    target.addDynamicallyLegalOp<util::SizeOfOp>(
       [&typeConverter](util::SizeOfOp op) {
-         auto isLegal = !hasDSAType(typeConverter, op.getType());
+         auto isLegal = !hasArrowType(typeConverter, op.getType());
          return isLegal;
       });
    auto* ctxt = &getContext();

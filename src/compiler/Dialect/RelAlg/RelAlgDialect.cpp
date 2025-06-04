@@ -143,7 +143,6 @@ void RelAlgDialect::initialize() {
    addInterfaces<RelalgInlinerInterface>();
    addInterfaces<RelAlgFoldInterface>();
    getContext()->loadDialect<db::DBDialect>();
-//getContext()->loadDialect<dsa::DSADialect>();
    getContext()->loadDialect<mlir::arith::ArithDialect>();
    getContext()->loadDialect<tuples::TupleStreamDialect>();
 

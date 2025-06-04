@@ -2,8 +2,8 @@
 
 #include "lingodb/catalog/IndexCatalogEntry.h"
 #include "lingodb/catalog/TableCatalogEntry.h"
-#include "lingodb/compiler/Conversion/DBToStd/DBToStd.h"
 #include "lingodb/compiler/Conversion/ArrowToStd/ArrowToStd.h"
+#include "lingodb/compiler/Conversion/DBToStd/DBToStd.h"
 #include "lingodb/compiler/Conversion/RelAlgToSubOp/RelAlgToSubOpPass.h"
 #include "lingodb/compiler/Conversion/SubOpToControlFlow/SubOpToControlFlowPass.h"
 #include "lingodb/compiler/Dialect/RelAlg/Passes.h"
@@ -168,21 +168,21 @@ class DefaultImperativeLowering : public LoweringStep {
          return;
       }
       auto endLowerDB = std::chrono::high_resolution_clock::now();
-      auto startLowerDSA = std::chrono::high_resolution_clock::now();
-      mlir::PassManager lowerDSAPm(moduleOp->getContext());
-      lowerDSAPm.enableVerifier(verify);
-      addLingoDBInstrumentation(lowerDSAPm, getSerializationState());
-      lowerDSAPm.addPass(arrow::createLowerToStdPass());
-      lowerDSAPm.addPass(mlir::createCanonicalizerPass());
-      lowerDSAPm.addPass(mlir::createLoopInvariantCodeMotionPass());
-      lowerDSAPm.addPass(mlir::createCSEPass());
-      if (mlir::failed(lowerDSAPm.run(moduleOp))) {
-         error.emit() << "Lowering of dsa failed";
+      auto startLowerArrow = std::chrono::high_resolution_clock::now();
+      mlir::PassManager lowerArrowPm(moduleOp->getContext());
+      lowerArrowPm.enableVerifier(verify);
+      addLingoDBInstrumentation(lowerArrowPm, getSerializationState());
+      lowerArrowPm.addPass(arrow::createLowerToStdPass());
+      lowerArrowPm.addPass(mlir::createCanonicalizerPass());
+      lowerArrowPm.addPass(mlir::createLoopInvariantCodeMotionPass());
+      lowerArrowPm.addPass(mlir::createCSEPass());
+      if (mlir::failed(lowerArrowPm.run(moduleOp))) {
+         error.emit() << "Lowering of arrow failed";
          return;
       }
-      auto endLowerDSA = std::chrono::high_resolution_clock::now();
+      auto endLowerArrow = std::chrono::high_resolution_clock::now();
       timing["lowerDB"] = std::chrono::duration_cast<std::chrono::microseconds>(endLowerDB - startLowerDB).count() / 1000.0;
-      timing["lowerDSA"] = std::chrono::duration_cast<std::chrono::microseconds>(endLowerDSA - startLowerDSA).count() / 1000.0;
+      timing["lowerArrow"] = std::chrono::duration_cast<std::chrono::microseconds>(endLowerArrow - startLowerArrow).count() / 1000.0;
    }
 };
 ExecutionMode getExecutionMode() {

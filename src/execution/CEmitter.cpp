@@ -1261,10 +1261,9 @@ LogicalResult CppEmitter::emitOperation(Operation& op, bool trailingSemicolon) {
          .Case<arith::BitcastOp>(
             [&](auto op) {
                std::string type;
-                 if (failed(typeToString(op.getLoc(), op.getType(), type)))
-                    return failure();
-               return printStandardOperation(*this, op, [&](auto& os) { os << "std::bit_cast<"<<type<<">("<<this->getOrCreateName(op.getIn()) << ")"; });
-
+               if (failed(typeToString(op.getLoc(), op.getType(), type)))
+                  return failure();
+               return printStandardOperation(*this, op, [&](auto& os) { os << "std::bit_cast<" << type << ">(" << this->getOrCreateName(op.getIn()) << ")"; });
             })
 
          .Case<arith::IndexCastOp, arith::IndexCastUIOp, arith::SIToFPOp, arith::UIToFPOp, arith::TruncIOp, arith::TruncFOp, arith::ExtSIOp, arith::ExtUIOp, arith::ExtFOp>([&](mlir::Operation* op) { return printSimpleCast(*this, op); })

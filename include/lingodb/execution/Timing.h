@@ -34,7 +34,7 @@ class TimingPrinter : public TimingProcessor {
          total += t;
       }
       timing["total"] = total;
-      std::vector<std::string> printOrder = {"QOpt", "lowerRelAlg", "lowerSubOp", "lowerDB", "lowerDSA", "lowerToLLVM", "toLLVMIR", "llvmOptimize", "llvmCodeGen", "executionTime", "total"};
+      std::vector<std::string> printOrder = {"QOpt", "lowerRelAlg", "lowerSubOp", "lowerDB", "lowerArrow", "lowerToLLVM", "toLLVMIR", "llvmOptimize", "llvmCodeGen", "executionTime", "total"};
       std::cout << std::endl
                 << std::endl;
       std::cout << std::setw(10) << "name";

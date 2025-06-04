@@ -1,5 +1,5 @@
-#ifndef LINGODB_COMPILER_DIALECT_DSA_IR_DSAOPS_H
-#define LINGODB_COMPILER_DIALECT_DSA_IR_DSAOPS_H
+#ifndef LINGODB_COMPILER_DIALECT_ARROW_IR_ARROWOPS_H
+#define LINGODB_COMPILER_DIALECT_ARROW_IR_ARROWOPS_H
 
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/OpDefinition.h"
@@ -13,4 +13,4 @@
 
 #define GET_OP_CLASSES
 #include "lingodb/compiler/Dialect/Arrow/IR/ArrowOps.h.inc"
-#endif //LINGODB_COMPILER_DIALECT_DSA_IR_DSAOPS_H
+#endif //LINGODB_COMPILER_DIALECT_ARROW_IR_ARROWOPS_H

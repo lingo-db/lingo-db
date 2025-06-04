@@ -1,5 +1,5 @@
 #include "lingodb/runtime/ArrowView.h"
-#include<cstddef>
+#include <cstddef>
 namespace {
 static constexpr std::array<uint8_t, 4096> createValidData() {
    std::array<uint8_t, 4096> res;

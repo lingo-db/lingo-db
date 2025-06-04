@@ -245,7 +245,7 @@ class StringCastOpLowering : public OpConversionPattern<db::CastOp> {
             result = StringRuntime::toDate(rewriter, loc)({valueToCast})[0];
          } else if (mlir::isa<db::TimestampType>(scalarTargetType)) {
             result = StringRuntime::toTimestamp(rewriter, loc)({valueToCast})[0];
-         }else if (auto charType = mlir::dyn_cast_or_null<db::CharType>(scalarTargetType)) {
+         } else if (auto charType = mlir::dyn_cast_or_null<db::CharType>(scalarTargetType)) {
             // chars with length 1 are stored as i32 and must converted, all other chars are already stored as strings
             if (charType.getLen() <= 1) {
                result = StringRuntime::toChar(rewriter, loc)({valueToCast})[0];
@@ -1126,28 +1126,6 @@ void DBToStdLoweringPass::runOnOperation() {
       return convertTuple(tupleType, typeConverter);
    });
 
-   /*auto convertPhysical = [&](mlir::TupleType tuple) -> mlir::TupleType {
-      std::vector<mlir::Type> types;
-      for (auto t : tuple.getTypes()) {
-         mlir::Type arrowPhysicalType = convertPhysicalSingle(t, typeConverter);
-         types.push_back(arrowPhysicalType);
-      }
-      return mlir::TupleType::get(tuple.getContext(), types);
-   };
-   typeConverter.addConversion([&](dsa::RecordType r) {
-      return dsa::RecordType::get(r.getContext(), convertPhysical(r.getRowType()));
-   });
-   typeConverter.addConversion([&](dsa::RecordBatchType r) {
-      auto res = dsa::RecordBatchType::get(r.getContext(), convertPhysical(r.getRowType()));
-      return res;
-   });
-   typeConverter.addConversion([&](dsa::ColumnBuilderType r) {
-      return dsa::ColumnBuilderType::get(r.getContext(), convertPhysicalSingle(r.getType(), typeConverter));
-   });
-   typeConverter.addConversion([&](dsa::ColumnType r) {
-      return dsa::ColumnType::get(r.getContext(), convertPhysicalSingle(r.getType(), typeConverter));
-   });*/
-   //typeConverter.addConversion([&](dsa::TableType r) { return dsa::TableType::get(r.getContext(), convertPhysical(r.getRowType())); });
    RewritePatternSet patterns(&getContext());
 
    mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::func::FuncOp>(patterns, typeConverter);
@@ -1160,7 +1138,6 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<SimpleTypeConversionPattern<mlir::arith::SelectOp>>(typeConverter, &getContext());
    patterns.insert<LoadArrowOpLowering>(typeConverter, &getContext());
    patterns.insert<AppendArrowLowering>(typeConverter, &getContext());
-   //patterns.insert<SimpleTypeConversionPattern<dsa::ForOp>>(typeConverter, &getContext());
    patterns.insert<StringCmpOpLowering>(typeConverter, ctxt);
    patterns.insert<CharCmpOpLowering>(typeConverter, ctxt);
    patterns.insert<StringCastOpLowering>(typeConverter, ctxt);
