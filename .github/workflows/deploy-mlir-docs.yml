@@ -2,8 +2,8 @@ name: Generate and Deploy MLIR Docs
 
 on:
   push:
-#    branches:
-#      - main
+    branches:
+      - main
 
 jobs:
   generate-docs:
