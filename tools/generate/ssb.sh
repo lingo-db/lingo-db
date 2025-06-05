@@ -4,15 +4,8 @@ TMPDIR=`mktemp --directory`
 echo $TMPDIR
 cp  resources/sql/ssb/initialize.sql $TMPDIR/initialize.sql
 pushd $TMPDIR
-echo 'd37618c646a6918be8ccc4bc79704061  dbgen.zip' | md5sum --check --status 2>/dev/null || curl -OL https://db.in.tum.de/~fent/dbgen/ssb/dbgen.zip
-echo 'd37618c646a6918be8ccc4bc79704061  dbgen.zip' | md5sum --check --status
-unzip -u dbgen.zip
-mv dbgen/* .
-rm -rf dbgen
-rm dbgen.zip
-rm -rf ./*.tbl
-sed -i 's/#define  MAXAGG_LEN    10/#define  MAXAGG_LEN    20/' shared.h
-make dbgen
+git clone https://github.com/lingo-db/ssb-dbgen.git
+cmake -B . ssb-dbgen && cmake --build .
 SF=$2
 ./dbgen -f -T c -s "$SF"
 ./dbgen -qf -T d -s "$SF"
