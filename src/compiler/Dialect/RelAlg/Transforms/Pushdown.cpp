@@ -147,6 +147,76 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
       for (auto& u : o->getUses()) uses++; // NOLINT(clang-diagnostic-unused-variable)
       return uses;
    }
+   Operator pushdownSemi(Operator topush, Operator curr, size_t index, relalg::ColumnCreatorAnalysis& columnCreatorAnalysis) {
+      if (countUses(curr) > 1) {
+         topush.setChildren({curr});
+         return topush;
+      }
+      relalg::SemiJoinOp topushOp = mlir::dyn_cast_or_null<relalg::SemiJoinOp>(topush.getOperation());
+      relalg::ColumnSet usedAttributes = topush.getUsedColumns();
+      auto res = ::llvm::TypeSwitch<mlir::Operation*, Operator>(curr.getOperation())
+         .Case<UnaryOperator>([&](UnaryOperator unaryOperator) {
+            Operator asOp = mlir::dyn_cast_or_null<Operator>(unaryOperator.getOperation());
+            auto child = mlir::dyn_cast_or_null<Operator>(unaryOperator.child());
+            bool allColumnsAvailable = true;
+            for (const auto* c : usedAttributes) {
+               allColumnsAvailable &= columnCreatorAnalysis.getCreator(c).canColumnReach(Operator{}, child, c);
+            }
+            if (allColumnsAvailable) {
+               topush->moveBefore(asOp.getOperation());
+               asOp.setChildren({pushdownSemi(topush, child, index, columnCreatorAnalysis)});
+               return asOp;
+            }
+            if (index == 0) {
+               topush.setChildren({asOp, topush.getChildren()[1]});
+            } else {
+               topush.setChildren({topush.getChildren()[0], asOp});
+            }
+            return topush;
+         })
+         .Case<BinaryOperator>([&](BinaryOperator binop) {
+            Operator asOp = mlir::dyn_cast_or_null<Operator>(binop.getOperation());
+            auto left = mlir::dyn_cast_or_null<Operator>(binop.leftChild());
+            auto right = mlir::dyn_cast_or_null<Operator>(binop.rightChild());
+            bool pushableLeft = true;
+            bool pushableRight = true;
+
+            for (auto* c : usedAttributes) {
+               auto creator = columnCreatorAnalysis.getCreator(c);
+               if (mlir::isa<relalg::ConstRelationOp>(creator)) {
+                  continue;
+               }
+               pushableLeft &= columnCreatorAnalysis.getCreator(c).canColumnReach(Operator{}, left, c);
+               pushableRight &= columnCreatorAnalysis.getCreator(c).canColumnReach(Operator{}, right, c);
+            }
+            if (!pushableLeft && !pushableRight) {
+               if (index == 0) {
+                  topush.setChildren({asOp, topush.getChildren()[1]});
+               } else {
+                  topush.setChildren({topush.getChildren()[0], asOp});
+               }
+               return topush;
+            } else if (pushableLeft) {
+               topush->moveBefore(asOp.getOperation());
+               left = pushdownSemi(topush, left, index, columnCreatorAnalysis);
+            } else if (pushableRight) {
+               topush->moveBefore(asOp.getOperation());
+               right = pushdownSemi(topush, right, index, columnCreatorAnalysis);
+            }
+
+            asOp.setChildren({left, right});
+            return asOp;
+         })
+         .Default([&](mlir::Operation* others) {
+            if (index == 0) {
+               topush.setChildren({mlir::cast<Operator>(others), topush.getChildren()[1]});
+            } else {
+               topush.setChildren({topush.getChildren()[0], mlir::cast<Operator>(others)});
+            }
+            return topush;
+         });
+      return res;
+   }
    Operator pushdown(Operator topush, Operator curr, relalg::ColumnCreatorAnalysis& columnCreatorAnalysis) {
       if (countUses(curr) > 1) {
          topush.setChildren({curr});
@@ -181,7 +251,6 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
                           pushableLeft &= columnCreatorAnalysis.getCreator(c).canColumnReach(Operator{}, left, c);
                           pushableRight &= columnCreatorAnalysis.getCreator(c).canColumnReach(Operator{}, right, c);
                        }
-
                        pushableLeft &= topushUnary.lPushable(binop);
                        pushableRight &= topushUnary.rPushable(binop);
                        if (!pushableLeft && !pushableRight) {
@@ -257,6 +326,71 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
          Operator pushedDown = pushdown(sel, sel.getChildren()[0], columnCreatorAnalysis);
          if (sel.getOperation() != pushedDown.getOperation()) {
             sel.getResult().replaceUsesWithIf(pushedDown->getResult(0), [&](mlir::OpOperand& operand) {
+               return users.contains(operand.getOwner());
+            });
+         }
+      });
+
+      auto containCrossProduct = [&](Operator& op) {
+         int exists = false;
+         op.walk([&](relalg::CrossProductOp semi) {
+            exists = true;
+         });
+         return exists;
+      };
+      getOperation()->walk([&](relalg::SemiJoinOp semi) {
+         SmallPtrSet<mlir::Operation*, 4> users;
+         for (auto* u : semi->getUsers()) {
+            users.insert(u);
+         }
+         auto left = semi.getChildren()[0];
+         auto right = semi.getChildren()[1];
+         Operator pushedDown;
+         bool leftConst = mlir::isa<relalg::ConstRelationOp>(left);
+         bool rightConst = mlir::isa<relalg::ConstRelationOp>(right);
+         bool leftCP = containCrossProduct(left);
+         bool rightCP = containCrossProduct(right);
+         if (leftConst == rightConst) return;
+         // only pushdown semijoin to crossproduct semijoin to a const relation
+         if (leftConst && rightCP) {
+            pushedDown = pushdownSemi(semi, right, 1, columnCreatorAnalysis);
+            left->moveBefore(semi.getOperation());
+         } else if (rightConst && leftCP) {
+            pushedDown = pushdownSemi(semi, left, 0, columnCreatorAnalysis);
+            right->moveBefore(semi.getOperation());
+         } else {
+            return;
+         }
+         if (semi.getOperation() != pushedDown.getOperation()) {
+            semi.getResult().replaceUsesWithIf(pushedDown->getResult(0), [&](mlir::OpOperand& operand) {
+               return users.contains(operand.getOwner());
+            });
+         }
+      });
+      getOperation()->walk([&](relalg::MarkJoinOp semi) {
+         SmallPtrSet<mlir::Operation*, 4> users;
+         for (auto* u : semi->getUsers()) {
+            users.insert(u);
+         }
+         auto left = semi.getChildren()[0];
+         auto right = semi.getChildren()[1];
+         Operator pushedDown;
+         bool leftConst = mlir::isa<relalg::ConstRelationOp>(left);
+         bool rightConst = mlir::isa<relalg::ConstRelationOp>(right);
+         bool leftCP = containCrossProduct(left);
+         bool rightCP = containCrossProduct(right);
+         if (leftConst == rightConst) return;
+         if (leftConst && rightCP) {
+            pushedDown = pushdownSemi(semi, right, 1, columnCreatorAnalysis);
+            left->moveBefore(semi.getOperation());
+         } else if (rightConst && leftCP) {
+            pushedDown = pushdownSemi(semi, left, 0, columnCreatorAnalysis);
+            right->moveBefore(semi.getOperation());
+         } else {
+            return;
+         }
+         if (semi.getOperation() != pushedDown.getOperation()) {
+            semi.getResult().replaceUsesWithIf(pushedDown->getResult(0), [&](mlir::OpOperand& operand) {
                return users.contains(operand.getOwner());
             });
          }
