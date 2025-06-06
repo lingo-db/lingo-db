@@ -13,8 +13,15 @@ namespace lingodb::runtime {
  */
 struct BufferIterator;
 struct Buffer {
-   size_t numElements;
-   uint8_t* ptr;
+   union {
+      struct {
+         size_t numElements;
+         uint8_t* ptr;
+      };
+      __int128 as128;
+   };
+   Buffer(size_t numElements, uint8_t* ptr) : numElements(numElements), ptr(ptr) {}
+
    static Buffer createZeroed(size_t bytes);
    static void iterate(bool parallel, Buffer, size_t typeSize, void (*forEachChunk)(Buffer, size_t, size_t, void*), void* contextPtr);
 };
@@ -40,13 +47,13 @@ class FlexibleBuffer {
 
    void nextBuffer() {
       size_t nextCapacity = currCapacity * 2;
-      buffers.push_back(Buffer{0, (uint8_t*) malloc(nextCapacity * typeSize)});
+      buffers.push_back(Buffer(0, (uint8_t*) malloc(nextCapacity * typeSize)));
       currCapacity = nextCapacity;
    }
 
    public:
    FlexibleBuffer(size_t initialCapacity, size_t typeSize) : totalLen(0), currCapacity(initialCapacity), typeSize(typeSize) {
-      buffers.push_back(Buffer{0, (uint8_t*) malloc(initialCapacity * typeSize)});
+      buffers.push_back(Buffer(0, (uint8_t*) malloc(initialCapacity * typeSize)));
    }
    uint8_t* insert() {
       if (buffers.back().numElements == currCapacity) {
