@@ -13,8 +13,14 @@ namespace lingodb::runtime {
  */
 struct BufferIterator;
 struct Buffer {
-   size_t numElements;
-   uint8_t* ptr;
+   union {
+      struct {
+         size_t numElements;
+         uint8_t* ptr;
+      };
+      __int128 as128;
+   };
+
    static Buffer createZeroed(size_t bytes);
    static void iterate(bool parallel, Buffer, size_t typeSize, void (*forEachChunk)(Buffer, size_t, size_t, void*), void* contextPtr);
 };
