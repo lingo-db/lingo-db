@@ -45,6 +45,7 @@
 #include <csignal>
 #include <filesystem>
 #include <fstream>
+#include <regex>
 
 #include <dlfcn.h>
 #include <spawn.h>
@@ -824,8 +825,27 @@ class DefaultCPULLVMBackend : public execution::ExecutionBackend {
       timing["executionTime"] = (measuredTimes.size() > 1 ? *std::min_element(measuredTimes.begin() + 1, measuredTimes.end()) : measuredTimes[0]);
    }
 };
+std::optional<std::string> extractSingleResultName(llvm::StringRef line) {
+   size_t eq = line.find('=');
+   if (eq == llvm::StringRef::npos)
+      return std::nullopt;
 
-static void addDebugInfo(mlir::ModuleOp module, std::string lastSnapShotFile) {
+   llvm::StringRef lhs = line.take_front(eq);
+   static const std::regex ssaRegex(R"(%[\w\d._]+)");
+   std::string lhsStr = lhs.str();
+
+   std::sregex_iterator begin(lhsStr.begin(), lhsStr.end(), ssaRegex), end;
+   if (begin != end)
+      return begin->str(); // take the first match
+   return std::nullopt;
+}
+static void addDebugInfo(mlir::ModuleOp module, std::string lastSnapShotFile, bool addDbgValues) {
+   std::ifstream file(lastSnapShotFile);
+   std::string line;
+   std::vector<std::string> lines;
+   while (std::getline(file, line))
+      lines.push_back(line);
+
    auto fileAttr = mlir::LLVM::DIFileAttr::get(module->getContext(), lastSnapShotFile, std::filesystem::current_path().string());
    auto compileUnitAttr = mlir::LLVM::DICompileUnitAttr::get(mlir::DistinctAttr::create(mlir::UnitAttr::get(module->getContext())), static_cast<uint8_t>(llvm::dwarf::DW_LANG_C), fileAttr, mlir::StringAttr::get(module->getContext(), "LingoDB"), true, mlir::LLVM::DIEmissionKind::Full);
    module->walk([&](mlir::LLVM::LLVMFuncOp funcOp) {
@@ -840,6 +860,40 @@ static void addDebugInfo(mlir::ModuleOp module, std::string lastSnapShotFile) {
       auto subroutineType = mlir::LLVM::DISubroutineTypeAttr::get(module->getContext(), {});
       auto subProgramAttr = mlir::LLVM::DISubprogramAttr::get(module->getContext(), id, compileUnitAt, fileAttr, funcOp.getNameAttr(), funcOp.getNameAttr(), fileAttr, 0, 0, subprogramFlags, subroutineType, {}, {});
       funcOp->setLoc(mlir::FusedLocWith<mlir::LLVM::DIScopeAttr>::get(funcOp->getLoc(), subProgramAttr, module->getContext()));
+      if (addDbgValues) {
+         funcOp.walk([&](mlir::Operation* op) {
+            if (mlir::isa<mlir::LLVM::DbgValueOp>(op) || mlir::isa<mlir::LLVM::DbgDeclareOp>(op))
+               return; // skip debug ops
+            if (auto loc = mlir::dyn_cast<mlir::FileLineColLoc>(op->getLoc())) {
+               if (loc.getFilename().str() == lastSnapShotFile && loc.getLine() > 0 && loc.getLine() <= lines.size() && op->getNumResults() == 1) {
+                  // We have a line number in the snapshot file, so we can extract the result name
+                  // from the line and set it as a debug info.
+                  auto resultNameOpt = extractSingleResultName(lines[loc.getLine() - 1]);
+                  auto resultType = op->getResult(0).getType();
+                  if (resultNameOpt) {
+                     std::string resultName = "v" + resultNameOpt.value().substr(1); // remove the leading %
+                     mlir::OpBuilder builder(op);
+                     builder.setInsertionPointAfter(op);
+                     mlir::LLVM::DITypeAttr typeAttr;
+                     if (resultType.isInteger()) {
+                        typeAttr = mlir::LLVM::DIBasicTypeAttr::get(builder.getContext(), llvm::dwarf::DW_TAG_base_type, "int", resultType.getIntOrFloatBitWidth(), llvm::dwarf::DW_ATE_signed);
+                     }
+                     if (resultType.isF32() || resultType.isF64()) {
+                        typeAttr = mlir::LLVM::DIBasicTypeAttr::get(builder.getContext(), llvm::dwarf::DW_TAG_base_type, "float", resultType.getIntOrFloatBitWidth(), llvm::dwarf::DW_ATE_float);
+                     }
+                     if (auto ptrType = mlir::dyn_cast<mlir::LLVM::LLVMPointerType>(resultType)) {
+                        auto baseIntType = mlir::LLVM::DIBasicTypeAttr::get(builder.getContext(), llvm::dwarf::DW_TAG_base_type, "void", 8, llvm::dwarf::DW_ATE_signed);
+                        typeAttr = mlir::LLVM::DIDerivedTypeAttr::get(builder.getContext(), llvm::dwarf::DW_TAG_pointer_type, builder.getStringAttr("pointer"), baseIntType, 64, 0, 0, {}, mlir::LLVM::DINodeAttr());
+                     }
+                     if (typeAttr) {
+                        auto variableAttr = mlir::LLVM::DILocalVariableAttr::get(builder.getContext(), subProgramAttr, builder.getStringAttr(resultName), fileAttr, loc.getLine(), 0, 0, typeAttr, mlir::LLVM::DIFlags{});
+                        builder.create<mlir::LLVM::DbgValueOp>(loc, op->getResult(0), variableAttr);
+                     }
+                  }
+               }
+            }
+         });
+      }
    });
 }
 class CPULLVMDebugBackend : public execution::ExecutionBackend {
@@ -855,7 +909,7 @@ class CPULLVMDebugBackend : public execution::ExecutionBackend {
       }
       auto endLowerToLLVM = std::chrono::high_resolution_clock::now();
       if (auto moduleFileLineLoc = mlir::dyn_cast_or_null<mlir::FileLineColLoc>(moduleOp.getLoc())) {
-         addDebugInfo(moduleOp, moduleFileLineLoc.getFilename().str());
+         addDebugInfo(moduleOp, moduleFileLineLoc.getFilename().str(), true);
       }
       timing["lowerToLLVM"] = std::chrono::duration_cast<std::chrono::microseconds>(endLowerToLLVM - startLowerToLLVM).count() / 1000.0;
       auto convertFn = [&](mlir::Operation* module, llvm::LLVMContext& context) -> std::unique_ptr<llvm::Module> {
@@ -936,7 +990,7 @@ class CPULLVMProfilingBackend : public execution::ExecutionBackend {
       auto endLowerToLLVM = std::chrono::high_resolution_clock::now();
       timing["lowerToLLVM"] = std::chrono::duration_cast<std::chrono::microseconds>(endLowerToLLVM - startLowerToLLVM).count() / 1000.0;
       if (auto moduleFileLineLoc = mlir::dyn_cast_or_null<mlir::FileLineColLoc>(moduleOp.getLoc())) {
-         addDebugInfo(moduleOp, moduleFileLineLoc.getFilename().str());
+         addDebugInfo(moduleOp, moduleFileLineLoc.getFilename().str(), false);
       }
       double translateToLLVMIRTime;
       auto convertFn = [&](mlir::Operation* module, llvm::LLVMContext& context) -> std::unique_ptr<llvm::Module> {
