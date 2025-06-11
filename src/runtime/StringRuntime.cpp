@@ -3,6 +3,8 @@
 #include "arrow/util/value_parsing.h"
 #include "lingodb/runtime/helpers.h"
 
+#include <regex>
+
 #include <arrow/type.h>
 #include <arrow/util/decimal.h>
 
@@ -309,6 +311,21 @@ lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::substr(lingodb::runt
    size_t byteTo = charIndexToByteIndex(str, legalizedTo, byteFrom, legalizedFrom);
 
    return lingodb::runtime::VarLen32::fromString(str.str().substr(byteFrom, byteTo - byteFrom));
+}
+
+// TODO add regexp flags
+lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::regexpReplace(
+   VarLen32 text,
+   VarLen32 pattern,
+   VarLen32 replace) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+
+   // TODO handle more complex regexp featuers
+   /*
+    * SQL's regexpReplace works differently than C++'s regex_replace work differently e.g.
+    * - group capturing uses \1 in sql and $1 in c++ (hence pre-parsing is necessary)
+    * - the pattern .* returns different results
+    */
+   return VarLen32::fromString(std::regex_replace(text.str(), std::regex(pattern.str()), replace.str(), std::regex_constants::format_default));
 }
 
 size_t lingodb::runtime::StringRuntime::findMatch(VarLen32 str, VarLen32 needle, size_t start, size_t end) {

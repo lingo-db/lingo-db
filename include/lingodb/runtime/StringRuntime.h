@@ -30,6 +30,7 @@ struct StringRuntime {
    static VarLen32 fromChar(uint32_t);
    static VarLen32 fromDecimal(__int128, int32_t scale);
    static VarLen32 substr(VarLen32 str, int64_t from, int64_t len);
+   static VarLen32 regexpReplace(VarLen32 str, VarLen32 pattern, VarLen32 replace);
    static VarLen32 toUpper(VarLen32 str);
    static VarLen32 concat(VarLen32 a, VarLen32 b);
    static size_t findMatch(VarLen32 str, VarLen32 needle, size_t start, size_t end);

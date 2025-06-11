@@ -347,6 +347,12 @@ mlir::Value frontend::sql::Parser::translateFuncCallExpression(Node* node, mlir:
       auto to = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->tail->data.ptr_value), context);
       return builder.create<db::RuntimeCall>(loc, str.getType(), "Substring", mlir::ValueRange({str, from, to})).getRes();
    }
+   if (funcName == "REGEXP_REPLACE" || funcName == "regexp_replace") {
+      auto text = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->data.ptr_value), context);
+      auto pattern = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->next->data.ptr_value), context);
+      auto replace = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->tail->data.ptr_value), context);
+      return builder.create<db::RuntimeCall>(loc, text.getType(), "RegexpReplace", mlir::ValueRange({text, pattern, replace})).getRes();
+   }
    if (funcName == "length") {
       auto str = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->data.ptr_value), context);
       return builder.create<db::RuntimeCall>(loc, builder.getI64Type(), "StringLength", str).getRes();
