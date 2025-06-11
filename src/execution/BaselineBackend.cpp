@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <iostream>
+#include <mlir/Dialect/Func/IR/FuncOps.h.inc>
 #include <sstream>
 #include <tpde/CompilerBase.hpp>
 #include <tpde/x64/CompilerX64.hpp>
@@ -15,9 +16,9 @@
 #include <spdlog/sinks/ostream_sink.h>
 #include <spdlog/spdlog.h>
 
-lingodb::utility::Setting<std::string> baselineObjectFileOut("system.compilation.baseline_object_out", "");
-
 namespace {
+lingodb::utility::GlobalSetting<std::string> baselineObjectFileOut("system.compilation.baseline_object_out", "");
+
 class SpdLogSpoof {
    // storage for the log messages
    std::ostringstream oss;
@@ -45,8 +46,215 @@ class SpdLogSpoof {
 class BaselineBackend : public lingodb::execution::ExecutionBackend {
    // adaptor mlir -> tpde
    struct IRAdaptor {
+      using IRFuncRef = mlir::func::FuncOp*;
+      using IRBlockRef = mlir::Region*;
+      using IRInstRef = mlir::Operation*;
+      using IRValueRef = mlir::Value*;
+
+      static constexpr IRFuncRef INVALID_FUNC_REF = nullptr;
+      static constexpr IRBlockRef INVALID_BLOCK_REF = nullptr;
+      static constexpr IRValueRef INVALID_VALUE_REF = nullptr;
+
+      static constexpr bool TPDE_PROVIDES_HIGHEST_VAL_IDX = false;
+      static constexpr bool TPDE_LIVENESS_VISIT_ARGS = true;
+
+      using IR = mlir::ModuleOp;
+
       mlir::ModuleOp* moduleOp;
       IRAdaptor(mlir::ModuleOp* moduleOp) : moduleOp(moduleOp) {}
+      IR* module;
+      IRFuncRef cur_func = INVALID_FUNC_REF;
+
+      uint32_t func_count() const noexcept {
+         // return module->functions.size();
+      }
+
+      auto funcs() const noexcept {
+         // return module->functions;
+      }
+
+      auto funcs_to_compile() const noexcept {
+         // return funcs();
+      }
+
+      std::string_view func_link_name(IRFuncRef func) const noexcept {
+         // return func->name;
+      }
+
+      bool func_extern(IRFuncRef) const noexcept {
+         // return false;
+      }
+
+      bool func_only_local(IRFuncRef) const noexcept {
+         // return false;
+      }
+
+      static bool func_has_weak_linkage(IRFuncRef) noexcept {
+         // return false;
+      }
+
+      static bool cur_needs_unwind_info() noexcept {
+         // return false;
+      }
+
+      static bool cur_is_vararg() noexcept {
+         return false;
+      }
+
+      auto& cur_args() const noexcept {
+         // return cur_func->parameters;
+      }
+
+      static bool cur_arg_is_byval(uint32_t) noexcept { return false; }
+      static uint32_t cur_arg_byval_align(uint32_t) noexcept { return 0; }
+      static uint32_t cur_arg_byval_size(uint32_t) noexcept { return 0; }
+      static bool cur_arg_is_sret(uint32_t) noexcept { return false; }
+
+      auto cur_static_allocas() const noexcept {
+         // return std::views::empty<IRValueRef>;
+      }
+
+      static bool cur_has_dynamic_alloca() noexcept {
+         // the IR does not support dynamic stack allocations
+         // return false;
+      }
+
+      IRBlockRef cur_entry_block() const noexcept {
+         // return cur_func->basicBlocks.front();
+      }
+
+      auto& cur_blocks() const noexcept {
+         // return cur_func->basicBlocks;
+      }
+
+      auto& block_succs(IRBlockRef block) const noexcept {
+         // return block->successors;
+      }
+
+      auto block_insts(IRBlockRef block) const noexcept {
+         // return std::views::transform(block->values, [](Value* val) {
+         //    return &val->op;
+         // });
+      }
+
+      auto& block_phis(IRBlockRef block) const noexcept {
+         // return block->phiNodes;
+      }
+
+      uint32_t block_info(IRBlockRef block) const noexcept {
+         // return block->block_info;
+      }
+
+      void block_set_info(IRBlockRef block, uint32_t info) noexcept {
+         // block->block_info = info;
+      }
+
+      uint32_t block_info2(IRBlockRef block) const noexcept {
+         // return block->block_info2;
+      }
+
+      void block_set_info2(IRBlockRef block, uint32_t info) noexcept {
+         // block->block_info2 = info;
+      }
+
+      std::string_view block_fmt_ref(IRBlockRef block) const noexcept {
+         // return block->name;
+      }
+
+      tpde::ValLocalIdx val_local_idx(IRValueRef val) const noexcept {
+         // return static_cast<tpde::ValLocalIdx>(val->id);
+      }
+
+      bool val_ignore_in_liveness_analysis(IRValueRef val) const noexcept {
+         // return false;
+      }
+
+      bool val_is_phi(IRValueRef val) const noexcept {
+         // return val->op.type == Operation::Type::PhiNode;
+      }
+
+      struct PHIRef {
+         IRInstRef* phi_op;
+
+         uint32_t incoming_count() const noexcept {
+            // return phi_op->args.phiOperands.size();
+         }
+
+         IRValueRef incoming_val_for_slot(uint32_t slot) const noexcept {
+            // return phi_op->args.phiOperands[slot].second;
+         }
+
+         IRBlockRef incoming_block_for_slot(uint32_t slot) const noexcept {
+            // return phi_op->args.phiOperands[slot].first;
+         }
+
+         IRValueRef incoming_val_for_block(IRBlockRef block) const noexcept {
+            // for (const auto& pair : phi_op->args.phiOperands) {
+            //    if (pair.first == block) {
+            //       return pair.second;
+            //    }
+            // }
+            // return INVALID_VALUE_REF;
+         }
+      };
+
+      PHIRef val_as_phi(IRValueRef val) const noexcept {
+         // return PHIRef{&val->op};
+      }
+
+      uint32_t val_alloca_size(IRValueRef val) const noexcept {
+         // return 0;
+      }
+
+      uint32_t val_alloca_align(IRValueRef val) const noexcept {
+         // return 0;
+      }
+
+      std::string_view value_fmt_ref(IRValueRef val) const noexcept {
+         // return val->name;
+      }
+
+      auto inst_operands(IRInstRef inst) const noexcept {
+         // if (inst->args.operands.empty() || inst->type == Operation::Type::Const || inst->type == Operation::Type::PhiNode) {
+         //    return std::ranges::subrange<IRValueRef*>(nullptr, nullptr);
+         // }
+         // return std::ranges::subrange<IRValueRef*>(
+         //    inst->args.operands.data(),
+         //    inst->args.operands.data() + inst->args.operands.size());
+      }
+
+      auto inst_results(IRInstRef inst) const noexcept {
+         // if (inst->type == Operation::Type::Const || inst->type == Operation::Type::PhiNode) {
+         //    return std::ranges::subrange<IRValueRef*>(nullptr, nullptr);
+         // }
+         // return std::ranges::subrange<IRValueRef*>(&inst->result, &inst->result + 1);
+      }
+
+      static bool inst_fused(IRInstRef) noexcept {
+         // return false;
+      }
+
+      std::string_view inst_fmt_ref(IRInstRef inst) const noexcept {
+         // return inst->name;
+      }
+
+      static void start_compile() {
+         // pass
+      }
+
+      static void end_compile() {
+         // pass
+      }
+
+      bool switch_func(IRFuncRef func) noexcept {
+         // cur_func = func;
+         // return true;
+      }
+
+      void reset() {
+         // technically, we don't need to do anything
+         cur_func = INVALID_FUNC_REF;
+      }
    };
 
    // we will use the default config
@@ -54,14 +262,139 @@ class BaselineBackend : public lingodb::execution::ExecutionBackend {
    };
 
    // cross-platform compiler base class
-   template <typename Adaptor, typename Derived, typename Config>
-   struct IRCompilerBase : tpde::CompilerBase<Adaptor, Derived, Config> {
-      using Base = tpde::CompilerBase<Adaptor, Derived, Config>;
+   template <typename, typename Derived, typename Config>
+   struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
+      using Base = tpde::CompilerBase<IRAdaptor, Derived, Config>;
+      using IR = IRAdaptor::IR;
 
       IRCompilerBase(IRAdaptor* adaptor) : Base{adaptor} {
          static_assert(tpde::Compiler<Derived, Config>);
-         // the class has to take an adaptor parameter but we know that it always will be the ir::IRAdaptor
-         static_assert(std::is_same_v<Adaptor, IRAdaptor>);
+      }
+
+      // shortcuts to access the derived class later
+      Derived* derived() noexcept { return static_cast<Derived*>(this); }
+      const Derived* derived() const noexcept {
+         return static_cast<Derived*>(this);
+      }
+
+      const IR* ir() const noexcept {
+         return this->adaptor->module;
+      }
+
+      bool cur_func_may_emit_calls() {
+         // we can grab this directly from the IR
+         // return false;
+      }
+
+      static typename CompilerConfig::Assembler::SymRef cur_personality_func() {
+         // as the IR has no means of handling exceptions or specifying unwind actions
+         // there are no personality functions
+         // return {};
+      }
+
+      bool try_force_fixed_assignment(IRAdaptor::IRValueRef) const noexcept {
+         // our example IR has a flag to try to force a fixed assignment on a value.
+         // you likely don't want to do this
+         // return false;
+      }
+
+      struct ValueParts {
+         // all values use one register
+         static uint32_t count() { return 1; }
+         // all values are 64-bit
+         static uint32_t size_bytes(uint32_t /* part_idx */) { return 8; }
+         // all values are integers and therefore use GP registers
+         static tpde::RegBank reg_bank(uint32_t /* part_idx */) {
+            return CompilerConfig::GP_BANK;
+         }
+      };
+
+      static ValueParts val_parts(IRAdaptor::IRValueRef) { return ValueParts{}; }
+
+      static std::optional<typename Base::ValRefSpecial> val_ref_special(IRAdaptor::IRValueRef value_ref) {
+         // if (value_ref->op.type == Operation::Type::Const) {
+         //    return typename Base::ValRefSpecial{
+         //       .const_data = std::bit_cast<uint64_t>(value_ref->op.args.constantValue)};
+         // }
+         // return std::nullopt;
+      }
+
+      static void define_func_idx(IRAdaptor::IRFuncRef func, uint32_t idx) {
+         // pass
+      }
+
+      bool compile_inst(IRAdaptor::IRInstRef inst, Base::InstRange remaining) noexcept {
+         // assert(inst->type != Operation::Type::PhiNode);
+         //
+         // // simply switch over the opcode and compile
+         // switch (inst->type) {
+         //    using enum Operation::Type;
+         //    case Add: return derived()->compile_add(inst);
+         //    case Sub: return derived()->compile_sub(inst);
+         //    case Unreachable: return this->compile_unreachable();
+         //    case Return: return this->compile_ret(inst);
+         //    case Const: return derived()->compile_const(inst);
+         //    default:
+         //       TPDE_LOG_ERR("encountered unimplemented instruction");
+         //       return false;
+         // }
+      }
+
+      bool compile_unreachable() noexcept {
+         // // this will restore callee-saved registers and return
+         // // and is implemented in tpde::x64::CompilerX64 or tpde::a64::CompilerA64
+         // derived()->gen_func_epilog();
+         //
+         // // need to do this after return
+         // this->release_regs_after_return();
+         // return true;
+      }
+
+      bool compile_ret(IRAdaptor::IRInstRef inst) noexcept {
+         // // a return simply has to move the value to be returned into the return register.
+         // // since we only have single-register integer values, this is very easy to implement
+         // // in the base class using the calling convention information from the derived class.
+         //
+         // const Value& value = *inst->result;
+         // auto ret_op = inst->args.operands.front();
+         //
+         // // Create the RetBuilder
+         // typename Base::RetBuilder rb{*derived(), *this->cur_cc_assigner()};
+         // rb.add(ret_op);
+         //
+         // // generate the return
+         // rb.ret();
+         // return true;
+      }
+
+      bool compile_sub(IRAdaptor::IRInstRef inst) noexcept {
+         // Value* value = inst->result;
+         //
+         // const auto lhs_idx = inst->args.operands[0];
+         // const auto rhs_idx = inst->args.operands[1];
+         //
+         // ValueRef lhs_ref = this->val_ref(lhs_idx);
+         // ValueRef rhs_ref = this->val_ref(rhs_idx);
+         // ValueRef res_ref = this->result_ref(value);
+         //
+         // ScratchReg res_scratch{this};
+         // if (!derived()->encode_subi64(lhs_ref.part(0), rhs_ref.part(0), res_scratch)) {
+         //    return false;
+         // }
+         // this->set_value(res_ref.part(0), res_scratch);
+         // return true;
+      }
+
+      Base::ValuePartRef val_part_ref_special(Base::ValRefSpecial& ref, uint32_t part) noexcept {
+         // return typename Base::ValuePartRef(this, ref.const_data, 8, Config::GP_BANK);
+      }
+
+      static bool arg_is_int128(Base::IRValueRef) noexcept {
+         // return false;
+      }
+
+      static bool arg_allow_split_reg_stack_passing(Base::IRValueRef) noexcept {
+         // return false;
       }
    };
 
@@ -72,6 +405,10 @@ class BaselineBackend : public lingodb::execution::ExecutionBackend {
       explicit IRCompilerX64(IRAdaptor* adaptor)
          : Base(adaptor) {
          static_assert(tpde::Compiler<IRCompilerX64, tpde::x64::PlatformConfig>);
+      }
+
+      void reset() noexcept {
+         Base::reset();
       }
    };
 
