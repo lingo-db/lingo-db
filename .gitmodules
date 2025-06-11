@@ -1,0 +1,4 @@
+[submodule "vendored/tpde"]
+	path = vendored/tpde
+	url = https://github.com/lingo-db/tpde.git
+	branch = fix-partial-order-req

@@ -1,4 +1,5 @@
-// RUN: run-mlir %s | FileCheck %s
+// RUN: env LINGODB_EXECUTION_MODE=DEFAULT run-mlir %s | FileCheck %s
+// RUN: if [ "$(uname)" = "Linux" ]; then env LINGODB_EXECUTION_MODE=BASELINE run-mlir %s | FileCheck %s; fi
 
  module {
 	func.func @test_or (%arg0: i1,%arg1: i1,%arg2: i1) {

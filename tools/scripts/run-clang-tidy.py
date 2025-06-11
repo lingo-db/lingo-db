@@ -80,7 +80,7 @@ def make_absolute(f, directory):
 
 
 def get_tidy_invocation(f, clang_tidy_binary, checks, tmpdir, build_path,
-                        header_filter, allow_enabling_alpha_checkers,
+                        header_filter, exclude_header_filter, allow_enabling_alpha_checkers,
                         extra_arg, extra_arg_before, quiet, config):
   """Gets a command line for clang-tidy."""
   start = [clang_tidy_binary]
@@ -88,6 +88,8 @@ def get_tidy_invocation(f, clang_tidy_binary, checks, tmpdir, build_path,
     start.append('-allow-enabling-analyzer-alpha-checkers')
   if header_filter is not None:
     start.append('-header-filter=' + header_filter)
+  if exclude_header_filter is not None:
+      start.append('-exclude-header-filter=' + exclude_header_filter)
   if checks:
     start.append('-checks=' + checks)
   if tmpdir is not None:
@@ -162,7 +164,7 @@ def run_tidy(args, tmpdir, build_path, queue, lock, failed_files):
   while True:
     name = queue.get()
     invocation = get_tidy_invocation(name, args.clang_tidy_binary, args.checks,
-                                     tmpdir, build_path, args.header_filter,
+                                     tmpdir, build_path, args.header_filter, args.exclude_header_filter,
                                      args.allow_enabling_alpha_checkers,
                                      args.extra_arg, args.extra_arg_before,
                                      args.quiet, args.config)
@@ -238,6 +240,8 @@ def main():
                       'command line.')
   parser.add_argument('-quiet', action='store_true',
                       help='Run clang-tidy in quiet mode')
+  parser.add_argument('-exclude-header-filter', dest='exclude_header_filter',
+                      help='regular expression to exclude headers.')
   args = parser.parse_args()
 
   db_path = 'compile_commands.json'

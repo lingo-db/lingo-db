@@ -3,6 +3,10 @@ name: build+test (macOS 15 aarch64)
 on:
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: macos-15
@@ -21,7 +25,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.ccache
-          key: ccache-${{ matrix.build_type }}-build-build-macos-15
+          key: ccache-${{ matrix.build_type }}-build-macos-15
 
       - name: Cache Homebrew packages
         id: cache-brew
@@ -43,13 +47,13 @@ jobs:
           brew install lingo-db/homebrew/apache-arrow@20
 
       - name: Build
+        env:
+          CXX: "ccache /opt/homebrew/opt/llvm/bin/clang++"
+          CC: "ccache /opt/homebrew/opt/llvm/bin/clang"
+          CCACHE_DIR: "~/.ccache"
+          CMAKE_PREFIX_PATH: "/opt/homebrew/"
         run: |
           mkdir -p ~/.ccache
-          export CXX="ccache /opt/homebrew/opt/llvm/bin/clang++"
-          export CC="ccache /opt/homebrew/opt/llvm/bin/clang"
-          export CCACHE_DIR="~/.ccache"
-          export CMAKE_PREFIX_PATH="/opt/homebrew/"
-
           make clean
           make build-${{ matrix.build_type }}
 
@@ -86,14 +90,36 @@ jobs:
           restore-keys: |
             brew-macos-15-
 
-      - name: Test
+      - name: Setup for tests
         run: |
-          export ASAN_OPTIONS="detect_leaks=0 detect_container_overflow=0"
           touch build/dependencies
           touch build/lingodb-${{ matrix.build_type }}/.stamp
           touch build/lingodb-${{ matrix.build_type }}/.buildstamp
           chmod +x build/lingodb-${{ matrix.build_type }}/*
-          make TEST_BUILD_TYPE=${{ matrix.build_type }} DATA_BUILD_TYPE=${{ matrix.build_type }} test-no-rebuild
+
+      - name: Test lit
+        run: |
+          make test-no-rebuild-lit
+        env:
+          TEST_BUILD_TYPE: ${{ matrix.build_type }}
+          DATA_BUILD_TYPE: ${{ matrix.build_type }}
+          ASAN_OPTIONS: "detect_leaks=0 detect_container_overflow=0"
+
+      - name: Test unit
+        run: |
+          make test-no-rebuild-unit
+        env:
+          TEST_BUILD_TYPE: ${{ matrix.build_type }}
+          DATA_BUILD_TYPE: ${{ matrix.build_type }}
+          ASAN_OPTIONS: "detect_leaks=0 detect_container_overflow=0"
+
+      - name: Test sqlite-small
+        run: |
+          make test-no-rebuild-sqlite-small
+        env:
+          TEST_BUILD_TYPE: ${{ matrix.build_type }}
+          DATA_BUILD_TYPE: ${{ matrix.build_type }}
+          ASAN_OPTIONS: "detect_leaks=0 detect_container_overflow=0"
 
   sqlite_tests:
     needs: build
@@ -124,12 +150,14 @@ jobs:
 
       - name: Test
         run: |
-          export ASAN_OPTIONS="detect_leaks=0 detect_container_overflow=0"
           touch build/dependencies
           touch build/lingodb-${{ matrix.build_type }}/.stamp
           touch build/lingodb-${{ matrix.build_type }}/.buildstamp
           chmod +x build/lingodb-${{ matrix.build_type }}/*
-          make SQLITE_TEST_BUILD_TYPE=${{ matrix.build_type }} sqlite-test-no-rebuild
+          make test-no-rebuild-sqlite
+        env:
+          SQLITE_TEST_BUILD_TYPE: ${{ matrix.build_type }}
+          ASAN_OPTIONS: "detect_leaks=0 detect_container_overflow=0"
 
   sqlite_dataset-tests:
     needs: build
@@ -164,7 +192,6 @@ jobs:
         with:
           path: ~/datasets/
           key: datasets-macos-with-job
-
       - name: Generate dataset if not cached
         if: steps.cache-datasets.outputs.cache-hit != 'true'
         run: |

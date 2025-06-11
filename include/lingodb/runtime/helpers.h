@@ -40,9 +40,11 @@ static uint32_t unalignedLoad32(const uint8_t* p) {
    memcpy(&result, p, sizeof(result));
    return result;
 }
+#if !defined(ASAN_ACTIVE)
 static bool cachelineRemains8(const uint8_t* p) {
    return (reinterpret_cast<uintptr_t>(p) & 63) <= 56;
 }
+#endif
 static uint64_t read8PadZero(const uint8_t* p, uint32_t len) {
    if (len == 0) return 0; //do not dereference!
 #if defined(ASAN_ACTIVE)

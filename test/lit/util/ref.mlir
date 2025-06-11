@@ -1,4 +1,6 @@
- // RUN: run-mlir %s | FileCheck %s
+ // RUN: env LINGODB_EXECUTION_MODE=DEFAULT run-mlir %s | FileCheck %s
+ // we don't run BASELINE since it does not support util.alloc
+
  module {
 
 	func.func @main () {

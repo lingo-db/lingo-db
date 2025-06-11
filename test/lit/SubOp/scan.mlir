@@ -1,4 +1,6 @@
-//RUN: run-mlir %s %S/../../../resources/data/test| FileCheck %s
+//RUN: env LINGODB_EXECUTION_MODE=DEFAULT run-mlir %s %S/../../../resources/data/test| FileCheck %s
+//RUN: if [ "$(uname)" = "Linux" ]; then env LINGODB_EXECUTION_MODE=BASELINE run-mlir %s %S/../../../resources/data/test | FileCheck %s; fi
+
 //CHECK: |                           str  |                       float32  |                       float64  |                       decimal  |                         int32  |                         int64  |                          bool  |                        date32  |                        date64  |                         char1  |                        char20  |
 //CHECK: ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 //CHECK: |                         "str"  |                           1.1  |                           1.1  |                          1.10  |                             1  |                             1  |                          true  |                    1996-01-02  | 1996-01-02 13:37:00.000000000  |                             a  |        "abcdefghijklmnopqrst"  |

@@ -4,10 +4,13 @@ on:
   push:
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 env:
   REGISTRY: ghcr.io
 jobs:
-
   build:
     strategy:
       matrix:
@@ -17,6 +20,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
+        with:
+          submodules: recursive
       - name: CCache
         id: ccache
         uses: actions/cache@v3
@@ -26,11 +31,13 @@ jobs:
       - name: Build
         run: |
           mkdir -p /ccache
-          export CXX="ccache clang++-20"
-          export CC="ccache clang-20"
-          export CCACHE_DIR="/ccache"
           make clean
           make build-${{ matrix.build_type }}
+        env:
+          CCACHE_DIR: /ccache
+          CC: ccache clang-20
+          CXX: ccache clang++-20
+          ENABLE_BASELINE_BACKEND: "ON"
       - uses: actions/upload-artifact@master
         with:
           name: ${{ matrix.build_type }}-build
@@ -50,13 +57,43 @@ jobs:
         with:
           name: ${{ matrix.build_type }}-build
           path: build/lingodb-${{ matrix.build_type }}
-      - name: Test
+      - name: Setup for tests
         run: |
           touch build/dependencies
           touch build/lingodb-${{ matrix.build_type }}/.stamp
           touch build/lingodb-${{ matrix.build_type }}/.buildstamp
           chmod +x build/lingodb-${{ matrix.build_type }}/*
-          make TEST_BUILD_TYPE=${{ matrix.build_type }} DATA_BUILD_TYPE=${{ matrix.build_type }} test-no-rebuild
+      - name: Test lit
+        run: |
+          make test-no-rebuild-lit
+        env:
+          TEST_BUILD_TYPE: ${{ matrix.build_type }}
+          DATA_BUILD_TYPE: ${{ matrix.build_type }}
+
+      - name: Test unit
+        run: |
+          make test-no-rebuild-unit
+        env:
+          TEST_BUILD_TYPE: ${{ matrix.build_type }}
+          DATA_BUILD_TYPE: ${{ matrix.build_type }}
+
+      - name: Test sqlite-small (llvm)
+        run: |
+          make test-no-rebuild-sqlite-small
+        env:
+          TEST_BUILD_TYPE: ${{ matrix.build_type }}
+          DATA_BUILD_TYPE: ${{ matrix.build_type }}
+          LINGODB_EXECUTION_MODE: DEFAULT
+
+      - name: Test sqlite-small (baseline)
+        run: |
+          # only run sqlite-small for default and baseline backend, since lit chooses backend on its own and unit is backend-agnostic
+          make test-no-rebuild-sqlite-small
+        env:
+          TEST_BUILD_TYPE: ${{ matrix.build_type }}
+          DATA_BUILD_TYPE: ${{ matrix.build_type }}
+          LINGODB_EXECUTION_MODE: BASELINE
+
   sqlite_tests:
     strategy:
       matrix:
@@ -70,13 +107,24 @@ jobs:
         with:
           name: ${{ matrix.build_type }}-build
           path: build/lingodb-${{ matrix.build_type }}
-      - name: Test
+      - name: Setup for tests
         run: |
           touch build/dependencies
           touch build/lingodb-${{ matrix.build_type }}/.stamp
           touch build/lingodb-${{ matrix.build_type }}/.buildstamp
           chmod +x build/lingodb-${{ matrix.build_type }}/*
-          make SQLITE_TEST_BUILD_TYPE=${{ matrix.build_type }} sqlite-test-no-rebuild
+      - name: Test llvm backend
+        run: |
+          make test-no-rebuild-sqlite
+        env:
+          SQLITE_TEST_BUILD_TYPE: ${{ matrix.build_type }}
+          LINGODB_EXECUTION_MODE: "DEFAULT"
+      - name: Test baseline backend
+        run: |
+          make test-no-rebuild-sqlite
+        env:
+          SQLITE_TEST_BUILD_TYPE: ${{ matrix.build_type }}
+          LINGODB_EXECUTION_MODE: "BASELINE"
 
   sqlite_dataset-tests:
     strategy:
@@ -110,23 +158,51 @@ jobs:
           bash tools/generate/tpch.sh /datasets/tpch-1 1
           bash tools/generate/tpcds.sh /datasets/tpcds-1 1
           bash tools/generate/job.sh /datasets/job
-      - name: Load datasets
+      - name: Load dataset tpch
         run: |
           export BASE_PATH=$(pwd)
           mkdir -p /db/tpch-1
           cd /datasets/tpch-1
           $BASE_PATH/build/lingodb-${{ matrix.build_type }}/sql /db/tpch-1 < $BASE_PATH/resources/sql/tpch/initialize.sql
+      - name: Load dataset tpcds
+        run: |
+          export BASE_PATH=$(pwd)
           mkdir -p /db/tpcds-1
           cd /datasets/tpcds-1
           $BASE_PATH/build/lingodb-${{ matrix.build_type }}/sql /db/tpcds-1 < $BASE_PATH/resources/sql/tpcds/initialize.sql
+      - name: Load dataset job
+        run: |
+          export BASE_PATH=$(pwd)
           mkdir -p /db/job
           cd /datasets/job
           $BASE_PATH/build/lingodb-${{ matrix.build_type }}/sql /db/job < $BASE_PATH/resources/sql/job/initialize.sql
-      - name: Test
-        run: |
-          ./build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpchSf1.test /db/tpch-1
-          ./build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpcdsSf1.test /db/tpcds-1
-          ./build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/job.test /db/job
+
+      - name: Test tpcds (llvm)
+        run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpchSf1.test /db/tpch-1
+        env:
+          LINGODB_EXECUTION_MODE: DEFAULT
+      - name: Test tpcds (baseline)
+        run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpchSf1.test /db/tpch-1
+        env:
+          LINGODB_EXECUTION_MODE: BASELINE
+
+      - name: Test tpcds (llvm)
+        run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpcdsSf1.test /db/tpcds-1
+        env:
+          LINGODB_EXECUTION_MODE: DEFAULT
+      - name: Test tpcds (baseline)
+        run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpcdsSf1.test /db/tpcds-1
+        env:
+          LINGODB_EXECUTION_MODE: BASELINE
+
+      - name: Test job (llvm)
+        run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/job.test /db/job
+        env:
+          LINGODB_EXECUTION_MODE: DEFAULT
+      - name: Test job (baseline)
+        run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/job.test /db/job
+        env:
+          LINGODB_EXECUTION_MODE: BASELINE
 
 
   build_lingodb_python:
@@ -147,6 +223,7 @@ jobs:
         with:
           name: lingodb-python-build
           path: /built-packages
+
   test_lingodb_python:
     needs: build_lingodb_python
     runs-on: ubuntu-24.04

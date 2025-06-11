@@ -49,6 +49,7 @@ void lingodb::execution::initializeContext(mlir::MLIRContext& context) {
    registry.insert<mlir::memref::MemRefDialect>();
    registry.insert<util::UtilDialect>();
    registry.insert<mlir::scf::SCFDialect>();
+   // TODO: should we make this optional? Would require a cmake flag that deactivates the LLVM backend.
    registry.insert<mlir::LLVM::LLVMDialect>();
 
 #if GPU_ENABLED == 1
@@ -57,6 +58,7 @@ void lingodb::execution::initializeContext(mlir::MLIRContext& context) {
    mlir::NVVM::registerNVVMTargetInterfaceExternalModels(registry);
 #endif
    mlir::registerAllExtensions(registry);
+   // TODO: same as above, should we make this optional?
    mlir::registerAllToLLVMIRTranslations(registry);
    context.appendDialectRegistry(registry);
    context.loadAllAvailableDialects();

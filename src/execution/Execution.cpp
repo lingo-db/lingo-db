@@ -9,6 +9,7 @@
 #include "lingodb/compiler/Dialect/RelAlg/Passes.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/Passes.h"
+#include "lingodb/execution/BaselineBackend.h"
 #include "lingodb/execution/CBackend.h"
 #include "lingodb/execution/LLVMBackends.h"
 #include "lingodb/runtime/storage/TableStorage.h"
@@ -185,35 +186,49 @@ class DefaultImperativeLowering : public LoweringStep {
 };
 ExecutionMode getExecutionMode() {
    ExecutionMode runMode;
-   if (RUN_QUERIES_WITH_PERF) {
+   if constexpr (RUN_QUERIES_WITH_PERF) {
       runMode = ExecutionMode::PERF;
    } else {
       runMode = ExecutionMode::DEFAULT;
    }
    std::string mode = executionModeSetting.getValue();
-   if (std::string(mode) == "PERF") {
+   if (mode == "PERF") {
       runMode = ExecutionMode::PERF;
-   } else if (std::string(mode) == "CHEAP") {
+   } else if (mode == "CHEAP") {
       runMode = ExecutionMode::CHEAP;
-   } else if (std::string(mode) == "EXTREME_CHEAP") {
-      runMode = ExecutionMode::EXTREME_CHEAP;
-   } else if (std::string(mode) == "DEFAULT") {
+   } else if (mode == "DEFAULT") {
       runMode = ExecutionMode::DEFAULT;
-   } else if (std::string(mode) == "DEBUGGING") {
+   } else if (mode == "DEBUGGING") {
       runMode = ExecutionMode::DEBUGGING;
-   } else if (std::string(mode) == "SPEED") {
+   } else if (mode == "SPEED") {
       std::cout << "using speed mode" << std::endl;
       runMode = ExecutionMode::SPEED;
-   } else if (std::string(mode) == "C") {
+   } else if (mode == "C") {
       runMode = ExecutionMode::C;
-   } else if (std::string(mode) == "GPU") {
-#if GPU_ENABLED == 1
-      runMode = ExecutionMode::GPU;
-#endif
-   } else if (std::string(mode) == "NONE") {
-      runMode = ExecutionMode::NONE;
    }
-
+#if GPU_ENABLED == 1
+   else if (mode == "GPU") {
+      runMode = ExecutionMode::GPU;
+   }
+#endif
+#if BASELINE_ENABLED == 1
+   else if (mode == "BASELINE") {
+      runMode = ExecutionMode::BASELINE;
+   } else if (mode == "BASELINE_SPEED") {
+      runMode = ExecutionMode::BASELINE_SPEED;
+   }
+#else
+   else if (mode == "BASELINE" || mode == "BASELINE_SPEED") {
+      std::cerr << "Baseline mode is not enabled in this build" << std::endl;
+      exit(1);
+   }
+#endif
+   else if (mode == "NONE") {
+      runMode = ExecutionMode::NONE;
+   } else {
+      std::cerr << "Unknown execution mode: " << mode << std::endl;
+      exit(1);
+   }
    return runMode;
 }
 
@@ -339,11 +354,17 @@ std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(execution::Exec
 #if GPU_ENABLED == 1
       config->executionBackend = createGPULLVMBackend();
 #endif
+   } else if (runMode == ExecutionMode::BASELINE || runMode == ExecutionMode::BASELINE_SPEED) {
+#if BASELINE_ENABLED == 1
+      config->executionBackend = createBaselineBackend();
+#else
+      std::cerr << "Baseline mode is not enabled in this build" << std::endl;
+#endif
    } else if (runMode != ExecutionMode::NONE) {
       config->executionBackend = createDefaultLLVMBackend();
    }
    config->resultProcessor = execution::createTablePrinter();
-   if (runMode == ExecutionMode::SPEED || runMode == ExecutionMode::EXTREME_CHEAP) {
+   if (runMode == ExecutionMode::SPEED || runMode == ExecutionMode::BASELINE_SPEED) {
       config->queryOptimizer->disableVerification();
       config->executionBackend->disableVerification();
       for (auto& loweringStep : config->loweringSteps) {
