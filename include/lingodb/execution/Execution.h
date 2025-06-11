@@ -100,7 +100,8 @@ enum class ExecutionMode {
    EXTREME_CHEAP = 5, // compile as cheap (compile time) as possible, don't verify MLIR module
    C = 6,
    GPU = 7, // compile with support for GPUs
-   NONE = 8
+   NONE = 8,
+   Baseline = 9, // baseline compilation mode, similar to LLVM -O0, uses TPDE
 };
 std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(ExecutionMode runMode, bool sqlInput);
 ExecutionMode getExecutionMode();

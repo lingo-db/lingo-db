@@ -9,6 +9,7 @@
 #include "lingodb/compiler/Dialect/RelAlg/Passes.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/Passes.h"
+#include "lingodb/execution/BaselineBackend.h"
 #include "lingodb/execution/CBackend.h"
 #include "lingodb/execution/LLVMBackends.h"
 #include "lingodb/runtime/storage/TableStorage.h"
@@ -340,6 +341,10 @@ std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(execution::Exec
    } else if (runMode == ExecutionMode::GPU) {
 #if GPU_ENABLED == 1
       config->executionBackend = createGPULLVMBackend();
+#endif
+   } else if (runMode == ExecutionMode::Baseline) {
+#if BASELINE_ENABLED == 1
+      config->executionBackend = createBaselineBackend();
 #endif
    } else if (runMode != ExecutionMode::NONE) {
       config->executionBackend = createDefaultLLVMBackend();
