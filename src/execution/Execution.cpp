@@ -209,14 +209,23 @@ ExecutionMode getExecutionMode() {
       runMode = ExecutionMode::SPEED;
    } else if (std::string(mode) == "C") {
       runMode = ExecutionMode::C;
-   } else if (std::string(mode) == "GPU") {
-#if GPU_ENABLED == 1
-      runMode = ExecutionMode::GPU;
-#endif
-   } else if (std::string(mode) == "NONE") {
-      runMode = ExecutionMode::NONE;
    }
-
+#if GPU_ENABLED == 1
+   else if (std::string(mode) == "GPU") {
+      runMode = ExecutionMode::GPU;
+   }
+#endif
+#if BASELINE_ENABLED == 1
+   else if (std::string(mode) == "BASELINE") {
+      runMode = ExecutionMode::BASELINE;
+   }
+#endif
+   else if (std::string(mode) == "NONE") {
+      runMode = ExecutionMode::NONE;
+   } else {
+      std::cerr << "Unknown execution mode: " << mode << std::endl;
+      exit(1);
+   }
    return runMode;
 }
 
@@ -342,7 +351,7 @@ std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(execution::Exec
 #if GPU_ENABLED == 1
       config->executionBackend = createGPULLVMBackend();
 #endif
-   } else if (runMode == ExecutionMode::Baseline) {
+   } else if (runMode == ExecutionMode::BASELINE) {
 #if BASELINE_ENABLED == 1
       config->executionBackend = createBaselineBackend();
 #endif

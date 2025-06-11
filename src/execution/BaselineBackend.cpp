@@ -4,20 +4,25 @@
 #endif
 
 #include "lingodb/execution/BaselineBackend.h"
+#include "lingodb/compiler/Dialect/util/UtilOps.h"
 #include "lingodb/utility/Setting.h"
 #include <cstdio>
 #include <filesystem>
 #include <iostream>
-#include <mlir/Dialect/Func/IR/FuncOps.h.inc>
+#include <ranges>
 #include <sstream>
 #include <tpde/CompilerBase.hpp>
 #include <tpde/x64/CompilerX64.hpp>
 #include <dlfcn.h>
+#include <mlir/Dialect/Func/IR/FuncOps.h>
+#include <mlir/Interfaces/FunctionInterfaces.h>
 #include <spdlog/sinks/ostream_sink.h>
 #include <spdlog/spdlog.h>
 
 namespace {
 lingodb::utility::GlobalSetting<std::string> baselineObjectFileOut("system.compilation.baseline_object_out", "");
+
+using namespace lingodb::compiler;
 
 class SpdLogSpoof {
    // storage for the log messages
@@ -46,14 +51,14 @@ class SpdLogSpoof {
 class BaselineBackend : public lingodb::execution::ExecutionBackend {
    // adaptor mlir -> tpde
    struct IRAdaptor {
-      using IRFuncRef = mlir::func::FuncOp*;
-      using IRBlockRef = mlir::Region*;
-      using IRInstRef = mlir::Operation*;
-      using IRValueRef = mlir::Value*;
+      using IRFuncRef = mlir::func::FuncOp;
+      using IRBlockRef = mlir::Block*;
+      using IRInstRef = mlir::Operation;
+      using IRValueRef = mlir::Value;
 
-      static constexpr IRFuncRef INVALID_FUNC_REF = nullptr;
-      static constexpr IRBlockRef INVALID_BLOCK_REF = nullptr;
-      static constexpr IRValueRef INVALID_VALUE_REF = nullptr;
+      IRFuncRef INVALID_FUNC_REF = nullptr;
+      IRBlockRef INVALID_BLOCK_REF = nullptr;
+      IRValueRef INVALID_VALUE_REF = nullptr;
 
       static constexpr bool TPDE_PROVIDES_HIGHEST_VAL_IDX = false;
       static constexpr bool TPDE_LIVENESS_VISIT_ARGS = true;
@@ -66,43 +71,50 @@ class BaselineBackend : public lingodb::execution::ExecutionBackend {
       IRFuncRef cur_func = INVALID_FUNC_REF;
 
       uint32_t func_count() const noexcept {
-         // return module->functions.size();
+         const auto it = funcs();
+         return std::distance(it.begin(), it.begin());
       }
 
       auto funcs() const noexcept {
-         // return module->functions;
+         return module->getOps<mlir::func::FuncOp>();
       }
 
       auto funcs_to_compile() const noexcept {
-         // return funcs();
+         return llvm::make_filter_range(funcs(), [](mlir::func::FuncOp func) {
+            return !func.isExternal() && !func.isDeclaration();
+         });
       }
 
       std::string_view func_link_name(IRFuncRef func) const noexcept {
-         // return func->name;
+         return func.getSymName();
       }
 
-      bool func_extern(IRFuncRef) const noexcept {
-         // return false;
+      bool func_extern(IRFuncRef func) const noexcept {
+         return func.isExternal();
       }
 
-      bool func_only_local(IRFuncRef) const noexcept {
-         // return false;
+      bool func_only_local(IRFuncRef func) const noexcept {
+         return func.isPrivate();
       }
 
-      static bool func_has_weak_linkage(IRFuncRef) noexcept {
-         // return false;
+      static bool func_has_weak_linkage(IRFuncRef func) noexcept {
+         return false; // IR does not support weak linkage
       }
 
       static bool cur_needs_unwind_info() noexcept {
-         // return false;
+         return false; // we do not want to support exceptions
       }
 
       static bool cur_is_vararg() noexcept {
-         return false;
+         return false; // we do not support varargs
       }
 
-      auto& cur_args() const noexcept {
-         // return cur_func->parameters;
+      auto cur_args() const noexcept {
+         mlir::FunctionOpInterface interface = dyn_cast<mlir::FunctionOpInterface>(cur_func);
+         return std::views::all(interface.getArguments()) |
+            std::views::transform([](mlir::BlockArgument arg) {
+                   return dyn_cast<mlir::Value>(arg);
+                });
       }
 
       static bool cur_arg_is_byval(uint32_t) noexcept { return false; }
@@ -111,30 +123,37 @@ class BaselineBackend : public lingodb::execution::ExecutionBackend {
       static bool cur_arg_is_sret(uint32_t) noexcept { return false; }
 
       auto cur_static_allocas() const noexcept {
-         // return std::views::empty<IRValueRef>;
+         mlir::FunctionOpInterface interface = dyn_cast<mlir::FunctionOpInterface>(cur_func);
+         return llvm::make_filter_range(interface.getFunctionBody().getOps<dialect::util::AllocaOp>(),
+                                        [](dialect::util::AllocaOp alloca) {
+                                           return dyn_cast<mlir::Value>(alloca.getResult());
+                                        });
       }
 
       static bool cur_has_dynamic_alloca() noexcept {
          // the IR does not support dynamic stack allocations
-         // return false;
+         return false;
       }
 
       IRBlockRef cur_entry_block() const noexcept {
-         // return cur_func->basicBlocks.front();
+         mlir::FunctionOpInterface interface = dyn_cast<mlir::FunctionOpInterface>(cur_func);
+         return &interface.getFunctionBody().getBlocks().front();
       }
 
-      auto& cur_blocks() const noexcept {
-         // return cur_func->basicBlocks;
+      auto cur_blocks() const noexcept {
+         mlir::FunctionOpInterface interface = dyn_cast<mlir::FunctionOpInterface>(cur_func);
+         return interface.getFunctionBody().getBlocks() |
+            std::views::transform([](mlir::Block& block) {
+                   return &block;
+                });
       }
 
-      auto& block_succs(IRBlockRef block) const noexcept {
-         // return block->successors;
+      auto block_succs(IRBlockRef block) const noexcept {
+         return block->getSuccessors();
       }
 
-      auto block_insts(IRBlockRef block) const noexcept {
-         // return std::views::transform(block->values, [](Value* val) {
-         //    return &val->op;
-         // });
+      auto& block_insts(IRBlockRef block) const noexcept {
+         return block->getOperations();
       }
 
       auto& block_phis(IRBlockRef block) const noexcept {

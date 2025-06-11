@@ -101,7 +101,7 @@ enum class ExecutionMode {
    C = 6,
    GPU = 7, // compile with support for GPUs
    NONE = 8,
-   Baseline = 9, // baseline compilation mode, similar to LLVM -O0, uses TPDE
+   BASELINE = 9, // baseline compilation mode, similar to LLVM -O0, uses TPDE
 };
 std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(ExecutionMode runMode, bool sqlInput);
 ExecutionMode getExecutionMode();
