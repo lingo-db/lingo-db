@@ -258,6 +258,7 @@ std::shared_ptr<db::RuntimeFunctionRegistry> db::RuntimeFunctionRegistry::getBui
    builtinRegistry->add("ToUpper").implementedAs(StringRuntime::toUpper).matchesTypes({RuntimeFunction::stringLike}, RuntimeFunction::matchesArgument());
    builtinRegistry->add("Concatenate").implementedAs(StringRuntime::concat).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike}, RuntimeFunction::matchesArgument());
 
+   builtinRegistry->add("RegexpReplace").implementedAs(StringRuntime::regexpReplace).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike, RuntimeFunction::stringLike}, RuntimeFunction::matchesArgument());
    builtinRegistry->add("Like").implementedAs(StringRuntime::like).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike}, resTypeIsBool);
    builtinRegistry->add("ConstLike").matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike}, resTypeIsBool).implementedAs(constLikeImpl).needsWrapping();
    builtinRegistry->add("RoundDecimal").matchesTypes({RuntimeFunction::anyDecimal, RuntimeFunction::intLike}, RuntimeFunction::matchesArgument()).needsWrapping().implementedAs([](mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, const mlir::TypeConverter* typeConverter, mlir::Location loc) -> mlir::Value {
