@@ -8,6 +8,8 @@ add_executable(tester
         catalog/TestMetaData.cpp
         catalog/TestCatalogEntries.cpp
         runtime/TestUTF8.cpp
+        runtime/StringRuntime.cpp
+        runtime/DateRuntime.cpp
         storage/TestStorage.cpp
         utility/TestSerialization.cpp
 )

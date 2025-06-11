@@ -280,13 +280,18 @@ std::shared_ptr<db::RuntimeFunctionRegistry> db::RuntimeFunctionRegistry::getBui
    builtinRegistry->add("RandomInRange").implementedAs(IntegerRuntime::randomInRange).matchesTypes({RuntimeFunction::intLike, RuntimeFunction::intLike}, RuntimeFunction::matchesArgument());
 
    builtinRegistry->add("ExtractFromDate").matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::dateLike}, resTypeIsI64).needsWrapping();
+   builtinRegistry->add("DateTrunc").matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::dateLike}, resTypeIsI64).implementedAs(DateRuntime::dateTrunc);
    builtinRegistry->add("DateDiff").matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::dateLike, RuntimeFunction::dateLike}, resTypeIsI64);
    builtinRegistry->add("DateDiffSecond").matchesTypes({RuntimeFunction::dateLike, RuntimeFunction::dateLike}, resTypeIsI64).implementedAs(DateRuntime::dateDiffSeconds);
    builtinRegistry->add("ExtractYearFromDate").matchesTypes({RuntimeFunction::dateLike}, resTypeIsI64).implementedAs(DateRuntime::extractYear);
    builtinRegistry->add("ExtractMonthFromDate").matchesTypes({RuntimeFunction::dateLike}, resTypeIsI64).implementedAs(DateRuntime::extractMonth);
    builtinRegistry->add("ExtractDayFromDate").matchesTypes({RuntimeFunction::dateLike}, resTypeIsI64).implementedAs(DateRuntime::extractDay);
    builtinRegistry->add("ExtractHourFromDate").matchesTypes({RuntimeFunction::dateLike}, resTypeIsI64).implementedAs(DateRuntime::extractHour);
+   builtinRegistry->add("ExtractMinuteFromDate").matchesTypes({RuntimeFunction::dateLike}, resTypeIsI64).implementedAs(DateRuntime::extractMinute);
+   builtinRegistry->add("ExtractSecondFromDate").matchesTypes({RuntimeFunction::dateLike}, resTypeIsI64).implementedAs(DateRuntime::extractSecond);
    builtinRegistry->add("DateAdd").handlesInvalid().matchesTypes({RuntimeFunction::dateLike, RuntimeFunction::dateInterval}, RuntimeFunction::matchesArgument()).implementedAs(dateAddImpl).folds(dateAddFoldFn);
+   builtinRegistry->add("DateSubtract").handlesInvalid().matchesTypes({RuntimeFunction::dateLike, RuntimeFunction::dateInterval}, RuntimeFunction::matchesArgument()).implementedAs(dateSubImpl).folds(dateSubtractFoldFn);
+
    builtinRegistry->add("AbsInt").handlesInvalid().matchesTypes({RuntimeFunction::intLike}, RuntimeFunction::matchesArgument()).implementedAs(absImpl);
    builtinRegistry->add("AbsDecimal").handlesInvalid().matchesTypes({RuntimeFunction::anyDecimal}, RuntimeFunction::matchesArgument()).implementedAs(absImpl);
    builtinRegistry->add("Sqrt").needsWrapping().matchesTypes({RuntimeFunction::anyNumber}, RuntimeFunction::matchesArgument()).implementedAs(sqrtImpl);
@@ -296,7 +301,6 @@ std::shared_ptr<db::RuntimeFunctionRegistry> db::RuntimeFunctionRegistry::getBui
    builtinRegistry->add("Erf").matchesTypes({RuntimeFunction::float64}, resTypeIsF64).implementedAs(FloatRuntime::erf);
    builtinRegistry->add("Cos").matchesTypes({RuntimeFunction::float64}, resTypeIsF64).implementedAs(FloatRuntime::cos);
    builtinRegistry->add("ASin").matchesTypes({RuntimeFunction::float64}, resTypeIsF64).implementedAs(FloatRuntime::arcsin);
-   builtinRegistry->add("DateSubtract").handlesInvalid().matchesTypes({RuntimeFunction::dateLike, RuntimeFunction::dateInterval}, RuntimeFunction::matchesArgument()).implementedAs(dateSubImpl).folds(dateSubtractFoldFn);
    builtinRegistry->add("Hash").matchesTypes({RuntimeFunction::anyType}, resTypeIsIndex).needsWrapping().implementedAs([](mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, const mlir::TypeConverter* typeConverter, mlir::Location loc) -> mlir::Value {
       return rewriter.create<lingodb::compiler::dialect::db::Hash>(loc, loweredArguments[0]);
    });
