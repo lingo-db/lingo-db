@@ -5,7 +5,6 @@
 #include <csignal>
 #include <deque>
 #include <iostream>
-#include <memory>
 #include <thread>
 
 #include "lingodb/scheduler/Scheduler.h"
@@ -13,9 +12,93 @@
 
 namespace lingodb::scheduler {
 class Worker;
+namespace {
+static thread_local Worker* currentWorker;
+} // end namespace
 
 struct TaskWrapper;
+#ifdef ASAN_ACTIVE
 
+class Fiber {
+   std::thread thread;
+   std::atomic<bool> isRunning = false;
+   bool done = true;
+   Worker* worker = nullptr;
+   TaskWrapper* task = nullptr;
+   std::condition_variable cvMain, cvFiber;
+   std::mutex mtx;
+
+   public:
+   void setup();
+   void teardown();
+   Fiber() = default;
+
+   ~Fiber() {
+      if (thread.joinable()) {
+         //resume(); // just in case it's yielded
+         thread.join();
+      }
+   }
+   bool run(Worker* w, TaskWrapper* tw, const std::function<void()>&& f) {
+      worker = w;
+      task = tw;
+      done = false;
+      isRunning = true;
+      std::unique_lock<std::mutex> lk(mtx);
+      if (thread.joinable()) {
+         thread.join();
+      }
+      thread = std::thread([this, f]() {
+         currentWorker = worker;
+         setup();
+         f(); // execute task
+         isRunning = false;
+         done = true;
+         teardown();
+         std::unique_lock<std::mutex> lk(mtx);
+         cvMain.notify_one(); // notify resume() that we're done
+      });
+
+      // Wait for initial yield before we return
+      cvMain.wait(lk);
+
+      return done;
+   }
+   bool resume() {
+      assert(!isRunning);
+      assert(!done);
+      isRunning = true;
+      std::unique_lock<std::mutex> lk(mtx);
+      cvFiber.notify_one();
+      cvMain.wait(lk);
+      return done;
+   }
+
+   void yield() {
+      assert(isRunning);
+      assert(!done);
+      isRunning = false;
+      teardown();
+      std::unique_lock<std::mutex> lk(mtx);
+      cvMain.notify_one();
+      cvFiber.wait(lk);
+      setup();
+   }
+
+   bool isYielded() {
+      return !isRunning;
+   }
+
+   Worker* getWorker() {
+      return worker;
+   }
+
+   TaskWrapper* getTask() {
+      return task;
+   }
+};
+
+#else
 class Fiber {
    static constexpr size_t stackSize = 1 << 20;
 
@@ -49,6 +132,9 @@ class Fiber {
    TaskWrapper* task = nullptr;
 
    public:
+   void setup();
+   void teardown();
+
    bool run(Worker* worker, TaskWrapper* taskWrapper, const std::function<void()>&& f) {
       this->worker = worker;
       this->task = taskWrapper;
@@ -56,7 +142,9 @@ class Fiber {
       isRunning = true;
       fiber = boost::context::fiber{std::allocator_arg, LocalAllocator{this}, [&](boost::context::fiber&& boostSink) {
                                        sink = std::move(boostSink);
+                                       setup();
                                        f();
+                                       teardown();
                                        isRunning = false;
                                        done = true;
                                        return std::move(sink);
@@ -77,7 +165,9 @@ class Fiber {
       assert(!isRunning);
       assert(!done);
       isRunning = true;
+      setup();
       fiber = std::move(fiber).resume();
+      teardown();
       return done;
    }
 
@@ -85,6 +175,7 @@ class Fiber {
       assert(isRunning);
       assert(!done);
       isRunning = false;
+      teardown();
       sink = std::move(sink).resume();
    }
    bool isYielded() {
@@ -97,6 +188,7 @@ class Fiber {
       assert(done);
    }
 };
+#endif
 
 struct TaskWrapper {
    std::unique_ptr<Task> task;
@@ -141,6 +233,14 @@ struct TaskWrapper {
    }
 };
 
+void Fiber::teardown() {
+   assert(task && task->task);
+   task->task->teardown();
+}
+void Fiber::setup() {
+   assert(task && task->task);
+   task->task->setup();
+}
 class Scheduler {
    size_t numWorkers;
 
@@ -427,10 +527,7 @@ class Worker {
             fiberAllocator.deallocate(std::move(currentFiber));
          };
          if (currentFiber) {
-            auto* relatedTask = currentFiber->getTask();
-            relatedTask->task->setup();
             if (currentFiber->resume()) {
-               relatedTask->task->teardown();
                //unyield because it was previously registered as yielded
                if (currentFiber->getTask()) {
                   currentFiber->getTask()->unYieldFiber();
@@ -438,8 +535,6 @@ class Worker {
                auto* resumeTask = currentFiber->getTask();
                handleFiberComplete();
                scheduler.returnTask(resumeTask);
-            } else {
-               relatedTask->task->teardown();
             }
             assert(!currentFiber);
          }
@@ -492,11 +587,9 @@ class Worker {
                currentFiber = fiberAllocator.allocate();
                assert(currentFiber);
                // Step 3. consume reserved work
-               currTask->task->setup();
                auto fiberDone = currentFiber->run(this, currTask, [&] {
                   currTask->task->performWork();
                });
-               currTask->task->teardown();
                if (fiberDone) {
                   this->startWaitTime = TimePoint::min();
                   handleFiberComplete();
@@ -528,7 +621,6 @@ class Worker {
 
 namespace {
 Scheduler* scheduler;
-static thread_local Worker* currentWorker;
 static std::atomic<size_t> numSchedulerUsers = 0;
 
 void stopCurrentScheduler() {
