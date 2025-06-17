@@ -69,12 +69,15 @@ class ArrayLoadFixedSizedLowering : public OpConversionPattern<arrow::LoadFixedS
    LogicalResult matchAndRewrite(arrow::LoadFixedSizedOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       mlir::Value valueBuffer;
       createAtArrayCreation(rewriter, adaptor.getArray(), [&](mlir::ConversionPatternRewriter& rewriter) {
+         auto offsetPtr = rewriter.create<util::TupleElementPtrOp>(op.getLoc(), util::RefType::get(rewriter.getIndexType()), adaptor.getArray(), 2);
+         auto offset = rewriter.create<util::LoadOp>(op.getLoc(), offsetPtr);
          auto bufferArrayPtr = rewriter.create<util::TupleElementPtrOp>(op.getLoc(), util::RefType::get(util::RefType::get(util::RefType::get(rewriter.getI8Type()))), adaptor.getArray(), 5);
          auto bufferArray = rewriter.create<util::LoadOp>(op.getLoc(), bufferArrayPtr);
          //load buffer with main values (offset 1)
          auto c1 = rewriter.create<arith::ConstantIndexOp>(op.getLoc(), 1);
          auto buffer = rewriter.create<util::LoadOp>(op.getLoc(), bufferArray, c1);
          valueBuffer = rewriter.create<util::GenericMemrefCastOp>(op.getLoc(), util::RefType::get(op.getType()), buffer);
+         valueBuffer = rewriter.create<util::ArrayElementPtrOp>(op.getLoc(), util::RefType::get(op.getType()), valueBuffer, offset);
       });
 
       rewriter.replaceOpWithNewOp<util::LoadOp>(op, valueBuffer, adaptor.getOffset());
@@ -106,14 +109,18 @@ class ArrayLoadBoolLowering : public OpConversionPattern<arrow::LoadBoolOp> {
    using OpConversionPattern<arrow::LoadBoolOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(arrow::LoadBoolOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       mlir::Value buffer;
+      mlir::Value arrayOffset;
       createAtArrayCreation(rewriter, adaptor.getArray(), [&](mlir::ConversionPatternRewriter& rewriter) {
+         auto offsetPtr = rewriter.create<util::TupleElementPtrOp>(op.getLoc(), util::RefType::get(rewriter.getIndexType()), adaptor.getArray(), 2);
+         arrayOffset = rewriter.create<util::LoadOp>(op.getLoc(), offsetPtr);
          auto bufferArrayPtr = rewriter.create<util::TupleElementPtrOp>(op.getLoc(), util::RefType::get(util::RefType::get(util::RefType::get(rewriter.getI8Type()))), adaptor.getArray(), 5);
          auto bufferArray = rewriter.create<util::LoadOp>(op.getLoc(), bufferArrayPtr);
          //load buffer with main values (offset 1)
          auto c1 = rewriter.create<arith::ConstantIndexOp>(op.getLoc(), 1);
          buffer = rewriter.create<util::LoadOp>(op.getLoc(), bufferArray, c1);
       });
-      rewriter.replaceOp(op, getBit(rewriter, op.getLoc(), buffer, adaptor.getOffset()));
+      mlir::Value offset = rewriter.create<arith::AddIOp>(op.getLoc(), rewriter.getIndexType(), arrayOffset, adaptor.getOffset());
+      rewriter.replaceOp(op, getBit(rewriter, op.getLoc(), buffer, offset));
 
       return success();
    }
@@ -127,6 +134,8 @@ class ArrayLoadVariableSizeBinaryLowering : public OpConversionPattern<arrow::Lo
       mlir::Value binaryBuffer;
       mlir::Value c1;
       createAtArrayCreation(rewriter, adaptor.getArray(), [&](mlir::ConversionPatternRewriter& rewriter) {
+         auto offsetPtr = rewriter.create<util::TupleElementPtrOp>(op.getLoc(), util::RefType::get(rewriter.getIndexType()), adaptor.getArray(), 2);
+         auto offset = rewriter.create<util::LoadOp>(op.getLoc(), offsetPtr);
          auto bufferArrayPtr = rewriter.create<util::TupleElementPtrOp>(op.getLoc(), util::RefType::get(util::RefType::get(util::RefType::get(rewriter.getI8Type()))), adaptor.getArray(), 5);
          auto bufferArray = rewriter.create<util::LoadOp>(op.getLoc(), bufferArrayPtr);
          //load buffer with main values (offset 1)
@@ -134,6 +143,7 @@ class ArrayLoadVariableSizeBinaryLowering : public OpConversionPattern<arrow::Lo
          auto c2 = rewriter.create<arith::ConstantIndexOp>(op.getLoc(), 2);
          valueBuffer = rewriter.create<util::LoadOp>(op.getLoc(), bufferArray, c1);
          valueBuffer = rewriter.create<util::GenericMemrefCastOp>(op.getLoc(), util::RefType::get(rewriter.getI32Type()), valueBuffer);
+         valueBuffer = rewriter.create<util::ArrayElementPtrOp>(op.getLoc(), util::RefType::get(rewriter.getI32Type()), valueBuffer, offset);
          binaryBuffer = rewriter.create<util::LoadOp>(op.getLoc(), bufferArray, c2);
       });
       auto pos1 = rewriter.create<util::LoadOp>(op.getLoc(), valueBuffer, adaptor.getOffset());
@@ -152,14 +162,18 @@ class ArrayIsValidLowering : public OpConversionPattern<arrow::IsValidOp> {
    using OpConversionPattern<arrow::IsValidOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(arrow::IsValidOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       mlir::Value buffer;
+      mlir::Value arrayOffset;
       createAtArrayCreation(rewriter, adaptor.getArray(), [&](mlir::ConversionPatternRewriter& rewriter) {
+         auto offsetPtr = rewriter.create<util::TupleElementPtrOp>(op.getLoc(), util::RefType::get(rewriter.getIndexType()), adaptor.getArray(), 2);
+         arrayOffset = rewriter.create<util::LoadOp>(op.getLoc(), offsetPtr);
          auto bufferArrayPtr = rewriter.create<util::TupleElementPtrOp>(op.getLoc(), util::RefType::get(util::RefType::get(util::RefType::get(rewriter.getI8Type()))), adaptor.getArray(), 5);
          auto bufferArray = rewriter.create<util::LoadOp>(op.getLoc(), bufferArrayPtr);
          //load  validity buffer (offset 0)
          auto c0 = rewriter.create<arith::ConstantIndexOp>(op.getLoc(), 0);
          buffer = rewriter.create<util::LoadOp>(op.getLoc(), bufferArray, c0);
       });
-      rewriter.replaceOp(op, getBit(rewriter, op.getLoc(), buffer, adaptor.getOffset()));
+      auto offset = rewriter.create<arith::AddIOp>(op.getLoc(), rewriter.getIndexType(), arrayOffset, adaptor.getOffset());
+      rewriter.replaceOp(op, getBit(rewriter, op.getLoc(), buffer, offset));
       return success();
    }
 };
