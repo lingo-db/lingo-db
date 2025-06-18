@@ -25,10 +25,6 @@ int main(int argc, char** argv) {
    lingodb::compiler::support::eval::init();
    execution::ExecutionMode runMode = execution::getExecutionMode();
    auto queryExecutionConfig = execution::createQueryExecutionConfig(runMode, true);
-   if (const char* numRuns = std::getenv("QUERY_RUNS")) {
-      queryExecutionConfig->executionBackend->setNumRepetitions(std::atoi(numRuns));
-      std::cout << "using " << queryExecutionConfig->executionBackend->getNumRepetitions() << " runs" << std::endl;
-   }
    unsetenv("PERF_BUILDID_DIR");
    queryExecutionConfig->timingProcessor = std::make_unique<execution::TimingPrinter>(inputFileName);
 
