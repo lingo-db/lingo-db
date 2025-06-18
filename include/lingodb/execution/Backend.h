@@ -8,22 +8,14 @@ class ModuleOp;
 } // namespace mlir
 namespace lingodb::execution {
 using mainFnType = std::add_pointer<void()>::type;
-using setExecutionContextFnType = std::add_pointer<void(runtime::ExecutionContext*)>::type;
 class ExecutionBackend {
    protected:
-   size_t numRepetitions = 1;
    std::unordered_map<std::string, double> timing;
    Error error;
    bool verify = true;
    std::shared_ptr<SnapshotState> serializationState;
 
    public:
-   size_t getNumRepetitions() const {
-      return numRepetitions;
-   }
-   void setNumRepetitions(size_t numRepetitions) {
-      ExecutionBackend::numRepetitions = numRepetitions;
-   }
    const std::unordered_map<std::string, double>& getTiming() const {
       return timing;
    }

@@ -110,16 +110,6 @@ coverage: build/lingodb-debug-coverage/.stamp
 	llvmcov2html --exclude-dir=$(dir $<),vendored,test build/coverage-report --projectroot=$(ROOT_DIR) $(dir $<)/run-mlir $(dir $<)/run-sql $(dir $<)/mlir-db-opt $(dir $<)/sql-to-mlir $(dir $<)/tester $(dir $<)/coverage.profdata
 
 
-.PHONY: run-benchmark
-run-benchmark: build/lingodb-release/.stamp resources/data/tpch-1/.stamp
-	cmake --build $(dir $<) --target run-sql -- -j${NPROCS}
-	env QUERY_RUNS=5 env LINGODB_EXECUTION_MODE=SPEED python3 tools/scripts/benchmark-tpch.py $(dir $<) tpch-1
-
-run-benchmarks: build/lingodb-release/.stamp resources/data/tpch-1/.stamp resources/data/tpcds-1/.stamp
-	cmake --build $(dir $<) --target run-sql -- -j${NPROCS}
-	env QUERY_RUNS=5 env LINGODB_EXECUTION_MODE=SPEED python3 tools/scripts/benchmark-tpch.py $(dir $<) tpch-1
-	env QUERY_RUNS=5 env LINGODB_EXECUTION_MODE=SPEED python3 tools/scripts/benchmark-tpcds.py $(dir $<) tpcds-1
-
 build-docker-dev:
 	DOCKER_BUILDKIT=1 docker build -f "tools/docker/Dockerfile" -t lingodb-dev --target baseimg "."
 
