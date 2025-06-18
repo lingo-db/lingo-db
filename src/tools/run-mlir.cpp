@@ -24,10 +24,6 @@ int main(int argc, char** argv) {
    lingodb::compiler::support::eval::init();
    execution::ExecutionMode runMode = execution::getExecutionMode();
    auto queryExecutionConfig = execution::createQueryExecutionConfig(runMode, false);
-   if (const char* numRuns = std::getenv("QUERY_RUNS")) {
-      queryExecutionConfig->executionBackend->setNumRepetitions(std::atoi(numRuns));
-      std::cout << "using " << queryExecutionConfig->executionBackend->getNumRepetitions() << " runs" << std::endl;
-   }
    if (std::getenv("LINGODB_BACKEND_ONLY")) {
       queryExecutionConfig->queryOptimizer = {};
       queryExecutionConfig->loweringSteps.clear();

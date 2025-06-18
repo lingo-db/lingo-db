@@ -234,6 +234,8 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
             builder2.setInsertionPointToEnd(mapBlockInfo.block);
             builder2.create<tuples::ReturnOp>(builder2.getUnknownLoc(), mapBlockInfo.results);
             left = mapOp;
+         } else {
+            delete mapBlockInfo.block; // no need to keep empty block
          }
          predicateOperator->setAttr("leftHash", builder.getArrayAttr(keys));
          predicateOperator->setAttr("nullsEqual", builder.getArrayAttr(nullsEqual));
@@ -254,6 +256,8 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
             builder2.setInsertionPointToEnd(mapBlockInfo.block);
             builder2.create<tuples::ReturnOp>(builder2.getUnknownLoc(), mapBlockInfo.results);
             right = mapOp;
+         } else {
+            delete mapBlockInfo.block; // no need to keep empty block
          }
          predicateOperator->setAttr("rightHash", builder.getArrayAttr(keys));
       }

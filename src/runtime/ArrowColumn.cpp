@@ -5,6 +5,7 @@
 #include <arrow/array/builder_decimal.h>
 #include <arrow/array/builder_primitive.h>
 #include <arrow/builder.h>
+#include <lingodb/runtime/ExecutionContext.h>
 
 using namespace lingodb::runtime;
 namespace {
@@ -96,10 +97,12 @@ void handleStatus(arrow::Status status) {
 } // end namespace
 ArrowColumnBuilder* ArrowColumnBuilder::create(VarLen32 type) {
    auto arrowType = parseType(type.str());
-   return new ArrowColumnBuilder(arrowType);
+   auto* cb = new ArrowColumnBuilder(arrowType);
+   getCurrentExecutionContext()->registerState({cb, [](void* ptr) { delete reinterpret_cast<ArrowColumnBuilder*>(ptr); }});
+   return cb;
 }
 
-ArrowColumnBuilder::ArrowColumnBuilder(std::shared_ptr<arrow::DataType> type) : type(type) {
+ArrowColumnBuilder::ArrowColumnBuilder(std::shared_ptr<arrow::DataType> type) : childBuilder(nullptr), type(type) {
    builderUnique = arrow::MakeBuilder(physicalType(type)).ValueOrDie();
    auto reserveOk = builderUnique->Reserve(20000).ok();
    assert(reserveOk);
@@ -179,7 +182,9 @@ ArrowColumn* ArrowColumnBuilder::finish() {
    auto array = builder->Finish().ValueOrDie();
    additionalArrays.push_back(cast(array, type));
    auto column = std::make_shared<arrow::ChunkedArray>(additionalArrays, type);
-   return new ArrowColumn(column);
+   auto* c = new ArrowColumn(column);
+   getCurrentExecutionContext()->registerState({c, [](void* ptr) { delete reinterpret_cast<ArrowColumn*>(ptr); }});
+   return c;
 }
 void ArrowColumnBuilder::merge(ArrowColumnBuilder* other) {
    auto array = other->builder->Finish().ValueOrDie();

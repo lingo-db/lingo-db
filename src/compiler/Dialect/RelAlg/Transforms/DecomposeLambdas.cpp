@@ -168,10 +168,9 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
             }
          }
          OpBuilder builder(andop);
-         auto newAndOp = builder.create<db::AndOp>(andop->getLoc(), vals);
-         andop->remove();
-         andop->dropAllReferences();
-         //andop->destroy();
+         mlir::Value newAndOp = builder.create<db::AndOp>(andop->getLoc(), vals);
+         andop.replaceAllUsesWith(newAndOp);
+         andop->erase();
          return newAndOp;
       } else {
          if (required[v].isSubsetOf(availableRight)) {
@@ -185,8 +184,7 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
             relalg::detail::inlineOpIntoBlock(v.getDefiningOp(), v.getDefiningOp()->getParentOp(), &newsel.getPredicateBlock(), mapping);
             builder.create<tuples::ReturnOp>(currentJoinOp->getLoc(), mapping.lookup(v));
             auto* terminator = newsel.getLambdaBlock().getTerminator();
-            terminator->remove();
-            terminator->destroy();
+            terminator->erase();
             currentJoinOp.setChildren({children[0], newsel});
             return Value();
          }
@@ -214,9 +212,7 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
             mapping.map(currentMap.getLambdaArgument(), newmap.getLambdaArgument());
             relalg::detail::inlineOpIntoBlock(currentVal.getDefiningOp(), currentVal.getDefiningOp()->getParentOp(), &newmap.getLambdaBlock(), mapping);
             builder.create<tuples::ReturnOp>(currentMap->getLoc(), mapping.lookup(currentVal));
-            ret1->remove();
-            ret1->dropAllReferences();
-            ret1->destroy();
+            ret1->erase();
          }
       }
    }
@@ -226,6 +222,7 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
       if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
          signalPassFailure();
       }
+      std::vector<mlir::Operation*> toErase;
       getOperation().walk([&](relalg::SelectionOp op) {
          auto* terminator = op.getRegion().front().getTerminator();
          mlir::Value val = op.getRel();
@@ -233,15 +230,14 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
             decomposeSelection(terminator->getOperand(0), val);
          }
          op.replaceAllUsesWith(val);
-         op->erase();
+         toErase.push_back(op.getOperation());
       });
       getOperation().walk([&](relalg::MapOp op) {
          mlir::Value val = op.getRel();
          decomposeMap(op, val);
          op.replaceAllUsesWith(val);
-         op->erase();
+         toErase.push_back(op.getOperation());
       });
-
       getOperation().walk([&](relalg::OuterJoinOp op) {
          auto* terminator = op.getRegion().front().getTerminator();
          if (terminator->getNumOperands() == 0) {
@@ -254,8 +250,11 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
          auto val = decomposeOuterJoin(retval, availableLeft, availableRight, mapped);
          mlir::OpBuilder builder(terminator);
          builder.create<tuples::ReturnOp>(terminator->getLoc(), val ? mlir::ValueRange{val} : mlir::ValueRange{});
-         terminator->erase();
+         toErase.push_back(terminator);
       });
+      for (auto* op : toErase) {
+         op->erase();
+      }
    }
 };
 } // end anonymous namespace

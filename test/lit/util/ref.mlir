@@ -11,6 +11,7 @@
         %generic_memref1= util.to_generic_memref %memref1 : memref<?xi8> -> !util.ref<!db.nullable<i32>>
         %memref_reloaded=util.to_memref %generic_memref1 : !util.ref<!db.nullable<i32>> -> memref<?xi8>
         %reloaded=memref.load %memref_reloaded[%c1] :memref<?xi8>
+        memref.dealloc %memref1 : memref<?xi8>
 
         %generic_memref=util.alloc(%c2) : !util.ref<!db.nullable<i32>>
         %testval1= db.null : !db.nullable<i32>
@@ -25,7 +26,7 @@
         db.runtime_call "DumpValue" (%res1) : (!db.nullable<i32>) -> ()
         //CHECK: int(42)
         db.runtime_call "DumpValue" (%res2) : (!db.nullable<i32>) -> ()
-        //util.dealloc %generic_memref : !util.ref<!db.nullable<i32>>
+        util.dealloc %generic_memref : !util.ref<!db.nullable<i32>>
 
 
 

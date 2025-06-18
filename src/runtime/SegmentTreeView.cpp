@@ -103,5 +103,6 @@ SegmentTreeView* SegmentTreeView::build(Buffer buffer, size_t typeSize, void (*c
 }
 SegmentTreeView::~SegmentTreeView() {
    FixedSizedBuffer<TreeNode>::deallocate(storage, numEntries);
+   FixedSizedBuffer<uint8_t>::deallocate(stateStorage, numEntries * stateTypeSize);
 }
 } // namespace lingodb::runtime

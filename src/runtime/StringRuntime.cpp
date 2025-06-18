@@ -194,7 +194,7 @@ __int128 lingodb::runtime::StringRuntime::toDecimal(lingodb::runtime::VarLen32 s
       size_t len = 0;                                                                                                                                \
       arrow::Status status = formatter(value, [&](std::string_view v) {                                                                              \
          len = v.length();                                                                                                                           \
-         data = new uint8_t[len];                                                                                                                    \
+         data = getCurrentExecutionContext()->allocString(len);                                                                                      \
          memcpy(data, v.data(), len);                                                                                                                \
          return arrow::Status::OK();                                                                                                                 \
       });                                                                                                                                            \
@@ -340,7 +340,8 @@ lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::toUpper(lingodb::run
       ::toUpper(str.data(), str.getLen());
       return str;
    } else {
-      char* copied = new char[str.getLen()];
+      char* copied = reinterpret_cast<char*>(getCurrentExecutionContext()->allocString(str.getLen()));
+
       memcpy(copied, str.data(), str.getLen());
       ::toUpper(copied, str.getLen());
       return lingodb::runtime::VarLen32(reinterpret_cast<uint8_t*>(copied), str.getLen());
@@ -354,7 +355,7 @@ lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::concat(lingodb::runt
       memcpy(&data[a.getLen()], b.data(), b.getLen());
       return lingodb::runtime::VarLen32(data, totalLength);
    } else {
-      char* copied = new char[totalLength];
+      char* copied = reinterpret_cast<char*>(getCurrentExecutionContext()->allocString(totalLength));
       memcpy(copied, a.data(), a.getLen());
       memcpy(&copied[a.getLen()], b.data(), b.getLen());
       return lingodb::runtime::VarLen32(reinterpret_cast<uint8_t*>(copied), totalLength);

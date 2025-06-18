@@ -4,7 +4,6 @@
 void lingodb::runtime::ExecutionContext::setResult(uint32_t id, uint8_t* ptr) {
    auto* context = getCurrentExecutionContext();
    assert(context);
-   context->states.erase(ptr);
    context->results[id] = ptr;
 }
 void lingodb::runtime::ExecutionContext::clearResult(uint32_t id) {
@@ -16,7 +15,8 @@ void lingodb::runtime::ExecutionContext::setTupleCount(uint32_t id, int64_t tupl
    auto* context = getCurrentExecutionContext();
    context->tupleCounts[id] = tupleCount;
 }
-void lingodb::runtime::ExecutionContext::reset() {
+
+lingodb::runtime::ExecutionContext::~ExecutionContext() {
    states.forEach([&](void* key, State value) {
       value.freeFn(value.ptr);
    });
@@ -29,9 +29,15 @@ void lingodb::runtime::ExecutionContext::reset() {
    allocators.clear();
    states.clear();
 }
-lingodb::runtime::ExecutionContext::~ExecutionContext() {
-   reset();
+
+uint8_t* lingodb::runtime::ExecutionContext::allocStateRaw(size_t size) {
+   auto* context = getCurrentExecutionContext();
+   assert(context);
+   uint8_t* ptr = static_cast<uint8_t*>(malloc(size));
+   context->registerState({ptr, [](void* p) { free(p); }});
+   return ptr;
 }
+
 namespace {
 thread_local lingodb::runtime::ExecutionContext* currentExecutionContext = nullptr;
 } // end namespace

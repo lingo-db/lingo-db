@@ -193,13 +193,12 @@ class ExpandTransitiveEqualities : public mlir::PassWrapper<ExpandTransitiveEqua
          auto& colManager = getContext().getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
          auto availableColumns = op.getAvailableColumns();
          for (auto pred : additionalPredicates) {
-            auto loc = builder.getUnknownLoc();
-            auto* block = new mlir::Block;
-            mlir::OpBuilder predBuilder(&getContext());
-            block->addArgument(tuples::TupleType::get(&getContext()), loc);
-
-            predBuilder.setInsertionPointToStart(block);
             if (availableColumns.contains(pred.first) && availableColumns.contains(pred.second)) {
+               auto loc = builder.getUnknownLoc();
+               auto* block = new mlir::Block;
+               mlir::OpBuilder predBuilder(&getContext());
+               block->addArgument(tuples::TupleType::get(&getContext()), loc);
+               predBuilder.setInsertionPointToStart(block);
                mlir::Value left = predBuilder.create<tuples::GetColumnOp>(loc, pred.first->type, colManager.createRef(pred.first), block->getArgument(0));
                mlir::Value right = predBuilder.create<tuples::GetColumnOp>(loc, pred.second->type, colManager.createRef(pred.second), block->getArgument(0));
                mlir::Value compared = predBuilder.create<db::CmpOp>(loc, db::DBCmpPredicate::eq, left, right);

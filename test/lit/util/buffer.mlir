@@ -25,7 +25,7 @@
         db.runtime_call "DumpValue" (%res1) : (!db.nullable<i32>) -> ()
         //CHECK: int(42)
         db.runtime_call "DumpValue" (%res2) : (!db.nullable<i32>) -> ()
-        //util.dealloc %generic_memref : !util.ref<!db.nullable<i32>>
+        util.dealloc %generic_memref : !util.ref<!db.nullable<i32>>
 
 
 

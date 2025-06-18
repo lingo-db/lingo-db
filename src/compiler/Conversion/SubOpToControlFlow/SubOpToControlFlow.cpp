@@ -1034,14 +1034,20 @@ class CreateThreadLocalLowering : public SubOpConversionPattern<subop::CreateThr
             mlir::Value casted = rewriter.create<util::GenericMemrefCastOp>(createThreadLocal->getLoc(), util::RefType::get(rewriter.getI8Type()), unrealized);
             rewriter.create<mlir::func::ReturnOp>(loc, casted);
          });
+         delete newBlock;
       });
-      Value arg = rewriter.create<util::AllocOp>(loc, util::RefType::get(i8PtrType), rewriter.create<mlir::arith::ConstantIndexOp>(loc, toStore.size()));
-      for (size_t i = 0; i < toStore.size(); i++) {
-         Value valPtr = rewriter.create<util::AllocOp>(loc, util::RefType::get(toStore[i].getType()), mlir::Value());
+      auto ptrSize = rewriter.create<util::SizeOfOp>(loc, rewriter.getIndexType(), i8PtrType);
+      auto numPtrs = rewriter.create<mlir::arith::ConstantIndexOp>(loc, toStore.size());
+      auto bytes = rewriter.create<mlir::arith::MulIOp>(loc, ptrSize, numPtrs);
 
+      Value arg = rt::ExecutionContext::allocStateRaw(rewriter, loc)({bytes})[0];
+      arg = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(rewriter.getContext(), i8PtrType), arg);
+      for (size_t i = 0; i < toStore.size(); i++) {
+         Value storeSize = rewriter.create<util::SizeOfOp>(loc, rewriter.getIndexType(), toStore[i].getType());
+         Value valPtrOrig = rt::ExecutionContext::allocStateRaw(rewriter, loc)({storeSize})[0];
+         Value valPtr = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(toStore[i].getType()), valPtr);
          rewriter.create<util::StoreOp>(loc, toStore[i], valPtr, mlir::Value());
-         valPtr = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(rewriter.getI8Type()), valPtr);
-         rewriter.create<util::StoreOp>(loc, valPtr, arg, rewriter.create<mlir::arith::ConstantIndexOp>(loc, i));
+         rewriter.create<util::StoreOp>(loc, valPtrOrig, arg, rewriter.create<mlir::arith::ConstantIndexOp>(loc, i));
       }
       Value functionPointer = rewriter.create<mlir::func::ConstantOp>(loc, funcOp.getFunctionType(), SymbolRefAttr::get(rewriter.getStringAttr(funcOp.getSymName())));
       rewriter.replaceOp(createThreadLocal, rt::ThreadLocal::create(rewriter, loc)({functionPointer, arg}));
@@ -1283,7 +1289,9 @@ class CreateTableLowering : public SubOpConversionPattern<subop::GenericCreateOp
          columnBuilders.push_back(columnBuilder);
       }
       mlir::Value tpl = rewriter.create<util::PackOp>(createOp->getLoc(), columnBuilders);
-      mlir::Value ref = rewriter.create<util::AllocOp>(createOp->getLoc(), util::RefType::get(tpl.getType()), mlir::Value());
+      auto tplSize = rewriter.create<util::SizeOfOp>(createOp->getLoc(), rewriter.getIndexType(), tpl.getType());
+      mlir::Value ref = rt::ExecutionContext::allocStateRaw(rewriter, loc)({tplSize})[0];
+      ref = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(tpl.getType()), ref);
       rewriter.create<util::StoreOp>(createOp->getLoc(), tpl, ref, mlir::Value());
       rewriter.replaceOp(createOp, ref);
       return mlir::success();

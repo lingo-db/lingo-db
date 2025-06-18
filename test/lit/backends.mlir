@@ -251,7 +251,7 @@ module  {
 		%after = util.load %ref[] : !util.ref<i64> -> i64
 		call @dumpI64(%before) : (i64) -> ()
 		call @dumpI64(%after) : (i64) -> ()
-
+        util.dealloc %ref : !util.ref<i64>
 		return
 	}
 

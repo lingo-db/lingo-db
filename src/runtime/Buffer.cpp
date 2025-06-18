@@ -219,7 +219,9 @@ class FlexibleBufferIterator : public lingodb::runtime::BufferIterator {
 };
 
 lingodb::runtime::BufferIterator* lingodb::runtime::FlexibleBuffer::createIterator() {
-   return new FlexibleBufferIterator(*this);
+   auto* it = new FlexibleBufferIterator(*this);
+   getCurrentExecutionContext()->registerState({it, [](void* ptr) { delete reinterpret_cast<BufferIterator*>(ptr); }});
+   return it;
 }
 size_t lingodb::runtime::FlexibleBuffer::getLen() const {
    return totalLen;

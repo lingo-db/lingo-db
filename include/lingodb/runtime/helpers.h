@@ -1,5 +1,7 @@
 #ifndef LINGODB_RUNTIME_HELPERS_H
 #define LINGODB_RUNTIME_HELPERS_H
+#include "ExecutionContext.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
@@ -93,7 +95,7 @@ class VarLen32 {
       if (str.size() <= shortLen) {
          return VarLen32(reinterpret_cast<const uint8_t*>(str.data()), str.size());
       }
-      auto* ptr = new uint8_t[str.size()];
+      auto* ptr = getCurrentExecutionContext()->allocString(str.size());
       memcpy(ptr, str.data(), str.size());
       return VarLen32(ptr, str.size());
    }

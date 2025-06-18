@@ -476,33 +476,50 @@ class LLVMBackend {
 
 } // namespace
 
-static bool lowerToLLVMDialect(mlir::ModuleOp& moduleOp, std::shared_ptr<execution::SnapshotState> serializationState, bool verify) {
-   if (runLoweringPasses.getValue()) {
-      std::string error;
+struct LLVMInfo {
+   llvm::TargetMachine* targetMachine;
+   llvm::DataLayout dataLayout;
+   LLVMInfo() {
       auto targetTriple = llvm::sys::getDefaultTargetTriple();
+      std::string error;
 
       // Look up the target using the target triple.
       auto* target = llvm::TargetRegistry::lookupTarget(targetTriple, error);
       if (!target) {
-         llvm::errs() << error;
-         return 1;
+         llvm::errs() << "Could not find target for triple: " << targetTriple
+                      << "\nError: " << error << "\n";
+         assert(false);
       }
-
       // Create the TargetMachine.
       const auto* cpu = "generic";
       const auto* features = "";
       llvm::TargetOptions opt;
       auto rm = std::optional<llvm::Reloc::Model>();
       auto* targetMachine = target->createTargetMachine(targetTriple, cpu, features, opt, rm);
-
       if (!targetMachine) {
-         llvm::errs() << "Could not create TargetMachine!";
-         return 1;
+         llvm::errs() << "Could not create target machine for triple: " << targetTriple
+                      << "\n";
+         assert(false);
       }
+      this->targetMachine = targetMachine;
+      // Set the data layout.
+      this->dataLayout = targetMachine->createDataLayout();
+   }
+   ~LLVMInfo() {
+      if (targetMachine) {
+         delete targetMachine;
+      }
+   }
+};
+LLVMInfo& getLLVMInfo() {
+   static LLVMInfo llvmInfo{};
+   return llvmInfo;
+}
 
+static bool lowerToLLVMDialect(mlir::ModuleOp& moduleOp, std::shared_ptr<execution::SnapshotState> serializationState, bool verify) {
+   if (runLoweringPasses.getValue()) {
       // Retrieve the data layout from the TargetMachine.
-      const llvm::DataLayout& dataLayout = targetMachine->createDataLayout();
-      mlir::Attribute dataLayoutSpec = mlir::translateDataLayout(dataLayout, moduleOp->getContext());
+      mlir::Attribute dataLayoutSpec = mlir::translateDataLayout(getLLVMInfo().dataLayout, moduleOp->getContext());
       moduleOp->setAttr("util.dataLayout", dataLayoutSpec);
 
       mlir::PassManager pm2(moduleOp->getContext());
@@ -809,20 +826,16 @@ class DefaultCPULLVMBackend : public execution::ExecutionBackend {
       totalJITTime -= translateToLLVMIRTime;
       totalJITTime -= llvmPassesTime;
 
-      std::vector<double> measuredTimes;
-      for (size_t i = 0; i < numRepetitions; i++) {
-         auto executionStart = std::chrono::high_resolution_clock::now();
-         utility::Tracer::Trace trace(execution);
-         mainFunc();
-         trace.stop();
-         auto executionEnd = std::chrono::high_resolution_clock::now();
-         executionContext->reset();
-         measuredTimes.push_back(std::chrono::duration_cast<std::chrono::microseconds>(executionEnd - executionStart).count() / 1000.0);
-      }
+      auto executionStart = std::chrono::high_resolution_clock::now();
+      utility::Tracer::Trace trace(execution);
+      mainFunc();
+      trace.stop();
+      auto executionEnd = std::chrono::high_resolution_clock::now();
+
       timing["toLLVMIR"] = translateToLLVMIRTime;
       timing["llvmOptimize"] = llvmPassesTime;
       timing["llvmCodeGen"] = totalJITTime;
-      timing["executionTime"] = (measuredTimes.size() > 1 ? *std::min_element(measuredTimes.begin() + 1, measuredTimes.end()) : measuredTimes[0]);
+      timing["executionTime"] = (std::chrono::duration_cast<std::chrono::microseconds>(executionEnd - executionStart).count() / 1000.0);
    }
 };
 std::optional<std::string> extractSingleResultName(llvm::StringRef line) {
@@ -936,15 +949,11 @@ class CPULLVMDebugBackend : public execution::ExecutionBackend {
          return;
       }
 
-      std::vector<double> measuredTimes;
-      for (size_t i = 0; i < numRepetitions; i++) {
-         auto executionStart = std::chrono::high_resolution_clock::now();
-         mainFunc();
-         auto executionEnd = std::chrono::high_resolution_clock::now();
-         executionContext->reset();
-         measuredTimes.push_back(std::chrono::duration_cast<std::chrono::microseconds>(executionEnd - executionStart).count() / 1000.0);
-      }
-      timing["executionTime"] = (measuredTimes.size() > 1 ? *std::min_element(measuredTimes.begin() + 1, measuredTimes.end()) : measuredTimes[0]);
+      auto executionStart = std::chrono::high_resolution_clock::now();
+      mainFunc();
+      auto executionEnd = std::chrono::high_resolution_clock::now();
+
+      timing["executionTime"] = std::chrono::duration_cast<std::chrono::microseconds>(executionEnd - executionStart).count() / 1000.0;
    }
 };
 
@@ -1036,15 +1045,9 @@ class CPULLVMProfilingBackend : public execution::ExecutionBackend {
       //start profiling
       pid_t pid = runPerfRecord();
       if (error) return;
-
-      std::vector<double> measuredTimes;
-      for (size_t i = 0; i < numRepetitions; i++) {
-         auto executionStart = std::chrono::high_resolution_clock::now();
-         mainFunc();
-         auto executionEnd = std::chrono::high_resolution_clock::now();
-         executionContext->reset();
-         measuredTimes.push_back(std::chrono::duration_cast<std::chrono::microseconds>(executionEnd - executionStart).count() / 1000.0);
-      }
+      auto executionStart = std::chrono::high_resolution_clock::now();
+      mainFunc();
+      auto executionEnd = std::chrono::high_resolution_clock::now();
       //finish profiling
       kill(pid, SIGINT);
       sleep(2);
@@ -1052,7 +1055,7 @@ class CPULLVMProfilingBackend : public execution::ExecutionBackend {
       timing["toLLVMIR"] = translateToLLVMIRTime;
       timing["llvmOptimize"] = llvmPassesTime;
       timing["llvmCodeGen"] = totalJITTime;
-      timing["executionTime"] = (measuredTimes.size() > 1 ? *std::min_element(measuredTimes.begin() + 1, measuredTimes.end()) : measuredTimes[0]);
+      timing["executionTime"] = (std::chrono::duration_cast<std::chrono::microseconds>(executionEnd - executionStart).count() / 1000.0);
    }
 };
 
