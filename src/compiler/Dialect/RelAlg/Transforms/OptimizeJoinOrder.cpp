@@ -157,7 +157,7 @@ class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::Oper
                op->dropAllUses();
                op->dropAllReferences();
                op->remove();
-               //op->destroy();
+               op->erase();
             }
          }
          //mark subtree as already optimized

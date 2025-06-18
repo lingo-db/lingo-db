@@ -15,7 +15,7 @@ class ConnectionHandle {
    ConnectionHandle(bridge::Connection* connection) : connection(connection) {}
    void appendTable(std::string name, nb::object table) {
       std::shared_ptr<arrow::Table> arrowTable = arrow::py::unwrap_table(table.ptr()).ValueOrDie();
-      auto batchReader = std::make_shared<arrow::TableBatchReader>(*arrowTable);
+      auto batchReader = std::make_shared<arrow::TableBatchReader>(arrowTable);
       ArrowArrayStream arrayStream;
       if (!arrow::ExportRecordBatchReader(batchReader, &arrayStream).ok()) {
          std::cerr << "export failed" << std::endl;

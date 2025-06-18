@@ -173,7 +173,9 @@ HashIndexAccess* RelationHelper::accessHashIndex(lingodb::runtime::VarLen32 desc
       for (auto m : json["mapping"].get<nlohmann::json::object_t>()) {
          cols.push_back(m.second.get<std::string>());
       }
-      return new HashIndexAccess(*hashIndex, cols);
+      auto* access = new HashIndexAccess(*hashIndex, cols);
+      context->registerState({access, [&](void* ptr) { delete static_cast<HashIndexAccess*>(ptr); }});
+      return access;
    } else {
       throw std::runtime_error("no such table");
    }

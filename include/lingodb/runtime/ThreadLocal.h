@@ -29,6 +29,9 @@ class ThreadLocal {
       return std::span<T*>(reinterpret_cast<T**>(values), lingodb::scheduler::getNumWorkers());
    }
    uint8_t* merge(void (*mergeFn)(uint8_t*, uint8_t*));
+   ~ThreadLocal() {
+      delete[] values;
+   }
 };
 } // end namespace lingodb::runtime
 

@@ -42,7 +42,9 @@ lingodb::runtime::DataSourceIteration* lingodb::runtime::DataSourceIteration::in
    for (std::string c : descr.get<nlohmann::json::array_t>()) {
       members.push_back(c);
    }
-   return new DataSourceIteration(dataSource, members);
+   auto* it = new DataSourceIteration(dataSource, members);
+   getCurrentExecutionContext()->registerState({it, [](void* ptr) { delete reinterpret_cast<DataSourceIteration*>(ptr); }});
+   return it;
 }
 lingodb::runtime::DataSourceIteration::DataSourceIteration(DataSource* dataSource, const std::vector<std::string>& members) : dataSource(dataSource), members(members) {
 }
@@ -58,7 +60,10 @@ lingodb::runtime::DataSource* lingodb::runtime::DataSource::get(lingodb::runtime
       for (auto m : descr["mapping"].get<nlohmann::json::object_t>()) {
          memberToColumn[m.first] = m.second.get<std::string>();
       }
-      return new TableSource(relation->getTableStorage(), memberToColumn);
+      auto* ts = new TableSource(relation->getTableStorage(), memberToColumn);
+      getCurrentExecutionContext()->registerState({ts, [](void* ptr) { delete reinterpret_cast<TableSource*>(ptr); }});
+      return ts;
+
    } else {
       throw std::runtime_error("could not find relation");
    }

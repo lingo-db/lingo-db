@@ -122,14 +122,7 @@ class DefaultCBackend : public lingodb::execution::ExecutionBackend {
          error.emit() << "Could not load symbol for main function: " << std::string(dlsymError);
          return;
       }
-
-      std::vector<size_t> measuredTimes;
-      for (size_t i = 0; i < numRepetitions; i++) {
-         auto executionStart = std::chrono::high_resolution_clock::now();
-         mainFunc();
-         auto executionEnd = std::chrono::high_resolution_clock::now();
-         measuredTimes.push_back(std::chrono::duration_cast<std::chrono::microseconds>(executionEnd - executionStart).count() / 1000.0);
-      }
+      mainFunc();
       dlclose(handle);
    }
 };

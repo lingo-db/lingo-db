@@ -61,7 +61,7 @@ bool bridge::run(Connection* connection, const char* module, ArrowArrayStream* r
    executer->fromData(module);
    scheduler::awaitEntryTask(std::make_unique<execution::QueryExecutionTask>(std::move(executer)));
    if (result) {
-      auto batchReader = std::make_shared<arrow::TableBatchReader>(*result);
+      auto batchReader = std::make_shared<arrow::TableBatchReader>(result);
       if (!arrow::ExportRecordBatchReader(batchReader, res).ok()) {
          std::cerr << "export failed" << std::endl;
       } else {
@@ -79,7 +79,7 @@ bool bridge::runSQL(Connection* connection, const char* query, ArrowArrayStream*
    executer->fromData(query);
    scheduler::awaitEntryTask(std::make_unique<execution::QueryExecutionTask>(std::move(executer)));
    if (result) {
-      auto batchReader = std::make_shared<arrow::TableBatchReader>(*result);
+      auto batchReader = std::make_shared<arrow::TableBatchReader>(result);
       if (!arrow::ExportRecordBatchReader(batchReader, res).ok()) {
          std::cerr << "export failed" << std::endl;
       } else {
