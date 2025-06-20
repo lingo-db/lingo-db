@@ -16,6 +16,8 @@
 #include <mlir/IR/Operation.h>
 #include <mlir/Interfaces/FunctionInterfaces.h>
 #include <mlir/Transforms/Passes.h>
+#include <mlir/Dialect/Transform/IR/TransformTypes.h.inc>
+#include <mlir/Dialect/LLVMIR/LLVMAttrs.h>
 
 #include <tpde/CompilerBase.hpp>
 #include <tpde/x64/CompilerX64.hpp>
@@ -33,16 +35,6 @@
 
 #include "snippet_encoders_x64.hpp"
 
-#include <mlir/Dialect/ControlFlow/IR/ControlFlowOps.h.inc>
-#include <mlir/Dialect/EmitC/IR/EmitCEnums.h.inc>
-#include <mlir/Dialect/Transform/IR/TransformTypes.h.inc>
-#include <llvm-20/llvm/IR/DataLayout.h>
-#include <llvm-20/llvm/MC/TargetRegistry.h>
-#include <llvm-20/llvm/Support/CodeGen.h>
-#include <llvm-20/llvm/Target/TargetOptions.h>
-#include <llvm-20/llvm/TargetParser/Host.h>
-#include <mlir/Dialect/LLVMIR/LLVMAttrs.h>
-#include <mlir/Target/LLVMIR/Import.h>
 
 namespace {
 lingodb::utility::GlobalSetting<std::string> baselineObjectFileOut("system.compilation.baseline_object_out", "");
@@ -80,62 +72,117 @@ class TupleHelper {
    public:
    explicit TupleHelper(mlir::TupleType tupleType) : tupleType(tupleType) {}
 
-   [[nodiscard]] std::pair<size_t, unsigned> size_and_padding() const noexcept {
+   [[nodiscard]] unsigned getElementOffset(uint32_t index) const noexcept {
       size_t offset = 0;
-      unsigned max_align = 0;
-      for (const mlir::Type elem : tupleType.getTypes()) {
-         unsigned elem_align = 0;
-         size_t elem_size = 0;
+      assert(index < tupleType.getTypes().size() && "Index out of bounds for tuple type");
+      for (const mlir::Type elem : tupleType.getTypes() | std::views::take(index - 1)) {
+         unsigned elemAlign = 0;
+         size_t elemSize = 0;
          llvm::TypeSwitch<mlir::Type>(elem)
             .Case<dialect::util::RefType>([&](dialect::util::RefType t) {
-               elem_size = sizeof(void*);
-               elem_align = alignof(void*);
+               elemSize = sizeof(void*);
+               elemAlign = alignof(void*);
             })
             .Case<mlir::IntegerType>([&](mlir::IntegerType t) {
-               elem_size = t.getIntOrFloatBitWidth() / 8;
-               switch (elem_size) {
-                  case 1: elem_align = alignof(int8_t); break;
-                  case 2: elem_align = alignof(int16_t); break;
-                  case 4: elem_align = alignof(int32_t); break;
-                  case 8: elem_align = alignof(int64_t); break;
-                  case 16: elem_align = alignof(__int128); break;
+               elemSize = t.getIntOrFloatBitWidth() / 8;
+               switch (elemSize) {
+                  case 1: elemAlign = alignof(int8_t); break;
+                  case 2: elemAlign = alignof(int16_t); break;
+                  case 4: elemAlign = alignof(int32_t); break;
+                  case 8: elemAlign = alignof(int64_t); break;
+                  case 16: elemAlign = alignof(__int128); break;
                   default:
                      assert(false && "Unsupported integer type width for alignment calculation.");
-                     elem_align = 1; // fallback to 1 byte alignment
+                     elemAlign = 1; // fallback to 1 byte alignment
                }
             })
             .Case<mlir::FloatType>([&](mlir::FloatType t) {
-               elem_size = t.getIntOrFloatBitWidth() / 8;
+               elemSize = t.getIntOrFloatBitWidth() / 8;
                switch (t.getIntOrFloatBitWidth()) {
-                  case 32: assert(sizeof(float) == 4); elem_align = alignof(float); break;
-                  case 64: assert(sizeof(double) == 8); elem_align = alignof(double); break;
+                  case 32: static_assert(sizeof(float) == 4); elemAlign = alignof(float); break;
+                  case 64: static_assert(sizeof(double) == 8); elemAlign = alignof(double); break;
                   default:
                      assert(false && "Unsupported integer type width for alignment calculation.");
-                     elem_align = 1; // fallback to 1 byte alignment
+                     elemAlign = 1; // fallback to 1 byte alignment
                }
             })
             .Case<mlir::TupleType>([&](mlir::TupleType tupleType) {
-               auto [size, align] = TupleHelper{tupleType}.size_and_padding();
-               elem_size = size;
-               elem_align = align;
+               auto [size, align] = TupleHelper{tupleType}.sizeAndPadding();
+               elemSize = size;
+               elemAlign = align;
             })
             .Case<mlir::IndexType>([&](auto) {
-               elem_size = sizeof(uint64_t);
-               elem_align = alignof(uint64_t);
+               elemSize = sizeof(uint64_t);
+               elemAlign = alignof(uint64_t);
             })
             .Default([](mlir::Type) {
                assert(false && "Cannot calculate size for unsupported type.");
                return 0;
             });
          // enforce alignment requirement
-         offset += offset % elem_align;
+         offset += offset % elemAlign;
          // add offset of element
-         offset += elem_size;
-         max_align = std::max(max_align, elem_align);
+         offset += elemSize;
+      }
+      return offset;
+   }
+
+   [[nodiscard]] std::pair<size_t, unsigned> sizeAndPadding() const noexcept {
+      size_t offset = 0;
+      unsigned maxAlign = 0;
+      for (const mlir::Type elem : tupleType.getTypes()) {
+         unsigned elemAlign = 0;
+         size_t elemSize = 0;
+         llvm::TypeSwitch<mlir::Type>(elem)
+            .Case<dialect::util::RefType>([&](dialect::util::RefType t) {
+               elemSize = sizeof(void*);
+               elemAlign = alignof(void*);
+            })
+            .Case<mlir::IntegerType>([&](mlir::IntegerType t) {
+               elemSize = t.getIntOrFloatBitWidth() / 8;
+               switch (elemSize) {
+                  case 1: elemAlign = alignof(int8_t); break;
+                  case 2: elemAlign = alignof(int16_t); break;
+                  case 4: elemAlign = alignof(int32_t); break;
+                  case 8: elemAlign = alignof(int64_t); break;
+                  case 16: elemAlign = alignof(__int128); break;
+                  default:
+                     assert(false && "Unsupported integer type width for alignment calculation.");
+                     elemAlign = 1; // fallback to 1 byte alignment
+               }
+            })
+            .Case<mlir::FloatType>([&](mlir::FloatType t) {
+               elemSize = t.getIntOrFloatBitWidth() / 8;
+               switch (t.getIntOrFloatBitWidth()) {
+                  case 32: static_assert(sizeof(float) == 4); elemAlign = alignof(float); break;
+                  case 64: static_assert(sizeof(double) == 8); elemAlign = alignof(double); break;
+                  default:
+                     assert(false && "Unsupported integer type width for alignment calculation.");
+                     elemAlign = 1; // fallback to 1 byte alignment
+               }
+            })
+            .Case<mlir::TupleType>([&](mlir::TupleType tupleType) {
+               auto [size, align] = TupleHelper{tupleType}.sizeAndPadding();
+               elemSize = size;
+               elemAlign = align;
+            })
+            .Case<mlir::IndexType>([&](auto) {
+               elemSize = sizeof(uint64_t);
+               elemAlign = alignof(uint64_t);
+            })
+            .Default([](mlir::Type) {
+               assert(false && "Cannot calculate size for unsupported type.");
+               return 0;
+            });
+         // enforce alignment requirement
+         offset += offset % elemAlign;
+         // add offset of element
+         offset += elemSize;
+         maxAlign = std::max(maxAlign, elemAlign);
       }
       // adjust entire struct size to the maximum alignment (for array usage)
-      offset += offset % max_align;
-      return {offset, max_align};
+      offset += offset % maxAlign;
+      return {offset, maxAlign};
    }
 };
 
@@ -431,6 +478,7 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
    using ValueRef = typename Base::ValueRef;
    using InstRange = typename Base::InstRange;
    using IRInstRef = IRAdaptor::IRInstRef;
+   using AsmReg = Base::AsmReg;
 
    Error error;
 
@@ -518,7 +566,7 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
       }
       if (const auto utilSizeOfOp = mlir::dyn_cast_or_null<dialect::util::SizeOfOp>(val.getDefiningOp())) {
          const mlir::TypeAttr type_attr = mlir::cast<mlir::TypeAttr>(utilSizeOfOp->getAttr("type"));
-         const size_t tuple_size = TupleHelper{mlir::cast<mlir::TupleType>(type_attr.getValue())}.size_and_padding().first;
+         const size_t tuple_size = TupleHelper{mlir::cast<mlir::TupleType>(type_attr.getValue())}.sizeAndPadding().first;
          return ValRefSpecial{.mode = 4, .value = static_cast<uint64_t>(tuple_size)};
       }
       return std::nullopt;
@@ -622,6 +670,32 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
       return false;
    }
 
+   bool compile_util_tuple_element_ptr_op(dialect::util::TupleElementPtrOp op) {
+      const mlir::Value base_op = op->getOperand(0);
+      const mlir::TupleType tuple_type = mlir::cast<mlir::TupleType>(mlir::cast<dialect::util::RefType>(base_op.getType()).getElementType());
+      const mlir::IntegerAttr idx_op = mlir::cast<mlir::IntegerAttr>(op->getOperand(1));
+
+      // calc the byte-offset of the element in the tuple (same address layout as C++ structs for target)
+      unsigned elementOffset = TupleHelper{tuple_type}.getElementOffset(idx_op.getInt());
+
+      const auto dst = op->getResult(0);
+      assert(val_parts(base_op).count() == 1);
+      assert(val_parts(dst).count() == 1);
+      auto [_, base_vr] = this->val_ref_single(base_op);
+      auto [_, res_vr] = this->result_ref_single(dst);
+
+      // create a base + offset expression
+      AsmReg base_reg = base_vr.load_to_reg();
+      GenericValuePart addr = GenericValuePart::Expr{base_reg, elementOffset};
+
+      // load value to register (e.g. mov + add / lea for x86_64)
+      AsmReg res_reg = derived()->gval_expr_as_reg(addr);
+      ScratchReg res_scratch{derived()};
+      derived()->mov(res_scratch.alloc_gp(), res_reg, 8);
+      this->set_value(res_vr, res_scratch);
+      return true;
+   }
+
    bool compile_inst(IRInstRef inst, InstRange) noexcept {
       return mlir::TypeSwitch<IRInstRef, bool>(inst)
          .Case<mlir::arith::AddIOp, mlir::arith::SubIOp, mlir::arith::MulIOp, mlir::arith::DivSIOp, mlir::arith::AndIOp, mlir::arith::OrIOp, mlir::arith::XOrIOp, mlir::arith::ShLIOp, mlir::arith::ShRUIOp>([&](auto op) {
@@ -645,6 +719,15 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
          .template Case<dialect::util::GenericMemrefCastOp>([&](auto op) {
             return compile_util_generic_memref_cast_op(op);
          })
+         .template Case<dialect::util::TupleElementPtrOp>([&](auto op) {
+            return derived()->compile_util_tuple_element_ptr_op(op);
+         })
+         .template Case<mlir::func::ConstantOp>([&](auto op) {
+            return derived()->compile_func_constant_op(op);
+         })
+         .template Case<mlir::func::CallOp>([&](auto op) {
+            return derived()->compile_func_call_op(op);
+         })
          .Default([&](IRInstRef op) {
             error.emit() << "Encountered unimplemented instruction: " << op->getName().getStringRef().str() << "\n";
             op->dump();
@@ -664,6 +747,44 @@ struct IRCompilerX64 : tpde::x64::CompilerX64<IRAdaptor, IRCompilerX64, IRCompil
 
    explicit IRCompilerX64(std::unique_ptr<IRAdaptor>&& adaptor) : Base{adaptor.get()}, adaptor(std::move(adaptor)) {
       static_assert(tpde::Compiler<IRCompilerX64, tpde::x64::PlatformConfig>);
+   }
+
+   bool compile_func_constant_op(mlir::func::ConstantOp op) {
+      // we do not support function constants in the IR, so we just return true
+      // this is a no-op
+      return true;
+   }
+
+   // TODO: this is veeeery brittle -> test!
+   bool compile_func_call_op(mlir::func::CallOp op) {
+      const mlir::FlatSymbolRefAttr callee_attr = op.getCalleeAttr();
+      mlir::func::FuncOp callee_func = op->getParentOfType<mlir::ModuleOp>().lookupSymbol<mlir::func::FuncOp>(callee_attr.getValue());
+
+      // we only call into the runtime => use C-CallConv (yes, this is a hack since the runtime is actually C++ code. works for now)
+      auto call_conv_assigner = tpde::x64::CCAssignerSysV(false /* is_vararg */);
+      auto builder = CallBuilder(*this, call_conv_assigner);
+
+      for (size_t i = 0; i < op.getArgOperands().size(); ++i) {
+         const mlir::Value arg = op.getArgOperands()[i];
+         mlir::Attribute attr = callee_func.getArgAttrsAttr()[i];
+         auto flag = CallArg::Flag::none;
+         if (auto string_attr = mlir::dyn_cast<mlir::StringAttr>(attr); string_attr && string_attr.getValue() == "llvm.zeroext") {
+            flag = CallArg::Flag::zext;
+         } else {
+            assert(0 && "Unsupported call argument attribute");
+            return false;
+         }
+         builder.add_arg(CallArg{arg, flag, 0, 0}); // TODO: check byval_align and byval_size
+      }
+
+      mlir::Operation* target = op.resolveCallable();
+      assert(target && "Call target must be a valid operation");
+      auto [_, func_vr] = this->val_ref_single(target->getResult(0));
+      builder.call(std::move(func_vr));
+
+      assert(op.getNumResults() == 1 && "Function call must have exactly one result in the IR");
+      ValueRef res = this->result_ref(op.getResult(0));
+      builder.add_ret(res);
    }
 
    bool compile_arith_cmp_int_op(mlir::arith::CmpIOp op) {
