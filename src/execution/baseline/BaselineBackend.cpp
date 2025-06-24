@@ -9,15 +9,15 @@
 
 #include <llvm/ADT/TypeSwitch.h>
 #include <llvm/Target/TargetMachine.h>
+#include <mlir/Dialect/Transform/IR/TransformTypes.h.inc>
 #include <mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h>
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/ControlFlow/IR/ControlFlowOps.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
+#include <mlir/Dialect/LLVMIR/LLVMAttrs.h>
 #include <mlir/IR/Operation.h>
 #include <mlir/Interfaces/FunctionInterfaces.h>
 #include <mlir/Transforms/Passes.h>
-#include <mlir/Dialect/Transform/IR/TransformTypes.h.inc>
-#include <mlir/Dialect/LLVMIR/LLVMAttrs.h>
 
 #include <tpde/CompilerBase.hpp>
 #include <tpde/x64/CompilerX64.hpp>
@@ -34,7 +34,6 @@
 #include <dlfcn.h>
 
 #include "snippet_encoders_x64.hpp"
-
 
 namespace {
 lingodb::utility::GlobalSetting<std::string> baselineObjectFileOut("system.compilation.baseline_object_out", "");
@@ -99,8 +98,14 @@ class TupleHelper {
             .Case<mlir::FloatType>([&](mlir::FloatType t) {
                elemSize = t.getIntOrFloatBitWidth() / 8;
                switch (t.getIntOrFloatBitWidth()) {
-                  case 32: static_assert(sizeof(float) == 4); elemAlign = alignof(float); break;
-                  case 64: static_assert(sizeof(double) == 8); elemAlign = alignof(double); break;
+                  case 32:
+                     static_assert(sizeof(float) == 4);
+                     elemAlign = alignof(float);
+                     break;
+                  case 64:
+                     static_assert(sizeof(double) == 8);
+                     elemAlign = alignof(double);
+                     break;
                   default:
                      assert(false && "Unsupported integer type width for alignment calculation.");
                      elemAlign = 1; // fallback to 1 byte alignment
@@ -154,8 +159,14 @@ class TupleHelper {
             .Case<mlir::FloatType>([&](mlir::FloatType t) {
                elemSize = t.getIntOrFloatBitWidth() / 8;
                switch (t.getIntOrFloatBitWidth()) {
-                  case 32: static_assert(sizeof(float) == 4); elemAlign = alignof(float); break;
-                  case 64: static_assert(sizeof(double) == 8); elemAlign = alignof(double); break;
+                  case 32:
+                     static_assert(sizeof(float) == 4);
+                     elemAlign = alignof(float);
+                     break;
+                  case 64:
+                     static_assert(sizeof(double) == 8);
+                     elemAlign = alignof(double);
+                     break;
                   default:
                      assert(false && "Unsupported integer type width for alignment calculation.");
                      elemAlign = 1; // fallback to 1 byte alignment
@@ -361,10 +372,30 @@ struct IRAdaptor {
          const auto preds = arg.getOwner()->getPredecessors();
          const auto matching_pred = std::find(preds.begin(), preds.end(), predecessor);
          assert(matching_pred != preds.end() && "Predecessor block not found in predecessors");
-         assert(std::find(matching_pred, preds.end(), predecessor) == preds.end() && "Predecessor block found multiple times in predecessors. While this is allowed for MLIR, this is currently not supported by TPDE, especially with different edge-values");
-         uint32_t slot = std::distance(preds.begin(), matching_pred);
+#ifndef NDEBUG
+         assert(std::count(preds.begin(), preds.end(), predecessor) == 1 && "Predecessor block found multiple times in predecessors. While this is allowed for MLIR, this is currently not supported by TPDE, especially with different edge-values");
+#endif
+         const uint32_t slot = std::distance(preds.begin(), matching_pred);
          mlir::Operation* terminator = predecessor->getTerminator();
-         const mlir::OpResult incomingVal = terminator->getOpResult(slot);
+         const mlir::OpResult incomingVal = mlir::TypeSwitch<mlir::Operation, mlir::OpResult>(*terminator)
+                                               .Case([&](mlir::cf::BranchOp br) {
+                                                  return br.getDestOperands()[slot];
+                                               })
+                                               .Case([&](mlir::cf::CondBranchOp br) {
+                                                  if (br.getTrueDest() == arg.getOwner()) {
+                                                     return br.getTrueDestOperands()[slot];
+                                                  }
+                                                  if (br.getFalseDest() == arg.getOwner()) {
+                                                     return br.getFalseDestOperands()[slot];
+                                                  }
+                                                  assert(0 && "Predecessor block not found in branch operands");
+                                                  return mlir::OpResult();
+                                               })
+                                               .Default([](auto op) {
+                                                  op.dump();
+                                                  assert(0);
+                                                  return mlir::OpResult();
+                                               });
          assert(incomingVal && "Invalid slot for incoming value");
          assert(incomingVal.getType() == arg.getType() && "Incoming value type mismatch");
          return cast<IRValueRef>(incomingVal);
@@ -474,6 +505,7 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
    using IR = IRAdaptor::IR;
    using ValuePartRef = typename Base::ValuePartRef;
    using GenericValuePart = typename Base::GenericValuePart;
+   using Expr = typename Base::GenericValuePart::Expr;
    using ScratchReg = typename Base::ScratchReg;
    using ValueRef = typename Base::ValueRef;
    using InstRange = typename Base::InstRange;
@@ -481,6 +513,7 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
    using AsmReg = Base::AsmReg;
 
    Error error;
+   mlir::DenseMap<mlir::StringRef, uint32_t> funcMap;
 
    IRCompilerBase(IRAdaptor* adaptor) : Base{adaptor} {
       static_assert(tpde::Compiler<Derived, Config>);
@@ -518,7 +551,7 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
       uint32_t count() const noexcept {
          assert(!mlir::isa<mlir::TupleType>(valType) && "Tuple types are not supported yet");
          return mlir::TypeSwitch<mlir::Type, uint32_t>(valType)
-            .Case<mlir::IntegerType>([](auto intType) { return intType.getIntOrFloatBitWidth() / 64; })
+            .Case<mlir::IntegerType>([](auto intType) { return (intType.getIntOrFloatBitWidth() + 64 - 1) / 64; })
             .template Case<dialect::util::VarLen32Type, dialect::util::BufferType>([](auto) { return 2; })
             .Default([](mlir::Type t) { return 1; });
       }
@@ -526,9 +559,9 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
          assert(!mlir::isa<mlir::TupleType>(valType) && "Tuple types are not supported yet");
          return mlir::TypeSwitch<mlir::Type, uint32_t>(valType)
             .Case<mlir::IntegerType>([&](auto intType) {
-               assert(part_idx < intType.getIntOrFloatBitWidth() / 64);
+               assert(part_idx < (intType.getIntOrFloatBitWidth() + 64 - 1) / 64 && "Part index out of range for integer type");
                // integer types are sized by their bit width
-               return (intType.getIntOrFloatBitWidth() % 64) / 8;
+               return (intType.getIntOrFloatBitWidth() % 65 + 8 - 1) / 8;
             })
             .template Case<mlir::IndexType, dialect::util::RefType>([](auto) { return 8; })
             .template Case<dialect::util::VarLen32Type, dialect::util::BufferType>([&](auto) {
@@ -586,42 +619,89 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
       return false; // we do not support split register stack passing
    }
 
-   static void define_func_idx(IRAdaptor::IRFuncRef, uint32_t) {
-      // pass
+   void define_func_idx(IRAdaptor::IRFuncRef func, uint32_t idx) {
+      funcMap[func.getSymName()] = idx;
    }
 
    bool compile_arith_binary_op(IRInstRef op) {
       auto lhs_vr = this->val_ref(op->getOperand(0));
       auto rhs_vr = this->val_ref(op->getOperand(1));
-      auto lhs_pr = lhs_vr.part(0);
-      auto rhs_pr = rhs_vr.part(0);
       auto res_type = op->getResult(0).getType();
 
-      // move constant operands to the right side
-      if ((mlir::isa<mlir::arith::AddIOp, mlir::arith::MulIOp, mlir::arith::AndIOp, mlir::arith::OrIOp, mlir::arith::XOrIOp>(op)) && lhs_pr.is_const() && !rhs_pr.is_const()) {
-         std::swap(lhs_vr, rhs_vr);
-         std::swap(lhs_pr, rhs_pr);
+      unsigned op_width;
+      switch (res_type.getIntOrFloatBitWidth()) {
+         case 32:
+         case 64:
+            op_width = res_type.getIntOrFloatBitWidth();
+            break;
+         case 128:
+            op_width = 128;
+            break;
+         case 1:
+            op_width = 32; // we use 32-bit operations for boolean values
+            break;
+         default:
+            op->dump();
+            assert(0 && "Unsupported integer type width for arithmetic operation");
+            return false;
       }
 
-      const auto lhs_const = lhs_pr.is_const();
-      const auto rhs_const = rhs_pr.is_const();
-      auto lhs_op = GenericValuePart{std::move(lhs_pr)};
-      auto rhs_op = GenericValuePart{std::move(rhs_pr)};
+      if (op_width == 128) {
+         std::unordered_map<std::string, bool (Derived::*)(GenericValuePart&&, GenericValuePart&&, GenericValuePart&&, GenericValuePart&&, ScratchReg&, ScratchReg&)> encoder_lookup = {
+            {"arith.addi", &Derived::encode_arith_add_i128},
+            {"arith.andi", &Derived::encode_arith_land_i128},
+         };
+#ifndef NDEBUG
+         if (!encoder_lookup.contains(op->getName().getStringRef().str().c_str())) {
+            op->dump();
+            std::cerr << op->getName().getStringRef().str().c_str() << " is not supported by the baseline backend\n";
+            assert(0);
+         }
+#endif
+         const auto encoder = encoder_lookup[op->getName().getStringRef().str().c_str()];
 
-      assert(res_type.getIntOrFloatBitWidth() == 32 || res_type.getIntOrFloatBitWidth() == 64);
+         ScratchReg res_scratch_high{derived()};
+         ScratchReg res_scratch_low{derived()};
+         auto res = this->result_ref(op->getResult(0));
+         auto res_low = res.part(0);
+         auto res_high = res.part(1);
+         (derived()->*encoder)(std::move(lhs_vr.part(0)), std::move(lhs_vr.part(1)), std::move(rhs_vr.part(0)), std::move(rhs_vr.part(1)), res_scratch_low, res_scratch_high);
+         this->set_value(res_low, res_scratch_low);
+         this->set_value(res_high, res_scratch_high);
+         return true;
+      } else {
+         auto lhs_pr = lhs_vr.part(0);
+         auto rhs_pr = rhs_vr.part(0);
+         // move constant operands to the right side
+         if ((mlir::isa<mlir::arith::AddIOp, mlir::arith::MulIOp, mlir::arith::AndIOp, mlir::arith::OrIOp, mlir::arith::XOrIOp>(op)) && lhs_pr.is_const() && !rhs_pr.is_const()) {
+            std::swap(lhs_vr, rhs_vr);
+            std::swap(lhs_pr, rhs_pr);
+         }
+         auto lhs_op = GenericValuePart{std::move(lhs_pr)};
+         auto rhs_op = GenericValuePart{std::move(rhs_pr)};
 
-      ScratchReg res_scratch{derived()};
-      // encode functions for 32/64 bit operations
-      mlir::DenseMap<const char*, std::array<bool (Derived::*)(GenericValuePart&&, GenericValuePart&&, ScratchReg&), 2>> encoder_lookup = {
-         {"arith.addi", {&Derived::encode_arith_add_i32, &Derived::encode_arith_add_i64}},
-      };
-      const auto encoders = encoder_lookup[op->getName().getStringRef().str().c_str()];
-      const auto sub_encoder_idx = res_type.getIntOrFloatBitWidth() == 64 ? 1 : 0;
-      (derived()->*encoders[sub_encoder_idx])(std::move(lhs_op), std::move(rhs_op), res_scratch);
+         ScratchReg res_scratch{derived()};
 
-      auto [res_vr, res_pr] = this->result_ref_single(op->getResult(0));
-      this->set_value(res_pr, res_scratch);
-      return true;
+         // encode functions for 32/64 bit operations
+         // TODO: replace this map with something more efficient
+         std::unordered_map<std::string, std::array<bool (Derived::*)(GenericValuePart&&, GenericValuePart&&, ScratchReg&), 2>> encoder_lookup = {
+            {"arith.addi", {&Derived::encode_arith_add_i32, &Derived::encode_arith_add_i64}},
+            {"arith.andi", {&Derived::encode_arith_land_i32, &Derived::encode_arith_land_i64}},
+         };
+#ifndef NDEBUG
+         if (!encoder_lookup.contains(op->getName().getStringRef().str().c_str())) {
+            op->dump();
+            std::cerr << op->getName().getStringRef().str().c_str() << " is not supported by the baseline backend\n";
+            assert(0);
+         }
+#endif
+         const auto encoders = encoder_lookup[op->getName().getStringRef().str().c_str()];
+         const auto sub_encoder_idx = op_width == 64 ? 1 : 0;
+         (derived()->*encoders[sub_encoder_idx])(std::move(lhs_op), std::move(rhs_op), res_scratch);
+         auto [res_vr, res_pr] = this->result_ref_single(op->getResult(0));
+         this->set_value(res_pr, res_scratch);
+         return true;
+      }
    }
 
    bool compile_cf_br_op(mlir::cf::BranchOp op) {
@@ -655,8 +735,8 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
    }
 
    bool compile_util_generic_memref_cast_op(dialect::util::GenericMemrefCastOp op) {
-      const auto src = op->getOperand(0);
-      const auto dst = op->getResult(0);
+      const mlir::TypedValue<dialect::util::RefType> src = op.getVal();
+      const mlir::TypedValue<dialect::util::RefType> dst = op.getRes();
       assert(val_parts(src).count() == 1);
       assert(val_parts(dst).count() == 1);
 
@@ -671,28 +751,125 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
    }
 
    bool compile_util_tuple_element_ptr_op(dialect::util::TupleElementPtrOp op) {
-      const mlir::Value base_op = op->getOperand(0);
-      const mlir::TupleType tuple_type = mlir::cast<mlir::TupleType>(mlir::cast<dialect::util::RefType>(base_op.getType()).getElementType());
-      const mlir::IntegerAttr idx_op = mlir::cast<mlir::IntegerAttr>(op->getOperand(1));
+      const mlir::TypedValue<dialect::util::RefType> base_ref = op.getRef();
+      const mlir::TupleType tuple_type = mlir::cast<mlir::TupleType>(base_ref.getType().getElementType());
 
       // calc the byte-offset of the element in the tuple (same address layout as C++ structs for target)
-      unsigned elementOffset = TupleHelper{tuple_type}.getElementOffset(idx_op.getInt());
+      unsigned elementOffset = TupleHelper{tuple_type}.getElementOffset(op.getIdx());
 
       const auto dst = op->getResult(0);
-      assert(val_parts(base_op).count() == 1);
+      assert(val_parts(base_ref).count() == 1);
       assert(val_parts(dst).count() == 1);
-      auto [_, base_vr] = this->val_ref_single(base_op);
+      auto [_, base_vr] = this->val_ref_single(base_ref);
       auto [_, res_vr] = this->result_ref_single(dst);
 
       // create a base + offset expression
       AsmReg base_reg = base_vr.load_to_reg();
-      GenericValuePart addr = GenericValuePart::Expr{base_reg, elementOffset};
+      GenericValuePart addr = typename GenericValuePart::Expr{base_reg, elementOffset};
 
       // load value to register (e.g. mov + add / lea for x86_64)
       AsmReg res_reg = derived()->gval_expr_as_reg(addr);
       ScratchReg res_scratch{derived()};
       derived()->mov(res_scratch.alloc_gp(), res_reg, 8);
       this->set_value(res_vr, res_scratch);
+      return true;
+   }
+
+   bool compile_util_load_op(dialect::util::LoadOp op) {
+      const mlir::TypedValue<dialect::util::RefType> ptr = op.getRef();
+      const mlir::TypedValue<mlir::IndexType> idx = op.getIdx();
+      const mlir::Type loaded_type = op.getVal().getType();
+
+      auto [_, ptr_ref] = this->val_ref_single(ptr);
+      GenericValuePart ptr_part;
+      if (idx) {
+         if (auto idx_op = mlir::dyn_cast_or_null<mlir::arith::ConstantIndexOp>(idx.getDefiningOp())) {
+            AsmReg ptr_reg = ptr_ref.alloc_reg();
+            ptr_part = GenericValuePart{Expr{std::move(ptr_reg), idx_op.value()}};
+         } else {
+            error.emit() << "Index must be a constant index operation";
+            return false;
+         }
+      } else {
+         ptr_part = GenericValuePart{std::move(ptr_ref)};
+      }
+
+      auto res = this->result_ref(op.getVal());
+      ScratchReg res_scratch{this};
+      return mlir::TypeSwitch<mlir::Type, bool>(loaded_type)
+         .Case([&](const mlir::IntegerType t) {
+            switch (t.getIntOrFloatBitWidth()) {
+               case 64: derived()->encode_util_load_i64(std::move(ptr_part), res_scratch); break;
+               case 32: derived()->encode_util_load_i32(std::move(ptr_part), res_scratch); break;
+               case 128: {
+                  ScratchReg res_scratch_high{derived()};
+                  auto res_low = res.part(0);
+                  auto res_high = res.part(1);
+                  derived()->encode_loadi128(std::move(ptr_part), res_scratch, res_scratch_high);
+                  this->set_value(res_low, res_scratch);
+                  this->set_value(res_high, res_scratch_high);
+                  return true;
+               }
+               default:
+                  assert(false && "Unsupported integer type width for load operation");
+                  return false;
+            }
+            ValuePartRef res_ref = res.part(0);
+            this->set_value(res_ref, res_scratch);
+            return true;
+         })
+         .template Case<dialect::util::RefType, mlir::IndexType>([&](auto) {
+            derived()->encode_util_load_i64(std::move(ptr_part), res_scratch);
+            ValuePartRef res_ref = res.part(0);
+            this->set_value(res_ref, res_scratch);
+            return true;
+         })
+         .Default([](mlir::Type t) {
+            t.dump();
+            assert(false && "Unsupported load type");
+            return false;
+         });
+   }
+
+   bool compile_func_constant_op(mlir::func::ConstantOp) {
+      // we do not support function constants in the IR, so we just return true
+      // this is a no-op
+      return true;
+   }
+
+   // TODO: this is veeeery brittle -> test!
+   bool compile_func_call_op(mlir::func::CallOp op) {
+      const mlir::FlatSymbolRefAttr callee_attr = op.getCalleeAttr();
+      mlir::func::FuncOp callee_func = mlir::cast<mlir::func::FuncOp>(op.resolveCallable());
+
+      // we only call into the runtime => use C-CallConv (yes, this is a hack since the runtime is actually C++ code. works for now)
+      auto call_conv_assigner = tpde::x64::CCAssignerSysV(false /* is_vararg */);
+      auto builder = typename Derived::CallBuilder(*derived(), call_conv_assigner);
+
+      for (size_t i = 0; i < op.getArgOperands().size(); ++i) {
+         const mlir::Value arg = op.getArgOperands()[i];
+         auto flag = Base::CallArg::Flag::none;
+         if (const auto attrs = callee_func.getArgAttrs(); attrs.has_value()) {
+            mlir::ArrayAttr attr = attrs.value();
+            if (auto string_attr = mlir::dyn_cast<mlir::StringAttr>(attr[i]); string_attr && string_attr.getValue() == "llvm.zeroext") {
+               flag = Base::CallArg::Flag::zext;
+            } else {
+               assert(0 && "Unsupported call argument attribute");
+               return false;
+            }
+         }
+         builder.add_arg(typename Base::CallArg{arg, flag, 0, 0}); // TODO: check byval_align and byval_size
+      }
+
+      assert(funcMap.contains(callee_func.getSymName()) && "Function not found in function map");
+      uint32_t func_idx = funcMap[callee_func.getSymName()];
+      assert(func_idx < this->func_syms.size() && "Function index out of bounds");
+      typename Base::Assembler::SymRef func_ref = this->func_syms[func_idx];
+      builder.call(func_ref);
+
+      assert(op.getNumResults() == 1 && "Function call must have exactly one result in the IR");
+      ValueRef res = this->result_ref(op.getResult(0));
+      builder.add_ret(res);
       return true;
    }
 
@@ -723,10 +900,13 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
             return derived()->compile_util_tuple_element_ptr_op(op);
          })
          .template Case<mlir::func::ConstantOp>([&](auto op) {
-            return derived()->compile_func_constant_op(op);
+            return compile_func_constant_op(op);
+         })
+         .template Case<dialect::util::LoadOp>([&](auto op) {
+            return compile_util_load_op(op);
          })
          .template Case<mlir::func::CallOp>([&](auto op) {
-            return derived()->compile_func_call_op(op);
+            return compile_func_call_op(op);
          })
          .Default([&](IRInstRef op) {
             error.emit() << "Encountered unimplemented instruction: " << op->getName().getStringRef().str() << "\n";
@@ -749,46 +929,8 @@ struct IRCompilerX64 : tpde::x64::CompilerX64<IRAdaptor, IRCompilerX64, IRCompil
       static_assert(tpde::Compiler<IRCompilerX64, tpde::x64::PlatformConfig>);
    }
 
-   bool compile_func_constant_op(mlir::func::ConstantOp op) {
-      // we do not support function constants in the IR, so we just return true
-      // this is a no-op
-      return true;
-   }
-
-   // TODO: this is veeeery brittle -> test!
-   bool compile_func_call_op(mlir::func::CallOp op) {
-      const mlir::FlatSymbolRefAttr callee_attr = op.getCalleeAttr();
-      mlir::func::FuncOp callee_func = op->getParentOfType<mlir::ModuleOp>().lookupSymbol<mlir::func::FuncOp>(callee_attr.getValue());
-
-      // we only call into the runtime => use C-CallConv (yes, this is a hack since the runtime is actually C++ code. works for now)
-      auto call_conv_assigner = tpde::x64::CCAssignerSysV(false /* is_vararg */);
-      auto builder = CallBuilder(*this, call_conv_assigner);
-
-      for (size_t i = 0; i < op.getArgOperands().size(); ++i) {
-         const mlir::Value arg = op.getArgOperands()[i];
-         mlir::Attribute attr = callee_func.getArgAttrsAttr()[i];
-         auto flag = CallArg::Flag::none;
-         if (auto string_attr = mlir::dyn_cast<mlir::StringAttr>(attr); string_attr && string_attr.getValue() == "llvm.zeroext") {
-            flag = CallArg::Flag::zext;
-         } else {
-            assert(0 && "Unsupported call argument attribute");
-            return false;
-         }
-         builder.add_arg(CallArg{arg, flag, 0, 0}); // TODO: check byval_align and byval_size
-      }
-
-      mlir::Operation* target = op.resolveCallable();
-      assert(target && "Call target must be a valid operation");
-      auto [_, func_vr] = this->val_ref_single(target->getResult(0));
-      builder.call(std::move(func_vr));
-
-      assert(op.getNumResults() == 1 && "Function call must have exactly one result in the IR");
-      ValueRef res = this->result_ref(op.getResult(0));
-      builder.add_ret(res);
-   }
-
    bool compile_arith_cmp_int_op(mlir::arith::CmpIOp op) {
-      mlir::Type ty = op.getOperand(0).getType();
+      mlir::Type ty = op.getLhs().getType();
       assert(mlir::isa<mlir::IntegerType>(ty) && "Expected integer type for comparison operation");
       unsigned int_width = ty.getIntOrFloatBitWidth();
       Jump jump;
@@ -819,8 +961,8 @@ struct IRCompilerX64 : tpde::x64::CompilerX64<IRAdaptor, IRCompilerX64, IRCompil
 
       // TODO: check if the result can be fused with a subsequent br instruction
 
-      auto lhs = this->val_ref(op->getOperand(0));
-      auto rhs = this->val_ref(op->getOperand(1));
+      auto lhs = this->val_ref(op.getLhs());
+      auto rhs = this->val_ref(op.getRhs());
       ScratchReg res_scratch{this};
 
       ValuePartRef lhs_pr = lhs.part(0);
@@ -867,9 +1009,9 @@ struct IRCompilerX64 : tpde::x64::CompilerX64<IRAdaptor, IRCompilerX64, IRCompil
             default: assert(0); return false;
          }
       }
-
-      lhs.reset();
-      rhs.reset();
+      // TODO: why does this not work?
+      // lhs.reset();
+      // rhs.reset();
 
       auto [_, res_ref] = result_ref_single(op);
       generate_raw_set(jump, res_scratch.alloc_gp());
