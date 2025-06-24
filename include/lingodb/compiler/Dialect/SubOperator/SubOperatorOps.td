@@ -675,11 +675,15 @@ def InsertOp : SubOperator_Op<"insert",[SubOperator,DeclareOpInterfaceMethods<St
 
 def LookupOp : SubOperator_Op<"lookup",[SubOperator,DeclareOpInterfaceMethods<StateUsingSubOperator>,ReferenceProducer]> {
     let summary = "performs a lookup in a state and annotates the result as attribute ";
+    let description = [{
+        Currently LookupOp returns an optional reference when the state is a map structure.
+        It is therefore necessary to combine it with an UnwrapOptionalRefOp
+    }];
     let arguments = (ins TupleStream: $stream, AnyType: $state, ArrayAttr: $keys,ColumnDefAttr:$ref);
     let results = (outs TupleStream: $res);
     let regions = (region AnyRegion:$eqFn, AnyRegion:$initFn);
-      let hasCustomAssemblyFormat = 1;
-      let extraClassDeclaration = [{
+    let hasCustomAssemblyFormat = 1;
+    let extraClassDeclaration = [{
           std::vector<std::string> getReadMembers();
           dialect::tuples::ColumnDefAttr getProducedReference(){ return getRef(); }
           mlir::Operation* cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, lingodb::compiler::dialect::subop::ColumnMapping& columnMapping);
@@ -735,7 +739,7 @@ def UnwrapOptionalRefOp : SubOperator_Op<"unwrap_optional_ref",[SubOperator,Decl
 
 
 def GatherOp : SubOperator_Op<"gather",[SubOperator,DeclareOpInterfaceMethods<StateUsingSubOperator>]> {
-    let summary = "scatter";
+    let summary = "gather";
 
     let arguments = (ins TupleStream : $stream, ColumnRefAttr: $ref, DictionaryAttr : $mapping );
     let results = (outs TupleStream : $res);

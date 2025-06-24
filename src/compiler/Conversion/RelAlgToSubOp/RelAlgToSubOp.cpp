@@ -2106,8 +2106,9 @@ static std::tuple<mlir::Value, mlir::DictionaryAttr, mlir::DictionaryAttr> perfo
       lookupOp.getInitFn().push_back(initialValueBlock);
       mlir::Block* equalBlock = new Block;
       lookupOp.getEqFn().push_back(equalBlock);
-      equalBlock->addArguments(keyTypes, locations);
-      equalBlock->addArguments(keyTypes, locations);
+      // equal functions compare two values (e.g. attr1 and attr2) both of the same type
+      equalBlock->addArguments(keyTypes, locations); // types of attr1
+      equalBlock->addArguments(keyTypes, locations); // types of attr2
       {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPointToStart(equalBlock);
@@ -2502,16 +2503,24 @@ class AggregationLowering : public OpConversionPattern<relalg::AggregationOp> {
          if (auto aggrFn = mlir::dyn_cast_or_null<relalg::AggrFuncOp>(computedVal.getDefiningOp())) {
             tupleStream = aggrFn.getRel();
             auto sourceColumnAttr = aggrFn.getAttr();
-            if (aggrFn.getFn() == relalg::AggrFunc::sum) {
-               distAggrFunc = std::make_shared<SumAggrFunc>(destColumnAttr, sourceColumnAttr);
-            } else if (aggrFn.getFn() == relalg::AggrFunc::min) {
-               distAggrFunc = std::make_shared<MinAggrFunc>(destColumnAttr, sourceColumnAttr);
-            } else if (aggrFn.getFn() == relalg::AggrFunc::max) {
-               distAggrFunc = std::make_shared<MaxAggrFunc>(destColumnAttr, sourceColumnAttr);
-            } else if (aggrFn.getFn() == relalg::AggrFunc::any) {
-               distAggrFunc = std::make_shared<AnyAggrFunc>(destColumnAttr, sourceColumnAttr);
-            } else if (aggrFn.getFn() == relalg::AggrFunc::count) {
-               distAggrFunc = std::make_shared<CountAggrFunc>(destColumnAttr, sourceColumnAttr);
+            switch (aggrFn.getFn()) {
+               case relalg::AggrFunc::sum:
+                  distAggrFunc = std::make_shared<SumAggrFunc>(destColumnAttr, sourceColumnAttr);
+                  break;
+               case relalg::AggrFunc::min:
+                  distAggrFunc = std::make_shared<MinAggrFunc>(destColumnAttr, sourceColumnAttr);
+                  break;
+               case relalg::AggrFunc::max:
+                  distAggrFunc = std::make_shared<MaxAggrFunc>(destColumnAttr, sourceColumnAttr);
+                  break;
+               case relalg::AggrFunc::any:
+                  distAggrFunc = std::make_shared<AnyAggrFunc>(destColumnAttr, sourceColumnAttr);
+                  break;
+               case relalg::AggrFunc::count:
+                  distAggrFunc = std::make_shared<CountAggrFunc>(destColumnAttr, sourceColumnAttr);
+                  break;
+               default:
+                  assert(false && "Aggregation Function is not implemented");
             }
          }
          if (auto countOp = mlir::dyn_cast_or_null<relalg::CountRowsOp>(computedVal.getDefiningOp())) {
