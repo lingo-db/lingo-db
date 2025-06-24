@@ -189,6 +189,12 @@ std::vector<std::string> readTestFile(std::string path) {
    std::vector<std::string> res;
    std::string line;
    std::ifstream infile(path);
+
+   if (!infile) {
+      std::cerr << "File could not be opened. Please verify the file path";
+      exit(1);
+   }
+
    while (std::getline(infile, line)) {
       res.push_back(line);
    }
