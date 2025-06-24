@@ -1,0 +1,1 @@
+SELECT UserID, m, SearchPhrase, COUNT(*) FROM (SELECT UserID, extract(minute FROM EventTime) AS m, SearchPhrase FROM hits) as tmp GROUP BY UserID, m, SearchPhrase ORDER BY COUNT(*) DESC LIMIT 10;
