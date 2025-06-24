@@ -259,5 +259,7 @@ order by v.gelesenvon
 2134	1	2.0000
 2137	2	4.0000
 
-
-
+query tsv rowsort i
+SELECT SUM(sws), SUM(sws + 1), SUM(sws + 2), SUM(sws + 3), SUM(sws + 4), SUM(sws + 5), SUM(sws + 6), SUM(sws + 7), SUM(sws + 8), SUM(sws + 9), SUM(sws + 10), SUM(sws + 11), SUM(sws + 12), SUM(sws + 13), SUM(sws + 14), SUM(sws + 15), SUM(sws + 16), SUM(sws + 17), SUM(sws + 18), SUM(sws + 19), SUM(sws + 20), SUM(sws + 21), SUM(sws + 22), SUM(sws + 23), SUM(sws + 24), SUM(sws + 25), SUM(sws + 26), SUM(sws + 27), SUM(sws + 28), SUM(sws + 29), SUM(sws + 30), SUM(sws + 31), SUM(sws + 32), SUM(sws + 33), SUM(sws + 34), SUM(sws + 35), SUM(sws + 36), SUM(sws + 37), SUM(sws + 38), SUM(sws + 39), SUM(sws + 40), SUM(sws + 41), SUM(sws + 42), SUM(sws + 43), SUM(sws + 44), SUM(sws + 45), SUM(sws + 46), SUM(sws + 47), SUM(sws + 48), SUM(sws + 49), SUM(sws + 50), SUM(sws + 51), SUM(sws + 52), SUM(sws + 53), SUM(sws + 54), SUM(sws + 55), SUM(sws + 56), SUM(sws + 57), SUM(sws + 58), SUM(sws + 59), SUM(sws + 60), SUM(sws + 61), SUM(sws + 62), SUM(sws + 63), SUM(sws + 64), SUM(sws + 65), SUM(sws + 66), SUM(sws + 67), SUM(sws + 68), SUM(sws + 69), SUM(sws + 70), SUM(sws + 71), SUM(sws + 72), SUM(sws + 73), SUM(sws + 74), SUM(sws + 75), SUM(sws + 76), SUM(sws + 77), SUM(sws + 78), SUM(sws + 79), SUM(sws + 80), SUM(sws + 81), SUM(sws + 82), SUM(sws + 83), SUM(sws + 84), SUM(sws + 85), SUM(sws + 86), SUM(sws + 87), SUM(sws + 88), SUM(sws + 89) FROM Vorlesungen;
+----
+30	40	50	60	70	80	90	100	110	120	130	140	150	160	170	180	190	200	210	220	230	240	250	260	270	280	290	300	310	320	330	340	350	360	370	380	390	400	410	420	430	440	450	460	470	480	490	500	510	520	530	540	550	560	570	580	590	600	610	620	630	640	650	660	670	680	690	700	710	720	730	740	750	760	770	780	790	800	810	820	830	840	850	860	870	880	890	900	910	920

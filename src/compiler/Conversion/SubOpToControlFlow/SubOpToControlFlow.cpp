@@ -215,7 +215,8 @@ class EntryStorageHelper {
          type = converted ? converted : type;
          MemberInfo memberInfo;
          if (auto nullableType = mlir::dyn_cast_or_null<db::NullableType>(type)) {
-            if (compressionEnabled) {
+            // Compression is bounded
+            if (compressionEnabled && nullBitOffset <= 63) {
                memberInfo.isNullable = true;
                if (nullBitOffset == 0) {
                   nullBitSetPos = types.size();
