@@ -2083,7 +2083,6 @@ static std::tuple<mlir::Value, mlir::DictionaryAttr, mlir::DictionaryAttr> perfo
       createOp.getInitFn().push_back(initialValueBlock);
       state = createOp.getRes();
       afterLookup = rewriter.create<subop::LookupOp>(loc, tuples::TupleStreamType::get(rewriter.getContext()), stream, state, rewriter.getArrayAttr({}), referenceDefAttr);
-
    } else {
       std::vector<mlir::Attribute> keyNames;
       std::vector<mlir::Attribute> keyTypesAttr;
@@ -2535,6 +2534,9 @@ class AggregationLowering : public OpConversionPattern<relalg::AggregationOp> {
    LogicalResult matchAndRewrite(relalg::AggregationOp aggregationOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       AnalyzedAggregation analyzedAggregation;
       analyze(aggregationOp, analyzedAggregation);
+
+      auto loc = aggregationOp->getLoc();
+
       auto keyAttributes = relalg::OrderedAttributes::fromRefArr(aggregationOp.getGroupByColsAttr());
       std::vector<std::tuple<mlir::Value, mlir::DictionaryAttr, mlir::DictionaryAttr>> subResults;
       for (auto x : analyzedAggregation.distAggrFuncs) {
@@ -2546,25 +2548,53 @@ class AggregationLowering : public OpConversionPattern<relalg::AggregationOp> {
             auto projectionAttrs = keyAttributes.getAttrs();
             auto distinctAttrs = distinctBy.getAttrs();
             projectionAttrs.insert(projectionAttrs.end(), distinctAttrs.begin(), distinctAttrs.end());
-            tree = rewriter.create<relalg::ProjectionOp>(aggregationOp->getLoc(), relalg::SetSemantic::distinct, tree, relalg::OrderedAttributes::fromVec(projectionAttrs).getArrayAttr(rewriter.getContext()));
+            tree = rewriter.create<relalg::ProjectionOp>(loc, relalg::SetSemantic::distinct, tree, relalg::OrderedAttributes::fromVec(projectionAttrs).getArrayAttr(rewriter.getContext()));
          }
-         auto partialResult = performAggregation(aggregationOp->getLoc(), rewriter, x.second, keyAttributes, tree, performAggrFuncReduce);
+         auto partialResult = performAggregation(loc, rewriter, x.second, keyAttributes, tree, performAggrFuncReduce);
          subResults.push_back(partialResult);
       }
       if (subResults.empty()) {
-         //handle the case that aggregation is only used for distinct projection
+         // handle the case that aggregation is only used for distinct projection
          rewriter.replaceOpWithNewOp<relalg::ProjectionOp>(aggregationOp, relalg::SetSemantic::distinct, adaptor.getRel(), aggregationOp.getGroupByCols());
          return success();
       }
 
-      mlir::Value newStream = rewriter.create<subop::ScanOp>(aggregationOp->getLoc(), std::get<0>(subResults.at(0)), std::get<1>(subResults.at(0)));
+      // rejoin the aggregation functions
+      mlir::Value newStream = rewriter.create<subop::ScanOp>(loc, std::get<0>(subResults.at(0)), std::get<1>(subResults.at(0)));
       ; //= scan %state of subresult 0
       for (size_t i = 1; i < subResults.size(); i++) {
          mlir::Value state = std::get<0>(subResults.at(i));
          mlir::DictionaryAttr stateColumnMapping = std::get<2>(subResults.at(i));
-         auto [referenceDef, referenceRef] = createColumn(subop::LookupEntryRefType::get(getContext(), mlir::cast<subop::LookupAbleState>(state.getType())), "lookup", "ref");
-         mlir::Value afterLookup = rewriter.create<subop::LookupOp>(aggregationOp->getLoc(), tuples::TupleStreamType::get(getContext()), newStream, state, aggregationOp.getGroupByCols(), referenceDef);
-         newStream = rewriter.create<subop::GatherOp>(aggregationOp->getLoc(), afterLookup, referenceRef, stateColumnMapping);
+
+         auto [optionalReferenceDef, optionalReferenceRef] = createColumn(subop::OptionalType::get(getContext(), subop::LookupEntryRefType::get(getContext(), mlir::cast<subop::LookupAbleState>(state.getType()))), "lookup", "ref");
+         auto [finalReferenceDef, finalReferenceRef] = createColumn(subop::LookupEntryRefType::get(getContext(), mlir::cast<subop::LookupAbleState>(state.getType())), "lookup", "ref");
+
+         mlir::Value afterLookup;
+         if (keyAttributes.getAttrs().empty()) {
+            afterLookup = rewriter.create<subop::LookupOp>(loc, tuples::TupleStreamType::get(getContext()), newStream, state, aggregationOp.getGroupByCols(), finalReferenceDef);
+         } else {
+            std::vector<mlir::Type> keyTypes;
+            std::vector<mlir::Location> locations;
+            for (auto* x : keyAttributes.getAttrs()) {
+               keyTypes.push_back((x->type));
+               locations.push_back(loc);
+            }
+
+            auto lookupOp = rewriter.create<subop::LookupOp>(loc, tuples::TupleStreamType::get(rewriter.getContext()), newStream, state, keyAttributes.getArrayAttr(rewriter.getContext()), optionalReferenceDef);
+
+            mlir::Block* equalBlock = new Block;
+            lookupOp.getEqFn().push_back(equalBlock);
+            equalBlock->addArguments(keyTypes, locations);
+            equalBlock->addArguments(keyTypes, locations);
+            {
+               mlir::OpBuilder::InsertionGuard guard(rewriter);
+               rewriter.setInsertionPointToStart(equalBlock);
+               mlir::Value compared = compareKeys(rewriter, equalBlock->getArguments().drop_back(keyTypes.size()), equalBlock->getArguments().drop_front(keyTypes.size()), loc);
+               rewriter.create<tuples::ReturnOp>(loc, compared);
+            }
+            afterLookup = rewriter.create<subop::UnwrapOptionalRefOp>(loc, lookupOp.getRes(), optionalReferenceRef, finalReferenceDef);
+         }
+         newStream = rewriter.create<subop::GatherOp>(loc, afterLookup, finalReferenceRef, stateColumnMapping);
       }
 
       rewriter.replaceOp(aggregationOp, newStream);

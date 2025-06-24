@@ -25,7 +25,7 @@ class IntroduceTmp : public mlir::PassWrapper<IntroduceTmp, mlir::OperationPass<
    }
    void runOnOperation() override {
       getOperation().walk([&](Operator op) {
-         if (!op->use_empty() && !op->hasOneUse()) {
+         if (!op->getParentOfType<Operator>() && !op->use_empty() && !op->hasOneUse()) {
             mlir::OpBuilder builder(&getContext());
             builder.setInsertionPointAfter(op.getOperation());
             relalg::ColumnSet usedAttributes;

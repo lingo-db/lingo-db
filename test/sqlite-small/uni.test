@@ -237,3 +237,27 @@ from studenten s
 29120	2	29120
 29555	2	58675
 
+query tsv rowsort g
+select v.sws, count(*), count(distinct v.gelesenvon)
+from vorlesungen v
+group by v.sws
+order by v.sws
+----
+2	4	4
+3	2	1
+4	4	2
+
+query tsv rowsort h
+select v.gelesenvon, count(*), avg(distinct v.sws)
+from vorlesungen v
+group by v.gelesenvon
+order by v.gelesenvon
+----
+2125	3	3.0000
+2126	3	2.5000
+2133	1	2.0000
+2134	1	2.0000
+2137	2	4.0000
+
+
+
