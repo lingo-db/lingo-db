@@ -8,8 +8,6 @@
 #include "lingodb/execution/baseline/utils.hpp"
 #include "lingodb/utility/Setting.h"
 
-#include <llvm/ADT/TypeSwitch.h>
-#include <llvm/Target/TargetMachine.h>
 #include <mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h>
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/ControlFlow/IR/ControlFlowOps.h>
@@ -18,6 +16,15 @@
 #include <mlir/IR/Operation.h>
 #include <mlir/Interfaces/FunctionInterfaces.h>
 #include <mlir/Transforms/Passes.h>
+
+#include <llvm/ADT/TypeSwitch.h>
+#include <llvm/Target/TargetMachine.h>
+#include <llvm/ExecutionEngine/JITLink/EHFrameSupport.h>
+#include <llvm/ExecutionEngine/Orc/Core.h>
+#include <llvm/ExecutionEngine/Orc/EHFrameRegistrationPlugin.h>
+#include <llvm/ExecutionEngine/Orc/ExecutionUtils.h>
+#include <llvm/ExecutionEngine/Orc/MapperJITLinkMemoryManager.h>
+#include <llvm/ExecutionEngine/Orc/ObjectLinkingLayer.h>
 
 #include <tpde/CompilerBase.hpp>
 #include <tpde/x64/CompilerX64.hpp>
@@ -315,15 +322,31 @@ namespace lingodb::execution::baseline {
         }
 
         [[maybe_unused]] std::string value_fmt_ref(IRValueRef val) const noexcept {
-            return val.getDefiningOp()->getName().getStringRef().str();
+            if (const auto op = val.getDefiningOp()) {
+                return op->getName().getStringRef().str();
+            }
+            if (const mlir::BlockArgument arg = mlir::dyn_cast<mlir::BlockArgument>(val)) {
+                return std::format("block_arg_{}", arg.getArgNumber());
+            }
+            return "";
         }
 
-        [[maybe_unused]] auto inst_operands(IRInstRef inst) const noexcept {
-            auto operands = inst->getOperands();
-            if (operands.empty()) {
-                return mlir::OperandRange{nullptr, 0};
-            }
-            return operands;
+        [[maybe_unused]] auto inst_operands(IRInstRef op) const noexcept {
+            return llvm::TypeSwitch<IRInstRef, mlir::OperandRange>(op)
+                    .Case<mlir::cf::BranchOp>([](auto) {
+                        // direct branches only have block arguments as operands, their usage is counted via phi nodes
+                        return mlir::OperandRange{nullptr, 0};
+                    })
+                    .Case<mlir::cf::CondBranchOp>([](const auto branch) {
+                        return mlir::OperandRange{&branch->getOpOperand(0), 1};
+                    })
+                    .Default([](const auto op) {
+                        auto operands = op->getOperands();
+                        if (operands.empty()) {
+                            return mlir::OperandRange{nullptr, 0};
+                        }
+                        return operands;
+                    });
         }
 
         [[maybe_unused]] auto inst_results(IRInstRef inst) const noexcept {
@@ -474,32 +497,62 @@ namespace lingodb::execution::baseline {
 
         struct ValRefSpecial {
             uint8_t mode = 4;
-            uint64_t value;
+            IRAdaptor::IRValueRef value;
         };
 
         static std::optional<ValRefSpecial> val_ref_special(IRAdaptor::IRValueRef val) {
-            if (auto constOp = mlir::dyn_cast_or_null<mlir::arith::ConstantOp>(val.getDefiningOp())) {
-                if (const auto intAttr = mlir::dyn_cast_or_null<mlir::IntegerAttr>(constOp.getValue())) {
-                    return ValRefSpecial{.mode = 4, .value = std::bit_cast<uint64_t>(intAttr.getInt())};
-                }
-                if (const auto floatAttr = mlir::dyn_cast_or_null<mlir::FloatAttr>(constOp.getValue())) {
-                    return ValRefSpecial{.mode = 4, .value = std::bit_cast<uint64_t>(floatAttr.getValueAsDouble())};
-                }
-                assert(0 && "Unsupported constant type in val_ref_special");
-                return std::nullopt;
-            }
-            if (const auto utilSizeOfOp = mlir::dyn_cast_or_null<dialect::util::SizeOfOp>(val.getDefiningOp())) {
-                const mlir::TypeAttr type_attr = mlir::cast<mlir::TypeAttr>(utilSizeOfOp->getAttr("type"));
-                const size_t tuple_size = TupleHelper{mlir::cast<mlir::TupleType>(type_attr.getValue())}.
-                        sizeAndPadding().first;
-                return ValRefSpecial{.mode = 4, .value = static_cast<uint64_t>(tuple_size)};
+            if (val.getDefiningOp() && mlir::isa<mlir::arith::ConstantOp, dialect::util::SizeOfOp,
+                    dialect::util::CreateConstVarLen>(val.getDefiningOp())) {
+                return ValRefSpecial{.mode = 4, .value = val};
             }
             return std::nullopt;
         }
 
         ValuePartRef val_part_ref_special(ValRefSpecial &ref, uint32_t part) noexcept {
-            assert(part == 0);
-            return ValuePartRef(this, ref.value, 8, Config::GP_BANK);
+            if (auto constOp = mlir::dyn_cast_or_null<mlir::arith::ConstantOp>(ref.value.getDefiningOp())) {
+                if (auto intAttr = mlir::dyn_cast_or_null<mlir::IntegerAttr>(constOp.getValue())) {
+                    const mlir::APInt containedInt = intAttr.getValue();
+                    unsigned bitWidth;
+                    if (mlir::isa<mlir::IndexType>(intAttr.getType())) {
+                        bitWidth = 64;
+                    } else {
+                        bitWidth = intAttr.getType().getIntOrFloatBitWidth();
+                    }
+                    if (bitWidth <= 64) {
+                        assert(part == 0);
+                        return ValuePartRef(this, containedInt.getRawData()[0], bitWidth / 8, Config::GP_BANK);
+                    }
+                    if (bitWidth == 128) {
+                        assert(part < 2 && "Part index out of range for 128-bit integer");
+                        return ValuePartRef(this, containedInt.getRawData()[part], 8, Config::GP_BANK);
+                    }
+                    assert(0 && "Unsupported integer type in val_ref_special");
+                    return ValuePartRef{this};
+                }
+                if (const auto floatAttr = mlir::dyn_cast_or_null<mlir::FloatAttr>(constOp.getValue())) {
+                    assert(part == 0);
+                    uint64_t containedFloat = floatAttr.getValue().bitcastToAPInt().getRawData()[0];
+                    return ValuePartRef(this, containedFloat, floatAttr.getType().getIntOrFloatBitWidth() / 8,
+                                        Config::FP_BANK);
+                }
+                assert(0 && "Unsupported constant type in val_ref_special");
+                return ValuePartRef{this};
+            }
+            if (const auto utilSizeOfOp = mlir::dyn_cast_or_null<dialect::util::SizeOfOp>(ref.value.getDefiningOp())) {
+                assert(part == 0);
+                const mlir::TypeAttr type_attr = mlir::cast<mlir::TypeAttr>(utilSizeOfOp->getAttr("type"));
+                const uint64_t tuple_size = TupleHelper{mlir::cast<mlir::TupleType>(type_attr.getValue())}.
+                        sizeAndPadding().first;
+                return ValuePartRef(this, tuple_size, 8, Config::GP_BANK);
+            }
+            if (const auto constVarLenOp = mlir::dyn_cast_or_null<dialect::util::CreateConstVarLen>(
+                ref.value.getDefiningOp())) {
+                assert(0);
+                // return ValuePartRef(this, tuple_size, 8, Config::GP_BANK);
+                return ValuePartRef{this};
+            }
+            assert(0 && "Unsupported value in val_ref_special");
+            return ValuePartRef{this};
         }
 
         static bool arg_is_int128(IRAdaptor::IRValueRef val) noexcept {
@@ -655,25 +708,6 @@ namespace lingodb::execution::baseline {
             return true;
         }
 
-        bool compile_util_sizeof_op(dialect::util::SizeOfOp op) {
-            // the value of the sizeof operation can be statically calculated => treat value as constant, no codegen required
-            assert(this->val_ref(op.getResult()).part(0).is_const());
-            return true;
-        }
-
-        bool compile_arith_const_op(mlir::arith::ConstantOp op) {
-            // ValueRef val = this->val_ref(op.getResult());
-            // ValuePartRef val_pr = val.part(0);
-            // assert(val_pr.is_const());
-            //
-            // auto [_, res_ref] = this->result_ref_single(op.getResult());
-            // ScratchReg res_scratch{this};
-            // AsmReg res_reg = res_scratch.alloc_gp();
-            // ASM(MOV64ri, res_reg, val_pr.const_data()[0]);
-            assert(this->val_ref(op.getResult()).part(0).is_const());
-            return true;
-        }
-
         bool compile_util_generic_memref_cast_op(dialect::util::GenericMemrefCastOp op) {
             const mlir::TypedValue<dialect::util::RefType> src = op.getVal();
             const mlir::TypedValue<dialect::util::RefType> dst = op.getRes();
@@ -728,7 +762,7 @@ namespace lingodb::execution::baseline {
                     AsmReg ptr_reg = ptr_ref.alloc_reg();
                     ptr_part = GenericValuePart{Expr{std::move(ptr_reg), idx_op.value()}};
                 } else {
-                    error.emit() << "Index must be a constant index operation";
+                    error.emit() << "Index must be a constant index operation\n";
                     return false;
                 }
             } else {
@@ -816,12 +850,6 @@ namespace lingodb::execution::baseline {
                     });
         }
 
-        bool compile_func_constant_op(mlir::func::ConstantOp) {
-            // we do not support function constants in the IR, so we just return true
-            // this is a no-op
-            return true;
-        }
-
         // TODO: this is veeeery brittle -> test!
         bool compile_func_call_op(mlir::func::CallOp op) {
             mlir::func::FuncOp callee_func = mlir::cast<mlir::func::FuncOp>(op.resolveCallable());
@@ -838,9 +866,6 @@ namespace lingodb::execution::baseline {
                     if (auto string_attr = mlir::dyn_cast<mlir::StringAttr>(attr[i]);
                         string_attr && string_attr.getValue() == "llvm.zeroext") {
                         flag = Base::CallArg::Flag::zext;
-                    } else {
-                        assert(0 && "Unsupported call argument attribute");
-                        return false;
                     }
                 }
                 builder.add_arg(typename Base::CallArg{arg, flag, 0, 0}); // TODO: check byval_align and byval_size
@@ -868,11 +893,6 @@ namespace lingodb::execution::baseline {
                 rb.add(op->getOperand(0));
             }
             rb.ret();
-            return true;
-        }
-
-        bool compile_util_alloca_op(const dialect::util::AllocaOp op) {
-            // this is handled by the IRAdaptor, so we do not need to do anything here
             return true;
         }
 
@@ -946,21 +966,26 @@ namespace lingodb::execution::baseline {
         bool compile_arith_index_cast_op(const mlir::arith::IndexCastOp op) {
             mlir::Value src = op->getOperand(0);
             mlir::Value res = op->getResult(0);
-            assert(
-                mlir::isa<mlir::IntegerType>(src.getType()) &&
-                "Source must be an integer type for index cast operation");
-            assert(
-                src.getType().getIntOrFloatBitWidth() <= 64 &&
-                "Source must be an integer type for index cast operation");
-            assert(
-                mlir::isa<mlir::IndexType>(res.getType()) && "Result must be an index type for index cast operation");
-
-            auto [_, src_vpr] = this->val_ref_single(src);
-            src_vpr = std::move(src_vpr).into_extended(false, src.getType().getIntOrFloatBitWidth(), 64);
-
-            auto res_ref = this->result_ref(res);
-            res_ref.part(0).set_value(std::move(src_vpr));
-            return true;
+            if (mlir::isa<mlir::IntegerType>(src.getType()) && mlir::isa<mlir::IndexType>(res.getType())) {
+                assert(src.getType().getIntOrFloatBitWidth() <= 64);
+                auto [_, src_vpr] = this->val_ref_single(src);
+                if (src.getType().getIntOrFloatBitWidth() != 64)
+                    src_vpr = std::move(src_vpr).into_extended(false, src.getType().getIntOrFloatBitWidth(), 64);
+                auto res_ref = this->result_ref(res);
+                res_ref.part(0).set_value(std::move(src_vpr));
+                return true;
+            }
+            if (mlir::isa<mlir::IndexType>(src.getType()) && mlir::isa<mlir::IntegerType>(res.getType())) {
+                assert(res.getType().getIntOrFloatBitWidth() <= 64);
+                auto [_, src_vpr] = this->val_ref_single(src);
+                if (res.getType().getIntOrFloatBitWidth() != 64)
+                    src_vpr = std::move(src_vpr).into_extended(false, 64, res.getType().getIntOrFloatBitWidth());
+                auto res_ref = this->result_ref(res);
+                res_ref.part(0).set_value(std::move(src_vpr));
+                return true;
+            }
+            assert(0 && "Index cast operation must be between integer and index types");
+            return false;
         }
 
         bool compile_inst(const IRInstRef inst, InstRange) noexcept {
@@ -979,20 +1004,16 @@ namespace lingodb::execution::baseline {
                     .template Case<mlir::cf::CondBranchOp>([&](auto op) {
                         return derived()->compile_cf_cond_br_op(op);
                     })
-                    .template Case<mlir::arith::ConstantOp>([&](auto op) {
-                        return compile_arith_const_op(op);
-                    })
-                    .template Case<dialect::util::SizeOfOp>([&](auto op) {
-                        return compile_util_sizeof_op(op);
+                    .template Case<mlir::arith::ConstantOp, dialect::util::SizeOfOp, dialect::util::AllocaOp,
+                        mlir::func::ConstantOp, dialect::util::CreateConstVarLen>([&](auto) {
+                        // these are all constant operations whose value is handled in val_ref_special / val_part_ref_special
+                        return true;
                     })
                     .template Case<dialect::util::GenericMemrefCastOp>([&](auto op) {
                         return compile_util_generic_memref_cast_op(op);
                     })
                     .template Case<dialect::util::TupleElementPtrOp>([&](auto op) {
                         return derived()->compile_util_tuple_element_ptr_op(op);
-                    })
-                    .template Case<mlir::func::ConstantOp>([&](auto op) {
-                        return compile_func_constant_op(op);
                     })
                     .template Case<dialect::util::LoadOp>([&](auto op) {
                         return compile_util_load_op(op);
@@ -1005,9 +1026,6 @@ namespace lingodb::execution::baseline {
                     })
                     .template Case<mlir::func::ReturnOp>([&](auto op) {
                         return compile_func_return_op(op);
-                    })
-                    .template Case<dialect::util::AllocaOp>([&](auto op) {
-                        return compile_util_alloca_op(op);
                     })
                     .template Case<mlir::arith::ExtUIOp>([&](auto op) {
                         return compile_arith_ext_ui_op(op);
@@ -1200,6 +1218,137 @@ namespace lingodb::execution::baseline {
 
     // NOLINTEND(readability-identifier-naming)
 
+    class DynamicLoader {
+    protected:
+        std::vector<uint8_t> objFile;
+        Error &error;
+
+    public:
+        DynamicLoader(std::vector<uint8_t> objFile, Error &error) : objFile(std::move(objFile)), error(error) {
+        }
+
+        virtual ~DynamicLoader() = default;
+
+        virtual void teardown() {
+        }
+
+        virtual lingodb::execution::mainFnType getMainFunction() { return nullptr; }
+        bool has_error = false;
+    };
+
+    class LLVMOrcLoader : public DynamicLoader {
+        std::unique_ptr<llvm::orc::ExecutionSession> executionSession;
+        std::unique_ptr<llvm::orc::ObjectLinkingLayer> objectLayer;
+        llvm::orc::JITDylib *dylib;
+
+    public:
+        LLVMOrcLoader(std::vector<uint8_t> objFileBytes, Error &error) : DynamicLoader(std::move(objFileBytes), error) {
+            auto memBuf = llvm::MemoryBuffer::getMemBuffer(
+                llvm::StringRef(reinterpret_cast<char *>(objFile.data()), objFile.size()),
+                "",
+                false
+            );
+            assert(memBuf->getBufferSize());
+            executionSession = std::make_unique<llvm::orc::ExecutionSession>(
+                std::make_unique<llvm::orc::UnsupportedExecutorProcessControl>());
+            llvm::orc::MapperJITLinkMemoryManager memoryManager(getpagesize(),
+                                                                std::make_unique<llvm::orc::InProcessMemoryMapper>(
+                                                                    getpagesize()));
+            objectLayer = std::make_unique<llvm::orc::ObjectLinkingLayer>(*executionSession, memoryManager);
+            auto res = executionSession->createJITDylib("<main>");
+            if (auto err = res.takeError()) {
+                error.emit() << "Could not create JITDylib: " << llvm::toString(std::move(err)) << "\n";
+                has_error = true;
+                return;
+            }
+            dylib = &*res;
+            auto res2 = llvm::orc::DynamicLibrarySearchGenerator::GetForCurrentProcess(/*GlobalPrefix=*/'\0');
+            if (auto err = res2.takeError()) {
+                error.emit() << "Could not create DynamicLibrarySearchGenerator: " << llvm::toString(std::move(err))
+                        << "\n";
+                return;
+            }
+            dylib->addGenerator(std::move(*res2));
+            if (auto err = objectLayer->add(*dylib, std::move(memBuf))) {
+                error.emit() << "Could not add object file to JITDylib: " << llvm::toString(std::move(err)) << "\n";
+                return;
+            }
+            objectLayer->addPlugin(std::make_unique<llvm::orc::EHFrameRegistrationPlugin>(
+                *executionSession, std::make_unique<llvm::jitlink::InProcessEHFrameRegistrar>()));
+        }
+
+        mainFnType getMainFunction() override {
+            auto startSymRes = executionSession->lookup(dylib, "main");
+            if (auto err = startSymRes.takeError()) {
+                error.emit() << "Could not find main symbol in JITDylib: " << llvm::toString(std::move(err)) << "\n";
+                has_error = true;
+                return nullptr;
+            }
+            const llvm::orc::ExecutorSymbolDef startSym = *startSymRes;
+            return reinterpret_cast<mainFnType>(startSym.getAddress().getValue());
+        }
+
+        void teardown() override {
+            if (auto err = executionSession->endSession(); !err.success()) {
+                error.emit() << "Could not end JIT session: " << llvm::toString(std::move(err)) << "\n";
+                has_error = true;
+            }
+        }
+
+        ~LLVMOrcLoader() override = default;
+    };
+
+    class DebugLoader : public DynamicLoader {
+        void *handle = nullptr;
+
+    public:
+        DebugLoader(std::vector<uint8_t> objFileBytes, Error &error, std::string_view outFileName) : DynamicLoader(
+            std::move(objFileBytes), error) {
+            auto outFile = std::fopen(baselineObjectFileOut.getValue().c_str(), "wb");
+            if (!outFile) {
+                error.emit() << "Could not open output file for baseline object: " << baselineObjectFileOut.
+                        getValue() << " (" << strerror(errno) << ")\n";
+                has_error = true;
+                return;
+            }
+            if (std::fwrite(objFileBytes.data(), 1, objFileBytes.size(), outFile) != objFileBytes.size()) {
+                error.emit() << "Could not write object file to output file: " << baselineObjectFileOut.getValue()
+                        <<
+                        " (" << strerror(errno) << ")\n";
+                has_error = true;
+                return;
+            }
+            handle = dlopen(outFileName.data(), RTLD_LAZY);
+            const char *dlsymError = dlerror();
+            if (dlsymError) {
+                error.emit() << "Cannot open object file: " << std::string(dlsymError) << "\nerror: " <<
+                        strerror(errno) << "\n";
+                return;
+            }
+        }
+
+        mainFnType getMainFunction() override {
+            auto mainFunc = reinterpret_cast<lingodb::execution::mainFnType>(dlsym(handle, "main"));
+            const char *dlsymError = dlerror();
+            if (dlsymError) {
+                error.emit() << "Could not load symbol for main function: " << std::string(dlsymError) << "\nerror:"
+                        << strerror(errno) << "\n";
+                has_error = true;
+                return nullptr;
+            }
+            return mainFunc;
+        }
+
+        void teardown() override {
+            // if (outFile) {
+            //     std::fclose(outFile);
+            // }
+            dlclose(handle);
+        }
+
+        ~DebugLoader() override = default;
+    };
+
     class BaselineBackend : public lingodb::execution::ExecutionBackend {
         // lower mlir IR to a form that can be compiled by tpde
         // currently mostly does a SCF to CF conversion
@@ -1225,8 +1374,7 @@ namespace lingodb::execution::baseline {
             timing["baselineLowering"] = std::chrono::duration_cast<std::chrono::microseconds>(
                                              endLowering - startLowering).count() / 1000.0;
 
-            // SpdLogSpoof logSpoof;
-            spdlog::set_level(spdlog::level::trace);
+            SpdLogSpoof logSpoof;
 #if defined(__x86_64__)
             IRCompilerX64 compiler{std::make_unique<IRAdaptor>(&moduleOp, error)};
 #else
@@ -1234,51 +1382,22 @@ namespace lingodb::execution::baseline {
 #endif
             if (!compiler.compile()) {
                 error.emit() << "Could not compile query module:\n"
-                        // << logSpoof.drain_logs() << "\n"
+                        << logSpoof.drain_logs() << "\n"
                         << compiler.adaptor->getError().emit().str() << "\n"
                         << compiler.getError().emit().str() << "\n";
                 return;
             }
             std::vector<uint8_t> objFileBytes = compiler.assembler.build_object_file();
-
-            std::FILE *outFile;
-            std::string outFileName;
-            if (baselineObjectFileOut.getValue().empty()) {
-                outFile = std::tmpfile();
-                // be careful, this only works on Linux!
-                outFileName = std::filesystem::read_symlink(
-                    std::filesystem::path("/proc/self/fd") / std::to_string(fileno(outFile)));
+            std::unique_ptr<DynamicLoader> loader;
+            if (!baselineObjectFileOut.getValue().empty()) {
+                loader = std::make_unique<DebugLoader>(std::move(objFileBytes), error,
+                                                       baselineObjectFileOut.getValue());
             } else {
-                outFileName = baselineObjectFileOut.getValue();
-                outFile = std::fopen(baselineObjectFileOut.getValue().c_str(), "wb");
-                if (!outFile) {
-                    error.emit() << "Could not open output file for baseline object: " << baselineObjectFileOut.
-                            getValue() << " (" << strerror(errno) << ")\n";
-                    return;
-                }
+                loader = std::make_unique<LLVMOrcLoader>(std::move(objFileBytes), error);
             }
-            if (std::fwrite(objFileBytes.data(), 1, objFileBytes.size(), outFile) != objFileBytes.size()) {
-                error.emit() << "Could not write object file to output file: " << baselineObjectFileOut.getValue() <<
-                        " (" << strerror(errno) << ")\n";
-                std::fclose(outFile);
-                return;
-            }
-
-            void *handle = dlopen(outFileName.c_str(), RTLD_LAZY);
-            const char *dlsymError = dlerror();
-            if (dlsymError) {
-                error.emit() << "Cannot open static library: " << std::string(dlsymError) << "\nerror: " <<
-                        strerror(errno) << "\n";
-                return;
-            }
-            auto mainFunc = reinterpret_cast<lingodb::execution::mainFnType>(dlsym(handle, "main"));
-            dlsymError = dlerror();
-            if (dlsymError) {
-                dlclose(handle);
-                error.emit() << "Could not load symbol for main function: " << std::string(dlsymError) << "\nerror:" <<
-                        strerror(errno) << "\n";
-                return;
-            }
+            if (loader->has_error) return;
+            auto mainFunc = loader->getMainFunction();
+            if (loader->has_error) return;
 
             std::vector<size_t> measuredTimes;
             for (size_t i = 0; i < numRepetitions; i++) {
@@ -1289,8 +1408,7 @@ namespace lingodb::execution::baseline {
                     std::chrono::duration_cast<std::chrono::microseconds>(executionEnd - executionStart).count() /
                     1000.0);
             }
-            dlclose(handle);
-            std::fclose(outFile);
+            loader->teardown();
         }
     };
 }
