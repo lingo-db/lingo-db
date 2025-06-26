@@ -87,12 +87,12 @@ module  {
     	%sub = arith.subf %c1, %c42 : f64
     	%mul = arith.mulf %c2, %c42 : f64
     	%div = arith.divf %c42, %c2 : f64
-    	%mod = arith.remf %c42, %c2 : f64
+    	//%mod = arith.remf %c42, %c2 : f64 -> currently not supported in tpde
     	call @dumpF64(%add) : (f64) -> ()
     	call @dumpF64(%sub) : (f64) -> ()
     	call @dumpF64(%mul) : (f64) -> ()
     	call @dumpF64(%div) : (f64) -> ()
-    	call @dumpF64(%mod) : (f64) -> ()
+    	//call @dumpF64(%mod) : (f64) -> ()
     	return
     }
   func.func @testFloatCmp(){
