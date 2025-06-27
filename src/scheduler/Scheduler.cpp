@@ -52,15 +52,15 @@ class Fiber {
          currentWorker = worker;
          setup();
          f(); // execute task
+         std::unique_lock<std::mutex> lk(mtx);
          isRunning = false;
          done = true;
          teardown();
-         std::unique_lock<std::mutex> lk(mtx);
          cvMain.notify_one(); // notify resume() that we're done
       });
 
       // Wait for initial yield before we return
-      cvMain.wait(lk);
+      cvMain.wait(lk, [&]() { return !isRunning; });
 
       return done;
    }
@@ -70,18 +70,18 @@ class Fiber {
       isRunning = true;
       std::unique_lock<std::mutex> lk(mtx);
       cvFiber.notify_one();
-      cvMain.wait(lk);
+      cvMain.wait(lk, [&]() { return !isRunning; });
       return done;
    }
 
    void yield() {
       assert(isRunning);
       assert(!done);
+      std::unique_lock<std::mutex> lk(mtx);
       isRunning = false;
       teardown();
-      std::unique_lock<std::mutex> lk(mtx);
       cvMain.notify_one();
-      cvFiber.wait(lk);
+      cvFiber.wait(lk, [&]() { return isRunning.load(); });
       setup();
    }
 
@@ -249,6 +249,7 @@ class Scheduler {
    Worker* idleWorkers = nullptr;
    std::mutex taskQueueMutex;
    std::mutex taskReturnMutex;
+   std::mutex taskDeleteMutex;
    TaskWrapper* taskHead = nullptr;
    TaskWrapper* taskTail = nullptr;
 
@@ -262,6 +263,10 @@ class Scheduler {
    }
    size_t getNumWorkers() {
       return numWorkers;
+   }
+
+   std::mutex& getTaskDeleteMutex() {
+      return taskDeleteMutex;
    }
 
    void putWorkerToSleep(Worker* worker);
@@ -351,6 +356,7 @@ class Scheduler {
       auto deployedNum = task->deployedOnWorkers.fetch_sub(1);
       if (task->finalized) {
          if (deployedNum == 1) {
+            std::lock_guard<std::mutex> guardDelete(taskDeleteMutex);
             delete task;
             return true;
          }
@@ -720,13 +726,17 @@ void TaskWrapper::finalize() {
 
 void awaitEntryTask(std::unique_ptr<Task> task) {
    TaskWrapper* taskWrapper = new TaskWrapper{std::move(task)};
-   std::condition_variable finished;
+   std::condition_variable cvFinished;
+   std::unique_lock<std::mutex> blockDelete;
+   bool finished = false;
    taskWrapper->onFinalize = [&]() {
-      finished.notify_one();
+      blockDelete = std::unique_lock<std::mutex>(scheduler->getTaskDeleteMutex());
+      finished = true;
+      cvFinished.notify_one();
    };
    std::unique_lock<std::mutex> lk(taskWrapper->finalizeMutex);
    scheduler->enqueueTask(taskWrapper);
-   finished.wait(lk);
+   cvFinished.wait(lk, [&]() { return finished; });
 }
 void awaitChildTask(std::unique_ptr<Task> task) {
    currentWorker->awaitChildTask(std::move(task));
