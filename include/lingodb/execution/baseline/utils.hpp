@@ -17,7 +17,7 @@ class TupleHelper {
    [[nodiscard]] unsigned getElementOffset(uint32_t index) const noexcept {
       size_t offset = 0;
       assert(index < tupleType.getTypes().size() && "Index out of bounds for tuple type");
-      for (const mlir::Type elem : tupleType.getTypes() | std::views::take(index - 1)) {
+      for (const mlir::Type elem : tupleType.getTypes() | std::views::take(index)) {
          unsigned elemAlign = 0;
          size_t elemSize = 0;
          llvm::TypeSwitch<mlir::Type>(elem)
