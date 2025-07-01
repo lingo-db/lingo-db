@@ -1,3 +1,5 @@
+#include "linenoise.h"
+
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -55,28 +57,46 @@ int main(int argc, char** argv) {
 
    lingodb::compiler::support::eval::init();
    auto scheduler = scheduler::startScheduler();
+
+   linenoiseSetMultiLine(true); // enables multi-line editing
+   std::string line;
+   std::stringstream query;
+
    while (true) {
-      //print prompt
-      if (prompt) {
-         std::cout << "sql>";
-      }
-      //read query from stdin until semicolon appears
-      std::stringstream query;
-      std::string line;
-      std::getline(std::cin, line);
-      if (line == "exit" || std::cin.eof()) {
-         //exit from repl loop
+      const char* promptStr = prompt ? (query.str().empty() ? "sql> " : "   -> ") : "";
+      char* input = linenoise(promptStr);
+
+      if (input == nullptr) {
+         // Ctrl+D or EOF
+         std::cout << std::endl;
          break;
       }
-      while (std::cin.good()) {
-         query << line << std::endl;
-         if (!line.empty() && line.find(';') == line.size() - 1) {
-            break;
-         }
-         std::getline(std::cin, line);
+
+      line = input;
+      free(input); // linenoise returns malloc'd memory
+
+      if (line == "exit") {
+         break;
       }
-      handleQuery(*session, query.str(), reportTimes);
+
+      query << line << '\n';
+
+      // Trim trailing whitespace
+      std::string trimmed = line;
+      trimmed.erase(trimmed.find_last_not_of(" \t\r\n") + 1);
+
+      if (!trimmed.empty() && trimmed.back() == ';') {
+         // Done reading the full statement
+         linenoiseHistoryAdd(query.str().c_str()); // optional: add to history
+
+         handleQuery(*session, query.str(), reportTimes);
+
+         // Clear for next command
+         query.str("");
+         query.clear();
+      }
    }
+   linenoiseHistoryFree();
 
    return 0;
 }
