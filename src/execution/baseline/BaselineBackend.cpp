@@ -162,8 +162,8 @@ namespace lingodb::execution::baseline {
         [[maybe_unused]] static bool cur_arg_is_sret(uint32_t) noexcept { return false; }
 
         [[maybe_unused]] auto cur_static_allocas() noexcept {
-            return cur_func.getFunctionBody().getOps<dialect::util::AllocaOp>();
             // we do not have dynamic allocas in the IR
+            return cur_func.getFunctionBody().getOps<dialect::util::AllocaOp>();
         }
 
         [[maybe_unused]] static bool cur_has_dynamic_alloca() noexcept {
@@ -415,11 +415,56 @@ namespace lingodb::execution::baseline {
         using ValuePart = typename Base::ValuePart;
         using InstRange = typename Base::InstRange;
         using IRInstRef = IRAdaptor::IRInstRef;
-        using AsmReg = Base::AsmReg;
+        using IRValueRef = IRAdaptor::IRValueRef;
+        using AsmReg = typename Base::AsmReg;
+        using Assembler = typename Base::Assembler;
+        using SymRef = typename Assembler::SymRef;
+
+        class BuiltinFuncStorage {
+        public:
+            enum class Type : uint8_t {
+                divti3,
+                udivti3,
+                modti3,
+                umodti3,
+                MAX, // sentinel counter-element
+            };
+
+            BuiltinFuncStorage() : funcs() {
+                std::fill(funcs.begin(), funcs.end(), SymRef{});
+            }
+
+            SymRef get_symbol(IRCompilerBase *compiler, Type type) {
+                if (SymRef ref = funcs[static_cast<unsigned>(type)]; ref != SymRef{}) {
+                    return ref;
+                } else {
+                    std::string name;
+                    switch (type) {
+                        case Type::divti3: name = "__divti3";
+                            break;
+                        case Type::udivti3: name = "__udivti3";
+                            break;
+                        case Type::modti3: name = "__modti3";
+                            break;
+                        case Type::umodti3: name = "__umodti3";
+                            break;
+                    }
+                    auto sym = compiler->assembler.sym_add_undef(name, Assembler::SymBinding::GLOBAL);
+                    funcs[static_cast<size_t>(type)] = sym;
+                    return sym;
+                }
+            }
+
+        private:
+            std::array<SymRef, static_cast<size_t>(Type::MAX)> funcs;
+        };
+
+        BuiltinFuncStorage builtins;
+        llvm::BumpPtrAllocator allocator;
 
         Error error;
         mlir::DenseMap<mlir::StringRef, uint32_t> funcMap;
-        mlir::SmallVector<typename Base::Assembler::SymRef> globalSymbols;
+        mlir::SmallVector<SymRef> globalSymbols;
 
         IRCompilerBase(IRAdaptor *adaptor) : Base{adaptor} {
             static_assert(tpde::Compiler<Derived, Config>);
@@ -504,19 +549,25 @@ namespace lingodb::execution::baseline {
 
         static std::optional<ValRefSpecial> val_ref_special(IRAdaptor::IRValueRef val) {
             if (const auto op = val.getDefiningOp()) {
-                if (mlir::isa<mlir::arith::ConstantOp, dialect::util::SizeOfOp>(op)) {
-                    return ValRefSpecial{.mode = 4, .value = val};
-                }
-                if (auto constVarLenOp = mlir::dyn_cast_or_null<dialect::util::CreateConstVarLen>(op)) {
-                    const mlir::StringRef content = mlir::cast<mlir::StringAttr>(
-                        constVarLenOp->getAttr(constVarLenOp.getStrAttrName())).getValue();
-                    if (content.size() <= 12) {
-                        return ValRefSpecial{.mode = 4, .value = val};
-                    } else {
-                        // long string require a pointer to the content, making them non-constant
-                        return std::nullopt;
-                    }
-                }
+                mlir::TypeSwitch<mlir::Operation *, std::optional<ValRefSpecial> >(op)
+                        .template Case<mlir::arith::ConstantOp, dialect::util::SizeOfOp, dialect::util::AllocOp>(
+                            [&](auto) {
+                                return ValRefSpecial{.mode = 4, .value = val};
+                            })
+                        .template Case<dialect::util::CreateConstVarLen>(
+                            [&](auto constVarLenOp) -> std::optional<ValRefSpecial> {
+                                const mlir::StringRef content = mlir::cast<mlir::StringAttr>(
+                                    constVarLenOp->getAttr(constVarLenOp.getStrAttrName())).getValue();
+                                if (content.size() <= 12) {
+                                    return ValRefSpecial{.mode = 4, .value = val};
+                                } else {
+                                    // long string require a pointer to the content, making them non-constant
+                                    return std::nullopt;
+                                }
+                            })
+                        .Default([&](auto) {
+                            return std::nullopt;
+                        });
             }
             return std::nullopt;
         }
@@ -614,10 +665,7 @@ namespace lingodb::execution::baseline {
         }
 
         bool compile_arith_binary_op(IRInstRef op) {
-            auto lhs_vr = this->val_ref(op->getOperand(0));
-            auto rhs_vr = this->val_ref(op->getOperand(1));
             auto res_type = op->getResult(0).getType();
-
             unsigned op_width;
             if (mlir::isa<mlir::IndexType>(res_type)) {
                 op_width = 64;
@@ -655,25 +703,53 @@ namespace lingodb::execution::baseline {
             }
 
             if (op_width == 128) {
+                auto res = this->result_ref(op->getResult(0));
+                auto builtin_func = mlir::TypeSwitch<mlir::Operation *, std::optional<SymRef> >(op)
+                        .Case([&](mlir::arith::DivUIOp) {
+                            return builtins.get_symbol(derived(), BuiltinFuncStorage::Type::udivti3);
+                        })
+                        .Case([&](mlir::arith::DivSIOp) {
+                            return builtins.get_symbol(derived(), BuiltinFuncStorage::Type::divti3);
+                        })
+                        .Case([&](mlir::arith::RemUIOp) {
+                            return builtins.get_symbol(derived(), BuiltinFuncStorage::Type::umodti3);
+                        })
+                        .Case([&](mlir::arith::RemSIOp) {
+                            return builtins.get_symbol(derived(), BuiltinFuncStorage::Type::modti3);
+                        })
+                        .Default([&](auto) {
+                            return std::nullopt;
+                        });
+                if (builtin_func.has_value()) {
+                    std::array args{op->getOperand(0), op->getOperand(1)};
+                    derived()->create_helper_call(args, &res, *builtin_func);
+                    return true;
+                }
+
                 std::unordered_map<std::string, bool (Derived::*)(GenericValuePart &&, GenericValuePart &&,
                                                                   GenericValuePart &&, GenericValuePart &&,
                                                                   ScratchReg &, ScratchReg &)> encoder_lookup = {
                     {"arith.addi", &Derived::encode_arith_add_i128},
                     {"arith.andi", &Derived::encode_arith_land_i128},
+                    {"arith.ori", &Derived::encode_arith_lor_i128},
+                    {"arith.xori", &Derived::encode_arith_lxor_i128},
+                    {"arith.muli", &Derived::encode_arith_mul_i128},
+                    {"arith.subi", &Derived::encode_arith_sub_i128},
                 };
 #ifndef NDEBUG
                 if (!encoder_lookup.contains(op->getName().getStringRef().str().c_str())) {
                     op->dump();
                     error.emit() << op->getName().getStringRef().str().c_str() <<
                             " is not supported by the baseline backend\n";
-                    assert(0);
+                    return false;
                 }
 #endif
                 const auto encoder = encoder_lookup[op->getName().getStringRef().str().c_str()];
 
+                auto lhs_vr = this->val_ref(op->getOperand(0));
+                auto rhs_vr = this->val_ref(op->getOperand(1));
                 ScratchReg res_scratch_high{derived()};
                 ScratchReg res_scratch_low{derived()};
-                auto res = this->result_ref(op->getResult(0));
                 auto res_low = res.part(0);
                 auto res_high = res.part(1);
                 (derived()->*encoder)(std::move(lhs_vr.part(0)), std::move(lhs_vr.part(1)), std::move(rhs_vr.part(0)),
@@ -682,6 +758,8 @@ namespace lingodb::execution::baseline {
                 this->set_value(res_high, res_scratch_high);
                 return true;
             } else {
+                auto lhs_vr = this->val_ref(op->getOperand(0));
+                auto rhs_vr = this->val_ref(op->getOperand(1));
                 auto lhs_pr = lhs_vr.part(0);
                 auto rhs_pr = rhs_vr.part(0);
                 // move constant operands to the right side
@@ -777,18 +855,35 @@ namespace lingodb::execution::baseline {
             const auto dst = op->getResult(0);
             assert(val_parts(base_ref).count() == 1);
             assert(val_parts(dst).count() == 1);
-            auto [_, base_vr] = this->val_ref_single(base_ref);
-            auto [_, res_vr] = this->result_ref_single(dst);
+            auto base_vr = this->val_ref(base_ref);
+            auto res_vr = this->result_ref(dst);
 
             // create a base + offset expression
-            AsmReg base_reg = base_vr.load_to_reg();
+            AsmReg base_reg = base_vr.part(0).load_to_reg();
             GenericValuePart addr = typename GenericValuePart::Expr{base_reg, elementOffset};
 
             // load value to register (e.g. mov + add / lea for x86_64)
             AsmReg res_reg = derived()->gval_expr_as_reg(addr);
             ScratchReg res_scratch{derived()};
             derived()->mov(res_scratch.alloc_gp(), res_reg, 8);
-            this->set_value(res_vr, res_scratch);
+            this->set_value(res_vr.part(0), res_scratch);
+            return true;
+        }
+
+        bool compile_util_buffer_cast_op(dialect::util::BufferCastOp op) {
+            // TODO: replace code below with this code to omit unnecessary copies (currently this doesn't work though)
+            // auto [tmp, src_vpr] = this->val_ref_single(op.getVal());
+            // auto [tmp1, res_vpr] = this->result_ref_single(op.getRes());
+            // res_vpr.set_value(std::move(src_vpr));
+            // return true;
+            auto src_vr = this->val_ref(op.getVal());
+            auto res_vr = this->result_ref(op.getRes());
+            ScratchReg res_scratch_low{derived()};
+            ScratchReg res_scratch_high{derived()};
+            derived()->mov(res_scratch_low.alloc_gp(), src_vr.part(0).load_to_reg(), 8);
+            derived()->mov(res_scratch_high.alloc_gp(), src_vr.part(1).load_to_reg(), 8);
+            this->set_value(res_vr.part(0), res_scratch_low);
+            this->set_value(res_vr.part(1), res_scratch_high);
             return true;
         }
 
@@ -810,11 +905,7 @@ namespace lingodb::execution::baseline {
                 error.emit() << "Unsupported type for store operation.";
                 return false;
             }
-            AsmReg buf_ptr_reg;
-            if (buf_vr.part(1).has_reg())
-                buf_ptr_reg = buf_vr.part(1).cur_reg();
-            else
-                buf_ptr_reg = buf_vr.part(1).load_to_reg();
+            AsmReg buf_ptr_reg = buf_vr.part(1).load_to_reg();
             if (auto idx_op = mlir::dyn_cast_or_null<mlir::arith::ConstantIndexOp>(idx.getDefiningOp())) {
                 ptr = GenericValuePart{
                     Expr{std::move(buf_ptr_reg), static_cast<int64_t>(static_cast<size_t>(idx_op.value()) * *elem_size)}
@@ -1036,14 +1127,26 @@ namespace lingodb::execution::baseline {
                 src_width <= dst_width &&
                 "Source width must be less than or equal to destination width for zext operation");
             assert(
-                src_width <= 64 && dst_width <= 64 &&
+                src_width <= 64 && (dst_width <= 64 || dst_width == 128) &&
                 "Source and destination widths must be less than or equal to 64 bits for zext operation");
 
             auto [_, src_vpr] = this->val_ref_single(src_val);
-            src_vpr = std::move(src_vpr).into_extended(sign, src_width, dst_width);
-
             auto res = this->result_ref(res_val);
-            res.part(0).set_value(std::move(src_vpr));
+            if (dst_width != 128) {
+                src_vpr = std::move(src_vpr).into_extended(sign, src_width, dst_width);
+                res.part(0).set_value(std::move(src_vpr));
+            } else {
+                ScratchReg res_scratch_low{derived()};
+                ScratchReg res_scratch_high{derived()};
+                if (src_width != 64) return false;
+                if (sign) {
+                    derived()->encode_arith_sext_i64_i128(std::move(src_vpr), res_scratch_low, res_scratch_high);
+                } else {
+                    derived()->encode_arith_zext_i64_i128(std::move(src_vpr), res_scratch_low, res_scratch_high);
+                }
+                this->set_value(res.part(0), res_scratch_low);
+                this->set_value(res.part(1), res_scratch_high);
+            }
             return true;
         }
 
@@ -1115,13 +1218,6 @@ namespace lingodb::execution::baseline {
             return false;
         }
 
-        bool compile_util_buffer_cast_op(dialect::util::BufferCastOp op) {
-            auto [_, src_vpr] = this->val_ref_single(op.getVal());
-            auto [_, res_vpr] = this->result_ref_single(op.getRes());
-            res_vpr.set_value(std::move(src_vpr));
-            return true;
-        }
-
         bool compile_util_buffer_get_len_op(dialect::util::BufferGetLen op) {
             auto elem_size = get_size(op.getBuffer().getType());
             if (!elem_size) {
@@ -1130,24 +1226,25 @@ namespace lingodb::execution::baseline {
                 return false;
             }
             // we store the length in the first 8 bytes of the buffer
-            auto [_, buf_vpr] = this->val_ref_single(op.getBuffer());
+            auto buf_vr = this->val_ref(op.getBuffer());
             ScratchReg buffer_len_scratch{derived()};
-            derived()->encode_util_load_i64(std::move(buf_vpr), buffer_len_scratch);
+            derived()->encode_util_load_i64(std::move(buf_vr.part(0)), buffer_len_scratch);
             ScratchReg res_scratch{derived()};
             ValuePart elem_size_vp{*elem_size, 8, Config::GP_BANK};
             derived()->encode_arith_udiv_i64(std::move(buffer_len_scratch),
                                              GenericValuePart{Expr{elem_size_vp.load_to_reg(derived())}},
                                              res_scratch);
             elem_size_vp.reset(derived()); // release the temporary register
-            auto [_, res_vr] = this->result_ref_single(op.getResult());
-            this->set_value(res_vr, res_scratch);
+            auto res_vr = this->result_ref(op.getResult());
+            this->set_value(res_vr.part(0), res_scratch);
             return true;
         }
 
         bool compile_util_const_varlen_op(const dialect::util::CreateConstVarLen op) {
             mlir::Value res = op->getResult(0);
             ValueRef res_ref = this->result_ref(res);
-            const mlir::StringRef content = mlir::cast<mlir::StringAttr>(op->getAttrs().front().getValue()).getValue();
+            const mlir::StringRef content = mlir::cast<mlir::StringAttr>(op->getAttrs().front().getValue()).
+                    getValue();
             const size_t len = content.size();
 
             // part0 is always constant
@@ -1173,14 +1270,15 @@ namespace lingodb::execution::baseline {
             auto src = op.getIn();
             auto dst = op.getOut();
             assert(
-                mlir::isa<mlir::IntegerType>(src.getType()) && "Source value must be an integer type for truncation");
+                mlir::isa<mlir::IntegerType>(src.getType()) &&
+                "Source value must be an integer type for truncation");
             assert(
                 mlir::isa<mlir::IntegerType>(dst.getType()) &&
                 "Destination value must be an integer type for truncation");
             assert(src.getType().getIntOrFloatBitWidth() == 128 && dst.getType().getIntOrFloatBitWidth() == 64 &&
                 "Source width must be 128 bits and destination width must be 64 or 32 bits for truncation");
             auto src_vr = this->val_ref(src);
-            auto [_, dst_vpr] = this->val_ref_single(dst);
+            auto [_, dst_vpr] = this->result_ref_single(dst);
             dst_vpr.set_value(src_vr.part(0));
             return true;
         }
@@ -1252,7 +1350,8 @@ namespace lingodb::execution::baseline {
                         return compile_arith_trunci_op(op);
                     })
                     .Default([&](IRInstRef op) {
-                        error.emit() << "Encountered unimplemented instruction: " << op->getName().getStringRef().str()
+                        error.emit() << "Encountered unimplemented instruction: " << op->getName().getStringRef().
+                                str()
                                 << "\n";
                         op->dump();
                         return false;
@@ -1265,7 +1364,8 @@ namespace lingodb::execution::baseline {
     // x86_64 target specific compiler
     // NOLINTBEGIN(readability-identifier-naming)
     struct IRCompilerX64 : tpde::x64::CompilerX64<IRAdaptor, IRCompilerX64, IRCompilerBase, CompilerConfig>,
-                           tpde_encodegen::EncodeCompiler<IRAdaptor, IRCompilerX64, IRCompilerBase, CompilerConfig> {
+                           tpde_encodegen::EncodeCompiler<IRAdaptor, IRCompilerX64, IRCompilerBase,
+                               CompilerConfig> {
         using Base = tpde::x64::CompilerX64<IRAdaptor, IRCompilerX64, IRCompilerBase, CompilerConfig>;
         using EncCompiler = tpde_encodegen::EncodeCompiler<IRAdaptor, IRCompilerX64, IRCompilerBase, CompilerConfig>;
 
@@ -1279,6 +1379,14 @@ namespace lingodb::execution::baseline {
         void load_address_of_global(const SymRef global_sym, const AsmReg dst) {
             ASM(MOV64rm, dst, FE_MEM(FE_IP, 0, FE_NOREG, -1));
             reloc_text(global_sym, R_X86_64_PC32, text_writer.offset() - 4, -4);
+        }
+
+        void create_helper_call(std::span<IRValueRef> args, ValueRef *result, SymRef sym) noexcept {
+            tpde::util::SmallVector<CallArg, 8> arg_vec{};
+            for (const auto arg: args) {
+                arg_vec.push_back(CallArg{arg});
+            }
+            generate_call(sym, arg_vec, result);
         }
 
         bool compile_arith_cmp_int_op(mlir::arith::CmpIOp op) {
@@ -1462,7 +1570,8 @@ namespace lingodb::execution::baseline {
         llvm::orc::JITDylib *dylib;
 
     public:
-        LLVMOrcLoader(std::vector<uint8_t> objFileBytes, Error &error) : DynamicLoader(std::move(objFileBytes), error) {
+        LLVMOrcLoader(std::vector<uint8_t> objFileBytes, Error &error) : DynamicLoader(
+            std::move(objFileBytes), error) {
             auto memBuf = llvm::MemoryBuffer::getMemBuffer(
                 llvm::StringRef(reinterpret_cast<char *>(objFile.data()), objFile.size()),
                 "",
@@ -1500,7 +1609,8 @@ namespace lingodb::execution::baseline {
         mainFnType getMainFunction() override {
             auto startSymRes = executionSession->lookup(dylib, "main");
             if (auto err = startSymRes.takeError()) {
-                error.emit() << "Could not find main symbol in JITDylib: " << llvm::toString(std::move(err)) << "\n";
+                error.emit() << "Could not find main symbol in JITDylib: " << llvm::toString(std::move(err)) <<
+                        "\n";
                 has_error = true;
                 return nullptr;
             }
@@ -1534,7 +1644,8 @@ namespace lingodb::execution::baseline {
                 return;
             }
             if (std::fwrite(objFile.data(), 1, objFile.size(), outFile) != objFile.size()) {
-                error.emit() << "Could not write object file to output file: " << objFileName << " (" << strerror(errno)
+                error.emit() << "Could not write object file to output file: " << objFileName << " (" << strerror(
+                            errno)
                         << ")\n";
                 has_error = true;
                 return;
@@ -1597,7 +1708,8 @@ namespace lingodb::execution::baseline {
     class BaselineBackend : public lingodb::execution::ExecutionBackend {
         // lower mlir IR to a form that can be compiled by tpde
         // currently mostly does a SCF to CF conversion
-        bool lower(mlir::ModuleOp &moduleOp, std::shared_ptr<lingodb::execution::SnapshotState> serializationState) {
+        bool lower(mlir::ModuleOp &moduleOp,
+                   std::shared_ptr<lingodb::execution::SnapshotState> serializationState) {
             mlir::PassManager pm2(moduleOp->getContext());
             pm2.enableVerifier(verify);
             lingodb::execution::addLingoDBInstrumentation(pm2, serializationState);
