@@ -28,6 +28,18 @@ uint64_t arith_lxor_i64(uint64_t a, uint64_t b) { return (a ^ b); }
 uint64_t arith_shl_i64(uint64_t a, uint64_t b) { return (a << b); }
 uint64_t arith_shr_i64(uint64_t a, uint64_t b) { return (a >> b); }
 
+__uint128_t arith_add_i128(__uint128_t a, __uint128_t b) { return (a + b); }
+__uint128_t arith_sub_i128(__uint128_t a, __uint128_t b) { return (a - b); }
+__uint128_t arith_mul_i128(__uint128_t a, __uint128_t b) { return (a * b); }
+// Division and remainder operations are not supported by tpde_encoder. We need to call builtins for these.
+//__int128_t arith_sdiv_i128(__int128_t a, __int128_t b) { return (a / b); }
+//__uint128_t arith_udiv_i128(__uint128_t a, __uint128_t b) { return (a / b); }
+//__int128_t arith_srem_i128(__int128_t a, __int128_t b) { return (a % b); }
+//__uint128_t arith_urem_i128(__uint128_t a, __uint128_t b) { return (a % b); }
+__uint128_t arith_land_i128(__uint128_t a, __uint128_t b) { return (a & b); }
+__uint128_t arith_lor_i128(__uint128_t a, __uint128_t b) { return (a | b); }
+__uint128_t arith_lxor_i128(__uint128_t a, __uint128_t b) { return (a ^ b); }
+
 float arith_add_f32(float a, float b) { return (a + b); }
 float arith_sub_f32(float a, float b) { return (a - b); }
 float arith_mul_f32(float a, float b) { return (a * b); }
@@ -39,9 +51,6 @@ double arith_sub_f64(double a, double b) { return (a - b); }
 double arith_mul_f64(double a, double b) { return (a * b); }
 double arith_div_f64(double a, double b) { return (a / b); }
 // double arith_rem_f64(double a, double b) { return __builtin_fmod(a, b); }
-
-__uint128_t arith_add_i128(__uint128_t a, __uint128_t b) { return (a + b); }
-__uint128_t arith_land_i128(__uint128_t a, __uint128_t b) { return (a & b); }
 
 uint32_t util_load_i8(uint8_t* ptr) { return *ptr; }
 uint32_t util_load_i16(uint16_t* ptr) { return *ptr; }
@@ -58,3 +67,6 @@ void store_i128(__uint128_t* ptr, __uint128_t value) { *ptr = value; }
 int32_t arith_select_i32(uint8_t cond, int32_t val1, int32_t val2) { return ((cond & 1) ? val1 : val2); }
 int64_t arith_select_i64(uint8_t cond, int64_t val1, int64_t val2) { return ((cond & 1) ? val1 : val2); }
 __uint128_t arith_select_i128(uint8_t cond, __uint128_t val1, __uint128_t val2) { return ((cond & 1) ? val1 : val2); }
+
+__int128_t arith_sext_i64_i128(int64_t in) { return (__int128_t)in; }
+__uint128_t arith_zext_i64_i128(uint64_t in) { return (__uint128_t)in; }
