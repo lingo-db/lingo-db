@@ -448,6 +448,8 @@ namespace lingodb::execution::baseline {
                             break;
                         case Type::umodti3: name = "__umodti3";
                             break;
+                        default:
+                            __builtin_unreachable();
                     }
                     auto sym = compiler->assembler.sym_add_undef(name, Assembler::SymBinding::GLOBAL);
                     funcs[static_cast<size_t>(type)] = sym;
@@ -464,7 +466,6 @@ namespace lingodb::execution::baseline {
 
         Error error;
         mlir::DenseMap<mlir::StringRef, uint32_t> funcMap;
-        mlir::SmallVector<SymRef> globalSymbols;
 
         IRCompilerBase(IRAdaptor *adaptor) : Base{adaptor} {
             static_assert(tpde::Compiler<Derived, Config>);
@@ -548,9 +549,9 @@ namespace lingodb::execution::baseline {
         };
 
         static std::optional<ValRefSpecial> val_ref_special(IRAdaptor::IRValueRef val) {
-            if (const auto op = val.getDefiningOp()) {
-                mlir::TypeSwitch<mlir::Operation *, std::optional<ValRefSpecial> >(op)
-                        .template Case<mlir::arith::ConstantOp, dialect::util::SizeOfOp, dialect::util::AllocOp>(
+            if (const auto* op = val.getDefiningOp()) {
+                return mlir::TypeSwitch<const mlir::Operation*, std::optional<ValRefSpecial>>(op)
+                        .template Case<mlir::arith::ConstantOp, dialect::util::SizeOfOp>(
                             [&](auto) {
                                 return ValRefSpecial{.mode = 4, .value = val};
                             })
@@ -1073,7 +1074,7 @@ namespace lingodb::execution::baseline {
             mlir::func::FuncOp callee_func = mlir::cast<mlir::func::FuncOp>(op.resolveCallable());
 
             // we only call into the runtime => use C-CallConv (yes, this is a hack since the runtime is actually C++ code. works for now)
-            auto call_conv_assigner = tpde::x64::CCAssignerSysV(false /* is_vararg */);
+            auto call_conv_assigner = tpde::x64::CCAssignerSysV(false /* is_vararg */); // TODO: this only works for x64
             auto builder = typename Derived::CallBuilder(*derived(), call_conv_assigner);
 
             for (size_t i = 0; i < op.getArgOperands().size(); ++i) {
@@ -1086,7 +1087,7 @@ namespace lingodb::execution::baseline {
                         flag = Base::CallArg::Flag::zext;
                     }
                 }
-                builder.add_arg(typename Base::CallArg{arg, flag, 0, 0}); // TODO: check byval_align and byval_size
+                builder.add_arg(typename Base::CallArg{arg, flag, 0, 0});
             }
 
             assert(funcMap.contains(callee_func.getSymName()) && "Function not found in function map");
@@ -1246,6 +1247,10 @@ namespace lingodb::execution::baseline {
             const mlir::StringRef content = mlir::cast<mlir::StringAttr>(op->getAttrs().front().getValue()).
                     getValue();
             const size_t len = content.size();
+            if (len <= 12) {
+                // short strings are stored as constants in 128-bit and are therefore handled by val_ref_special
+                return true;
+            }
 
             // part0 is always constant
             uint64_t first4 = 0;
@@ -1259,10 +1264,7 @@ namespace lingodb::execution::baseline {
             const auto addr_sym = derived()->assembler.sym_def_data(
                 rodata, "", std::span{reinterpret_cast<const uint8_t *>(content.data()), content.size()}, 8,
                 Derived::Assembler::SymBinding::LOCAL, &off);
-            globalSymbols.push_back(addr_sym);
-            ScratchReg ptr_reg{derived()};
-            derived()->load_address_of_global(addr_sym, ptr_reg.alloc_gp());
-            this->set_value(res_ref.part(1), ptr_reg);
+            derived()->load_address_of_global(addr_sym, res_ref.part(1).alloc_reg());
             return true;
         }
 
@@ -1731,7 +1733,8 @@ namespace lingodb::execution::baseline {
             timing["baselineLowering"] = std::chrono::duration_cast<std::chrono::microseconds>(
                                              endLowering - startLowering).count() / 1000.0;
 
-            SpdLogSpoof logSpoof;
+            // SpdLogSpoof logSpoof;
+            spdlog::set_level(spdlog::level::trace);
 #if defined(__x86_64__)
             IRCompilerX64 compiler{std::make_unique<IRAdaptor>(&moduleOp, error)};
 #else
@@ -1739,7 +1742,7 @@ namespace lingodb::execution::baseline {
 #endif
             if (!compiler.compile()) {
                 error.emit() << "Could not compile query module:\n"
-                        << logSpoof.drain_logs() << "\n"
+                        // << logSpoof.drain_logs() << "\n"
                         << compiler.adaptor->getError().emit().str() << "\n"
                         << compiler.getError().emit().str() << "\n";
                 return;
