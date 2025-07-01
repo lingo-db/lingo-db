@@ -1,5 +1,5 @@
 add_executable(sql sql.cpp)
-target_link_libraries(sql runner utility runtime mlir-support scheduler)
+target_link_libraries(sql runner utility runtime mlir-support scheduler linenoise-ng)
 set_target_properties(sql PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
 add_executable(sqlite-tester sqlite-tester.cpp)
