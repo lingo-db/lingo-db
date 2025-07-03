@@ -5,8 +5,10 @@
 
 #include "lingodb/execution/BaselineBackend.h"
 #include "lingodb/compiler/Dialect/util/UtilOps.h"
+#include "lingodb/compiler/Dialect/util/FunctionHelper.h"
 #include "lingodb/execution/baseline/utils.hpp"
 #include "lingodb/utility/Setting.h"
+#include "lingodb/utility/Tracer.h"
 
 #include <mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h>
 #include <mlir/Dialect/Arith/IR/Arith.h>
@@ -42,8 +44,11 @@
 
 #include "snippet_encoders_x64.hpp"
 
-
 namespace lingodb::execution::baseline {
+    namespace utility = lingodb::utility;
+    utility::Tracer::Event execution("Execution", "run");
+    utility::Tracer::Event llvmCodeGen("Compilation", "BaselineCodeGen");
+
     utility::GlobalSetting<std::string> baselineDebugFileOut("system.compilation.baseline_object_out", "");
 
     using namespace compiler;
@@ -133,7 +138,7 @@ namespace lingodb::execution::baseline {
         }
 
         [[maybe_unused]] bool func_only_local(IRFuncRef func) const noexcept {
-            return func.isPrivate();
+            return func.isPrivate() && !func.isExternal();
         }
 
         [[maybe_unused]] static bool func_has_weak_linkage(IRFuncRef) noexcept {
@@ -318,7 +323,7 @@ namespace lingodb::execution::baseline {
         }
 
         [[maybe_unused]] uint32_t val_alloca_align(IRValueRef val) const noexcept {
-            return 0;
+            return 1;
         }
 
         [[maybe_unused]] std::string value_fmt_ref(IRValueRef val) const noexcept {
@@ -465,11 +470,18 @@ namespace lingodb::execution::baseline {
         llvm::BumpPtrAllocator allocator;
 
         Error error;
-        mlir::DenseMap<mlir::StringRef, uint32_t> funcMap;
+        // non-external function name -> idx lookup map
+        llvm::StringMap<uint32_t> localFuncMap;
+        // external function name -> ptr lookup map
+        llvm::StringMap<void *> externFuncMap;
 
         IRCompilerBase(IRAdaptor *adaptor) : Base{adaptor} {
             static_assert(tpde::Compiler<Derived, Config>);
             static_assert(std::is_same_v<Adapter, IRAdaptor>, "Adapter must be IRAdaptor");
+
+            dialect::util::FunctionHelper::visitAllFunctions([&](std::string s, void *ptr) {
+                externFuncMap[s] = ptr;
+            });
         }
 
         Error &getError() { return error; }
@@ -521,7 +533,9 @@ namespace lingodb::execution::baseline {
                             // integer types are sized by their bit width
                             return (intType.getIntOrFloatBitWidth() % 65 + 8 - 1) / 8;
                         })
-                        .template Case<mlir::IndexType, dialect::util::RefType>([](auto) { return 8; })
+                        .template Case<mlir::IndexType, dialect::util::RefType, mlir::FunctionType>([](auto) {
+                            return 8;
+                        })
                         .template Case<dialect::util::VarLen32Type, dialect::util::BufferType>([&](auto) {
                             assert(part_idx < 2 && "VarLen32 and Buffer types are made of two parts");
                             // these container types are 2x64-bit
@@ -549,8 +563,8 @@ namespace lingodb::execution::baseline {
         };
 
         static std::optional<ValRefSpecial> val_ref_special(IRAdaptor::IRValueRef val) {
-            if (const auto* op = val.getDefiningOp()) {
-                return mlir::TypeSwitch<const mlir::Operation*, std::optional<ValRefSpecial>>(op)
+            if (const auto *op = val.getDefiningOp()) {
+                return mlir::TypeSwitch<const mlir::Operation *, std::optional<ValRefSpecial> >(op)
                         .template Case<mlir::arith::ConstantOp, dialect::util::SizeOfOp>(
                             [&](auto) {
                                 return ValRefSpecial{.mode = 4, .value = val};
@@ -662,7 +676,7 @@ namespace lingodb::execution::baseline {
         }
 
         void define_func_idx(IRAdaptor::IRFuncRef func, uint32_t idx) {
-            funcMap[func.getSymName()] = idx;
+            localFuncMap[func.getSymName()] = idx;
         }
 
         bool compile_arith_binary_op(IRInstRef op) {
@@ -1090,11 +1104,20 @@ namespace lingodb::execution::baseline {
                 builder.add_arg(typename Base::CallArg{arg, flag, 0, 0});
             }
 
-            assert(funcMap.contains(callee_func.getSymName()) && "Function not found in function map");
-            uint32_t func_idx = funcMap[callee_func.getSymName()];
-            assert(func_idx < this->func_syms.size() && "Function index out of bounds");
-            typename Base::Assembler::SymRef func_ref = this->func_syms[func_idx];
-            builder.call(func_ref);
+            if (callee_func.isExternal()) {
+                assert(
+                    externFuncMap.contains(callee_func.getSymName()) && "Function not found in external function map");
+                ValuePart funcPtrRef{
+                    std::bit_cast<uint64_t>(externFuncMap[callee_func.getSymName()]), 8, Config::GP_BANK
+                };
+                builder.call(std::move(funcPtrRef));
+            } else {
+                assert(localFuncMap.contains(callee_func.getSymName()) && "Function not found in local function map");
+                uint32_t func_idx = localFuncMap[callee_func.getSymName()];
+                assert(func_idx < this->func_syms.size() && "Function index out of bounds");
+                typename Base::Assembler::SymRef func_ref = this->func_syms[func_idx];
+                builder.call(std::move(func_ref));
+            }
 
             assert(op.getNumResults() <= 1 && "Function call must have exactly one result in the IR");
             if (op.getNumResults() != 0) {
@@ -1242,8 +1265,6 @@ namespace lingodb::execution::baseline {
         }
 
         bool compile_util_const_varlen_op(const dialect::util::CreateConstVarLen op) {
-            mlir::Value res = op->getResult(0);
-            ValueRef res_ref = this->result_ref(res);
             const mlir::StringRef content = mlir::cast<mlir::StringAttr>(op->getAttrs().front().getValue()).
                     getValue();
             const size_t len = content.size();
@@ -1251,6 +1272,8 @@ namespace lingodb::execution::baseline {
                 // short strings are stored as constants in 128-bit and are therefore handled by val_ref_special
                 return true;
             }
+            mlir::Value res = op->getResult(0);
+            ValueRef res_ref = this->result_ref(res);
 
             // part0 is always constant
             uint64_t first4 = 0;
@@ -1259,12 +1282,9 @@ namespace lingodb::execution::baseline {
             res_ref.part(0).set_value(ValuePartRef(this, c1, 8, Config::GP_BANK));
 
             // part1 is the pointer to the content
-            uint32_t off;
-            auto rodata = derived()->assembler.get_data_section(true, false);
-            const auto addr_sym = derived()->assembler.sym_def_data(
-                rodata, "", std::span{reinterpret_cast<const uint8_t *>(content.data()), content.size()}, 8,
-                Derived::Assembler::SymBinding::LOCAL, &off);
-            derived()->load_address_of_global(addr_sym, res_ref.part(1).alloc_reg());
+            // -> content is a StringRef pointing inside the mlir module
+            // -> as long as we keep that alive past query execution, we can just hand out the pointer!
+            res_ref.part(1).set_value(ValuePart{std::bit_cast<uint64_t>(content.data()), 8, Config::GP_BANK});
             return true;
         }
 
@@ -1285,6 +1305,26 @@ namespace lingodb::execution::baseline {
             return true;
         }
 
+        bool compile_func_constant_op(mlir::func::ConstantOp op) {
+            const auto funcName = op.getValue();
+            auto res_vr = this->result_ref(op.getResult());
+            if (localFuncMap.contains(funcName)) {
+                uint32_t func_idx = localFuncMap[funcName];
+                assert(func_idx < this->func_syms.size() && "Function index out of bounds");
+                typename Base::Assembler::SymRef func_ref = this->func_syms[func_idx];
+                derived()->load_address_of_global(func_ref, res_vr.part(0).alloc_reg());
+                return true;
+            }
+            if (externFuncMap.contains(funcName)) {
+                res_vr.part(0).set_value(
+                    ValuePart{std::bit_cast<uint64_t>(externFuncMap[funcName]), 8, Config::GP_BANK});
+                return true;
+            }
+            error.emit() << "Function constant refers to neither a local nor an external function: " <<
+                    funcName.str() << "\n";
+            return false;
+        }
+
         bool compile_inst(const IRInstRef inst, InstRange) noexcept {
             return mlir::TypeSwitch<IRInstRef, bool>(inst)
                     .Case<mlir::arith::AddIOp, mlir::arith::SubIOp, mlir::arith::MulIOp, mlir::arith::DivSIOp,
@@ -1301,10 +1341,13 @@ namespace lingodb::execution::baseline {
                     .template Case<mlir::cf::CondBranchOp>([&](auto op) {
                         return derived()->compile_cf_cond_br_op(op);
                     })
-                    .template Case<mlir::arith::ConstantOp, dialect::util::SizeOfOp, dialect::util::AllocaOp,
-                        mlir::func::ConstantOp>([&](auto) {
-                        // these are all constant operations whose value is handled in val_ref_special / val_part_ref_special
-                        return true;
+                    .template Case<mlir::arith::ConstantOp, dialect::util::SizeOfOp, dialect::util::AllocaOp>(
+                        [&](auto) {
+                            // these are all constant operations whose value is handled in val_ref_special / val_part_ref_special
+                            return true;
+                        })
+                    .template Case<mlir::func::ConstantOp>([&](auto op) {
+                        return compile_func_constant_op(op);
                     })
                     .template Case<dialect::util::GenericMemrefCastOp>([&](auto op) {
                         return compile_util_generic_memref_cast_op(op);
@@ -1740,6 +1783,7 @@ namespace lingodb::execution::baseline {
 #else
 #error "Baseline backend is only supported on x86_64 architecture."
 #endif
+            const auto baselineCodeGenStart = std::chrono::high_resolution_clock::now();
             if (!compiler.compile()) {
                 error.emit() << "Could not compile query module:\n"
                         // << logSpoof.drain_logs() << "\n"
@@ -1747,7 +1791,12 @@ namespace lingodb::execution::baseline {
                         << compiler.getError().emit().str() << "\n";
                 return;
             }
+            const auto baselineCodeGenEnd = std::chrono::high_resolution_clock::now();
+            const auto baselineEmitStart = std::chrono::high_resolution_clock::now();
             std::vector<uint8_t> objFileBytes = compiler.assembler.build_object_file();
+            const auto baselineEmitEnd = std::chrono::high_resolution_clock::now();
+
+            const auto loadingSetupStart = std::chrono::high_resolution_clock::now();
             std::unique_ptr<DynamicLoader> loader;
             if (!baselineDebugFileOut.getValue().empty()) {
                 loader = std::make_unique<DebugLoader>(std::move(objFileBytes), error,
@@ -1758,18 +1807,23 @@ namespace lingodb::execution::baseline {
             if (loader->has_error) return;
             auto mainFunc = loader->getMainFunction();
             if (loader->has_error) return;
+            const auto loadingSetupEnd = std::chrono::high_resolution_clock::now();
 
+            const auto executionStart = std::chrono::high_resolution_clock::now();
+            utility::Tracer::Trace trace(execution);
             mainFunc();
-            // std::vector<size_t> measuredTimes;
-            // for (size_t i = 0; i < numRepetitions; i++) {
-            //     auto executionStart = std::chrono::high_resolution_clock::now();
-            //     mainFunc();
-            //     auto executionEnd = std::chrono::high_resolution_clock::now();
-            //     measuredTimes.push_back(
-            //         std::chrono::duration_cast<std::chrono::microseconds>(executionEnd - executionStart).count() /
-            //         1000.0);
-            // }
+            trace.stop();
+            const auto executionEnd = std::chrono::high_resolution_clock::now();
             loader->teardown();
+
+            timing["baselineCodeGen"] = std::chrono::duration_cast<std::chrono::microseconds>(
+                                            baselineCodeGenEnd - baselineCodeGenStart).count() / 1000.0;
+            timing["baselineEmit"] = std::chrono::duration_cast<std::chrono::microseconds>(
+                                         baselineEmitEnd - baselineEmitStart).count() / 1000.0;
+            timing["baselineLoading"] = std::chrono::duration_cast<std::chrono::microseconds>(
+                                            loadingSetupEnd - loadingSetupStart).count() / 1000.0;
+            timing["executionTime"] = std::chrono::duration_cast<std::chrono::microseconds>(
+                                          executionEnd - executionStart).count() / 1000.0;
         }
     };
 }
