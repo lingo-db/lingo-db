@@ -13,6 +13,7 @@ cp -r tools/python/bridgelib/bridge.h build/pylingodb/src/extensions/.
 BASE_PATH=$(pwd)
 cd build/pylingodb
 mkdir -p src/lingodbbridge/mlir/dialects
+mkdir -p src/lingodbbridge/mlir/extras
 MLIR_BIN_DIR=/built-llvm/bin
 MLIR_INCLUDE_DIR=/built-llvm/include
 MLIR_PYTHON_BASE=/built-llvm/python_packages/mlir_core
@@ -26,6 +27,8 @@ cp -L ${MLIR_PYTHON_BASE}/mlir/dialects/_scf_ops_gen.py src/lingodbbridge/mlir/d
 cp -L ${MLIR_PYTHON_BASE}/mlir/dialects/scf.py src/lingodbbridge/mlir/dialects/.
 cp -L ${MLIR_PYTHON_BASE}/mlir/dialects/_builtin_ops_gen.py src/lingodbbridge/mlir/dialects/.
 cp -L ${MLIR_PYTHON_BASE}/mlir/dialects/builtin.py src/lingodbbridge/mlir/dialects/.
+cp -L ${MLIR_PYTHON_BASE}/mlir/extras/meta.py src/lingodbbridge/mlir/extras/.
+cp -L ${MLIR_PYTHON_BASE}/mlir/extras/types.py src/lingodbbridge/mlir/extras/.
 ${MLIR_BIN_DIR}/mlir-tblgen -gen-python-op-bindings -bind-dialect=util -I ${MLIR_INCLUDE_DIR} -I ${BASE_PATH}/include/ dialects/UtilOps.td  -I  ${BASE_PATH}/include/lingodb/compiler/Dialect/util > src/lingodbbridge/mlir/dialects/_util_ops_gen.py
 ${MLIR_BIN_DIR}/mlir-tblgen -gen-python-op-bindings -bind-dialect=tuples -I ${MLIR_INCLUDE_DIR} -I  ${BASE_PATH}/include/ dialects/TupleStreamOps.td > src/lingodbbridge/mlir/dialects/_tuples_ops_gen.py
 ${MLIR_BIN_DIR}/mlir-tblgen -gen-python-op-bindings -bind-dialect=db -I ${MLIR_INCLUDE_DIR} -I  ${BASE_PATH}/include/ dialects/DBOps.td > src/lingodbbridge/mlir/dialects/_db_ops_gen.py
