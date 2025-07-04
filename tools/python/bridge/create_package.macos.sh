@@ -45,7 +45,7 @@ $BASE_PATH/build/venv/bin/python3 -c "import pyarrow; pyarrow.create_library_sym
 
 # Build LingoDB
 cd $BASE_PATH
-cmake -G Ninja . -B build/lingodb-release-py/ -DCMAKE_BUILD_TYPE=Release -DClang_DIR=$LLVM_INSTALL_DIR/lib/cmake/clang -DArrow_DIR=$ARROW_INSTALL_DIR/lib64/cmake/Arrow  -DENABLE_TESTS=OFF -DCMAKE_PREFIX_PATH=/opt/homebrew/ -DCMAKE_OSX_SYSROOT=$(xcrun --sdk macosx --show-sdk-path)
+cmake -G Ninja . -B build/lingodb-release-py/ -DCMAKE_BUILD_TYPE=Release -DClang_DIR=$LLVM_INSTALL_DIR/lib/cmake/clang -DArrow_DIR=$ARROW_INSTALL_DIR/lib64/cmake/Arrow  -DENABLE_TESTS=OFF -DCMAKE_PREFIX_PATH=/opt/homebrew -DCMAKE_C_COMPILER=/opt/homebrew/opt/llvm/bin/clang -DCMAKE_CXX_COMPILER=/opt/homebrew/opt/llvm/bin/clang++ -DCMAKE_OSX_SYSROOT=$(xcrun --sdk macosx --show-sdk-path)
 cmake --build build/lingodb-release-py --target pybridge -j$(sysctl -n hw.logicalcpu)
 cp -r tools/python/bridge build/pylingodb
 cp -r tools/python/bridgelib/custom_dialects.h build/pylingodb/src/extensions/.
