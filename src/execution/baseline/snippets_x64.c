@@ -70,3 +70,22 @@ __uint128_t arith_select_i128(uint8_t cond, __uint128_t val1, __uint128_t val2) 
 
 __int128_t arith_sext_i64_i128(int64_t in) { return (__int128_t)in; }
 __uint128_t arith_zext_i64_i128(uint64_t in) { return (__uint128_t)in; }
+
+typedef struct UtilVarLenRes { uint64_t totalEqual; uint64_t needsDetailedComp; } UtilVarLenRes;
+UtilVarLenRes util_varlen_cmp(__uint128_t lhs, __uint128_t rhs) {
+    // cmp lengths + first 4 chars
+    uint64_t first64Left = (uint64_t)(lhs);
+    uint64_t first64Right = (uint64_t)(rhs);
+    bool first64Equal = (first64Left == first64Right);
+
+    // cmp chars 5-8 or pointers (bad)
+    uint64_t left64Left = (uint64_t)(lhs >> 64);
+    uint64_t left64Right = (uint64_t)(rhs >> 64);
+    bool last64Equal = (left64Left == left64Right);
+
+    bool totalEqual = first64Equal && last64Equal;
+    uint32_t len = first64Left & 0xFFFFFFFF;
+    bool lenGt12 = len > 12;
+    bool needsDetailedComp = first64Equal && lenGt12;
+    return (UtilVarLenRes){totalEqual, needsDetailedComp};
+}

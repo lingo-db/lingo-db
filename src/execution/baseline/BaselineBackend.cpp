@@ -30,6 +30,7 @@
 
 #include <tpde/CompilerBase.hpp>
 #include <tpde/x64/CompilerX64.hpp>
+#include <tpde/ElfMapper.hpp>
 
 #include <spdlog/sinks/ostream_sink.h>
 #include <spdlog/spdlog.h>
@@ -480,6 +481,9 @@ namespace lingodb::execution::baseline {
             static_assert(std::is_same_v<Adapter, IRAdaptor>, "Adapter must be IRAdaptor");
 
             dialect::util::FunctionHelper::visitAllFunctions([&](std::string s, void *ptr) {
+                externFuncMap[s] = ptr;
+            });
+            execution::visitBareFunctions([&](std::string s, void *ptr) {
                 externFuncMap[s] = ptr;
             });
         }
@@ -1312,7 +1316,7 @@ namespace lingodb::execution::baseline {
                 uint32_t func_idx = localFuncMap[funcName];
                 assert(func_idx < this->func_syms.size() && "Function index out of bounds");
                 typename Base::Assembler::SymRef func_ref = this->func_syms[func_idx];
-                derived()->load_address_of_global(func_ref, res_vr.part(0).alloc_reg());
+                derived()->load_address_of_got_sym(func_ref, res_vr.part(0).alloc_reg());
                 return true;
             }
             if (externFuncMap.contains(funcName)) {
@@ -1323,6 +1327,82 @@ namespace lingodb::execution::baseline {
             error.emit() << "Function constant refers to neither a local nor an external function: " <<
                     funcName.str() << "\n";
             return false;
+        }
+
+        bool compile_util_array_element_ptr_op(dialect::util::ArrayElementPtrOp op) {
+            const mlir::TypedValue<dialect::util::RefType> array_ptr = op.getRef();
+            const mlir::TypedValue<mlir::IndexType> idx = op.getIdx();
+            const mlir::Type elem_type = array_ptr.getType().getElementType();
+
+            assert(val_parts(array_ptr).count() == 1);
+            auto [array_ptr_vr, array_ptr_pr] = this->val_ref_single(array_ptr);
+
+            GenericValuePart ptr;
+            // store to [ptr + idx * elem_size]
+            auto elem_size = get_size(elem_type);
+            if (!elem_size) {
+                assert(0 && "Unsupported type for store operation");
+                error.emit() << "Unsupported type for store operation.";
+                return false;
+            }
+            AsmReg array_ptr_reg = array_ptr_pr.load_to_reg();
+            if (auto idx_op = mlir::dyn_cast_or_null<mlir::arith::ConstantIndexOp>(idx.getDefiningOp())) {
+                ptr = GenericValuePart{
+                    Expr{
+                        std::move(array_ptr_reg), static_cast<int64_t>(static_cast<size_t>(idx_op.value()) * *elem_size)
+                    }
+                };
+            } else {
+                auto [_, idx_ref] = this->val_ref_single(idx);
+                auto generic_ptr_expr = Expr{std::move(array_ptr_reg)};
+                generic_ptr_expr.index = idx_ref.alloc_reg();
+                generic_ptr_expr.scale = *elem_size;
+                ptr = GenericValuePart{std::move(generic_ptr_expr)};
+            }
+
+            // load value to register (e.g. mov + add / lea for x86_64)
+            AsmReg res_reg = derived()->gval_expr_as_reg(ptr);
+            ScratchReg res_scratch{derived()};
+            derived()->mov(res_scratch.alloc_gp(), res_reg, 8);
+
+            const auto dst = op.getRes();
+            assert(val_parts(dst).count() == 1);
+            auto [_, res_vr] = this->result_ref_single(dst);
+            this->set_value(res_vr, res_scratch);
+            return true;
+        }
+
+        bool compile_util_create_varlen_op(dialect::util::CreateVarLen op) {
+            auto call_conv_assigner = tpde::x64::CCAssignerSysV(false /* is_vararg */); // TODO: this only works for x64
+            auto builder = typename Derived::CallBuilder(*derived(), call_conv_assigner);
+            builder.add_arg(typename Base::CallArg{op.getRef()});
+            builder.add_arg(typename Base::CallArg{op.getLen()});
+            assert(externFuncMap.contains("createVarLen32"));
+            ValuePart funcPtrRef{
+                std::bit_cast<uint64_t>(externFuncMap["createVarLen32"]), 8, Config::GP_BANK
+            };
+            builder.call(std::move(funcPtrRef));
+            ValueRef res = this->result_ref(op.getVarlen());
+            builder.add_ret(res);
+            return true;
+        }
+
+        bool compile_util_varlen_cmp_op(dialect::util::VarLenCmp op) {
+            auto lhs_vr = this->val_ref(op.getLeft());
+            auto rhs_vr = this->val_ref(op.getRight());
+            ScratchReg res_scratch{derived()};
+            ScratchReg res_scratch_more{derived()};
+            if (!derived()->encode_util_varlen_cmp(lhs_vr.part(0), lhs_vr.part(1),
+                                              rhs_vr.part(0), rhs_vr.part(1), res_scratch, res_scratch_more)) {
+                return false;
+            }
+
+            auto eq_res_vr = this->result_ref(op.getEq());
+            this->set_value(eq_res_vr.part(0), res_scratch);
+
+            auto more_cmp_res_vr = this->result_ref(op.getNeedsDetailedEval());
+            this->set_value(more_cmp_res_vr.part(0), res_scratch);
+            return true;
         }
 
         bool compile_inst(const IRInstRef inst, InstRange) noexcept {
@@ -1393,6 +1473,15 @@ namespace lingodb::execution::baseline {
                     })
                     .template Case<mlir::arith::TruncIOp>([&](auto op) {
                         return compile_arith_trunci_op(op);
+                    })
+                    .template Case<dialect::util::ArrayElementPtrOp>([&](auto op) {
+                        return compile_util_array_element_ptr_op(op);
+                    })
+                    .template Case<dialect::util::CreateVarLen>([&](auto op) {
+                        return compile_util_create_varlen_op(op);
+                    })
+                    .template Case<dialect::util::VarLenCmp>([&](auto op) {
+                        return compile_util_varlen_cmp_op(op);
                     })
                     .Default([&](IRInstRef op) {
                         error.emit() << "Encountered unimplemented instruction: " << op->getName().getStringRef().
@@ -1581,6 +1670,12 @@ namespace lingodb::execution::baseline {
             return true;
         }
 
+        void load_address_of_got_sym(const SymRef sym, const AsmReg dst) noexcept {
+            assert(sym.valid());
+            ASM(MOV64rm, dst, FE_MEM(FE_IP, 0, FE_NOREG, -1));
+            reloc_text(sym, R_X86_64_GOTPCREL, text_writer.offset() - 4, -4);
+        }
+
         void reset() noexcept {
             Base::reset();
             EncCompiler::reset();
@@ -1593,11 +1688,10 @@ namespace lingodb::execution::baseline {
 
     class DynamicLoader {
     protected:
-        std::vector<uint8_t> objFile;
         Error &error;
 
     public:
-        DynamicLoader(std::vector<uint8_t> objFile, Error &error) : objFile(std::move(objFile)), error(error) {
+        DynamicLoader(Error &error) : error(error) {
         }
 
         virtual ~DynamicLoader() = default;
@@ -1605,80 +1699,36 @@ namespace lingodb::execution::baseline {
         virtual void teardown() {
         }
 
-        virtual lingodb::execution::mainFnType getMainFunction() { return nullptr; }
+        virtual mainFnType getMainFunction() { return nullptr; }
         bool has_error = false;
     };
 
-    class LLVMOrcLoader : public DynamicLoader {
-        std::unique_ptr<llvm::orc::ExecutionSession> executionSession;
-        std::unique_ptr<llvm::orc::ObjectLinkingLayer> objectLayer;
-        llvm::orc::JITDylib *dylib;
+    template<typename Assembler>
+    class InMemoryLoader final : public DynamicLoader {
+        tpde::ElfMapper mapper;
+        llvm::DenseMap<const llvm::GlobalValue *, tpde::AssemblerElfBase::SymRef> globals;
+        tpde::AssemblerElfBase::SymRef main_func;
 
     public:
-        LLVMOrcLoader(std::vector<uint8_t> objFileBytes, Error &error) : DynamicLoader(
-            std::move(objFileBytes), error) {
-            auto memBuf = llvm::MemoryBuffer::getMemBuffer(
-                llvm::StringRef(reinterpret_cast<char *>(objFile.data()), objFile.size()),
-                "",
-                false
-            );
-            assert(memBuf->getBufferSize());
-            executionSession = std::make_unique<llvm::orc::ExecutionSession>(
-                std::make_unique<llvm::orc::UnsupportedExecutorProcessControl>());
-            llvm::orc::MapperJITLinkMemoryManager memoryManager(getpagesize(),
-                                                                std::make_unique<llvm::orc::InProcessMemoryMapper>(
-                                                                    getpagesize()));
-            objectLayer = std::make_unique<llvm::orc::ObjectLinkingLayer>(*executionSession, memoryManager);
-            auto res = executionSession->createJITDylib("<main>");
-            if (auto err = res.takeError()) {
-                error.emit() << "Could not create JITDylib: " << llvm::toString(std::move(err)) << "\n";
-                has_error = true;
-                return;
-            }
-            dylib = &*res;
-            auto res2 = llvm::orc::DynamicLibrarySearchGenerator::GetForCurrentProcess(/*GlobalPrefix=*/'\0');
-            if (auto err = res2.takeError()) {
-                error.emit() << "Could not create DynamicLibrarySearchGenerator: " << llvm::toString(std::move(err))
-                        << "\n";
-                return;
-            }
-            dylib->addGenerator(std::move(*res2));
-            if (auto err = objectLayer->add(*dylib, std::move(memBuf))) {
-                error.emit() << "Could not add object file to JITDylib: " << llvm::toString(std::move(err)) << "\n";
-                return;
-            }
-            objectLayer->addPlugin(std::make_unique<llvm::orc::EHFrameRegistrationPlugin>(
-                *executionSession, std::make_unique<llvm::jitlink::InProcessEHFrameRegistrar>()));
+        InMemoryLoader(Assembler &assembler, Error &error, typename Assembler::SymRef main_func) : DynamicLoader(error),
+            main_func(main_func) {
+            mapper.map(assembler, [](const std::string_view name) {
+                return dlsym(RTLD_DEFAULT, std::string(name).c_str());
+            });
         }
 
         mainFnType getMainFunction() override {
-            auto startSymRes = executionSession->lookup(dylib, "main");
-            if (auto err = startSymRes.takeError()) {
-                error.emit() << "Could not find main symbol in JITDylib: " << llvm::toString(std::move(err)) <<
-                        "\n";
-                has_error = true;
-                return nullptr;
-            }
-            const llvm::orc::ExecutorSymbolDef startSym = *startSymRes;
-            return reinterpret_cast<mainFnType>(startSym.getAddress().getValue());
+            return reinterpret_cast<mainFnType>(mapper.get_sym_addr(main_func));
         }
-
-        void teardown() override {
-            if (auto err = executionSession->endSession(); !err.success()) {
-                error.emit() << "Could not end JIT session: " << llvm::toString(std::move(err)) << "\n";
-                has_error = true;
-            }
-        }
-
-        ~LLVMOrcLoader() override = default;
     };
 
-    class DebugLoader : public DynamicLoader {
+    template<typename Assembler>
+    class DebugLoader final : public DynamicLoader {
         void *handle = nullptr;
 
     public:
-        DebugLoader(std::vector<uint8_t> objFileBytes, Error &error, std::string_view outFileName) : DynamicLoader(
-            std::move(objFileBytes), error) {
+        DebugLoader(Assembler &assembler, Error &error, const std::string_view outFileName) : DynamicLoader(error) {
+            const auto objFile = assembler.build_object_file();
             const std::string objFileName = std::string{outFileName} + ".o";
             const std::string linkedFileName = std::string{outFileName} + ".so";
             auto *outFile = std::fopen((std::string{outFileName} + ".o").c_str(), "wb");
@@ -1729,9 +1779,8 @@ namespace lingodb::execution::baseline {
         }
 
         mainFnType getMainFunction() override {
-            auto mainFunc = reinterpret_cast<lingodb::execution::mainFnType>(dlsym(handle, "main"));
-            const char *dlsymError = dlerror();
-            if (dlsymError) {
+            const auto mainFunc = reinterpret_cast<mainFnType>(dlsym(handle, "main"));
+            if (const char *dlsymError = dlerror()) {
                 error.emit() << "Could not load symbol for main function: " << std::string(dlsymError) << "\nerror:"
                         << strerror(errno) << "\n";
                 has_error = true;
@@ -1741,13 +1790,8 @@ namespace lingodb::execution::baseline {
         }
 
         void teardown() override {
-            // if (outFile) {
-            //     std::fclose(outFile);
-            // }
             dlclose(handle);
         }
-
-        ~DebugLoader() override = default;
     };
 
     class BaselineBackend : public lingodb::execution::ExecutionBackend {
@@ -1793,21 +1837,18 @@ namespace lingodb::execution::baseline {
             }
             const auto baselineCodeGenEnd = std::chrono::high_resolution_clock::now();
             const auto baselineEmitStart = std::chrono::high_resolution_clock::now();
-            std::vector<uint8_t> objFileBytes = compiler.assembler.build_object_file();
-            const auto baselineEmitEnd = std::chrono::high_resolution_clock::now();
-
-            const auto loadingSetupStart = std::chrono::high_resolution_clock::now();
             std::unique_ptr<DynamicLoader> loader;
             if (!baselineDebugFileOut.getValue().empty()) {
-                loader = std::make_unique<DebugLoader>(std::move(objFileBytes), error,
-                                                       baselineDebugFileOut.getValue());
+                loader = std::make_unique<DebugLoader<IRCompilerX64::Assembler> >(compiler.assembler, error,
+                    baselineDebugFileOut.getValue());
             } else {
-                loader = std::make_unique<LLVMOrcLoader>(std::move(objFileBytes), error);
+                loader = std::make_unique<InMemoryLoader<IRCompilerX64::Assembler> >(
+                    compiler.assembler, error, compiler.func_syms[compiler.localFuncMap["main"]]);
             }
             if (loader->has_error) return;
             auto mainFunc = loader->getMainFunction();
             if (loader->has_error) return;
-            const auto loadingSetupEnd = std::chrono::high_resolution_clock::now();
+            const auto baselineEmitEnd = std::chrono::high_resolution_clock::now();
 
             const auto executionStart = std::chrono::high_resolution_clock::now();
             utility::Tracer::Trace trace(execution);
@@ -1820,8 +1861,6 @@ namespace lingodb::execution::baseline {
                                             baselineCodeGenEnd - baselineCodeGenStart).count() / 1000.0;
             timing["baselineEmit"] = std::chrono::duration_cast<std::chrono::microseconds>(
                                          baselineEmitEnd - baselineEmitStart).count() / 1000.0;
-            timing["baselineLoading"] = std::chrono::duration_cast<std::chrono::microseconds>(
-                                            loadingSetupEnd - loadingSetupStart).count() / 1000.0;
             timing["executionTime"] = std::chrono::duration_cast<std::chrono::microseconds>(
                                           executionEnd - executionStart).count() / 1000.0;
         }
