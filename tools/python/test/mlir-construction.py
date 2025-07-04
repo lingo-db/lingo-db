@@ -1,6 +1,6 @@
 import lingodbbridge
 from lingodbbridge.mlir import ir
-from lingodbbridge.mlir.dialects import func,arith,scf,util,tuples,db,relalg
+from lingodbbridge.mlir.dialects import func,arith,scf,util,tuples,db,relalg, builtin
 import lingodbbridge.mlir._mlir_libs.mlir_init as mlir_init
 
 con=lingodbbridge.ext.in_memory()
