@@ -124,7 +124,12 @@ class TupleHelper {
                elemSize = sizeof(uint64_t);
                elemAlign = alignof(uint64_t);
             })
-            .Default([](mlir::Type) {
+            .Case<dialect::util::BufferType, dialect::util::VarLen32Type>([&](auto) {
+               elemSize = sizeof(__uint128_t);
+               elemAlign = alignof(__uint128_t);
+            })
+            .Default([](const mlir::Type elem) {
+               elem.dump();
                assert(false && "Cannot calculate size for unsupported type.");
                return 0;
             });

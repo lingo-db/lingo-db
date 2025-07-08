@@ -15,7 +15,7 @@ struct BufferIterator;
 struct Buffer {
    union {
       struct {
-         size_t numElements;
+         uint64_t numElements;
          uint8_t* ptr;
       };
       __int128 as128;

@@ -1010,6 +1010,9 @@ namespace lingodb::execution::baseline {
                     .template Case<dialect::util::RefType, mlir::IndexType>([&](auto) {
                         return derived()->encode_util_store_i64(std::move(ptr_part), in_vr.part(0));
                     })
+                    .template Case<dialect::util::VarLen32Type, dialect::util::BufferType>([&](auto) {
+                        return derived()->encode_store_i128(std::move(ptr_part), in_vr.part(0), in_vr.part(1));
+                    })
                     .Default([](mlir::Type t) {
                         t.dump();
                         assert(false && "Unsupported load type");
@@ -1080,7 +1083,16 @@ namespace lingodb::execution::baseline {
                         this->set_value(res_ref, res_scratch);
                         return true;
                     })
-                    .Default([](mlir::Type t) {
+                    .template Case<dialect::util::VarLen32Type, dialect::util::BufferType>([&](auto) {
+                        ScratchReg res_scratch_high{derived()};
+                        auto res_low = res.part(0);
+                        auto res_high = res.part(1);
+                        derived()->encode_load_i128(std::move(ptr_part), res_scratch, res_scratch_high);
+                        this->set_value(res_low, res_scratch);
+                        this->set_value(res_high, res_scratch_high);
+                        return true;
+                    })
+                    .Default([](const mlir::Type t) {
                         t.dump();
                         assert(false && "Unsupported load type");
                         return false;
@@ -1255,11 +1267,9 @@ namespace lingodb::execution::baseline {
             }
             // we store the length in the first 8 bytes of the buffer
             auto buf_vr = this->val_ref(op.getBuffer());
-            ScratchReg buffer_len_scratch{derived()};
-            derived()->encode_util_load_i64(std::move(buf_vr.part(0)), buffer_len_scratch);
             ScratchReg res_scratch{derived()};
             ValuePart elem_size_vp{*elem_size, 8, Config::GP_BANK};
-            derived()->encode_arith_udiv_i64(std::move(buffer_len_scratch),
+            derived()->encode_arith_udiv_i64(buf_vr.part(0),
                                              GenericValuePart{Expr{elem_size_vp.load_to_reg(derived())}},
                                              res_scratch);
             elem_size_vp.reset(derived()); // release the temporary register
@@ -1393,7 +1403,7 @@ namespace lingodb::execution::baseline {
             ScratchReg res_scratch{derived()};
             ScratchReg res_scratch_more{derived()};
             if (!derived()->encode_util_varlen_cmp(lhs_vr.part(0), lhs_vr.part(1),
-                                              rhs_vr.part(0), rhs_vr.part(1), res_scratch, res_scratch_more)) {
+                                                   rhs_vr.part(0), rhs_vr.part(1), res_scratch, res_scratch_more)) {
                 return false;
             }
 
@@ -1401,7 +1411,7 @@ namespace lingodb::execution::baseline {
             this->set_value(eq_res_vr.part(0), res_scratch);
 
             auto more_cmp_res_vr = this->result_ref(op.getNeedsDetailedEval());
-            this->set_value(more_cmp_res_vr.part(0), res_scratch);
+            this->set_value(more_cmp_res_vr.part(0), res_scratch_more);
             return true;
         }
 
@@ -1820,8 +1830,7 @@ namespace lingodb::execution::baseline {
             timing["baselineLowering"] = std::chrono::duration_cast<std::chrono::microseconds>(
                                              endLowering - startLowering).count() / 1000.0;
 
-            // SpdLogSpoof logSpoof;
-            spdlog::set_level(spdlog::level::trace);
+            SpdLogSpoof logSpoof;
 #if defined(__x86_64__)
             IRCompilerX64 compiler{std::make_unique<IRAdaptor>(&moduleOp, error)};
 #else
