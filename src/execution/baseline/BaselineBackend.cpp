@@ -258,20 +258,17 @@ namespace lingodb::execution::baseline {
                     std::count(preds.begin(), preds.end(), predecessor) == 1 &&
                     "Predecessor block found multiple times in predecessors. While this is allowed for MLIR, this is currently not supported by TPDE, especially with different edge-values");
 #endif
-                const uint32_t slot = std::distance(predecessor->succ_begin(),
-                                                    std::find(predecessor->succ_begin(), predecessor->succ_end(),
-                                                              arg.getOwner()));
                 mlir::Operation *terminator = predecessor->getTerminator();
                 const mlir::Value incomingVal = mlir::TypeSwitch<mlir::Operation *, mlir::Value>(terminator)
                         .Case<mlir::cf::BranchOp>([&](mlir::cf::BranchOp br) {
-                            return br.getDestOperands()[slot];
+                            return br.getDestOperands()[arg.getArgNumber()];
                         })
                         .Case<mlir::cf::CondBranchOp>([&](mlir::cf::CondBranchOp br) {
                             if (br.getTrueDest() == arg.getOwner()) {
-                                return br.getTrueDestOperands()[slot];
+                                return br.getTrueDestOperands()[arg.getArgNumber()];
                             }
                             if (br.getFalseDest() == arg.getOwner()) {
-                                return br.getFalseDestOperands()[slot];
+                                return br.getFalseDestOperands()[arg.getArgNumber()];
                             }
                             assert(0 && "Predecessor block not found in branch operands");
                             return mlir::Value();
@@ -289,14 +286,7 @@ namespace lingodb::execution::baseline {
             // looks roughly the same as the above, but does not need to calculate the slot index
             [[maybe_unused]] IRValueRef incoming_val_for_slot(const uint32_t slot) const noexcept {
                 mlir::Block *predecessor = incoming_block_for_slot(slot);
-                mlir::Operation *terminator = predecessor->getTerminator();
-                assert(terminator && "Predecessor block does not have a terminator");
-                assert(
-                    arg.getArgNumber() < terminator->getNumOperands() &&
-                    "block arg num out of range for operands of predecessor terminator");
-                const mlir::Value incomingVal = terminator->getOperand(arg.getArgNumber());
-                assert(incomingVal.getType() == arg.getType() && "Incoming value type mismatch");
-                return incomingVal;
+                return incoming_val_for_block(predecessor);
             }
         };
 
