@@ -30,6 +30,19 @@ if (CMAKE_BUILD_TYPE STREQUAL "ASAN")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${CMAKE_EXE_LINKER_FLAGS_ASAN}")
 endif ()
 
+
+## Add custom UBSAN build type
+set(CMAKE_CXX_FLAGS_UBSAN "-fsanitize=undefined -fno-omit-frame-pointer -g -O1 -DASAN_ACTIVE")
+set(CMAKE_C_FLAGS_UBSAN "-fsanitize=undefined -fno-omit-frame-pointer -g -O1 -DASAN_ACTIVE")
+set(CMAKE_EXE_LINKER_FLAGS_UBSAN "-fsanitize=undefined")
+# Apply the flags if the build type is UBSAN
+if (CMAKE_BUILD_TYPE STREQUAL "UBSAN")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_UBSAN}")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_UBSAN}")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${CMAKE_EXE_LINKER_FLAGS_UBSAN}")
+endif ()
+
+
 include(FindZLIB)
 message("Using ZLIB: ${ZLIB_INCLUDE_DIRS}")
 message("Using Python3: ${Python3_EXECUTABLE}")

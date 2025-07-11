@@ -1,7 +1,7 @@
 //RUN: run-mlir %s | FileCheck %s
 //CHECK: |                           ctr  |
 //CHECK: ----------------------------------
-//CHECK: |                             6  |
+//CHECK: |                             5  |
 
 module{
     func.func @main(){

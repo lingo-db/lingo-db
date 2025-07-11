@@ -149,13 +149,13 @@ NB_MODULE(mlir_lingodb, m) {
    // SubOp Dialect
    //----------------------------------------------------------------------------------------------------------------------
    auto subOpModule = m.def_submodule("subop", "extensions required for sub-operator dialect");
-   mlir::python::nanobind_adaptors::mlir_attribute_subclass(subOpModule, "StateMembersAttr", mlirAttributeIsASubOpStateMembersAttribute)
+   /*mlir::python::nanobind_adaptors::mlir_attribute_subclass(subOpModule, "StateMembersAttr", mlirAttributeIsASubOpStateMembersAttribute)
       .def_classmethod(
          "get",
          [](nb::object cls, MlirAttribute names, MlirAttribute types) {
             return cls(mlirSubOpStateMembersAttributeGet(names, types));
          },
-         nb::arg("cls"), nb::arg("names"), nb::arg("types"));
+         nb::arg("cls"), nb::arg("names"), nb::arg("types"));*/
    mlir::python::nanobind_adaptors::mlir_type_subclass(subOpModule, "TableType", mlirTypeIsASubOpTableType, mlirSubOpTableTypeGetTypeID)
       .def_classmethod(
          "get",

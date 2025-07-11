@@ -17,7 +17,7 @@ static thread_local Worker* currentWorker;
 } // end namespace
 
 struct TaskWrapper;
-#ifdef ASAN_ACTIVE
+#if defined(ASAN_ACTIVE) or 1
 
 class Fiber {
    std::thread thread;

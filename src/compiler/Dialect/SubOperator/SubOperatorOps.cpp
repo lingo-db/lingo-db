@@ -1,4 +1,5 @@
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
+#include "lingodb/compiler/Dialect/SubOperator/SubOperatorDialect.h"
 #include "lingodb/compiler/Dialect/TupleStream/ColumnManager.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamDialect.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
@@ -92,9 +93,10 @@ void printCustDef(OpAsmPrinter& p, mlir::Operation* op, tuples::ColumnDefAttr at
    }
 }
 
-ParseResult parseStateColumnMapping(OpAsmParser& parser, DictionaryAttr& attr) {
+ParseResult parseStateColumnMapping(OpAsmParser& parser, subop::ColumnDefMemberMappingAttr& attr) {
+   auto& memberManager = parser.getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
    if (parser.parseLBrace()) return failure();
-   std::vector<mlir::NamedAttribute> columns;
+   llvm::SmallVector<subop::ColumnDefMemberMapping::pairType> columns;
    while (true) {
       if (!parser.parseOptionalRBrace()) { break; }
       StringRef colName;
@@ -104,17 +106,19 @@ ParseResult parseStateColumnMapping(OpAsmParser& parser, DictionaryAttr& attr) {
       if (parseCustDef(parser, attrDefAttr)) {
          return failure();
       }
-      columns.push_back({StringAttr::get(parser.getBuilder().getContext(), colName), attrDefAttr});
+      columns.push_back({memberManager.lookupMember(colName.str()), attrDefAttr});
       if (!parser.parseOptionalComma()) { continue; }
       if (parser.parseRBrace()) { return failure(); }
       break;
    }
-   attr = mlir::DictionaryAttr::get(parser.getBuilder().getContext(), columns);
+   attr = subop::ColumnDefMemberMappingAttr::get(parser.getBuilder().getContext(),
+                                                 std::make_shared<subop::ColumnDefMemberMapping>(std::move(columns)));
    return success();
 }
-ParseResult parseColumnStateMapping(OpAsmParser& parser, DictionaryAttr& attr) {
+ParseResult parseColumnStateMapping(OpAsmParser& parser, subop::ColumnRefMemberMappingAttr& attr) {
+   auto& memberManager = parser.getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
    if (parser.parseLBrace()) return failure();
-   std::vector<mlir::NamedAttribute> columns;
+   llvm::SmallVector<subop::ColumnRefMemberMapping::pairType> columns;
    while (true) {
       if (!parser.parseOptionalRBrace()) { break; }
       tuples::ColumnRefAttr columnRefAttr;
@@ -126,45 +130,46 @@ ParseResult parseColumnStateMapping(OpAsmParser& parser, DictionaryAttr& attr) {
       StringRef colName;
       if (parser.parseKeyword(&colName)) { return failure(); }
 
-      columns.push_back({StringAttr::get(parser.getBuilder().getContext(), colName), columnRefAttr});
+      columns.push_back({memberManager.lookupMember(colName.str()), columnRefAttr});
       if (!parser.parseOptionalComma()) { continue; }
       if (parser.parseRBrace()) { return failure(); }
       break;
    }
-   attr = mlir::DictionaryAttr::get(parser.getBuilder().getContext(), columns);
+   attr = subop::ColumnRefMemberMappingAttr::get(parser.getBuilder().getContext(),
+                                                 std::make_shared<subop::ColumnRefMemberMapping>(std::move(columns)));
    return success();
 }
-void printStateColumnMapping(OpAsmPrinter& p, mlir::Operation* op, DictionaryAttr attr) {
+void printStateColumnMapping(OpAsmPrinter& p, mlir::Operation* op, subop::ColumnDefMemberMappingAttr attr) {
+   auto& memberManager = op->getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
    p << "{";
    auto first = true;
-   for (auto mapping : attr) {
-      auto columnName = mapping.getName();
-      auto attr = mapping.getValue();
-      auto relationDefAttr = mlir::dyn_cast_or_null<tuples::ColumnDefAttr>(attr);
+   for (auto mapping : attr.getMapping()->getMapping()) {
+      auto columnName = memberManager.getName(mapping.first);
+      auto relationDefAttr = mapping.second;
       if (first) {
          first = false;
       } else {
          p << ", ";
       }
-      p << columnName.getValue() << " => ";
+      p << columnName << " => ";
       printCustDef(p, op, relationDefAttr);
    }
    p << "}";
 }
-void printColumnStateMapping(OpAsmPrinter& p, mlir::Operation* op, DictionaryAttr attr) {
+void printColumnStateMapping(OpAsmPrinter& p, mlir::Operation* op, subop::ColumnRefMemberMappingAttr attr) {
+   auto& memberManager = op->getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
    p << "{";
    auto first = true;
-   for (auto mapping : attr) {
-      auto columnName = mapping.getName();
-      auto attr = mapping.getValue();
-      auto relationRefAttr = mlir::dyn_cast_or_null<tuples::ColumnRefAttr>(attr);
+   for (auto mapping : attr.getMapping()->getMapping()) {
+      auto columnName = memberManager.getName(mapping.first);
+      auto relationRefAttr = mapping.second;
       if (first) {
          first = false;
       } else {
          p << ", ";
       }
       printCustRef(p, op, relationRefAttr);
-      p << " => " << columnName.getValue();
+      p << " => " << columnName;
    }
    p << "}";
 }
@@ -238,31 +243,69 @@ void printCustDefArr(OpAsmPrinter& p, mlir::Operation* op, ArrayAttr arrayAttr) 
    }
    p << "]";
 }
+
+ParseResult parseCustMemberAttr(OpAsmParser& parser, subop::MemberAttr& attr) {
+   auto& memberManager = parser.getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
+   std::string memberName;
+   if (parser.parseString(&memberName).failed()) {
+      return failure();
+   }
+   attr = subop::MemberAttr::get(parser.getContext(), memberManager.lookupMember(memberName));
+   return success();
+}
+void printCustMemberAttr(OpAsmPrinter& p, mlir::Operation* op, subop::MemberAttr attr) {
+   auto& memberManager = op->getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
+   p.printString(memberManager.getName(attr.getMember()));
+}
+ParseResult parseCustMemberArrayAttr(OpAsmParser& parser, mlir::ArrayAttr& attr) {
+   // first parse the array as arrayattr of string attributes
+   mlir::ArrayAttr parsedAttr;
+   if (parser.parseAttribute(parsedAttr)) {
+      return failure();
+   }
+   std::vector<Attribute> attributes;
+   for (auto a : parsedAttr) {
+      mlir::StringAttr strAttr = mlir::dyn_cast<mlir::StringAttr>(a);
+      if (!strAttr) {
+         return parser.emitError(parser.getNameLoc(), "Expected string in member array");
+      }
+      subop::MemberAttr memberAttr = subop::MemberAttr::get(parser.getBuilder().getContext(),
+                                                            parser.getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager().lookupMember(strAttr.getValue().str()));
+      attributes.push_back(memberAttr);
+   }
+   attr = parser.getBuilder().getArrayAttr(attributes);
+   return success();
+}
+void printCustMemberArrayAttr(OpAsmPrinter& p, mlir::Operation* op, mlir::ArrayAttr arrayAttr) {
+   auto& memberManager = op->getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
+   llvm::SmallVector<mlir::Attribute> attributes;
+   for (auto a : arrayAttr) {
+      subop::MemberAttr memberAttr = mlir::cast<subop::MemberAttr>(a);
+      attributes.push_back(mlir::StringAttr::get(op->getContext(), memberManager.getName(memberAttr.getMember())));
+   }
+   p << mlir::ArrayAttr::get(op->getContext(), attributes);
+}
 } // namespace
 
 ParseResult subop::CreateHeapOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
+   auto& memberManager = parser.getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
+
+   subop::HeapType heapType;
+   if (parser.parseType(heapType)) {
+      return failure();
+   }
    mlir::ArrayAttr sortBy;
-   if (parser.parseAttribute(sortBy).failed()) {
+   if (parseCustMemberArrayAttr(parser, sortBy).failed()) {
       return failure();
    }
    result.addAttribute("sortBy", sortBy);
-   subop::HeapType heapType;
-   if (parser.parseArrow().failed() || parser.parseType(heapType)) {
-      return failure();
-   }
    std::vector<OpAsmParser::Argument> leftArgs(sortBy.size());
    std::vector<OpAsmParser::Argument> rightArgs(sortBy.size());
    if (parser.parseLParen() || parser.parseLSquare()) {
       return failure();
    }
    for (size_t i = 0; i < sortBy.size(); i++) {
-      size_t j = 0;
-      for (; j < heapType.getMembers().getNames().size(); j++) {
-         if (sortBy[i] == heapType.getMembers().getNames()[j]) {
-            break;
-         }
-      }
-      leftArgs[i].type = mlir::cast<mlir::TypeAttr>(heapType.getMembers().getTypes()[j]).getValue();
+      leftArgs[i].type = memberManager.getType(mlir::cast<subop::MemberAttr>(sortBy[i]).getMember());
       if (i > 0 && parser.parseComma().failed()) return failure();
       if (parser.parseArgument(leftArgs[i])) return failure();
    }
@@ -270,13 +313,7 @@ ParseResult subop::CreateHeapOp::parse(::mlir::OpAsmParser& parser, ::mlir::Oper
       return failure();
    }
    for (size_t i = 0; i < sortBy.size(); i++) {
-      size_t j = 0;
-      for (; j < heapType.getMembers().getNames().size(); j++) {
-         if (sortBy[i] == heapType.getMembers().getNames()[j]) {
-            break;
-         }
-      }
-      rightArgs[i].type = mlir::cast<mlir::TypeAttr>(heapType.getMembers().getTypes()[j]).getValue();
+      rightArgs[i].type = memberManager.getType(mlir::cast<subop::MemberAttr>(sortBy[i]).getMember());
       if (i > 0 && parser.parseComma().failed()) return failure();
       if (parser.parseArgument(rightArgs[i])) return failure();
    }
@@ -295,8 +332,9 @@ ParseResult subop::CreateHeapOp::parse(::mlir::OpAsmParser& parser, ::mlir::Oper
 }
 
 void subop::CreateHeapOp::print(OpAsmPrinter& p) {
-   p << getSortBy() << " -> " << getType() << " ";
-   p << "([";
+   p << " "<<getType() << " ";
+   printCustMemberArrayAttr(p, getOperation(), getSortBy());
+   p << " ([";
    bool first = true;
    for (size_t i = 0; i < getSortBy().size(); i++) {
       if (first) {
@@ -321,6 +359,7 @@ void subop::CreateHeapOp::print(OpAsmPrinter& p) {
    p.printOptionalAttrDict(getOperation()->getAttrs(), {getSortByAttrName()});
 }
 ParseResult subop::CreateSortedViewOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
+   auto& memberManager = parser.getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
    OpAsmParser::UnresolvedOperand getToSort;
    subop::BufferType vecType;
    if (parser.parseOperand(getToSort) || parser.parseColonType(vecType)) {
@@ -331,7 +370,7 @@ ParseResult subop::CreateSortedViewOp::parse(::mlir::OpAsmParser& parser, ::mlir
    }
 
    mlir::ArrayAttr sortBy;
-   if (parser.parseAttribute(sortBy).failed()) {
+   if (parseCustMemberArrayAttr(parser, sortBy).failed()) {
       return failure();
    }
    result.addAttribute("sortBy", sortBy);
@@ -341,13 +380,7 @@ ParseResult subop::CreateSortedViewOp::parse(::mlir::OpAsmParser& parser, ::mlir
       return failure();
    }
    for (size_t i = 0; i < sortBy.size(); i++) {
-      size_t j = 0;
-      for (; j < vecType.getMembers().getNames().size(); j++) {
-         if (sortBy[i] == vecType.getMembers().getNames()[j]) {
-            break;
-         }
-      }
-      leftArgs[i].type = mlir::cast<mlir::TypeAttr>(vecType.getMembers().getTypes()[j]).getValue();
+      leftArgs[i].type = memberManager.getType(mlir::cast<subop::MemberAttr>(sortBy[i]).getMember());
       if (i > 0 && parser.parseComma().failed()) return failure();
       if (parser.parseArgument(leftArgs[i])) return failure();
    }
@@ -355,13 +388,7 @@ ParseResult subop::CreateSortedViewOp::parse(::mlir::OpAsmParser& parser, ::mlir
       return failure();
    }
    for (size_t i = 0; i < sortBy.size(); i++) {
-      size_t j = 0;
-      for (; j < vecType.getMembers().getNames().size(); j++) {
-         if (sortBy[i] == vecType.getMembers().getNames()[j]) {
-            break;
-         }
-      }
-      rightArgs[i].type = mlir::cast<mlir::TypeAttr>(vecType.getMembers().getTypes()[j]).getValue();
+      rightArgs[i].type = memberManager.getType(mlir::cast<subop::MemberAttr>(sortBy[i]).getMember());
       if (i > 0 && parser.parseComma().failed()) return failure();
       if (parser.parseArgument(rightArgs[i])) return failure();
    }
@@ -381,8 +408,9 @@ ParseResult subop::CreateSortedViewOp::parse(::mlir::OpAsmParser& parser, ::mlir
 
 void subop::CreateSortedViewOp::print(OpAsmPrinter& p) {
    subop::CreateSortedViewOp& op = *this;
-   p << " " << op.getToSort() << " : " << op.getToSort().getType() << " " << op.getSortBy() << " ";
-   p << "([";
+   p << " " << op.getToSort() << " : " << op.getToSort().getType() << " ";
+   printCustMemberArrayAttr(p, getOperation(), op.getSortBy());
+   p << " ([";
    bool first = true;
    for (size_t i = 0; i < op.getSortBy().size(); i++) {
       if (first) {
@@ -515,6 +543,7 @@ void subop::LookupOrInsertOp::print(OpAsmPrinter& p) {
    p.printOptionalAttrDict(getOperation()->getAttrs(), {"keys", "ref"});
 }
 ParseResult subop::InsertOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
+   auto& memberManager = parser.getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
    OpAsmParser::UnresolvedOperand stream;
    if (parser.parseOperand(stream)) {
       return failure();
@@ -533,31 +562,31 @@ ParseResult subop::InsertOp::parse(::mlir::OpAsmParser& parser, ::mlir::Operatio
    if (parser.resolveOperand(state, stateType, result.operands).failed()) {
       return failure();
    }
-   mlir::DictionaryAttr columnStateMapping;
+   subop::ColumnRefMemberMappingAttr columnStateMapping;
    if (parseColumnStateMapping(parser, columnStateMapping).failed()) {
       return failure();
    }
    result.addAttribute("mapping", columnStateMapping);
-   auto keyTypes = stateType.getKeyMembers().getTypes();
+   auto keyMembers = stateType.getKeyMembers().getMembers();
 
-   std::vector<OpAsmParser::Argument> leftArgs(keyTypes.size());
-   std::vector<OpAsmParser::Argument> rightArgs(keyTypes.size());
+   std::vector<OpAsmParser::Argument> leftArgs(keyMembers.size());
+   std::vector<OpAsmParser::Argument> rightArgs(keyMembers.size());
    Region* eqFn = result.addRegion();
 
    if (parser.parseOptionalKeyword("eq").succeeded()) {
       if (parser.parseColon() || parser.parseLParen() || parser.parseLSquare()) {
          return failure();
       }
-      for (size_t i = 0; i < keyTypes.size(); i++) {
-         leftArgs[i].type = mlir::cast<mlir::TypeAttr>(keyTypes[i]).getValue();
+      for (size_t i = 0; i < keyMembers.size(); i++) {
+         leftArgs[i].type = memberManager.getType(keyMembers[i]);
          if (i > 0 && parser.parseComma().failed()) return failure();
          if (parser.parseArgument(leftArgs[i])) return failure();
       }
       if (parser.parseRSquare() || parser.parseComma() || parser.parseLSquare()) {
          return failure();
       }
-      for (size_t i = 0; i < keyTypes.size(); i++) {
-         rightArgs[i].type = mlir::cast<mlir::TypeAttr>(keyTypes[i]).getValue();
+      for (size_t i = 0; i < keyMembers.size(); i++) {
+         rightArgs[i].type = memberManager.getType(keyMembers[i]);
          if (i > 0 && parser.parseComma().failed()) return failure();
          if (parser.parseArgument(rightArgs[i])) return failure();
       }
@@ -580,11 +609,11 @@ void subop::InsertOp::print(OpAsmPrinter& p) {
    p << " " << op.getStream() << op.getState() << " ";
    p << " : " << op.getState().getType() << " ";
    printColumnStateMapping(p, getOperation(), getMapping());
-   auto keyTypes = getState().getType().getKeyMembers().getTypes();
+   auto numMembers = getState().getType().getKeyMembers().getMembers().size();
    if (!op.getEqFn().empty()) {
       p << " eq: ([";
       bool first = true;
-      for (size_t i = 0; i < keyTypes.size(); i++) {
+      for (size_t i = 0; i < numMembers; i++) {
          if (first) {
             first = false;
          } else {
@@ -594,13 +623,13 @@ void subop::InsertOp::print(OpAsmPrinter& p) {
       }
       p << "],[";
       first = true;
-      for (size_t i = 0; i < keyTypes.size(); i++) {
+      for (size_t i = 0; i < numMembers; i++) {
          if (first) {
             first = false;
          } else {
             p << ",";
          }
-         p << op.getEqFn().front().getArgument(keyTypes.size() + i);
+         p << op.getEqFn().front().getArgument(numMembers + i);
       }
       p << "]) ";
       p.printRegion(op.getEqFn(), false, true);
@@ -608,6 +637,7 @@ void subop::InsertOp::print(OpAsmPrinter& p) {
    p.printOptionalAttrDict(getOperation()->getAttrs(), {"mapping"});
 }
 ParseResult subop::LookupOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
+   auto& memberManager = parser.getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
    OpAsmParser::UnresolvedOperand stream;
    if (parser.parseOperand(stream)) {
       return failure();
@@ -646,7 +676,7 @@ ParseResult subop::LookupOp::parse(::mlir::OpAsmParser& parser, ::mlir::Operatio
          return failure();
       }
       for (size_t i = 0; i < keys.size(); i++) {
-         leftArgs[i].type = mlir::cast<mlir::TypeAttr>(stateType.getKeyMembers().getTypes()[i]).getValue();
+         leftArgs[i].type = memberManager.getType(stateType.getKeyMembers().getMembers()[i]);
          if (i > 0 && parser.parseComma().failed()) return failure();
          if (parser.parseArgument(leftArgs[i])) return failure();
       }
@@ -762,6 +792,7 @@ void subop::LoopOp::print(::mlir::OpAsmPrinter& p) {
 }
 
 ::mlir::ParseResult subop::CreateSegmentTreeView::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
+   auto& memberManager = parser.getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
    OpAsmParser::UnresolvedOperand source;
    ContinuousViewType continuousViewType;
    if (parser.parseOperand(source) || parser.parseColonType(continuousViewType) || parser.resolveOperand(source, continuousViewType, result.operands)) {
@@ -773,7 +804,7 @@ void subop::LoopOp::print(::mlir::OpAsmPrinter& p) {
    }
    result.types.push_back(resultType);
    ArrayAttr relevantMembers;
-   if (parser.parseKeyword("initial") || parser.parseAttribute(relevantMembers) || parser.parseColon()) {
+   if (parser.parseKeyword("initial") || parseCustMemberArrayAttr(parser, relevantMembers) || parser.parseColon()) {
       return failure();
    }
    result.addAttribute("relevant_members", relevantMembers);
@@ -781,15 +812,9 @@ void subop::LoopOp::print(::mlir::OpAsmPrinter& p) {
    if (parser.parseLParen() || parser.parseArgumentList(initialFnArguments) || parser.parseRParen()) {
       return failure();
    }
-   auto sourceMembers = continuousViewType.getMembers();
+   auto sourceMembers = continuousViewType.getMembers().getMembers();
    for (size_t i = 0; i < relevantMembers.size(); i++) {
-      size_t j = 0;
-      for (; j < sourceMembers.getNames().size(); j++) {
-         if (relevantMembers[i] == sourceMembers.getNames()[j]) {
-            break;
-         }
-      }
-      initialFnArguments[i].type = mlir::cast<mlir::TypeAttr>(sourceMembers.getTypes()[j]).getValue();
+      initialFnArguments[i].type = memberManager.getType(mlir::cast<subop::MemberAttr>(relevantMembers[i]).getMember());
    }
    Region* initialFn = result.addRegion();
    if (parser.parseRegion(*initialFn, initialFnArguments)) return failure();
@@ -804,8 +829,9 @@ void subop::LoopOp::print(::mlir::OpAsmPrinter& p) {
    if (parser.parseArgumentList(combineFnRightArguments) || parser.parseRSquare() || parser.parseRParen()) {
       return failure();
    }
-   for (size_t i = 0; i < resultType.getValueMembers().getTypes().size(); i++) {
-      auto t = mlir::cast<mlir::TypeAttr>(resultType.getValueMembers().getTypes()[i]).getValue();
+   auto resMembers = resultType.getValueMembers().getMembers();
+   for (size_t i = 0; i < resMembers.size(); i++) {
+      auto t = memberManager.getType(resMembers[i]);
       combineFnLeftArguments[i].type = t;
       combineFnRightArguments[i].type = t;
    }
@@ -820,8 +846,9 @@ void subop::LoopOp::print(::mlir::OpAsmPrinter& p) {
 }
 void subop::CreateSegmentTreeView::print(::mlir::OpAsmPrinter& p) {
    p << " " << getSource() << " : " << getSource().getType() << " -> " << getType() << " ";
-   p << "initial" << getRelevantMembers() << ":"
-     << "(";
+   p << "initial";
+   printCustMemberArrayAttr(p,getOperation(),getRelevantMembers());
+   p << ":(";
    bool first = true;
    for (auto arg : getInitialFn().getArguments()) {
       if (first) {
@@ -834,7 +861,7 @@ void subop::CreateSegmentTreeView::print(::mlir::OpAsmPrinter& p) {
    p << ")";
    p.printRegion(getInitialFn(), false, true);
    p << "combine: ([";
-   auto argCount = getType().getValueMembers().getTypes().size();
+   auto argCount = getType().getValueMembers().getMembers().size();
    for (size_t i = 0; i < argCount; i++) {
       if (i > 0) {
          p << ", ";
@@ -853,6 +880,7 @@ void subop::CreateSegmentTreeView::print(::mlir::OpAsmPrinter& p) {
    p.printOptionalAttrDict(getOperation()->getAttrs(), {"relevant_members"});
 }
 ParseResult subop::ReduceOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
+   auto& memberManager = parser.getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
    OpAsmParser::UnresolvedOperand stream;
    if (parser.parseOperand(stream)) {
       return failure();
@@ -872,7 +900,7 @@ ParseResult subop::ReduceOp::parse(::mlir::OpAsmParser& parser, ::mlir::Operatio
    }
    result.addAttribute("columns", columns);
    mlir::ArrayAttr members;
-   if (parser.parseAttribute(members).failed()) {
+   if (parseCustMemberArrayAttr(parser, members).failed()) {
       return failure();
    }
    result.addAttribute("members", members);
@@ -892,13 +920,7 @@ ParseResult subop::ReduceOp::parse(::mlir::OpAsmParser& parser, ::mlir::Operatio
       return failure();
    }
    for (size_t i = 0; i < members.size(); i++) {
-      size_t j = 0;
-      for (; j < stateMembers.getNames().size(); j++) {
-         if (members[i] == stateMembers.getNames()[j]) {
-            break;
-         }
-      }
-      rightArgs[i].type = mlir::cast<mlir::TypeAttr>(stateMembers.getTypes()[j]).getValue();
+      rightArgs[i].type = memberManager.getType(mlir::cast<subop::MemberAttr>(members[i]).getMember());
       if (i > 0 && parser.parseComma().failed()) return failure();
       if (parser.parseArgument(rightArgs[i])) return failure();
    }
@@ -925,14 +947,9 @@ ParseResult subop::ReduceOp::parse(::mlir::OpAsmParser& parser, ::mlir::Operatio
          return failure();
       }
       for (size_t i = 0; i < members.size(); i++) {
-         size_t j = 0;
-         for (; j < stateMembers.getNames().size(); j++) {
-            if (members[i] == stateMembers.getNames()[j]) {
-               break;
-            }
-         }
-         combineFnLeftArguments[i].type = mlir::cast<mlir::TypeAttr>(stateMembers.getTypes()[j]).getValue();
-         combineFnRightArguments[i].type = mlir::cast<mlir::TypeAttr>(stateMembers.getTypes()[j]).getValue();
+         auto t = memberManager.getType(mlir::cast<subop::MemberAttr>(members[i]).getMember());
+         combineFnLeftArguments[i].type = t;
+         combineFnRightArguments[i].type = t;
       }
       std::vector<OpAsmParser::Argument> combineArgs;
       combineArgs.insert(combineArgs.end(), combineFnLeftArguments.begin(), combineFnLeftArguments.end());
@@ -949,7 +966,9 @@ void subop::ReduceOp::print(OpAsmPrinter& p) {
    p << " " << op.getStream() << " ";
    printCustRef(p, op, op.getRef());
    printCustRefArr(p, op, op.getColumns());
-   p << " " << op.getMembers() << " ";
+   p << " ";
+   printCustMemberArrayAttr(p, getOperation(), op.getMembers());
+   p << " ";
    p << "([";
    bool first = true;
    for (size_t i = 0; i < op.getColumns().size(); i++) {
@@ -1078,35 +1097,27 @@ void subop::GenerateOp::print(OpAsmPrinter& p) {
    p.printOptionalAttrDict(getOperation()->getAttrs(), {"generated_columns"});
 }
 
-std::vector<std::string> subop::ScanOp::getReadMembers() {
-   std::vector<std::string> res;
-   for (auto x : getMapping()) {
-      res.push_back(x.getName().str());
-   }
-   return res;
+std::shared_ptr<subop::Members> subop::ScanOp::getReadMembers() {
+   return getMapping().getMapping()->toMembers();
 }
-std::vector<std::string> subop::MaterializeOp::getWrittenMembers() {
-   std::vector<std::string> res;
-   for (auto x : getMapping()) {
-      res.push_back(x.getName().str());
-   }
-   return res;
+std::shared_ptr<subop::Members> subop::MaterializeOp::getWrittenMembers() {
+   return getMapping().getMapping()->toMembers();
 }
-std::vector<std::string> subop::LockOp::getReadMembers() {
-   std::vector<std::string> res;
+std::shared_ptr<subop::Members> subop::LockOp::getReadMembers() {
+   llvm::SmallVector<std::shared_ptr<subop::Members>> res;
    this->getNested().walk([&](subop::SubOperator subop) {
       auto read = subop.getReadMembers();
-      res.insert(res.end(), read.begin(), read.end());
+      res.push_back(read);
    });
-   return res;
+   return std::make_shared<subop::Members>(res);
 }
-std::vector<std::string> subop::LockOp::getWrittenMembers() {
-   std::vector<std::string> res;
+std::shared_ptr<subop::Members> subop::LockOp::getWrittenMembers() {
+   llvm::SmallVector<std::shared_ptr<subop::Members>> res;
    this->getNested().walk([&](subop::SubOperator subop) {
       auto written = subop.getWrittenMembers();
-      res.insert(res.end(), written.begin(), written.end());
+      res.push_back(written);
    });
-   return res;
+   return std::make_shared<subop::Members>(res);
 }
 namespace {
 void cloneRegionInto(mlir::OpBuilder& builder, mlir::IRMapping& mapping, subop::ColumnMapping& columnMapping, mlir::Region& region, mlir::Region& newRegion) {
@@ -1142,27 +1153,27 @@ mlir::Operation* subop::LockOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMap
    mapResults(mapping, this->getOperation(), newOp.getOperation());
    return newOp;
 }
-std::vector<std::string> subop::NestedMapOp::getReadMembers() {
-   std::vector<std::string> res;
-   this->getRegion().walk([&](subop::SubOperator subop) {
+std::shared_ptr<subop::Members> subop::NestedMapOp::getReadMembers() {
+   llvm::SmallVector<std::shared_ptr<subop::Members>> res;
+   getRegion().walk([&](subop::SubOperator subop) {
       auto read = subop.getReadMembers();
-      res.insert(res.end(), read.begin(), read.end());
+      res.push_back(read);
    });
-   return res;
+   return std::make_shared<subop::Members>(res);
 }
-std::vector<std::string> subop::NestedMapOp::getWrittenMembers() {
-   std::unordered_set<std::string> res;
+std::shared_ptr<subop::Members> subop::NestedMapOp::getWrittenMembers() {
+   llvm::DenseSet<Member> res;
    this->getRegion().walk([&](subop::SubOperator subop) {
       auto written = subop.getWrittenMembers();
-      res.insert(written.begin(), written.end());
+      res.insert(written->getMembers().begin(), written->getMembers().end());
    });
    this->getRegion().walk([&](subop::StateCreator creator) {
       auto created = creator.getCreatedMembers();
-      for (auto m : created) {
+      for (auto m : created->getMembers()) {
          res.erase(m);
       }
    });
-   return std::vector<std::string>(res.begin(), res.end());
+   return std::make_shared<Members>(llvm::SmallVector<Member>(res.begin(), res.end()));
 }
 mlir::Operation* subop::NestedMapOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, subop::ColumnMapping& columnMapping) {
    auto newMap = builder.create<NestedMapOp>(this->getLoc(), mapping.lookupOrDefault(getStream()), columnMapping.remap(getParameters()));
@@ -1170,134 +1181,94 @@ mlir::Operation* subop::NestedMapOp::cloneSubOp(mlir::OpBuilder& builder, mlir::
    mapResults(mapping, this->getOperation(), newMap.getOperation());
    return newMap;
 }
-std::vector<std::string> subop::LoopOp::getReadMembers() {
-   std::vector<std::string> res;
+std::shared_ptr<subop::Members> subop::LoopOp::getReadMembers() {
+   llvm::SmallVector<std::shared_ptr<subop::Members>> res;
    for (auto arg : getArgs()) {
       if (auto stateType = mlir::dyn_cast_or_null<subop::State>(arg.getType())) {
-         for (auto x : stateType.getMembers().getNames()) {
-            res.push_back(mlir::cast<mlir::StringAttr>(x).str());
-         }
+         res.push_back(stateType.getMembers().getMembersPtr());
       }
    }
    this->getRegion().walk([&](subop::SubOperator subop) {
       auto read = subop.getReadMembers();
-      res.insert(res.end(), read.begin(), read.end());
+      res.push_back(read);
    });
-   return res;
+   return std::make_shared<subop::Members>(res);
 }
-std::vector<std::string> subop::LoopOp::getWrittenMembers() {
-   std::vector<std::string> res;
+std::shared_ptr<subop::Members> subop::LoopOp::getWrittenMembers() {
+   llvm::SmallVector<std::shared_ptr<subop::Members>> res;
    this->getRegion().walk([&](subop::SubOperator subop) {
       auto written = subop.getWrittenMembers();
-      res.insert(res.end(), written.begin(), written.end());
+      res.push_back(written);
    });
    for (auto resT : getResultTypes()) {
       if (auto stateType = mlir::dyn_cast_or_null<subop::State>(resT)) {
-         for (auto x : stateType.getMembers().getNames()) {
-            res.push_back(mlir::cast<mlir::StringAttr>(x).str());
-         }
+         res.push_back(stateType.getMembers().getMembersPtr());
       }
    }
-   return res;
+   return std::make_shared<subop::Members>(res);
 }
-std::vector<std::string> subop::CreateArrayOp::getReadMembers() {
-   std::vector<std::string> res;
-   for (auto x : getNumElements().getType().getMembers().getNames()) {
-      res.push_back(mlir::cast<mlir::StringAttr>(x).str());
-   }
-   return res;
+std::shared_ptr<subop::Members> subop::CreateArrayOp::getReadMembers() {
+   return getNumElements().getType().getMembers().getMembersPtr();
 }
-std::vector<std::string> subop::CreateArrayOp::getWrittenMembers() {
-   std::vector<std::string> res;
-   for (auto x : getRes().getType().getMembers().getNames()) {
-      res.push_back(mlir::cast<mlir::StringAttr>(x).str());
-   }
-   return res;
+std::shared_ptr<subop::Members> subop::CreateArrayOp::getWrittenMembers() {
+   return getRes().getType().getMembers().getMembersPtr();
 }
-std::vector<std::string> subop::CreateSortedViewOp::getWrittenMembers() {
-   std::vector<std::string> res;
-   for (auto x : mlir::cast<subop::BufferType>(getToSort().getType()).getMembers().getNames()) {
-      res.push_back(mlir::cast<mlir::StringAttr>(x).str());
-   }
-   return res;
+std::shared_ptr<subop::Members> subop::CreateSortedViewOp::getWrittenMembers() {
+   return mlir::cast<subop::BufferType>(getToSort().getType()).getMembers().getMembersPtr();
 }
-std::vector<std::string> subop::CreateHashIndexedView::getWrittenMembers() {
-   return {getLinkMember().str(), getHashMember().str()}; //todo: hack
+std::shared_ptr<subop::Members> subop::CreateHashIndexedView::getWrittenMembers() {
+   return std::make_shared<subop::Members>(llvm::SmallVector<Member>{getLinkMember().getMember(), getHashMember().getMember()}); //todo: hack
 }
-std::vector<std::string> subop::CreateHashIndexedView::getReadMembers() {
-   return {getHashMember().str()};
+std::shared_ptr<subop::Members> subop::CreateHashIndexedView::getReadMembers() {
+   return std::make_shared<subop::Members>(llvm::SmallVector<Member>{getHashMember().getMember()});
 }
-std::vector<std::string> subop::MergeOp::getReadMembers() {
-   auto names = getThreadLocal().getType().getWrapped().getMembers().getNames();
-   std::vector<std::string> res;
-   for (auto name : names) {
-      res.push_back(mlir::cast<mlir::StringAttr>(name).str());
-   }
-   return res;
+std::shared_ptr<subop::Members> subop::MergeOp::getReadMembers() {
+   return getThreadLocal().getType().getWrapped().getMembers().getMembersPtr();
 }
-std::vector<std::string> subop::MergeOp::getWrittenMembers() {
-   auto names = getThreadLocal().getType().getWrapped().getMembers().getNames();
-   std::vector<std::string> res;
-   for (auto name : names) {
-      res.push_back(mlir::cast<mlir::StringAttr>(name).str());
-   }
-   return res;
+std::shared_ptr<subop::Members> subop::MergeOp::getWrittenMembers() {
+   return getThreadLocal().getType().getWrapped().getMembers().getMembersPtr();
 }
-std::vector<std::string> subop::CreateSegmentTreeView::getWrittenMembers() {
-   std::vector<std::string> res;
-   auto names = mlir::cast<subop::SegmentTreeViewType>(getType()).getValueMembers().getNames();
-   for (auto name : names) {
-      res.push_back(mlir::cast<mlir::StringAttr>(name).str());
-   }
-   return res;
+std::shared_ptr<subop::Members> subop::CreateSegmentTreeView::getWrittenMembers() {
+   return mlir::cast<subop::SegmentTreeViewType>(getType()).getValueMembers().getMembersPtr();
 }
-std::vector<std::string> subop::CreateSegmentTreeView::getReadMembers() {
-   std::vector<std::string> res;
+std::shared_ptr<subop::Members> subop::CreateSegmentTreeView::getReadMembers() {
+   llvm::SmallVector<Member> res;
    for (auto name : getRelevantMembers()) {
-      res.push_back(mlir::cast<mlir::StringAttr>(name).str());
+      res.push_back(mlir::cast<MemberAttr>(name).getMember());
    }
-   return res;
+   return std::make_shared<subop::Members>(res);
 }
-std::vector<std::string> subop::CreateContinuousView::getWrittenMembers() {
-   std::vector<std::string> res;
-   auto names = mlir::cast<subop::State>(getSource().getType()).getMembers().getNames();
-   for (auto name : names) {
-      res.push_back(mlir::cast<mlir::StringAttr>(name).str());
-   }
-   return res;
+std::shared_ptr<subop::Members> subop::CreateContinuousView::getWrittenMembers() {
+   return mlir::cast<State>(getSource().getType()).getMembers().getMembersPtr();
 }
-std::vector<std::string> subop::CreateContinuousView::getReadMembers() {
-   std::vector<std::string> res;
-   auto names = mlir::cast<subop::State>(getSource().getType()).getMembers().getNames();
-   for (auto name : names) {
-      res.push_back(mlir::cast<mlir::StringAttr>(name).str());
-   }
-   return res;
+std::shared_ptr<subop::Members> subop::CreateContinuousView::getReadMembers() {
+   return mlir::cast<subop::State>(getSource().getType()).getMembers().getMembersPtr();
 }
 
-std::vector<std::string> subop::SimpleStateGetScalar::getReadMembers() {
-   return {getMember().str()};
+std::shared_ptr<subop::Members> subop::SimpleStateGetScalar::getReadMembers() {
+   return std::make_shared<Members>(llvm::SmallVector<Member>{getMember().getMember()});
 }
-std::vector<std::string> subop::CreateSortedViewOp::getReadMembers() {
-   std::vector<std::string> res;
+std::shared_ptr<subop::Members> subop::CreateSortedViewOp::getReadMembers() {
+   llvm::SmallVector<Member> res;
    for (auto x : getSortBy()) {
-      res.push_back(mlir::cast<mlir::StringAttr>(x).str());
+      res.push_back(mlir::cast<MemberAttr>(x).getMember());
    }
-   return res;
+   return std::make_shared<subop::Members>(res);
 }
-std::vector<std::string> subop::ReduceOp::getWrittenMembers() {
-   std::vector<std::string> res;
+std::shared_ptr<subop::Members> subop::ReduceOp::getWrittenMembers() {
+   llvm::SmallVector<Member> res;
    for (auto x : getMembers()) {
-      res.push_back(mlir::cast<mlir::StringAttr>(x).str());
+      res.push_back(mlir::cast<MemberAttr>(x).getMember());
    }
-   return res;
+   return std::make_shared<subop::Members>(res);
 }
-std::vector<std::string> subop::ReduceOp::getReadMembers() {
-   std::vector<std::string> res;
+std::shared_ptr<subop::Members> subop::ReduceOp::getReadMembers() {
+   llvm::SmallVector<Member> res;
    for (auto x : getMembers()) {
-      res.push_back(mlir::cast<mlir::StringAttr>(x).str());
+      res.push_back(mlir::cast<MemberAttr>(x).getMember());
    }
-   return res;
+   return std::make_shared<subop::Members>(res);
+   ;
 }
 
 mlir::Operation* subop::ReduceOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, subop::ColumnMapping& columnMapping) {
@@ -1307,24 +1278,16 @@ mlir::Operation* subop::ReduceOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRM
    mapResults(mapping, this->getOperation(), newOp.getOperation());
    return newOp;
 }
-std::vector<std::string> subop::ScatterOp::getWrittenMembers() {
-   std::vector<std::string> res;
-   for (auto x : getMapping()) {
-      res.push_back(x.getName().str());
-   }
-   return res;
+std::shared_ptr<subop::Members> subop::ScatterOp::getWrittenMembers() {
+   return getMapping().getMapping()->toMembers();
 }
 mlir::Operation* subop::ScatterOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, subop::ColumnMapping& columnMapping) {
    auto newOp = builder.create<ScatterOp>(this->getLoc(), mapping.lookupOrDefault(getStream()), columnMapping.remap(getRef()), columnMapping.remap(getMapping()));
    mapResults(mapping, this->getOperation(), newOp.getOperation());
    return newOp;
 }
-std::vector<std::string> subop::LookupOrInsertOp::getWrittenMembers() {
-   std::vector<std::string> res;
-   for (auto x : mlir::cast<subop::State>(getState().getType()).getMembers().getNames()) {
-      res.push_back(mlir::cast<mlir::StringAttr>(x).str());
-   }
-   return res;
+std::shared_ptr<subop::Members> subop::LookupOrInsertOp::getWrittenMembers() {
+   return mlir::cast<subop::State>(getState().getType()).getMembers().getMembersPtr();
 }
 mlir::Operation* subop::LookupOrInsertOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, subop::ColumnMapping& columnMapping) {
    auto newOp = builder.create<LookupOrInsertOp>(this->getLoc(), mapping.lookupOrDefault(getStream()), mapping.lookupOrDefault(getState()), columnMapping.remap(getKeys()), columnMapping.clone(getRef()));
@@ -1333,12 +1296,8 @@ mlir::Operation* subop::LookupOrInsertOp::cloneSubOp(mlir::OpBuilder& builder, m
    mapResults(mapping, this->getOperation(), newOp.getOperation());
    return newOp;
 }
-std::vector<std::string> subop::InsertOp::getWrittenMembers() {
-   std::vector<std::string> res;
-   for (auto x : mlir::cast<subop::State>(getState().getType()).getMembers().getNames()) {
-      res.push_back(mlir::cast<mlir::StringAttr>(x).str());
-   }
-   return res;
+std::shared_ptr<subop::Members> subop::InsertOp::getWrittenMembers() {
+   return mlir::cast<subop::State>(getState().getType()).getMembers().getMembersPtr();
 }
 
 mlir::Operation* subop::InsertOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, subop::ColumnMapping& columnMapping) {
@@ -1347,14 +1306,11 @@ mlir::Operation* subop::InsertOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRM
    mapResults(mapping, this->getOperation(), newOp.getOperation());
    return newOp;
 }
-std::vector<std::string> subop::LookupOp::getReadMembers() {
-   std::vector<std::string> res;
+std::shared_ptr<subop::Members> subop::LookupOp::getReadMembers() {
    if (auto lookableState = mlir::dyn_cast_or_null<subop::LookupAbleState>(getState().getType())) {
-      for (auto x : lookableState.getKeyMembers().getNames()) {
-         res.push_back(mlir::cast<mlir::StringAttr>(x).str());
-      }
+      return lookableState.getKeyMembers().getMembersPtr();
    }
-   return res;
+   return std::make_shared<subop::Members>();
 }
 mlir::Operation* subop::LookupOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, subop::ColumnMapping& columnMapping) {
    auto newOp = builder.create<LookupOp>(this->getLoc(), mapping.lookupOrDefault(getStream()), mapping.lookupOrDefault(getState()), columnMapping.remap(getKeys()), columnMapping.clone(getRef()));
@@ -1363,12 +1319,8 @@ mlir::Operation* subop::LookupOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRM
    mapResults(mapping, this->getOperation(), newOp.getOperation());
    return newOp;
 }
-std::vector<std::string> subop::GatherOp::getReadMembers() {
-   std::vector<std::string> res;
-   for (auto x : getMapping()) {
-      res.push_back(x.getName().str());
-   }
-   return res;
+std::shared_ptr<subop::Members> subop::GatherOp::getReadMembers() {
+   return getMapping().getMapping()->toMembers();
 }
 
 mlir::Operation* subop::GatherOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, subop::ColumnMapping& columnMapping) {
@@ -1592,39 +1544,27 @@ void subop::SetTrackedCountOp::updateStateType(subop::SubOpStateUsageTransformer
    assert(false && "should not happen");
 }
 
-std::vector<std::string> subop::SetTrackedCountOp::getReadMembers() {
-   return {getReadState().str()};
+std::shared_ptr<subop::Members> subop::SetTrackedCountOp::getReadMembers() {
+   return std::make_shared<Members>(llvm::SmallVector<Member>{getReadState().getMember()});
 }
-std::vector<std::string> subop::GenericCreateOp::getCreatedMembers() {
+std::shared_ptr<subop::Members> subop::GenericCreateOp::getCreatedMembers() {
    if (auto stateType = mlir::cast<subop::State>(getRes().getType())) {
-      std::vector<std::string> res;
-      for (auto m : stateType.getMembers().getNames()) {
-         res.push_back(mlir::cast<mlir::StringAttr>(m).str());
-      }
-      return res;
+      return stateType.getMembers().getMembersPtr();
    }
-   return {};
+   return std::make_shared<subop::Members>();
 }
 
-std::vector<std::string> subop::CreateFrom::getReadMembers() {
+std::shared_ptr<subop::Members> subop::CreateFrom::getReadMembers() {
    if (auto stateType = mlir::cast<subop::State>(getState().getType())) {
-      std::vector<std::string> res;
-      for (auto m : stateType.getMembers().getNames()) {
-         res.push_back(mlir::cast<mlir::StringAttr>(m).str());
-      }
-      return res;
+      return stateType.getMembers().getMembersPtr();
    }
-   return {};
+   return std::make_shared<subop::Members>();
 }
-std::vector<std::string> subop::CreateFrom::getWrittenMembers() {
+std::shared_ptr<subop::Members> subop::CreateFrom::getWrittenMembers() {
    if (auto stateType = mlir::cast<subop::State>(getState().getType())) {
-      std::vector<std::string> res;
-      for (auto m : stateType.getMembers().getNames()) {
-         res.push_back(mlir::cast<mlir::StringAttr>(m).str());
-      }
-      return res;
+      return stateType.getMembers().getMembersPtr();
    }
-   return {};
+   return std::make_shared<subop::Members>();
 }
 
 mlir::Operation* subop::RenamingOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, subop::ColumnMapping& columnMapping) {
