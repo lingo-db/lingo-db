@@ -14,13 +14,12 @@
 namespace {
 using namespace lingodb::compiler::dialect;
 
-static std::vector<subop::SubOperator> findWritingOps(mlir::Block& block, std::vector<std::string>& members) {
-   std::unordered_set<std::string> memberSet(members.begin(), members.end());
+static std::vector<subop::SubOperator> findWritingOps(mlir::Block& block, std::shared_ptr<subop::Members>& members) {
    std::vector<subop::SubOperator> res;
-   block.walk([&memberSet, &res](subop::SubOperator subop) {
+   block.walk([&members, &res](subop::SubOperator subop) {
       auto writtenBySubOp = subop.getWrittenMembers();
-      for (auto writtenMember : writtenBySubOp) {
-         if (memberSet.contains(writtenMember)) {
+      for (auto writtenMember : writtenBySubOp->getMembers()) {
+         if (members->contains(writtenMember)) {
             res.push_back(subop);
             break;
          }
@@ -70,16 +69,16 @@ class AvoidUnnecessaryMaterialization : public mlir::RewritePattern {
       if (auto materializeOp = mlir::dyn_cast_or_null<subop::MaterializeOp>(writingOps[0].getOperation())) {
          if (materializeOp->getBlock() == scanOp->getBlock() && materializeOp->isBeforeInBlock(scanOp)) {
             if (auto scanOp2 = mlir::dyn_cast_or_null<subop::ScanOp>(materializeOp.getStream().getDefiningOp())) {
-               std::vector<mlir::NamedAttribute> newMapping;
-               for (auto curr : scanOp.getMapping()) {
-                  auto currentMember = curr.getName();
-                  auto otherColumnDef = colManager.createDef(&mlir::cast<tuples::ColumnRefAttr>(materializeOp.getMapping().get(currentMember)).getColumn());
-                  auto otherMember = lookupByValue(scanOp2.getMapping(), otherColumnDef);
-                  newMapping.push_back(rewriter.getNamedAttr(otherMember.value(), curr.getValue()));
+               llvm::SmallVector<subop::ColumnDefMemberMapping::pairType> newMapping;
+               for (auto curr : scanOp.getMapping().getMapping()->getMapping()) {
+                  auto currentMember = curr.first;
+                  auto otherColumnDef = colManager.createDef(&materializeOp.getMapping().getMapping()->getRefAttr(currentMember).getColumn());
+                  auto otherMember = scanOp2.getMapping().getMapping()->getMember(otherColumnDef);
+                  newMapping.push_back({otherMember, otherColumnDef});
                }
                rewriter.modifyOpInPlace(op, [&] {
                   scanOp.setOperand(scanOp2.getState());
-                  scanOp.setMappingAttr(rewriter.getDictionaryAttr(newMapping));
+                  scanOp.setMappingAttr(subop::ColumnDefMemberMappingAttr::get(rewriter.getContext(), std::make_shared<subop::ColumnDefMemberMapping>(newMapping)));
                });
                return mlir::success();
             }
@@ -178,7 +177,8 @@ class AvoidArrayMaterialization : public mlir::RewritePattern {
                            scatterOp = localScatterOp;
                            offsetByOp = offsetBy;
                            replaceWith = colManager.createRef(&otherScanRefsOp.getRef().getColumn());
-                           if (scatterOp.getWrittenMembers().size() != mlir::cast<subop::State>(scanRefsOp.getState().getType()).getMembers().getNames().size()) {
+                           auto writtenMembers = localScatterOp.getWrittenMembers();
+                           if (writtenMembers->getMembers().size() != mlir::cast<subop::State>(scanRefsOp.getState().getType()).getMembers().getMembers().size()) {
                               return mlir::failure();
                            }
                         } else {
@@ -203,14 +203,11 @@ class AvoidArrayMaterialization : public mlir::RewritePattern {
          }
       }
       if (scatterOp) {
-         std::unordered_map<std::string, tuples::ColumnRefAttr> scatterMapping;
-         for (auto m : scatterOp.getMapping()) {
-            scatterMapping.insert({m.getName().str(), mlir::cast<tuples::ColumnRefAttr>(m.getValue())});
-         }
+         auto scatterMapping= scatterOp.getMapping().getMapping();
          std::vector<mlir::Attribute> renamed;
          for (auto gatherOp : gatherOps) {
-            for (auto m : gatherOp.getMapping()) {
-               renamed.push_back(colManager.createDef(&mlir::cast<tuples::ColumnDefAttr>(m.getValue()).getColumn(), rewriter.getArrayAttr(scatterMapping.at(m.getName().str()))));
+            for (auto m : gatherOp.getMapping().getMapping()->getMapping()) {
+               renamed.push_back(colManager.createDef(&m.second.getColumn(), rewriter.getArrayAttr(scatterMapping->getRefAttr(m.first))));
             }
             rewriter.replaceOp(gatherOp, gatherOp.getStream());
          }
@@ -261,6 +258,7 @@ class ReuseHashtable : public mlir::RewritePattern {
       auto state = insertOp.getState();
       auto multimapType = mlir::dyn_cast_or_null<subop::MultiMapType>(state.getType());
       if (!multimapType) return mlir::failure();
+      auto keyMembers = multimapType.getKeyMembers().getMembers();
       std::vector<subop::LookupOp> lookupOps;
       for (auto* user : state.getUsers()) {
          if (user == op) {
@@ -275,24 +273,25 @@ class ReuseHashtable : public mlir::RewritePattern {
       if (auto scanOp = mlir::dyn_cast_or_null<subop::ScanOp>(insertOp.getStream().getDefiningOp())) {
          if (auto htType = mlir::dyn_cast_or_null<subop::MapType>(scanOp.getState().getType())) {
             std::vector<tuples::Column*> hashedColumns;
-            for (auto m : multimapType.getKeyMembers().getNames()) {
-               hashedColumns.push_back(&mlir::cast<tuples::ColumnRefAttr>(insertOp.getMapping().get(mlir::cast<mlir::StringAttr>(m).strref())).getColumn());
+            for (auto m : keyMembers) {
+               hashedColumns.push_back(&insertOp.getMapping().getMapping()->getRefAttr(m).getColumn());
             }
-            std::unordered_map<std::string, std::string> memberMapping;
-            for (auto m : insertOp.getMapping()) {
-               auto colDef = colManager.createDef(&mlir::cast<tuples::ColumnRefAttr>(m.getValue()).getColumn());
-               auto hmMember = lookupByValue(scanOp.getMapping(), colDef);
-               auto bufferMember = m.getName().str();
+            std::unordered_map<subop::Member, subop::Member> memberMapping;
+            for (auto m : insertOp.getMapping().getMapping()->getMapping()) {
+               auto colDef = colManager.createDef(&m.second.getColumn());
+               auto hmMember = scanOp.getMapping().getMapping()->getMember(colDef);
+               auto bufferMember = m.first;
                if (hmMember) {
-                  memberMapping[bufferMember] = hmMember.value();
+                  memberMapping[bufferMember] = hmMember;
                }
             }
             std::unordered_set<tuples::Column*> hashMapKey;
-            std::unordered_map<std::string, tuples::Column*> keyMemberToColumn;
-            for (auto keyMember : htType.getKeyMembers().getNames()) {
-               auto colDef = mlir::cast<tuples::ColumnDefAttr>(scanOp.getMapping().get(mlir::cast<mlir::StringAttr>(keyMember).str()));
+            std::unordered_map<subop::Member, tuples::Column*> keyMemberToColumn;
+            auto htKeyMembers = htType.getKeyMembers().getMembers();
+            for (auto keyMember : htKeyMembers) {
+               auto colDef =scanOp.getMapping().getMapping()->getDefAttr(keyMember);
                hashMapKey.insert(&colDef.getColumn());
-               keyMemberToColumn[mlir::cast<mlir::StringAttr>(keyMember).str()] = &colDef.getColumn();
+               keyMemberToColumn[keyMember] = &colDef.getColumn();
             }
             if (hashMapKey.size() != hashedColumns.size()) {
                return mlir::failure();
@@ -326,8 +325,8 @@ class ReuseHashtable : public mlir::RewritePattern {
                   columnMapping.insert({std::get<1>(z), std::get<0>(z)});
                }
                std::vector<mlir::Attribute> lookupColumns;
-               for (auto keyMember : htType.getKeyMembers().getNames()) {
-                  auto* col = columnMapping.at(keyMemberToColumn.at(mlir::cast<mlir::StringAttr>(keyMember).str()));
+               for (auto keyMember : htKeyMembers) {
+                  auto* col = columnMapping.at(keyMemberToColumn.at(keyMember));
                   lookupColumns.push_back(colManager.createRef(col));
                }
                rewriter.setInsertionPointAfter(lookupOp);

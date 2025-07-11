@@ -179,9 +179,9 @@ bool mlirAttributeIsARelalgTableMetaDataAttr(MlirAttribute attribute) {
 // SubOp Dialect
 //----------------------------------------------------------------------------------------------------------------------
 
-MlirAttribute mlirSubOpStateMembersAttributeGet(MlirAttribute names, MlirAttribute types) {
-   return wrap(subop::StateMembersAttr::get(unwrap(names).getContext(), mlir::cast<mlir::ArrayAttr>(unwrap(names)), mlir::cast<mlir::ArrayAttr>(unwrap(types))));
-}
+//MlirAttribute mlirSubOpStateMembersAttributeGet(MlirAttribute names, MlirAttribute types) {
+//   return wrap(subop::StateMembersAttr::get(unwrap(names).getContext(), mlir::cast<mlir::ArrayAttr>(unwrap(names)), mlir::cast<mlir::ArrayAttr>(unwrap(types))));
+//}
 bool mlirAttributeIsASubOpStateMembersAttribute(MlirAttribute attribute) {
    return llvm::isa<subop::StateMembersAttr>(unwrap(attribute));
 }

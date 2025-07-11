@@ -112,8 +112,8 @@ class SubOpLoweringStep : public LoweringStep {
       while (std::getline(configList, optPass, ',')) {
          enabledPasses.insert(optPass);
       }
-      if (enabledPasses.contains("GlobalOpt"))
-         optSubOpPm.addPass(subop::createGlobalOptPass());
+      //if (enabledPasses.contains("GlobalOpt"))
+      //   optSubOpPm.addPass(subop::createGlobalOptPass());
       optSubOpPm.addPass(subop::createFoldColumnsPass());
       if (enabledPasses.contains("ReuseLocal"))
          optSubOpPm.addPass(subop::createReuseLocalPass());

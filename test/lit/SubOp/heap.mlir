@@ -10,7 +10,7 @@
 module {
     func.func @main(){
     	%subop_result = subop.execution_group (){
-			%heap = subop.create_heap ["ih"] -> !subop.heap<4,[ih : index]> ([%left],[%right]){
+			%heap = subop.create_heap !subop.heap<4,[ih : index]> ["ih"] ([%left],[%right]){
 				%lt = arith.cmpi ult, %left, %right : index
 				tuples.return %lt : i1
 			}

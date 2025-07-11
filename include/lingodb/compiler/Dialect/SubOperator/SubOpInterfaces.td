@@ -7,18 +7,18 @@ def SubOperator : OpInterface<"SubOperator"> {
   let methods = [
     InterfaceMethod<
       /*description=*/"",
-      /*retTy=*/"std::vector<std::string>",
+      /*retTy=*/"std::shared_ptr<::lingodb::compiler::dialect::subop::Members>",
       /*methodName=*/"getWrittenMembers",(ins ),"",
        /*defaultImplementation=*/[{
-           return {};
+             return std::make_shared<::lingodb::compiler::dialect::subop::Members>();
        }]
     >,
         InterfaceMethod<
           /*description=*/"",
-          /*retTy=*/"std::vector<std::string>",
+          /*retTy=*/"std::shared_ptr<::lingodb::compiler::dialect::subop::Members>",
           /*methodName=*/"getReadMembers",(ins ),"",
            /*defaultImplementation=*/[{
-               return {};
+             return std::make_shared<::lingodb::compiler::dialect::subop::Members>();
            }]
         >,
 		InterfaceMethod<
@@ -56,10 +56,10 @@ def StateCreator : OpInterface<"StateCreator"> {
     let methods = [
       InterfaceMethod<
         /*description=*/"",
-        /*retTy=*/"std::vector<std::string>",
+        /*retTy=*/"std::shared_ptr<::lingodb::compiler::dialect::subop::Members>",
         /*methodName=*/"getCreatedMembers",(ins ),"",
          /*defaultImplementation=*/[{
-             return {};
+             return std::make_shared<::lingodb::compiler::dialect::subop::Members>();
          }]
       >
   ];

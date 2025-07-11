@@ -74,12 +74,14 @@ subop::SubOpDependencyAnalysis::SubOpDependencyAnalysis(mlir::Operation* op, mli
                }
             }
          }
-         for (auto readMember : subop.getReadMembers()) {
+         auto opReadMembers =subop.getReadMembers();
+                auto opWrittenMembers = subop.getWrittenMembers();
+         for (auto readMember : opReadMembers->getMembers()) {
             for (auto* conflict : writtenMembers[readMember]) {
                addDependency(subopRoot, conflict, roots);
             }
          }
-         for (auto writtenMember : subop.getWrittenMembers()) {
+         for (auto writtenMember : opWrittenMembers->getMembers()) {
             for (auto* conflict : writtenMembers[writtenMember]) {
                addDependency(subopRoot, conflict, roots);
             }
@@ -87,10 +89,10 @@ subop::SubOpDependencyAnalysis::SubOpDependencyAnalysis(mlir::Operation* op, mli
                addDependency(subopRoot, conflict, roots);
             }
          }
-         for (auto readMember : subop.getReadMembers()) {
+         for (auto readMember : opReadMembers->getMembers()) {
             readMembers[readMember].insert(subopRoot);
          }
-         for (auto writtenMember : subop.getWrittenMembers()) {
+         for (auto writtenMember : opWrittenMembers->getMembers()) {
             writtenMembers[writtenMember].insert(subopRoot);
          }
 
