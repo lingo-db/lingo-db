@@ -284,14 +284,13 @@
 %type<std::shared_ptr<lingodb::ast::LimitModifier>> select_limit limit_clause
 
 %type<std::optional<lingodb::ast::LogicalType>> opt_interval
-%type<lingodb::ast::LogicalType> Typename
 %type<bool> opt_asymmetric set_quantifier
 
 
 
 %type<std::shared_ptr<lingodb::ast::CreateNode>> CreateStmt
 %type<bool> OptTemp opt_varying
-%type<lingodb::ast::LogicalTypeWithMods> Numeric SimpleType Type CharacterWithoutLength character Bit Character CharacterWithLength ConstDatetime
+%type<lingodb::ast::LogicalTypeWithMods> Numeric SimpleType Type CharacterWithoutLength character Bit Character CharacterWithLength ConstDatetime Typename
 %type<std::shared_ptr<lingodb::ast::TableElement>> TableElement columnElement TableConstraint
 %type<std::vector<std::shared_ptr<lingodb::ast::TableElement>>> TableElementList OptTableElementList
 %type<std::shared_ptr<lingodb::ast::Constraint>> ColConstraint ColConstraintElem ConstraintElem
@@ -2308,10 +2307,7 @@ opt_interval:
     ;
 //TODO missing rules
 Typename: 
-    DATE_P
-    {
-        $$ = lingodb::ast::LogicalType::DATE;
-    }
+    SimpleType {$$=$1;}
     ;
 
 /*
