@@ -3,7 +3,8 @@ namespace lingodb::ast {
 /*
  * BoundColumnRefExpression
 */
-BoundColumnRefExpression::BoundColumnRefExpression(std::string scope, catalog::NullableType resultType, std::shared_ptr<NamedResult> namedResult, std::string alias) : BoundExpression(TYPE, ExpressionType::BOUND_COLUMN_REF, resultType, alias), scope(scope), namedResult(std::move(namedResult)) {
+BoundColumnRefExpression::BoundColumnRefExpression(std::string scope, catalog::NullableType resultType, std::shared_ptr<NamedResult> namedResult, std::string alias) : BoundExpression(TYPE, ExpressionType::BOUND_COLUMN_REF, resultType, alias), scope(scope) {
+   this->namedResult = namedResult;
 }
 std::string BoundColumnRefExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    return "";

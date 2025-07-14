@@ -421,7 +421,8 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
    switch (expression->exprClass) {
       case ast::ExpressionClass::BOUND_COLUMN_REF: {
          auto columnRef = std::static_pointer_cast<ast::BoundColumnRefExpression>(expression);
-         auto nameResult = columnRef->namedResult;
+         assert(columnRef->namedResult.has_value());
+         auto nameResult = columnRef->namedResult.value();
 
          mlir::Type type = nameResult->resultType.toMlirType(builder.getContext());
 
@@ -1073,7 +1074,8 @@ mlir::Value SQLMlirTranslator::translateAggregation(mlir::OpBuilder& builder, st
    for (auto& groupBy : aggregation->groupByNode->groupExpressions) {
       if (groupBy->type == ast::ExpressionType::BOUND_COLUMN_REF) {
          auto columnRef = std::static_pointer_cast<ast::BoundColumnRefExpression>(groupBy);
-         auto namedResult = columnRef->namedResult;
+         assert(columnRef->namedResult.has_value());
+         auto namedResult = columnRef->namedResult.value();
 
          auto attrDef = namedResult->createRef(builder, attrManager);
          //TODO
@@ -1147,7 +1149,8 @@ mlir::Value SQLMlirTranslator::translateAggregation(mlir::OpBuilder& builder, st
             switch (aggrFunction->arguments[0]->type) {
                case ast::ExpressionType::BOUND_COLUMN_REF: {
                   auto columnRef = std::static_pointer_cast<ast::BoundColumnRefExpression>(aggrFunction->arguments[0]);
-                  auto namedResult = columnRef->namedResult;
+                  assert(columnRef->namedResult.has_value());
+                  auto namedResult = columnRef->namedResult.value();
                   refAttr = namedResult->createRef(builder, attrManager);
                   break;
                }
