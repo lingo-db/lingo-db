@@ -23,12 +23,12 @@ class BoundResultModifier : public TableProducer {
 
 class BoundOrderByElement {
    public:
-   BoundOrderByElement(OrderType type, OrderByNullType nullOrder, std::shared_ptr<BoundExpression> expression) : type(type), nullOrder(nullOrder), expression(expression) {};
+   BoundOrderByElement(OrderType type, OrderByNullType nullOrder, std::shared_ptr<NamedResult> namedResult) : type(type), nullOrder(nullOrder), namedResult(namedResult) {};
 
    /// Sort order
    OrderType type;
    /// Expression to order by
-   std::shared_ptr<BoundExpression> expression;
+   std::shared_ptr<NamedResult> namedResult;
    /// The NULL sort order, NULLS_FIRST or NULLS_LAST
    OrderByNullType nullOrder;
 
