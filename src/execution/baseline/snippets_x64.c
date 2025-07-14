@@ -13,7 +13,7 @@ uint32_t arith_land_i32(uint32_t a, uint32_t b) { return (a & b); }
 uint32_t arith_lor_i32(uint32_t a, uint32_t b) { return (a | b); }
 uint32_t arith_lxor_i32(uint32_t a, uint32_t b) { return (a ^ b); }
 uint32_t arith_shl_i32(uint32_t a, uint32_t b) { return (a << b); }
-uint32_t arith_shr_i32(uint32_t a, uint32_t b) { return (a >> b); }
+uint32_t arith_shr_u32(uint32_t a, uint32_t b) { return (a >> b); }
 
 uint64_t arith_add_i64(uint64_t a, uint64_t b) { return (a + b); }
 uint64_t arith_sub_i64(uint64_t a, uint64_t b) { return (a - b); }
@@ -26,7 +26,7 @@ uint64_t arith_land_i64(uint64_t a, uint64_t b) { return (a & b); }
 uint64_t arith_lor_i64(uint64_t a, uint64_t b) { return (a | b); }
 uint64_t arith_lxor_i64(uint64_t a, uint64_t b) { return (a ^ b); }
 uint64_t arith_shl_i64(uint64_t a, uint64_t b) { return (a << b); }
-uint64_t arith_shr_i64(uint64_t a, uint64_t b) { return (a >> b); }
+uint64_t arith_shr_u64(uint64_t a, uint64_t b) { return (a >> b); }
 
 __uint128_t arith_add_i128(__uint128_t a, __uint128_t b) { return (a + b); }
 __uint128_t arith_sub_i128(__uint128_t a, __uint128_t b) { return (a - b); }
@@ -52,12 +52,14 @@ double arith_mul_f64(double a, double b) { return (a * b); }
 double arith_div_f64(double a, double b) { return (a / b); }
 // double arith_rem_f64(double a, double b) { return __builtin_fmod(a, b); }
 
-uint32_t util_load_i8(uint8_t* ptr) { return *ptr; }
-uint32_t util_load_i16(uint16_t* ptr) { return *ptr; }
+bool util_load_i1(bool* ptr) { return *ptr; }
+uint8_t util_load_i8(uint8_t* ptr) { return *ptr; }
+uint16_t util_load_i16(uint16_t* ptr) { return *ptr; }
 uint32_t util_load_i32(uint32_t* ptr) { return *ptr; }
 uint64_t util_load_i64(uint64_t* ptr) { return *ptr; }
 __uint128_t load_i128(__uint128_t* ptr) { return *ptr; }
 
+void util_store_i1(bool* ptr, bool value) { *ptr = value; }
 void util_store_i8(uint8_t* ptr, uint8_t value) { *ptr = value; }
 void util_store_i16(uint16_t* ptr, uint16_t value) { *ptr = value; }
 void util_store_i32(uint32_t* ptr, uint32_t value) { *ptr = value; }
@@ -88,4 +90,43 @@ UtilVarLenRes util_varlen_cmp(__uint128_t lhs, __uint128_t rhs) {
     bool lenGt12 = len > 12;
     bool needsDetailedComp = first64Equal && lenGt12;
     return (UtilVarLenRes){totalEqual, needsDetailedComp};
+}
+
+// --------------------------
+// float comparisons
+// --------------------------
+
+#define FOP_ORD(ty, ty2, name, op) uint32_t arith_cmp_##ty2##_##name(ty a, ty b) { return !__builtin_isunordered(a, b) && (a op b); };
+#define FOP_UNRD(ty, ty2, name, op) uint32_t arith_cmp_##ty2##_##name(ty a, ty b) { return __builtin_isunordered(a, b) || (a op b); };
+#define FOPS(ty, ty2) FOP_ORD(ty, ty2, oeq, ==) \
+FOP_ORD(ty, ty2, ogt, >) \
+FOP_ORD(ty, ty2, oge, >=) \
+FOP_ORD(ty, ty2, olt, <) \
+FOP_ORD(ty, ty2, ole, <=) \
+FOP_ORD(ty, ty2, one, !=) \
+uint32_t arith_cmp_##ty2##_ord(ty a, ty b) { return !__builtin_isunordered(a, b); } \
+FOP_UNRD(ty, ty2, ueq, ==) \
+FOP_UNRD(ty, ty2, ugt, >) \
+FOP_UNRD(ty, ty2, uge, >=) \
+FOP_UNRD(ty, ty2, ult, <) \
+FOP_UNRD(ty, ty2, ule, <=) \
+FOP_UNRD(ty, ty2, une, !=) \
+uint32_t arith_cmp_##ty2##_uno(ty a, ty b) { return __builtin_isunordered(a, b); }
+
+FOPS(float, f32)
+FOPS(double, f64)
+
+#undef FOP_ORD
+#undef FOP_UNORD
+#undef FOPS
+
+// --------------------------
+// special operations
+// --------------------------
+
+uint64_t util_hash_64(uint64_t val) {
+    uint64_t p1 = 11400714819323198549ull;
+    uint64_t m1 = p1 * val;
+    uint64_t reversed = __builtin_bswap64(m1);
+    return m1 ^ reversed;
 }
