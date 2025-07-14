@@ -628,15 +628,17 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
          std::vector<std::shared_ptr<ast::NamedResult>> targetColumns{};
          for (auto& target : targetSelection->targets) {
             auto parsedExpression = analyzeExpression(target, context, resolverScope);
+
             switch (parsedExpression->exprClass) {
                case ast::ExpressionClass::BOUND_COLUMN_REF: {
+                  assert(parsedExpression->namedResult.has_value());
                   //ADD column_ref to targetInfo for the current scope!
                   auto columnRef = std::static_pointer_cast<ast::BoundColumnRefExpression>(parsedExpression);
-                  targetColumns.emplace_back(columnRef->namedResult);
+                  targetColumns.emplace_back(columnRef->namedResult.value());
                   if (!columnRef->alias.empty()) {
-                     context->mapAttribute(resolverScope, columnRef->alias, columnRef->namedResult);
+                     context->mapAttribute(resolverScope, columnRef->alias, columnRef->namedResult.value());
                   }
-                  context->currentScope->targetInfo.add(columnRef->namedResult);
+                  context->currentScope->targetInfo.add(columnRef->namedResult.value());
                   break;
                }
                case ast::ExpressionClass::BOUND_STAR: {
@@ -1035,7 +1037,8 @@ std::shared_ptr<ast::BoundResultModifier> SQLQueryAnalyzer::analyzeResultModifie
                switch (boundExpression->type) {
                   case ast::ExpressionType::BOUND_COLUMN_REF: {
                      auto columnRef = std::static_pointer_cast<ast::BoundColumnRefExpression>(boundExpression);
-                     namedResult = columnRef->namedResult;
+                     assert(columnRef->namedResult.has_value());
+                     namedResult = columnRef->namedResult.value();
                      break;
                   }
                   default: error("Order by element not implemented", orderByElement->expression->loc);
