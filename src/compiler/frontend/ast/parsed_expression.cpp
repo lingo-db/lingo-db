@@ -400,7 +400,7 @@ std::string OperatorExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGe
    return dot;
 }
 
-CastExpression::CastExpression(LogicalType logicalType, std::shared_ptr<ParsedExpression> child) : ParsedExpression(ExpressionType::CAST, TYPE), logicalType(logicalType), child(std::move(child)) {
+CastExpression::CastExpression(LogicalTypeWithMods logicalTypeWithMods, std::shared_ptr<ParsedExpression> child) : ParsedExpression(ExpressionType::CAST, TYPE), logicalTypeWithMods(logicalTypeWithMods), child(std::move(child)) {
 }
 std::string CastExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    std::string dot{};
@@ -410,8 +410,8 @@ std::string CastExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
 
    // Create the label with cast information
    std::string label = "Cast\\nType: ";
-   if (logicalType.has_value()) {
-      switch (logicalType.value()) {
+   if (logicalTypeWithMods.has_value()) {
+      switch (logicalTypeWithMods.value().logicalType) {
          case LogicalType::DATE:
             label += "DATE";
             break;

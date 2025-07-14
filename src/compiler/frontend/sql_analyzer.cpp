@@ -1490,10 +1490,10 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
       case ast::ExpressionClass::CAST: {
          auto castExpr = std::static_pointer_cast<ast::CastExpression>(rootNode);
          auto boundChild = analyzeExpression(castExpr->child, context, resolverScope);
-         if (!castExpr->logicalType.has_value()) {
+         if (!castExpr->logicalTypeWithMods.has_value()) {
             error("Cast expression must have logicalType", castExpr->loc);
          }
-         switch (castExpr->logicalType.value()) {
+         switch (castExpr->logicalTypeWithMods.value().logicalType) {
             case ast::DATE: {
                switch (boundChild->type) {
                   case ast::ExpressionType::VALUE_CONSTANT: {
@@ -1503,7 +1503,17 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
                      }
                      std::string stringRep = std::static_pointer_cast<ast::StringValue>(constExpr->value)->sVal;
                      stringRep += "days";
-                     return drv.nf.node<ast::BoundCastExpression>(castExpr->loc, catalog::Type(catalog::LogicalTypeId::DATE, std::make_shared<catalog::DateTypeInfo>(catalog::DateTypeInfo::DateUnit::DAY)), castExpr->alias, boundChild, castExpr->logicalType, stringRep);
+                     return drv.nf.node<ast::BoundCastExpression>(castExpr->loc, catalog::Type(catalog::LogicalTypeId::DATE, std::make_shared<catalog::DateTypeInfo>(catalog::DateTypeInfo::DateUnit::DAY)), castExpr->alias, boundChild, castExpr->logicalTypeWithMods, stringRep);
+                  }
+                  case ast::ExpressionType::BOUND_COLUMN_REF: {
+                     auto boundColRef = std::static_pointer_cast<ast::BoundColumnRefExpression>(boundChild);
+                     assert(boundColRef->resultType.has_value());
+                     if (boundColRef->resultType.value().type.getTypeId() == catalog::LogicalTypeId::DATE) {
+                        return boundColRef;
+                     }
+                     if (boundColRef->resultType.value().type.getTypeId() != catalog::LogicalTypeId::STRING) {
+                        error("Cannot cast " + boundColRef->alias + " to date", boundColRef->loc);
+                     }
                   }
                   default: error("Cast not implemented", rootNode->loc);
                }
@@ -1536,7 +1546,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
                   }
 
                }
-               auto boundCast = drv.nf.node<ast::BoundCastExpression>(castExpr->loc, resultType, castExpr->alias, boundChild, castExpr->logicalType, stringRepresentation);
+               auto boundCast = drv.nf.node<ast::BoundCastExpression>(castExpr->loc, resultType, castExpr->alias, boundChild, castExpr->logicalTypeWithMods, stringRepresentation);
 
                return boundCast;
             }

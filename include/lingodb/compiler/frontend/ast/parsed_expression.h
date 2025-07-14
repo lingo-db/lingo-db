@@ -432,8 +432,8 @@ class OperatorExpression : public ParsedExpression {
 class CastExpression : public ParsedExpression {
    public:
    static constexpr const ExpressionClass TYPE = ExpressionClass::CAST;
-   CastExpression(LogicalType logicalType, std::shared_ptr<ParsedExpression> child);
-   std::optional<LogicalType> logicalType;
+   CastExpression(LogicalTypeWithMods logicalTypeWithMods, std::shared_ptr<ParsedExpression> child);
+   std::optional<LogicalTypeWithMods> logicalTypeWithMods;
    //TODO better
    std::optional<LogicalType> optInterval;
    std::shared_ptr<ParsedExpression> child;
