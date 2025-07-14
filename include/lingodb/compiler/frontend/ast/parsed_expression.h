@@ -411,6 +411,8 @@ class TargetsExpression : public ParsedExpression {
 
    std::vector<std::shared_ptr<ParsedExpression>> targets{};
 
+   std::optional<std::vector<std::shared_ptr<ParsedExpression>>> distinctExpressions = std::nullopt;
+
    /*
     * Semantic
     */

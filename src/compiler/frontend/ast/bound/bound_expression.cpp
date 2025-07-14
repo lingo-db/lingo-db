@@ -46,7 +46,7 @@ std::string BoundConstantExpression::toDotGraph(uint32_t depth, NodeIdGenerator&
 /*
  * BoundTargetsExpression
 */
-BoundTargetsExpression::BoundTargetsExpression(std::string alias, std::vector<std::shared_ptr<BoundExpression>> targets, std::vector<std::shared_ptr<NamedResult>> targetColumns) : BoundExpression(TYPE, ExpressionType::BOUND_TARGETS, alias), targets(std::move(targets)), targetColumns(std::move(targetColumns)) {
+BoundTargetsExpression::BoundTargetsExpression(std::string alias, std::vector<std::shared_ptr<BoundExpression>> targets, std::optional<std::vector<std::shared_ptr<BoundExpression>>> distinctExpressions, std::vector<std::shared_ptr<NamedResult>> targetColumns) : BoundExpression(TYPE, ExpressionType::BOUND_TARGETS, alias), targets(std::move(targets)), distinctExpressions(std::move(distinctExpressions)), targetColumns(std::move(targetColumns)) {
    for (const auto& target : this->targets) {
       if (target->type == ExpressionType::AGGREGATE && target->exprClass == ExpressionClass::FUNCTION) {
          //TODO handle aggregation
@@ -90,7 +90,7 @@ std::string BoundOperatorExpression::toDotGraph(uint32_t depth, NodeIdGenerator&
 /*
  * BoundCastExpression
 */
-BoundCastExpression::BoundCastExpression(catalog::Type resultType, std::string alias, std::shared_ptr<BoundExpression> child, std::optional<LogicalTypeWithMods> logicalTypeWithMods, std::string stringRepr) : BoundExpression(TYPE, ExpressionType::CAST, resultType, alias), child(std::move(child)), logicalTypeWithMods(logicalTypeWithMods), stringRepr(stringRepr)
+BoundCastExpression::BoundCastExpression(catalog::NullableType resultType, std::string alias, std::shared_ptr<BoundExpression> child, std::optional<LogicalTypeWithMods> logicalTypeWithMods, std::string stringRepr) : BoundExpression(TYPE, ExpressionType::CAST, resultType, alias), child(std::move(child)), logicalTypeWithMods(logicalTypeWithMods), stringRepr(stringRepr)
 {
 }
 std::string BoundCastExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
