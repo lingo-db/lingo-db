@@ -345,6 +345,18 @@ catalog::CreateTableDef SQLMlirTranslator::translateTableElements(mlir::OpBuilde
 mlir::Value SQLMlirTranslator::translatePipeOperator(mlir::OpBuilder& builder, std::shared_ptr<ast::PipeOperator> pipeOperator, std::shared_ptr<analyzer::SQLContext> context, mlir::Value tree) {
    switch (pipeOperator->pipeOpType) {
       case ast::PipeOperatorType::SELECT: {
+         auto selectList = std::static_pointer_cast<ast::BoundTargetsExpression>(pipeOperator->node);
+         if (selectList->distinctExpressions.has_value()) {
+            if (!selectList->distinctExpressions.value().empty()) {
+               error("Distinct clause with multiple elements not supported yet", selectList->distinctExpressions.value()[0]->loc);
+            }
+            std::vector<mlir::Attribute> columns;
+            for (auto x : context->currentScope->targetInfo.targetColumns) {
+               columns.push_back(x->createRef(builder, attrManager));
+            }
+            tree = builder.create<relalg::ProjectionOp>(builder.getUnknownLoc(), relalg::SetSemantic::distinct, tree, builder.getArrayAttr(columns));
+
+         }
          return tree;
       }
       case ast::PipeOperatorType::WHERE: {
@@ -589,7 +601,7 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
             constOp.getResult().setType(resType);
             return constOp;
          } else {
-            return castExpr->resultType->castValueToThisType(builder, toCast, castExpr->child->resultType->isNullable);
+            return castExpr->resultType->castValueToThisType(builder, toCast, castExpr->resultType->isNullable);
 
          }
       }
