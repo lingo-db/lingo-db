@@ -303,12 +303,14 @@ namespace lingodb::execution::baseline {
             assert(mlir::isa<dialect::util::AllocaOp>(val.getDefiningOp()) && "Value is not an alloca operation");
             auto allocaOp = cast<dialect::util::AllocaOp>(val.getDefiningOp());
             if (const auto size = allocaOp.getSize()) {
-                auto op = mlir::cast_or_null<mlir::arith::ConstantIntOp>(size.getDefiningOp());
-                if (!op) {
-                    error.emit() << "Value is not an arith int constant";
-                    abort();
+                if (auto const_int = mlir::dyn_cast<mlir::arith::ConstantIntOp>(size.getDefiningOp())) {
+                    return static_cast<uint32_t>(const_int.value());
                 }
-                return static_cast<uint32_t>(op.value());
+                if (auto const_index = mlir::dyn_cast<mlir::arith::ConstantIndexOp>(size.getDefiningOp())) {
+                    return static_cast<uint32_t>(const_index.value());
+                }
+                error.emit() << "Value is not an arith int constant";
+                abort();
             }
             return 1; // default size for an alloca without a size is 1 byte
         }
@@ -370,10 +372,14 @@ namespace lingodb::execution::baseline {
             values.clear();
             for (auto &block: func.getFunctionBody()) {
                 for (auto arg: block.getArguments())
-                    values[arg] = ValInfo{.local_idx = tpde::ValLocalIdx(values.size())};
+                    values[arg] = ValInfo{
+                        .local_idx = tpde::ValLocalIdx(values.size())
+                    };
                 for (auto &op: block) {
                     for (auto result: op.getResults())
-                        values[result] = ValInfo{.local_idx = tpde::ValLocalIdx(values.size())};
+                        values[result] = ValInfo{
+                            .local_idx = tpde::ValLocalIdx(values.size())
+                        };
                 }
             }
             return true;
@@ -426,14 +432,11 @@ namespace lingodb::execution::baseline {
                 MAX, // sentinel counter-element
             };
 
-            BuiltinFuncStorage() : funcs() {
-                std::fill(funcs.begin(), funcs.end(), SymRef{});
-            }
+            BuiltinFuncStorage()
+                : funcs() { std::fill(funcs.begin(), funcs.end(), SymRef{}); }
 
             SymRef get_symbol(IRCompilerBase *compiler, Type type) {
-                if (SymRef ref = funcs[static_cast<unsigned>(type)]; ref != SymRef{}) {
-                    return ref;
-                } else {
+                if (SymRef ref = funcs[static_cast<unsigned>(type)]; ref != SymRef{}) { return ref; } else {
                     std::string name;
                     switch (type) {
                         case Type::divti3: name = "__divti3";
@@ -444,8 +447,7 @@ namespace lingodb::execution::baseline {
                             break;
                         case Type::umodti3: name = "__umodti3";
                             break;
-                        default:
-                            __builtin_unreachable();
+                        default: __builtin_unreachable();
                     }
                     auto sym = compiler->assembler.sym_add_undef(name, Assembler::SymBinding::GLOBAL);
                     funcs[static_cast<size_t>(type)] = sym;
@@ -466,16 +468,13 @@ namespace lingodb::execution::baseline {
         // external function name -> ptr lookup map
         llvm::StringMap<void *> externFuncMap;
 
-        IRCompilerBase(IRAdaptor *adaptor) : Base{adaptor} {
+        IRCompilerBase(IRAdaptor *adaptor)
+            : Base{adaptor} {
             static_assert(tpde::Compiler<Derived, Config>);
             static_assert(std::is_same_v<Adapter, IRAdaptor>, "Adapter must be IRAdaptor");
 
-            dialect::util::FunctionHelper::visitAllFunctions([&](std::string s, void *ptr) {
-                externFuncMap[s] = ptr;
-            });
-            execution::visitBareFunctions([&](std::string s, void *ptr) {
-                externFuncMap[s] = ptr;
-            });
+            dialect::util::FunctionHelper::visitAllFunctions([&](std::string s, void *ptr) { externFuncMap[s] = ptr; });
+            execution::visitBareFunctions([&](std::string s, void *ptr) { externFuncMap[s] = ptr; });
         }
 
         Error &getError() { return error; }
@@ -483,32 +482,23 @@ namespace lingodb::execution::baseline {
         // shortcuts to access the derived class later
         Derived *derived() noexcept { return static_cast<Derived *>(this); }
 
-        const Derived *derived() const noexcept {
-            return static_cast<Derived *>(this);
-        }
+        const Derived *derived() const noexcept { return static_cast<Derived *>(this); }
 
-        const IR *ir() const noexcept {
-            return this->adaptor->module;
-        }
+        const IR *ir() const noexcept { return this->adaptor->module; }
 
-        bool cur_func_may_emit_calls() {
-            return true;
-        }
+        bool cur_func_may_emit_calls() { return true; }
 
         static CompilerConfig::Assembler::SymRef cur_personality_func() {
             // we do not support exceptions, so we do not need a personality function
             return {};
         }
 
-        bool try_force_fixed_assignment(IRAdaptor::IRValueRef) const noexcept {
-            return false;
-        }
+        bool try_force_fixed_assignment(IRAdaptor::IRValueRef) const noexcept { return false; }
 
         struct ValueParts {
             mlir::Type valType;
 
             uint32_t count() const noexcept {
-                assert(!mlir::isa<mlir::TupleType>(valType) && "Tuple types are not supported yet");
                 return mlir::TypeSwitch<mlir::Type, uint32_t>(valType)
                         .Case<mlir::IntegerType>([](auto intType) {
                             return (intType.getIntOrFloatBitWidth() + 64 - 1) / 64;
@@ -518,14 +508,13 @@ namespace lingodb::execution::baseline {
             }
 
             uint32_t size_bytes(uint32_t part_idx) const noexcept {
-                assert(!mlir::isa<mlir::TupleType>(valType) && "Tuple types are not supported yet");
                 return mlir::TypeSwitch<mlir::Type, uint32_t>(valType)
-                        .Case<mlir::IntegerType>([&](auto intType) {
+                        .Case<mlir::IntegerType, mlir::FloatType>([&](auto numType) {
                             assert(
-                                part_idx < (intType.getIntOrFloatBitWidth() + 64 - 1) / 64 &&
-                                "Part index out of range for integer type");
-                            // integer types are sized by their bit width
-                            return (intType.getIntOrFloatBitWidth() % 65 + 8 - 1) / 8;
+                                part_idx < (numType.getIntOrFloatBitWidth() + 64 - 1) / 64 &&
+                                "Part index out of range for integer or float type");
+                            // integer and float types are sized by their bit width
+                            return (numType.getIntOrFloatBitWidth() % 65 + 8 - 1) / 8;
                         })
                         .template Case<mlir::IndexType, dialect::util::RefType, mlir::FunctionType>([](auto) {
                             return 8;
@@ -542,10 +531,19 @@ namespace lingodb::execution::baseline {
                         }); // all other types are not supported yet
             }
 
-            tpde::RegBank reg_bank(uint32_t) const noexcept {
-                assert(!mlir::isa<mlir::TupleType>(valType) && "Tuple types are not supported yet");
-                // we do not support floats
-                return CompilerConfig::GP_BANK;
+            tpde::RegBank reg_bank(uint32_t part_idx) const noexcept {
+                return mlir::TypeSwitch<mlir::Type, tpde::RegBank>(valType)
+                        .Case<mlir::IntegerType, mlir::IndexType, dialect::util::RefType, mlir::FunctionType,
+                            dialect::util::VarLen32Type, dialect::util::BufferType>([&](auto) {
+                            return Config::GP_BANK;
+                        })
+                        .template Case<mlir::FloatType>([](auto) { return Config::FP_BANK; })
+
+                        .Default([](mlir::Type t) {
+                            t.dump();
+                            assert(0 && "invalid type");
+                            return Config::GP_BANK;
+                        });
             }
         };
 
@@ -559,24 +557,18 @@ namespace lingodb::execution::baseline {
         static std::optional<ValRefSpecial> val_ref_special(IRAdaptor::IRValueRef val) {
             if (const auto *op = val.getDefiningOp()) {
                 return mlir::TypeSwitch<const mlir::Operation *, std::optional<ValRefSpecial> >(op)
-                        .template Case<mlir::arith::ConstantOp, dialect::util::SizeOfOp>(
-                            [&](auto) {
-                                return ValRefSpecial{.mode = 4, .value = val};
-                            })
+                        .template Case<mlir::arith::ConstantOp, dialect::util::SizeOfOp, dialect::util::UndefOp>(
+                            [&](auto) { return ValRefSpecial{.mode = 4, .value = val}; })
                         .template Case<dialect::util::CreateConstVarLen>(
                             [&](auto constVarLenOp) -> std::optional<ValRefSpecial> {
                                 const mlir::StringRef content = mlir::cast<mlir::StringAttr>(
                                     constVarLenOp->getAttr(constVarLenOp.getStrAttrName())).getValue();
-                                if (content.size() <= 12) {
-                                    return ValRefSpecial{.mode = 4, .value = val};
-                                } else {
+                                if (content.size() <= 12) { return ValRefSpecial{.mode = 4, .value = val}; } else {
                                     // long string require a pointer to the content, making them non-constant
                                     return std::nullopt;
                                 }
                             })
-                        .Default([&](auto) {
-                            return std::nullopt;
-                        });
+                        .Default([&](auto) { return std::nullopt; });
             }
             return std::nullopt;
         }
@@ -586,9 +578,7 @@ namespace lingodb::execution::baseline {
                 if (auto intAttr = mlir::dyn_cast_or_null<mlir::IntegerAttr>(constOp.getValue())) {
                     const mlir::APInt containedInt = intAttr.getValue();
                     unsigned bitWidth;
-                    if (mlir::isa<mlir::IndexType>(intAttr.getType())) {
-                        bitWidth = 64;
-                    } else {
+                    if (mlir::isa<mlir::IndexType>(intAttr.getType())) { bitWidth = 64; } else {
                         bitWidth = intAttr.getType().getIntOrFloatBitWidth();
                     }
                     if (bitWidth <= 64) {
@@ -641,9 +631,7 @@ namespace lingodb::execution::baseline {
                 if (part == 1) {
                     if (len <= 12) {
                         uint64_t last8 = 0;
-                        if (len > 4) {
-                            memcpy(&last8, content.data() + 4, std::min(8ul, len - 4));
-                        }
+                        if (len > 4) { memcpy(&last8, content.data() + 4, std::min(8ul, len - 4)); }
                         return ValuePartRef(this, last8, 8, Config::GP_BANK);
                     } else {
                         assert(0 && "VarLen32 type with part index 1 should not be used for long strings");
@@ -652,6 +640,17 @@ namespace lingodb::execution::baseline {
                 }
                 assert(0 && "Part index out of range for VarLen32 type");
                 return ValuePartRef{this};
+            }
+            if (auto undef_op = mlir::dyn_cast<dialect::util::UndefOp>(ref.value.getDefiningOp())) {
+                auto ret_type = undef_op.getRes().getType();
+                if (mlir::isa<mlir::IntegerType>(ret_type)) {
+                    return ValuePartRef(this, 0, ret_type.getIntOrFloatBitWidth() / 8, Config::GP_BANK);
+                } else if (mlir::isa<mlir::FloatType>(ret_type)) {
+                    return ValuePartRef(this, 0, ret_type.getIntOrFloatBitWidth() / 8, Config::FP_BANK);
+                } else {
+                    assert(0);
+                    return ValuePartRef{this};
+                }
             }
             ref.value.dump();
             assert(0 && "Unsupported value in val_ref_special");
@@ -675,34 +674,35 @@ namespace lingodb::execution::baseline {
 
         bool compile_arith_binary_op(IRInstRef op) {
             auto res_type = op->getResult(0).getType();
+            unsigned res_width;
             unsigned op_width;
             if (mlir::isa<mlir::IndexType>(res_type)) {
                 op_width = 64;
+                res_width = 64;
             } else if (mlir::isa<mlir::IntegerType>(res_type)) {
-                switch (res_type.getIntOrFloatBitWidth()) {
-                    case 32:
-                    case 64:
-                        op_width = res_type.getIntOrFloatBitWidth();
-                        break;
-                    case 128:
-                        op_width = 128;
-                        break;
+                res_width = res_type.getIntOrFloatBitWidth();
+                switch (res_width) {
                     case 1:
-                        op_width = 32; // we use 32-bit operations for boolean values
+                    case 8:
+                    case 16:
+                    case 32: op_width = 32;
                         break;
-                    default:
-                        op->dump();
+                    case 64: op_width = 64;
+                        break;
+                    case 128: op_width = 128;
+                        break;
+                    default: op->dump();
                         assert(0 && "Unsupported integer type width for arithmetic operation");
                         return false;
                 }
             } else if (mlir::isa<mlir::FloatType>(res_type)) {
-                switch (res_type.getIntOrFloatBitWidth()) {
-                    case 32:
-                    case 64:
-                        op_width = res_type.getIntOrFloatBitWidth();
+                res_width = res_type.getIntOrFloatBitWidth();
+                switch (res_width) {
+                    case 32: op_width = 32;
                         break;
-                    default:
-                        res_type.dump();
+                    case 64: op_width = 64;
+                        break;
+                    default: res_type.dump();
                         assert(0 && "Unsupported float type width for arithmetic operation");
                         return false;
                 }
@@ -777,6 +777,12 @@ namespace lingodb::execution::baseline {
                     std::swap(lhs_vr, rhs_vr);
                     std::swap(lhs_pr, rhs_pr);
                 }
+
+                if (op_width > res_width) {
+                    lhs_pr = std::move(lhs_pr).into_extended(true, res_width, op_width);
+                    rhs_pr = std::move(rhs_pr).into_extended(true, res_width, op_width);
+                }
+
                 auto lhs_op = GenericValuePart{std::move(lhs_pr)};
                 auto rhs_op = GenericValuePart{std::move(rhs_pr)};
 
@@ -807,6 +813,7 @@ namespace lingodb::execution::baseline {
                         {"arith.ori", {&Derived::encode_arith_lor_i32, &Derived::encode_arith_lor_i64}},
                         {"arith.xori", {&Derived::encode_arith_lxor_i32, &Derived::encode_arith_lxor_i64}},
                         {"arith.andi", {&Derived::encode_arith_land_i32, &Derived::encode_arith_land_i64}},
+                        {"arith.shrui", {&Derived::encode_arith_shr_u32, &Derived::encode_arith_shr_u64}}
                     };
                 }
 #ifndef NDEBUG
@@ -939,9 +946,7 @@ namespace lingodb::execution::baseline {
 
         static std::optional<size_t> get_size(mlir::Type type) noexcept {
             return mlir::TypeSwitch<mlir::Type, size_t>(type)
-                    .Case<mlir::IntegerType>([](auto intType) {
-                        return (intType.getIntOrFloatBitWidth() + 64 - 1) / 64 * 8;
-                    })
+                    .Case<mlir::IntegerType>([](auto intType) { return intType.getIntOrFloatBitWidth() / 8; })
                     .template Case<dialect::util::VarLen32Type, dialect::util::BufferType>([](auto) { return 16; })
                     .template Case<mlir::TupleType>([](auto t) { return TupleHelper{t}.sizeAndPadding().first; })
                     .template Case<mlir::IndexType, dialect::util::RefType>([](auto) { return 8; })
@@ -988,12 +993,15 @@ namespace lingodb::execution::baseline {
             return mlir::TypeSwitch<mlir::Type, bool>(stored_type)
                     .Case([&](const mlir::IntegerType t) {
                         switch (t.getIntOrFloatBitWidth()) {
-                            case 64: return derived()->encode_util_store_i64(std::move(ptr_part), in_vr.part(0));
+                            case 1: return derived()->encode_util_store_i1(std::move(ptr_part), in_vr.part(0));
+                            case 8: return derived()->encode_util_store_i8(std::move(ptr_part), in_vr.part(0));
+                            case 16: return derived()->encode_util_store_i16(std::move(ptr_part), in_vr.part(0));
                             case 32: return derived()->encode_util_store_i32(std::move(ptr_part), in_vr.part(0));
+                            case 64: return derived()->encode_util_store_i64(std::move(ptr_part), in_vr.part(0));
                             case 128: return derived()->encode_store_i128(
                                     std::move(ptr_part), in_vr.part(0), in_vr.part(1));
                             default:
-                                assert(0 && "Unsupported integer type width for load operation");
+                                assert(0 && "Unsupported integer type width for store operation");
                                 return false;
                         }
                     })
@@ -1046,9 +1054,15 @@ namespace lingodb::execution::baseline {
             return mlir::TypeSwitch<mlir::Type, bool>(loaded_type)
                     .Case([&](const mlir::IntegerType t) {
                         switch (t.getIntOrFloatBitWidth()) {
-                            case 64: derived()->encode_util_load_i64(std::move(ptr_part), res_scratch);
+                            case 1: derived()->encode_util_load_i1(std::move(ptr_part), res_scratch);
+                                break;
+                            case 8: derived()->encode_util_load_i8(std::move(ptr_part), res_scratch);
+                                break;
+                            case 16: derived()->encode_util_load_i16(std::move(ptr_part), res_scratch);
                                 break;
                             case 32: derived()->encode_util_load_i32(std::move(ptr_part), res_scratch);
+                                break;
+                            case 64: derived()->encode_util_load_i64(std::move(ptr_part), res_scratch);
                                 break;
                             case 128: {
                                 ScratchReg res_scratch_high{derived()};
@@ -1103,9 +1117,7 @@ namespace lingodb::execution::baseline {
                 if (const auto attrs = callee_func.getArgAttrs(); attrs.has_value()) {
                     mlir::ArrayAttr attr = attrs.value();
                     if (auto string_attr = mlir::dyn_cast<mlir::StringAttr>(attr[i]);
-                        string_attr && string_attr.getValue() == "llvm.zeroext") {
-                        flag = Base::CallArg::Flag::zext;
-                    }
+                        string_attr && string_attr.getValue() == "llvm.zeroext") { flag = Base::CallArg::Flag::zext; }
                 }
                 builder.add_arg(typename Base::CallArg{arg, flag, 0, 0});
             }
@@ -1191,15 +1203,14 @@ namespace lingodb::execution::baseline {
             auto res = this->result_ref(op->getResult(0));
 
             switch (lhs.getType().getIntOrFloatBitWidth()) {
+                case 1:
                 case 8:
                 case 16:
-                case 32:
-                    derived()->encode_arith_select_i32(std::move(cond_vpr), lhs_vr.part(0), rhs_vr.part(0),
-                                                       res_scratch);
+                case 32: derived()->encode_arith_select_i32(std::move(cond_vpr), lhs_vr.part(0), rhs_vr.part(0),
+                                                            res_scratch);
                     break;
-                case 64:
-                    derived()->encode_arith_select_i64(std::move(cond_vpr), lhs_vr.part(0), rhs_vr.part(0),
-                                                       res_scratch);
+                case 64: derived()->encode_arith_select_i64(std::move(cond_vpr), lhs_vr.part(0), rhs_vr.part(0),
+                                                            res_scratch);
                     break;
                 case 128: {
                     ScratchReg res_scratch_high{derived()};
@@ -1405,84 +1416,169 @@ namespace lingodb::execution::baseline {
             return true;
         }
 
+        bool compile_arith_cmp_float_op(mlir::arith::CmpFOp op) {
+            const mlir::Value lhs = op.getLhs();
+            const mlir::Value rhs = op.getRhs();
+            const mlir::Value res = op.getResult();
+            const mlir::arith::CmpFPredicate pred = op.getPredicate();
+            assert(lhs.getType() == rhs.getType() && "LHS and RHS must have the same type for float comparison");
+            const mlir::Type cmp_type = lhs.getType();
+            assert((cmp_type.isF32() || cmp_type.isF64()) && "Unsupported float type for comparison");
+
+            using mlir::arith::CmpFPredicate;
+            if (pred == CmpFPredicate::AlwaysFalse || pred == CmpFPredicate::AlwaysTrue) {
+                uint64_t val = pred == CmpFPredicate::AlwaysFalse ? 0u : 1u;
+                (void) this->val_ref(lhs); // ref-count
+                (void) this->val_ref(rhs); // ref-count
+                auto const_ref = ValuePartRef{this, val, 1, Config::GP_BANK};
+                this->result_ref(res).part(0).set_value(std::move(const_ref));
+                return true;
+            }
+
+            using EncodeFnTy = bool (Derived::*)(GenericValuePart &&, GenericValuePart &&, ScratchReg &);
+            EncodeFnTy fn = nullptr;
+            if (cmp_type.isF32()) {
+                switch (pred) {
+                    case CmpFPredicate::OEQ: fn = &Derived::encode_arith_cmp_f32_oeq;
+                        break;
+                    case CmpFPredicate::OLT: fn = &Derived::encode_arith_cmp_f32_olt;
+                        break;
+                    case CmpFPredicate::OLE: fn = &Derived::encode_arith_cmp_f32_ole;
+                        break;
+                    case CmpFPredicate::OGT: fn = &Derived::encode_arith_cmp_f32_ogt;
+                        break;
+                    case CmpFPredicate::OGE: fn = &Derived::encode_arith_cmp_f32_oge;
+                        break;
+                    case CmpFPredicate::ONE: fn = &Derived::encode_arith_cmp_f32_one;
+                        break;
+                    case CmpFPredicate::ORD: fn = &Derived::encode_arith_cmp_f32_ord;
+                        break;
+                    case CmpFPredicate::UNO: fn = &Derived::encode_arith_cmp_f32_uno;
+                        break;
+                    case CmpFPredicate::UEQ: fn = &Derived::encode_arith_cmp_f32_ueq;
+                        break;
+                    case CmpFPredicate::ULT: fn = &Derived::encode_arith_cmp_f32_ult;
+                        break;
+                    case CmpFPredicate::ULE: fn = &Derived::encode_arith_cmp_f32_ule;
+                        break;
+                    case CmpFPredicate::UGT: fn = &Derived::encode_arith_cmp_f32_ugt;
+                        break;
+                    case CmpFPredicate::UGE: fn = &Derived::encode_arith_cmp_f32_uge;
+                        break;
+                    case CmpFPredicate::UNE: fn = &Derived::encode_arith_cmp_f32_une;
+                        break;
+                    default: assert(0);
+                }
+            } else {
+                switch (pred) {
+                    case CmpFPredicate::OEQ: fn = &Derived::encode_arith_cmp_f64_oeq;
+                        break;
+                    case CmpFPredicate::OLT: fn = &Derived::encode_arith_cmp_f64_olt;
+                        break;
+                    case CmpFPredicate::OLE: fn = &Derived::encode_arith_cmp_f64_ole;
+                        break;
+                    case CmpFPredicate::OGT: fn = &Derived::encode_arith_cmp_f64_ogt;
+                        break;
+                    case CmpFPredicate::OGE: fn = &Derived::encode_arith_cmp_f64_oge;
+                        break;
+                    case CmpFPredicate::ONE: fn = &Derived::encode_arith_cmp_f64_one;
+                        break;
+                    case CmpFPredicate::ORD: fn = &Derived::encode_arith_cmp_f64_ord;
+                        break;
+                    case CmpFPredicate::UNO: fn = &Derived::encode_arith_cmp_f64_uno;
+                        break;
+                    case CmpFPredicate::UEQ: fn = &Derived::encode_arith_cmp_f64_ueq;
+                        break;
+                    case CmpFPredicate::ULT: fn = &Derived::encode_arith_cmp_f64_ult;
+                        break;
+                    case CmpFPredicate::ULE: fn = &Derived::encode_arith_cmp_f64_ule;
+                        break;
+                    case CmpFPredicate::UGT: fn = &Derived::encode_arith_cmp_f64_ugt;
+                        break;
+                    case CmpFPredicate::UGE: fn = &Derived::encode_arith_cmp_f64_uge;
+                        break;
+                    case CmpFPredicate::UNE: fn = &Derived::encode_arith_cmp_f64_une;
+                        break;
+                    default: assert(0);
+                }
+            }
+            ValueRef lhs_vr = this->val_ref(lhs);
+            ValueRef rhs_vr = this->val_ref(rhs);
+            ScratchReg res_scratch{derived()};
+            auto [res_vr, res_ref] = this->result_ref_single(res);
+            if (!(derived()->*fn)(lhs_vr.part(0), rhs_vr.part(0), res_scratch)) { return false; }
+            this->set_value(res_ref, res_scratch);
+            return true;
+        }
+
+        bool compile_util_hash_64_op(dialect::util::Hash64 op) {
+            auto [_, val_pr] = this->val_ref_single(op.getVal());
+            ScratchReg res_scratch{this};
+            if (!derived()->encode_util_hash_64(std::move(val_pr), res_scratch)) {
+                error.emit() << "Failed to compile hash operation\n";
+                return false;
+            }
+            auto res_pr = this->result_ref(op.getResult());
+            this->set_value(res_pr.part(0), res_scratch);
+            return true;
+        }
+
         bool compile_inst(const IRInstRef inst, InstRange) noexcept {
             return mlir::TypeSwitch<IRInstRef, bool>(inst)
                     .Case<mlir::arith::AddIOp, mlir::arith::SubIOp, mlir::arith::MulIOp, mlir::arith::DivSIOp,
+                        mlir::arith::DivUIOp, mlir::arith::RemSIOp, mlir::arith::RemUIOp,
                         mlir::arith::AndIOp, mlir::arith::OrIOp, mlir::arith::XOrIOp, mlir::arith::ShLIOp,
-                        mlir::arith::ShRUIOp>([&](auto op) {
-                        return compile_arith_binary_op(op);
-                    })
-                    .template Case<mlir::arith::CmpIOp>([&](auto op) {
-                        return derived()->compile_arith_cmp_int_op(op);
-                    })
-                    .template Case<mlir::cf::BranchOp>([&](auto op) {
-                        return compile_cf_br_op(op);
-                    })
-                    .template Case<mlir::cf::CondBranchOp>([&](auto op) {
-                        return derived()->compile_cf_cond_br_op(op);
-                    })
-                    .template Case<mlir::arith::ConstantOp, dialect::util::SizeOfOp, dialect::util::AllocaOp>(
+                        mlir::arith::ShRUIOp, mlir::arith::AddFOp, mlir::arith::SubFOp, mlir::arith::MulFOp,
+                        mlir::arith::DivFOp>([&](auto op) { return compile_arith_binary_op(op); })
+                    .template Case<mlir::arith::CmpIOp>(
+                        [&](auto op) { return derived()->compile_arith_cmp_int_op(op); })
+                    .template Case<mlir::arith::CmpFOp>([&](auto op) { return compile_arith_cmp_float_op(op); })
+                    .template Case<mlir::cf::BranchOp>([&](auto op) { return compile_cf_br_op(op); })
+                    .template Case<mlir::cf::CondBranchOp>(
+                        [&](auto op) { return derived()->compile_cf_cond_br_op(op); })
+                    .template Case<mlir::arith::ConstantOp, dialect::util::SizeOfOp, dialect::util::AllocaOp,
+                        dialect::util::UndefOp>(
                         [&](auto) {
                             // these are all constant operations whose value is handled in val_ref_special / val_part_ref_special
                             return true;
                         })
-                    .template Case<mlir::func::ConstantOp>([&](auto op) {
-                        return compile_func_constant_op(op);
-                    })
+                    .template Case<mlir::func::ConstantOp>([&](auto op) { return compile_func_constant_op(op); })
                     .template Case<dialect::util::GenericMemrefCastOp>([&](auto op) {
                         return compile_util_generic_memref_cast_op(op);
                     })
                     .template Case<dialect::util::TupleElementPtrOp>([&](auto op) {
                         return compile_util_tuple_element_ptr_op(op);
                     })
-                    .template Case<dialect::util::LoadOp>([&](auto op) {
-                        return compile_util_load_op(op);
-                    })
-                    .template Case<dialect::util::StoreOp>([&](auto op) {
-                        return compile_util_store_op(op);
-                    })
-                    .template Case<mlir::func::CallOp>([&](auto op) {
-                        return compile_func_call_op(op);
-                    })
-                    .template Case<mlir::func::ReturnOp>([&](auto op) {
-                        return compile_func_return_op(op);
-                    })
-                    .template Case<mlir::arith::ExtUIOp>([&](auto op) {
-                        return compile_arith_exti_op(op, false);
-                    })
-                    .template Case<mlir::arith::ExtSIOp>([&](auto op) {
-                        return compile_arith_exti_op(op, true);
-                    })
-                    .template Case<mlir::arith::SelectOp>([&](auto op) {
-                        return compile_arith_select_op(op);
-                    })
-                    .template Case<mlir::arith::IndexCastOp>([&](auto op) {
-                        return compile_arith_index_cast_op(op);
-                    })
+                    .template Case<dialect::util::LoadOp>([&](auto op) { return compile_util_load_op(op); })
+                    .template Case<dialect::util::StoreOp>([&](auto op) { return compile_util_store_op(op); })
+                    .template Case<mlir::func::CallOp>([&](auto op) { return compile_func_call_op(op); })
+                    .template Case<mlir::func::ReturnOp>([&](auto op) { return compile_func_return_op(op); })
+                    .template Case<mlir::arith::ExtUIOp>([&](auto op) { return compile_arith_exti_op(op, false); })
+                    .template Case<mlir::arith::ExtSIOp>([&](auto op) { return compile_arith_exti_op(op, true); })
+                    .template Case<mlir::arith::SelectOp>([&](auto op) { return compile_arith_select_op(op); })
+                    .template Case<mlir::arith::IndexCastOp>([&](auto op) { return compile_arith_index_cast_op(op); })
                     .template Case<dialect::util::CreateConstVarLen>([&](auto op) {
                         return compile_util_const_varlen_op(op);
                     })
-                    .template Case<dialect::util::BufferCastOp>([&](auto op) {
-                        return compile_util_buffer_cast_op(op);
-                    })
+                    .template Case<dialect::util::BufferCastOp>(
+                        [&](auto op) { return compile_util_buffer_cast_op(op); })
                     .template Case<dialect::util::BufferGetLen>([&](auto op) {
                         return compile_util_buffer_get_len_op(op);
                     })
                     .template Case<dialect::util::BufferGetElementRef>([&](auto op) {
                         return compile_util_buffer_get_element_ref_op(op);
                     })
-                    .template Case<mlir::arith::TruncIOp>([&](auto op) {
-                        return compile_arith_trunci_op(op);
-                    })
+                    .template Case<mlir::arith::TruncIOp>([&](auto op) { return compile_arith_trunci_op(op); })
                     .template Case<dialect::util::ArrayElementPtrOp>([&](auto op) {
                         return compile_util_array_element_ptr_op(op);
                     })
                     .template Case<dialect::util::CreateVarLen>([&](auto op) {
                         return compile_util_create_varlen_op(op);
                     })
-                    .template Case<dialect::util::VarLenCmp>([&](auto op) {
-                        return compile_util_varlen_cmp_op(op);
+                    .template Case<dialect::util::Hash64>([&](auto op) {
+                        return compile_util_hash_64_op(op);
                     })
+                    .template Case<dialect::util::VarLenCmp>([&](auto op) { return compile_util_varlen_cmp_op(op); })
                     .Default([&](IRInstRef op) {
                         error.emit() << "Encountered unimplemented instruction: " << op->getName().getStringRef().
                                 str()
@@ -1497,18 +1593,18 @@ namespace lingodb::execution::baseline {
 
     // x86_64 target specific compiler
     // NOLINTBEGIN(readability-identifier-naming)
-    struct IRCompilerX64 : tpde::x64::CompilerX64<IRAdaptor, IRCompilerX64, IRCompilerBase, CompilerConfig>,
-                           tpde_encodegen::EncodeCompiler<IRAdaptor, IRCompilerX64, IRCompilerBase,
-                               CompilerConfig> {
+    struct IRCompilerX64
+            : tpde::x64::CompilerX64<IRAdaptor, IRCompilerX64, IRCompilerBase, CompilerConfig>,
+              tpde_encodegen::EncodeCompiler<IRAdaptor, IRCompilerX64, IRCompilerBase,
+                  CompilerConfig> {
         using Base = tpde::x64::CompilerX64<IRAdaptor, IRCompilerX64, IRCompilerBase, CompilerConfig>;
         using EncCompiler = tpde_encodegen::EncodeCompiler<IRAdaptor, IRCompilerX64, IRCompilerBase, CompilerConfig>;
 
         std::unique_ptr<IRAdaptor> adaptor;
 
-        explicit IRCompilerX64(std::unique_ptr<IRAdaptor> &&adaptor) : Base{adaptor.get()},
-                                                                       adaptor(std::move(adaptor)) {
-            static_assert(tpde::Compiler<IRCompilerX64, tpde::x64::PlatformConfig>);
-        }
+        explicit IRCompilerX64(std::unique_ptr<IRAdaptor> &&adaptor)
+            : Base{adaptor.get()},
+              adaptor(std::move(adaptor)) { static_assert(tpde::Compiler<IRCompilerX64, tpde::x64::PlatformConfig>); }
 
         void load_address_of_global(const SymRef global_sym, const AsmReg dst) {
             ASM(MOV64rm, dst, FE_MEM(FE_IP, 0, FE_NOREG, -1));
@@ -1517,18 +1613,15 @@ namespace lingodb::execution::baseline {
 
         void create_helper_call(std::span<IRValueRef> args, ValueRef *result, SymRef sym) noexcept {
             tpde::util::SmallVector<CallArg, 8> arg_vec{};
-            for (const auto arg: args) {
-                arg_vec.push_back(CallArg{arg});
-            }
+            for (const auto arg: args) { arg_vec.push_back(CallArg{arg}); }
             generate_call(sym, arg_vec, result);
         }
 
         bool compile_arith_cmp_int_op(mlir::arith::CmpIOp op) {
             mlir::Type ty = op.getLhs().getType();
             unsigned int_width;
-            if (mlir::isa<mlir::IntegerType>(ty)) {
-                int_width = ty.getIntOrFloatBitWidth();
-            } else if (mlir::isa<mlir::IndexType>(ty)) {
+            if (mlir::isa<mlir::IntegerType>(ty)) { int_width = ty.getIntOrFloatBitWidth(); } else if (mlir::isa<
+                mlir::IndexType>(ty)) {
                 // index type is always 64-bit on x86_64
                 int_width = 64;
             } else {
@@ -1566,8 +1659,7 @@ namespace lingodb::execution::baseline {
                 case mlir::arith::CmpIPredicate::sgt:
                 case mlir::arith::CmpIPredicate::sge:
                 case mlir::arith::CmpIPredicate::slt:
-                case mlir::arith::CmpIPredicate::sle:
-                    is_signed = true;
+                case mlir::arith::CmpIPredicate::sle: is_signed = true;
                     break;
                 default: break;
             }
@@ -1691,7 +1783,8 @@ namespace lingodb::execution::baseline {
         Error &error;
 
     public:
-        DynamicLoader(Error &error) : error(error) {
+        DynamicLoader(Error &error)
+            : error(error) {
         }
 
         virtual ~DynamicLoader() = default;
@@ -1710,8 +1803,9 @@ namespace lingodb::execution::baseline {
         tpde::AssemblerElfBase::SymRef main_func;
 
     public:
-        InMemoryLoader(Assembler &assembler, Error &error, typename Assembler::SymRef main_func) : DynamicLoader(error),
-            main_func(main_func) {
+        InMemoryLoader(Assembler &assembler, Error &error, typename Assembler::SymRef main_func)
+            : DynamicLoader(error),
+              main_func(main_func) {
             mapper.map(assembler, [](const std::string_view name) {
                 return dlsym(RTLD_DEFAULT, std::string(name).c_str());
             });
@@ -1727,7 +1821,8 @@ namespace lingodb::execution::baseline {
         void *handle = nullptr;
 
     public:
-        DebugLoader(Assembler &assembler, Error &error, const std::string_view outFileName) : DynamicLoader(error) {
+        DebugLoader(Assembler &assembler, Error &error, const std::string_view outFileName)
+            : DynamicLoader(error) {
             const auto objFile = assembler.build_object_file();
             const std::string objFileName = std::string{outFileName} + ".o";
             const std::string linkedFileName = std::string{outFileName} + ".so";
@@ -1841,8 +1936,19 @@ namespace lingodb::execution::baseline {
                 loader = std::make_unique<DebugLoader<IRCompilerX64::Assembler> >(compiler.assembler, error,
                     baselineDebugFileOut.getValue());
             } else {
+                if (!compiler.localFuncMap.contains("main")) {
+                    error.emit() << "No main function found in query module. Please ensure that the module has a "
+                            "function named 'main'.\n";
+                    return;
+                }
+                const uint32_t mainFuncIdx = compiler.localFuncMap["main"];
+                if (mainFuncIdx >= compiler.func_syms.size()) {
+                    error.emit() << "Main function index out of bounds: " << mainFuncIdx << " >= " <<
+                            compiler.func_syms.size() << "\n";
+                    return;
+                }
                 loader = std::make_unique<InMemoryLoader<IRCompilerX64::Assembler> >(
-                    compiler.assembler, error, compiler.func_syms[compiler.localFuncMap["main"]]);
+                    compiler.assembler, error, compiler.func_syms[mainFuncIdx]);
             }
             if (loader->has_error) return;
             auto mainFunc = loader->getMainFunction();
