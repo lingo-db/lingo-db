@@ -108,7 +108,7 @@
  * Taken directly from postgres grammatic 
  * TODO LINK
 **/
-%token ABORT_P ABSENT ABSOLUTE_P ACCESS ACTION ADD_P ADMIN AFTER
+%token <std::string> ABORT_P ABSENT ABSOLUTE_P ACCESS ACTION ADD_P ADMIN AFTER
 	AGGREGATE ALL ALSO ALTER ALWAYS ANALYSE ANALYZE AND ANY ARRAY AS ASC
 	ASENSITIVE ASSERTION ASSIGNMENT ASYMMETRIC ATOMIC AT ATTACH ATTRIBUTE AUTHORIZATION
 
@@ -224,7 +224,7 @@
 %type <std::shared_ptr<lingodb::ast::TableProducer>> select_no_parens SelectStmt  select_with_parens PreparableStmt common_table_expr cte_list with_clause
 %type <std::shared_ptr<lingodb::ast::QueryNode>> simple_select select_clause  
 
-%type<std::vector<std::shared_ptr<lingodb::ast::ParsedExpression>>> target_list group_by_list func_arg_list func_arg_list_opt extract_list expr_list substr_list
+%type<std::vector<std::shared_ptr<lingodb::ast::ParsedExpression>>> target_list group_by_list func_arg_list func_arg_list_opt extract_list expr_list substr_list distinct_clause
 
 /*
 * in_expr either returns a SubQuery or a list of expressions
@@ -255,7 +255,7 @@
 
 %type<std::string>  ColId ColLabel BareColLabel attr_name 
                     qualified_name relation_expr alias_clause opt_alias_clause 
-                    name type_function_name func_name
+                    name type_function_name func_name col_name_keyword unreserved_keyword reserved_keyword
 
 %type<std::vector<std::string>> name_list opt_name_list
 
@@ -561,7 +561,20 @@ simple_select:
         t->having = $having_clause;
         $$ = t;
     }
-    //TODO | SELECT distinct_clause target_list into_clause from_clause where_clause group_clause having_clause window_clause
+    | SELECT distinct_clause target_list into_clause from_clause where_clause group_clause having_clause window_clause
+    {
+        auto t = mkNode<lingodb::ast::SelectNode>(@$);
+        auto target_list = mkNode<lingodb::ast::TargetsExpression>(@$);
+        target_list->targets = std::move($target_list);
+
+        target_list->distinctExpressions = $distinct_clause;
+        t->select_list = target_list;
+        t->where_clause = $where_clause;
+        t->from_clause = $from_clause;
+        t->groups = $group_clause;
+        t->having = $having_clause;
+        $$ = t;
+    }
     //TODO | TABLE relation_expr
     | select_clause[clause1] UNION set_quantifier select_clause[clause2] 
     {
@@ -585,6 +598,13 @@ with_clause:
 
     }
     ;
+distinct_clause: 
+    DISTINCT {$$ = mkListShared<lingodb::ast::ParsedExpression>();}
+    | DISTINCT ON LP expr_list RP
+    {
+        $$ = $expr_list;
+    }
+    ;
 cte_list: 
     common_table_expr 
     {
@@ -604,6 +624,16 @@ cte_list:
         
     }
     ;
+
+//TODO missing rules
+into_clause:
+    %empty
+    ;
+//TODO missing rules
+window_clause:
+    %empty
+    ;
+
 //TODO more complex rules
 common_table_expr: 
     name opt_name_list AS opt_materialized LP PreparableStmt RP
@@ -1610,8 +1640,8 @@ MathOp:
  
 ColId:
     IDENTIFIER {$$=$1;}
-   //TODO | unreserved_keyword
-   //TODO | col_name_keyword
+    | unreserved_keyword {$$=$1;}
+    | col_name_keyword {$$=$1;}
    ;
 
 /* Type/function identifier --- names that can be type or function names.*/
@@ -1653,10 +1683,10 @@ type_func_name_keyword:
  */
 ColLabel:
     IDENTIFIER									{ $$=$1; }
-	//TODO | unreserved_keyword					{ }
+	| unreserved_keyword					{ $$ = $1;}
 	//TODO | col_name_keyword						{ }
 	//TODO | type_func_name_keyword				{ }
-	| reserved_keyword						{ }
+	| reserved_keyword						{ $$ = $1; }
 	;
 /* Bare column label --- names that can be column labels without writing "AS".
  * This classification is orthogonal to the other keyword categories.
@@ -1756,6 +1786,413 @@ reserved_keyword:
 			| WHERE
 			| WINDOW
 			| WITH
+		;
+unreserved_keyword:
+			  ABORT_P
+			| ABSENT
+			| ABSOLUTE_P
+			| ACCESS
+			| ACTION
+			| ADD_P
+			| ADMIN
+			| AFTER
+			| AGGREGATE
+			| ALSO
+			| ALTER
+			| ALWAYS
+			| ASENSITIVE
+			| ASSERTION
+			| ASSIGNMENT
+			| AT
+			| ATOMIC
+			| ATTACH
+			| ATTRIBUTE
+			| BACKWARD
+			| BEFORE
+			| BEGIN_P
+			| BREADTH
+			| BY
+			| CACHE
+			| CALL
+			| CALLED
+			| CASCADE
+			| CASCADED
+			| CATALOG_P
+			| CHAIN
+			| CHARACTERISTICS
+			| CHECKPOINT
+			| CLASS
+			| CLOSE
+			| CLUSTER
+			| COLUMNS
+			| COMMENT
+			| COMMENTS
+			| COMMIT
+			| COMMITTED
+			| COMPRESSION
+			| CONDITIONAL
+			| CONFIGURATION
+			| CONFLICT
+			| CONNECTION
+			| CONSTRAINTS
+			| CONTENT_P
+			| CONTINUE_P
+			| CONVERSION_P
+			| COPY
+			| COST
+			| CSV
+			| CUBE
+			| CURRENT_P
+			| CURSOR
+			| CYCLE
+			| DATA_P
+			| DATABASE
+			| DAY_P
+			| DEALLOCATE
+			| DECLARE
+			| DEFAULTS
+			| DEFERRED
+			| DEFINER
+			| DELETE_P
+			| DELIMITER
+			| DELIMITERS
+			| DEPENDS
+			| DEPTH
+			| DETACH
+			| DICTIONARY
+			| DISABLE_P
+			| DISCARD
+			| DOCUMENT_P
+			| DOMAIN_P
+			| DOUBLE_P
+			| DROP
+			| EACH
+			| EMPTY_P
+			| ENABLE_P
+			| ENCODING
+			| ENCRYPTED
+			| ENFORCED
+			| ENUM_P
+			| ERROR_P
+			| ESCAPE
+			| EVENT
+			| EXCLUDE
+			| EXCLUDING
+			| EXCLUSIVE
+			| EXECUTE
+			| EXPLAIN
+			| EXPRESSION
+			| EXTENSION
+			| EXTERNAL
+			| FAMILY
+			| FILTER
+			| FINALIZE
+			| FIRST_P
+			| FOLLOWING
+			| FORCE
+			| FORMAT
+			| FORWARD
+			| FUNCTION
+			| FUNCTIONS
+			| GENERATED
+			| GLOBAL
+			| GRANTED
+			| GROUPS
+			| HANDLER
+			| HEADER_P
+			| HOLD
+			| HOUR_P
+			| IDENTITY_P
+			| IF_P
+			| IMMEDIATE
+			| IMMUTABLE
+			| IMPLICIT_P
+			| IMPORT_P
+			| INCLUDE
+			| INCLUDING
+			| INCREMENT
+			| INDENT
+			| INDEX
+			| INDEXES
+			| INHERIT
+			| INHERITS
+			| INLINE_P
+			| INPUT_P
+			| INSENSITIVE
+			| INSERT
+			| INSTEAD
+			| INVOKER
+			| ISOLATION
+			| KEEP
+			| KEY
+			| KEYS
+			| LABEL
+			| LANGUAGE
+			| LARGE_P
+			| LAST_P
+			| LEAKPROOF
+			| LEVEL
+			| LISTEN
+			| LOAD
+			| LOCAL
+			| LOCATION
+			| LOCK_P
+			| LOCKED
+			| LOGGED
+			| MAPPING
+			| MATCH
+			| MATCHED
+			| MATERIALIZED
+			| MAXVALUE
+			| MERGE
+			| METHOD
+			| MINUTE_P
+			| MINVALUE
+			| MODE
+			| MONTH_P
+			| MOVE
+			| NAME_P
+			| NAMES
+			| NESTED
+			| NEW
+			| NEXT
+			| NFC
+			| NFD
+			| NFKC
+			| NFKD
+			| NO
+			| NORMALIZED
+			| NOTHING
+			| NOTIFY
+			| NOWAIT
+			| NULLS_P
+			| OBJECT_P
+			| OBJECTS_P
+			| OF
+			| OFF
+			| OIDS
+			| OLD
+			| OMIT
+			| OPERATOR
+			| OPTION
+			| OPTIONS
+			| ORDINALITY
+			| OTHERS
+			| OVER
+			| OVERRIDING
+			| OWNED
+			| OWNER
+			| PARALLEL
+			| PARAMETER
+			| PARSER
+			| PARTIAL
+			| PARTITION
+			| PASSING
+			| PASSWORD
+			| PATH
+			| PERIOD
+			| PLAN
+			| PLANS
+			| POLICY
+			| PRECEDING
+			| PREPARE
+			| PREPARED
+			| PRESERVE
+			| PRIOR
+			| PRIVILEGES
+			| PROCEDURAL
+			| PROCEDURE
+			| PROCEDURES
+			| PROGRAM
+			| PUBLICATION
+			| QUOTE
+			| QUOTES
+			| RANGE
+			| READ
+			| REASSIGN
+			| RECURSIVE
+			| REF_P
+			| REFERENCING
+			| REFRESH
+			| REINDEX
+			| RELATIVE_P
+			| RELEASE
+			| RENAME
+			| REPEATABLE
+			| REPLACE
+			| REPLICA
+			| RESET
+			| RESTART
+			| RESTRICT
+			| RETURN
+			| RETURNS
+			| REVOKE
+			| ROLE
+			| ROLLBACK
+			| ROLLUP
+			| ROUTINE
+			| ROUTINES
+			| ROWS
+			| RULE
+			| SAVEPOINT
+			| SCALAR
+			| SCHEMA
+			| SCHEMAS
+			| SCROLL
+			| SEARCH
+			| SECOND_P
+			| SECURITY
+			| SEQUENCE
+			| SEQUENCES
+			| SERIALIZABLE
+			| SERVER
+			| SESSION
+			| SET
+			| SETS
+			| SHARE
+			| SHOW
+			| SIMPLE
+			| SKIP
+			| SNAPSHOT
+			| SOURCE
+			| SQL_P
+			| STABLE
+			| STANDALONE_P
+			| START
+			| STATEMENT
+			| STATISTICS
+			| STDIN
+			| STDOUT
+			| STORAGE
+			| STORED
+			| STRICT_P
+			| STRING_P
+			| STRIP_P
+			| SUBSCRIPTION
+			| SUPPORT
+			| SYSID
+			| SYSTEM_P
+			| TABLES
+			| TABLESPACE
+			| TARGET
+			| TEMP
+			| TEMPLATE
+			| TEMPORARY
+			| TEXT_P
+			| TIES
+			| TRANSACTION
+			| TRANSFORM
+			| TRIGGER
+			| TRUNCATE
+			| TRUSTED
+			| TYPE_P
+			| TYPES_P
+			| UESCAPE
+			| UNBOUNDED
+			| UNCOMMITTED
+			| UNCONDITIONAL
+			| UNENCRYPTED
+			| UNKNOWN
+			| UNLISTEN
+			| UNLOGGED
+			| UNTIL
+			| UPDATE
+			| VACUUM
+			| VALID
+			| VALIDATE
+			| VALIDATOR
+			| VALUE_P
+			| VARYING
+			| VERSION_P
+			| VIEW
+			| VIEWS
+			| VIRTUAL
+			| VOLATILE
+			| WHITESPACE_P
+			| WITHIN
+			| WITHOUT
+			| WORK
+			| WRAPPER
+			| WRITE
+			| XML_P
+			| YEAR_P
+			| YES_P
+			| ZONE
+		;
+/* Column identifier --- keywords that can be column, table, etc names.
+ *
+ * Many of these keywords will in fact be recognized as type or function
+ * names too; but they have special productions for the purpose, and so
+ * can't be treated as "generic" type or function names.
+ *
+ * The type names appearing here are not usable as function names
+ * because they can be followed by '(' in typename productions, which
+ * looks too much like a function call for an LR(1) parser.
+ */
+col_name_keyword:
+			  BETWEEN
+			| BIGINT
+			| BIT
+			| BOOLEAN_P
+			| CHAR_P
+			| CHARACTER
+			| COALESCE
+			| DEC
+			| DECIMAL_P
+			| EXISTS
+			| EXTRACT
+			| FLOAT_P
+			| GREATEST
+			| GROUPING
+			| INOUT
+			| INT_P
+			| INTEGER
+			| INTERVAL
+			| JSON
+			| JSON_ARRAY
+			| JSON_ARRAYAGG
+			| JSON_EXISTS
+			| JSON_OBJECT
+			| JSON_OBJECTAGG
+			| JSON_QUERY
+			| JSON_SCALAR
+			| JSON_SERIALIZE
+			| JSON_TABLE
+			| JSON_VALUE
+			| LEAST
+			| MERGE_ACTION
+			| NATIONAL
+			| NCHAR
+			| NONE
+			| NORMALIZE
+			| NULLIF
+			| NUMERIC
+			| OUT_P
+			| OVERLAY
+			| POSITION
+			| PRECISION
+			| REAL
+			| ROW
+			| SETOF
+			| SMALLINT
+			| SUBSTRING
+			| TIME
+			| TIMESTAMP
+			| TREAT
+			| TRIM
+			| VALUES
+			| VARCHAR
+			| XMLATTRIBUTES
+			| XMLCONCAT
+			| XMLELEMENT
+			| XMLEXISTS
+			| XMLFOREST
+			| XMLNAMESPACES
+			| XMLPARSE
+			| XMLPI
+			| XMLROOT
+			| XMLSERIALIZE
+			| XMLTABLE
 		;
 
 /*****************************************************************************
