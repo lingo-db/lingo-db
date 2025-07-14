@@ -134,9 +134,18 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                //Extract AggFunctions
                std::vector<std::shared_ptr<ast::ParsedExpression>> toRemove{};
                int i = 0;
+               //Canonicalize target expressions
                std::ranges::transform(selectNode->targets, selectNode->targets.begin(), [&](auto& target) {
                   return canonicalizeParsedExpression(target, context);
                });
+               //Canonicalize distinct expressions list
+               if (selectNode->distinctExpressions.has_value()) {
+                  std::ranges::transform(selectNode->distinctExpressions.value(), selectNode->distinctExpressions->begin(), [&](auto& target) {
+                     return canonicalizeParsedExpression(target, context);
+                  });
+               }
+
+
                for (auto& target : selectNode->targets) {
 
                   if (target->exprClass == ast::ExpressionClass::FUNCTION) {
@@ -626,6 +635,16 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
          auto targetSelection = std::static_pointer_cast<ast::TargetsExpression>(pipeOperator->node);
          std::vector<std::shared_ptr<ast::BoundExpression>> boundTargetExpressions{};
          std::vector<std::shared_ptr<ast::NamedResult>> targetColumns{};
+         std::optional<std::vector<std::shared_ptr<ast::BoundExpression>>> boundDistinctExpressions = std::nullopt;
+         if (targetSelection->distinctExpressions.has_value()) {
+            //Distinct is set
+            boundDistinctExpressions = std::vector<std::shared_ptr<ast::BoundExpression>>{};
+            std::ranges::transform(targetSelection->distinctExpressions.value(), std::back_inserter(boundDistinctExpressions.value()), [&](auto& expr) {
+               return analyzeExpression(expr, context, resolverScope);
+            });
+         }
+
+
          for (auto& target : targetSelection->targets) {
             auto parsedExpression = analyzeExpression(target, context, resolverScope);
 
@@ -680,7 +699,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                default: error("Not implemented", target->loc);
             }
          }
-         boundAstNode = drv.nf.node<ast::BoundTargetsExpression>(targetSelection->loc, targetSelection->alias,  boundTargetExpressions, targetColumns);
+         boundAstNode = drv.nf.node<ast::BoundTargetsExpression>(targetSelection->loc, targetSelection->alias,  boundTargetExpressions, boundDistinctExpressions, targetColumns);
          break;
       }
       case ast::PipeOperatorType::WHERE: {
@@ -1395,7 +1414,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
                }
                auto scope = createTmpScope();
                auto fName = function->alias.empty() ? function->functionName : function->alias;
-               auto resultType = catalog::Type::int64();
+               catalog::NullableType resultType{catalog::Type::int64(), arg2->resultType->isNullable};
 
                auto fInfo =  std::make_shared<ast::FunctionInfo>(scope, fName, resultType);
                fInfo->displayName = function->alias;
@@ -1423,7 +1442,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
 
                auto scope = createTmpScope();
                auto fName = function->alias.empty() ? function->functionName : function->alias;
-               auto resultType = catalog::Type::stringType();
+               catalog::NullableType resultType{catalog::Type::stringType(), stringArg->resultType->isNullable};
 
                auto fInfo =  std::make_shared<ast::FunctionInfo>(scope, fName, resultType);
                fInfo->displayName = function->alias;
@@ -1496,6 +1515,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
          if (!castExpr->logicalTypeWithMods.has_value()) {
             error("Cast expression must have logicalType", castExpr->loc);
          }
+         //TODO cleanup
          switch (castExpr->logicalTypeWithMods.value().logicalType) {
             case ast::DATE: {
                switch (boundChild->type) {
@@ -1553,7 +1573,17 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
 
                return boundCast;
             }
-            default: error("Cast not implemented", rootNode->loc);
+
+            default: {
+               auto castType = SQLTypeUtils::typemodsToCatalogType(castExpr->logicalTypeWithMods.value().logicalType, castExpr->logicalTypeWithMods.value().typeModifiers);
+               if (castType != boundChild->resultType.value()) {
+                  castType.isNullable = boundChild->resultType.value().isNullable;
+                  return drv.nf.node<ast::BoundCastExpression>(castExpr->loc, castType, castExpr->alias, boundChild, castExpr->logicalTypeWithMods, "");
+               } else {
+                  return boundChild;
+               }
+
+            };
          }
       }
       case ast::ExpressionClass::BETWEEN: {
