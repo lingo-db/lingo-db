@@ -171,7 +171,6 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
             case ast::PipeOperatorType::RESULT_MODIFIER: {
                auto resultModifier = std::static_pointer_cast<ast::ResultModifier>(pipeOp->node);
                //TODO Support more complex modifiers
-               resultModifier->input = pipeOp->input;
                return resultModifier;
             }
             case ast::PipeOperatorType::UNION:
@@ -221,7 +220,40 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
             default: return tableRef;
          }
       }
+      case ast::NodeType::RESULT_MODIFIER: {
+         auto resultModifier = std::static_pointer_cast<ast::ResultModifier>(rootNode);
+         if (resultModifier->input)
+            resultModifier->input = canonicalize(resultModifier->input, context);
+         switch (resultModifier->modifierType) {
+            case ast::ResultModifierType::ORDER_BY: {
+               auto orderBy = std::static_pointer_cast<ast::OrderByModifier>(resultModifier);
+               int i = 0;
+               for (auto expr: orderBy->orderByElements) {
+                  switch (expr->expression->exprClass) {
+                     case ast::ExpressionClass::FUNCTION: {
+                        auto function = std::static_pointer_cast<ast::FunctionExpression>(expr->expression);
+                        if (expr->expression->type == ast::ExpressionType::AGGREGATE) {
+                           context->currentScope->aggregationNode->aggregations.push_back(function);
+                        } else {
+                           context->currentScope->extendNode->extensions.push_back(function);
+                        }
+                        if (function->alias.empty()) {
+                           //TODO make unique alias
+                           function->alias = function->functionName + "_" + std::to_string(i);
+                        }
+                        expr->expression = drv.nf.node<ast::ColumnRefExpression>(function->loc, function->alias);
+                        i++;
+                     }
+                     default: ;
+                  }
+               }
+               break;
+            }
+               default: ;
+         }
 
+         return resultModifier;
+      }
       default:
          return rootNode;
    }
@@ -693,7 +725,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
          //Maybe Not the best way!
          if (!aggregationNode->groupByNode || aggregationNode->groupByNode->group_expressions.empty()) {
             for (auto boundAggr : boundAggregationExpressions) {
-               boundAggr->resultType->isNullable = true;
+               boundAggr->resultType->isNullable = boundAggr->functionName != "count";
             }
          }
 
@@ -997,7 +1029,19 @@ std::shared_ptr<ast::BoundResultModifier> SQLQueryAnalyzer::analyzeResultModifie
          for (auto orderByElement : orderByModifier->orderByElements) {
             if (orderByElement->expression) {
                auto boundExpression = analyzeExpression(orderByElement->expression, context, resolverScope);
-               auto boundOrderByElement = drv.nf.node<ast::BoundOrderByElement>(orderByElement->loc, orderByElement->type, orderByElement->nullOrder, boundExpression);
+
+               std::shared_ptr<ast::NamedResult> namedResult = nullptr;
+
+               switch (boundExpression->type) {
+                  case ast::ExpressionType::BOUND_COLUMN_REF: {
+                     auto columnRef = std::static_pointer_cast<ast::BoundColumnRefExpression>(boundExpression);
+                     namedResult = columnRef->namedResult;
+                     break;
+                  }
+                  default: error("Order by element not implemented", orderByElement->expression->loc);
+               }
+               assert(namedResult);
+               auto boundOrderByElement = drv.nf.node<ast::BoundOrderByElement>(orderByElement->loc, orderByElement->type, orderByElement->nullOrder, namedResult);
                boundOrderByElements.push_back(boundOrderByElement);
             }
          }
