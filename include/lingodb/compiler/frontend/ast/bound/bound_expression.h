@@ -142,8 +142,8 @@ class BoundOperatorExpression : public BoundExpression {
 class BoundCastExpression : public BoundExpression {
    public:
    static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_CAST;
-   BoundCastExpression(catalog::Type resultType, std::string alias, std::shared_ptr<BoundExpression> child, std::optional<LogicalType> logicalType, std::string stringRepr);
-   std::optional<LogicalType> logicalType;
+   BoundCastExpression(catalog::Type resultType, std::string alias, std::shared_ptr<BoundExpression> child, std::optional<LogicalTypeWithMods> logicalTypeWithMods, std::string stringRepr);
+   std::optional<LogicalTypeWithMods> logicalTypeWithMods;
    //TODO better
    std::string stringRepr;
    std::shared_ptr<BoundExpression> child;
