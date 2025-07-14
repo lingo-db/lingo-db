@@ -398,15 +398,12 @@ mlir::Value SQLMlirTranslator::translateResultModifier(mlir::OpBuilder& builder,
             if (orderByElement->type == ast::OrderType::DESCENDING) {
                spec = relalg::SortSpec::desc;
             }
-            if (orderByElement->expression->type == ast::ExpressionType::BOUND_COLUMN_REF) {
-               auto columnRef = std::static_pointer_cast<ast::BoundColumnRefExpression>(orderByElement->expression);
-               auto namedResult = columnRef->namedResult;
-               auto attrDef = namedResult->createRef(builder, attrManager);
-               mapping.push_back(relalg::SortSpecificationAttr::get(builder.getContext(), attrDef, spec));
+            assert(orderByElement->namedResult);
+            auto namedResult = orderByElement->namedResult;
+            auto attrDef = namedResult->createRef(builder, attrManager);
+            mapping.push_back(relalg::SortSpecificationAttr::get(builder.getContext(), attrDef, spec));
 
-            } else {
-               error("Not implemented", orderByElement->expression->loc);
-            }
+
          }
          return builder.create<relalg::SortOp>(builder.getUnknownLoc(), tuples::TupleStreamType::get(builder.getContext()), tree, builder.getArrayAttr(mapping));
       }
@@ -1205,7 +1202,7 @@ mlir::Value SQLMlirTranslator::translateAggregation(mlir::OpBuilder& builder, st
                aggrFunction->functionInfo->resultType.isNullable = true;
             }
             //TODO move to analyzer
-            if (!mlir::isa<db::NullableType>(aggrResultType) && (groupByAttrs.empty())) {
+            if (!mlir::isa<db::NullableType>(aggrResultType) && (groupByAttrs.empty()) && aggrFunction->functionName != "count") {
                aggrResultType = db::NullableType::get(builder.getContext(), aggrResultType);
 
             }
