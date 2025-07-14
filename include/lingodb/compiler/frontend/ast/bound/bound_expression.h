@@ -42,6 +42,7 @@ class BoundColumnRefExpression : public BoundExpression {
 
    //TODO semenatic
    std::string scope;
+   //TODO cleanup: remove, as it is already inside the parent
    std::shared_ptr<NamedResult> namedResult;
 
    //TODO type etc
