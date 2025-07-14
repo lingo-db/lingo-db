@@ -26,7 +26,7 @@ class TupleHelper {
                elemAlign = alignof(void*);
             })
             .Case<mlir::IntegerType>([&](mlir::IntegerType t) {
-               elemSize = t.getIntOrFloatBitWidth() / 8;
+               elemSize = (t.getIntOrFloatBitWidth() + 7) / 8;
                switch (elemSize) {
                   case 1: elemAlign = alignof(int8_t); break;
                   case 2: elemAlign = alignof(int16_t); break;
@@ -87,7 +87,7 @@ class TupleHelper {
                elemAlign = alignof(void*);
             })
             .Case<mlir::IntegerType>([&](mlir::IntegerType t) {
-               elemSize = t.getIntOrFloatBitWidth() / 8;
+               elemSize = (t.getIntOrFloatBitWidth() + 7) / 8;
                switch (elemSize) {
                   case 1: elemAlign = alignof(int8_t); break;
                   case 2: elemAlign = alignof(int16_t); break;
