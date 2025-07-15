@@ -209,13 +209,13 @@ struct ColumnRefMemberMappingAttrStorage : public ::mlir::AttributeStorage {
 } // namespace lingodb::compiler::dialect::subop::detail
 
 namespace lingodb::compiler::dialect::subop {
-llvm::SmallVector<std::pair<Member, tuples::ColumnDefAttr>> ColumnDefMemberMappingAttr::getMapping() const {
+llvm::SmallVector<std::pair<Member, tuples::ColumnDefAttr>> ColumnDefMemberMappingAttr::getMappingList() const {
    return getImpl()->mapping;
 }
-llvm::SmallVector<std::pair<Member, tuples::ColumnRefAttr>> ColumnRefMemberMappingAttr::getMapping() const {
+llvm::SmallVector<std::pair<Member, tuples::ColumnRefAttr>> ColumnRefMemberMappingAttr::getMappingList() const {
    return getImpl()->mapping;
 }
-llvm::SmallVector<Member> StateMembersAttr::getMembers() const {
+llvm::SmallVector<Member> StateMembersAttr::getMemberList() const {
    return getImpl()->members;
 }
 Member MemberAttr::getMember() const {

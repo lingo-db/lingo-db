@@ -51,15 +51,24 @@ def StateMembers : SubOperator_Attr<"StateMembers"> {
   let storageNamespace = "::lingodb::compiler::dialect::subop::detail";
 
   // Your parameters, printers, builders, etc.
-  let parameters = (ins "llvm::SmallVector<Member>":$members);
+  let parameters = (ins "llvm::SmallVector<Member>":$memberList);
   let hasCustomAssemblyFormat = 1;
+  let extraClassDeclaration = [{
+  const llvm::SmallVector<Member>& getMembers() const;
+  }];
+  let extraClassDefinition = [{
+    const llvm::SmallVector<Member>& $cppClass::getMembers() const {
+        return getImpl()->members;
+    }
+  }];
+
 
 }
 
 def ColumnRefMemberMapping : SubOperator_Attr<"ColumnRefMemberMapping"> {
     let mnemonic = "column_ref_member_mapping";
     let description = "A mapping from column references to members, e.g., for materializing operations";
-    let parameters = (ins "llvm::SmallVector<std::pair<Member, tuples::ColumnRefAttr>>":$mapping);
+    let parameters = (ins "llvm::SmallVector<std::pair<Member, tuples::ColumnRefAttr>>":$mappingList);
 
       let genStorageClass = 0;
       // Tell ODS what your storage class is called...
@@ -97,12 +106,18 @@ def ColumnRefMemberMapping : SubOperator_Attr<"ColumnRefMemberMapping"> {
             }
             return false;
         }
+        const llvm::SmallVector<std::pair<Member, tuples::ColumnRefAttr>>& getMapping() const;
     }];
+    let extraClassDefinition = [{
+        const llvm::SmallVector<std::pair<Member, tuples::ColumnRefAttr>>& $cppClass::getMapping() const {
+            return getImpl()->mapping;
+        }
+       }];
 }
 def ColumnDefMemberMapping : SubOperator_Attr<"ColumnDefMemberMapping"> {
     let mnemonic = "column_def_member_mapping";
     let description = "A mapping from members to column definitions, e.g., for scans";
-    let parameters = (ins "llvm::SmallVector<std::pair<Member, tuples::ColumnDefAttr>>":$mapping);
+    let parameters = (ins "llvm::SmallVector<std::pair<Member, tuples::ColumnDefAttr>>":$mappingList);
 
       let genStorageClass = 0;
       // Tell ODS what your storage class is called...
@@ -140,7 +155,13 @@ def ColumnDefMemberMapping : SubOperator_Attr<"ColumnDefMemberMapping"> {
             }
             return false;
         }
+        const llvm::SmallVector<std::pair<Member, tuples::ColumnDefAttr>>& getMapping() const;
     }];
+    let extraClassDefinition = [{
+        const llvm::SmallVector<std::pair<Member, tuples::ColumnDefAttr>>& $cppClass::getMapping() const {
+            return getImpl()->mapping;
+        }
+       }];
 }
 
 
