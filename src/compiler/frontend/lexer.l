@@ -176,6 +176,7 @@ boolean [fF][aA][lL][sS][eE]
 
 [eE][lL][sS][eE]                      { MAKE_KEYWORD(ELSE); }
 [eE][nN][dD]                          { MAKE_KEYWORD(END_P); }
+[eE][xX][cC][eE][pP][tT]              { MAKE_KEYWORD(EXCEPT); }
 [eE][xX][iI][sS][tT][sS]              { MAKE_KEYWORD(EXISTS); }
 [eE][xX][tT][rR][aA][cC][tT]          { MAKE_KEYWORD(EXTRACT); }
 
@@ -192,6 +193,7 @@ boolean [fF][aA][lL][sS][eE]
 [iI][nN][sS][eE][rR][tT]              { MAKE_KEYWORD(INSERT); }
 [iI][nN][tT]                          { MAKE_KEYWORD(INT_P); }
 [iI][nN][tT][eE][gG][eE][rR]          { MAKE_KEYWORD(INTEGER); }
+[iI][nN][tT][eE][rR][sS][eE][cC][tT]  { MAKE_KEYWORD(INTERSECT); }
 [iI][nN][tT][eE][rR][vV][aA][lL]      { MAKE_KEYWORD(INTERVAL); }
 [iI][nN][tT][oO]                      { MAKE_KEYWORD(INTO); }
 [nN][uU][mM][eE][rR][iI][cC]          { MAKE_KEYWORD(NUMERIC); }
