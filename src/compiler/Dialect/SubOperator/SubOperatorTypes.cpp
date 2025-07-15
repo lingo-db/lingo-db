@@ -10,7 +10,7 @@ using namespace lingodb::compiler::dialect;
 static mlir::LogicalResult parseStateMembers(mlir::AsmParser& parser, subop::StateMembersAttr& stateMembersAttr) {
    auto& memberManager = parser.getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
    if (parser.parseLSquare()) return mlir::failure();
-   std::vector<subop::Member> members;
+   llvm::SmallVector<subop::Member> members;
    while (true) {
       if (!parser.parseOptionalRSquare()) { break; }
       llvm::StringRef colName;
@@ -21,7 +21,7 @@ static mlir::LogicalResult parseStateMembers(mlir::AsmParser& parser, subop::Sta
       if (parser.parseRSquare()) { return mlir::failure(); }
       break;
    }
-   stateMembersAttr = subop::StateMembersAttr::get(parser.getContext(), std::make_shared<subop::Members>(members));
+   stateMembersAttr = subop::StateMembersAttr::get(parser.getContext(), members);
    return mlir::success();
 }
 static void printStateMembers(mlir::AsmPrinter& p, subop::StateMembersAttr stateMembersAttr) {
@@ -53,33 +53,46 @@ static void printWithLock(mlir::AsmPrinter& p, bool withLock) {
       p << ", lockable";
    }
 }
+llvm::SmallVector<subop::Member> combineMembers(
+   const subop::StateMembersAttr& keyMembers,
+   const subop::StateMembersAttr& valueMembers) {
+   llvm::SmallVector<subop::Member> combined;
+   combined.reserve(keyMembers.getMembers().size() + valueMembers.getMembers().size());
+   for (const auto& member : keyMembers.getMembers()) {
+      combined.push_back(member);
+   }
+   for (const auto& member : valueMembers.getMembers()) {
+      combined.push_back(member);
+   }
+   return combined;
+}
 } // namespace
-subop::StateMembersAttr subop::HashMapType::getMembers() {
-   return subop::StateMembersAttr::get(this->getContext(), std::make_shared<Members>(getKeyMembers().getMembers(), getValueMembers().getMembers()));
+subop::StateMembersAttr subop::HashMapType::getMembers() {   
+   return subop::StateMembersAttr::get(this->getContext(), combineMembers(getKeyMembers(), getValueMembers()));
 }
 subop::StateMembersAttr subop::PreAggrHtFragmentType::getMembers() {
-   return subop::StateMembersAttr::get(this->getContext(), std::make_shared<Members>(getKeyMembers().getMembers(), getValueMembers().getMembers()));
+   return subop::StateMembersAttr::get(this->getContext(), combineMembers(getKeyMembers(), getValueMembers()));
 }
 subop::StateMembersAttr subop::PreAggrHtType::getMembers() {
-   return subop::StateMembersAttr::get(this->getContext(), std::make_shared<Members>(getKeyMembers().getMembers(), getValueMembers().getMembers()));
+   return subop::StateMembersAttr::get(this->getContext(), combineMembers(getKeyMembers(), getValueMembers()));
 }
 subop::StateMembersAttr subop::HashMultiMapType::getMembers() {
-   return subop::StateMembersAttr::get(this->getContext(), std::make_shared<Members>(getKeyMembers().getMembers(), getValueMembers().getMembers()));
+   return subop::StateMembersAttr::get(this->getContext(), combineMembers(getKeyMembers(), getValueMembers()));
 }
 subop::StateMembersAttr subop::MultiMapType::getMembers() {
-   return subop::StateMembersAttr::get(this->getContext(), std::make_shared<Members>(getKeyMembers().getMembers(), getValueMembers().getMembers()));
+   return subop::StateMembersAttr::get(this->getContext(), combineMembers(getKeyMembers(), getValueMembers()));
 }
 subop::StateMembersAttr subop::ExternalHashIndexType::getMembers() {
-   return subop::StateMembersAttr::get(this->getContext(), std::make_shared<Members>(getKeyMembers().getMembers(), getValueMembers().getMembers()));
+   return subop::StateMembersAttr::get(this->getContext(), combineMembers(getKeyMembers(), getValueMembers()));
 }
 subop::StateMembersAttr subop::MapType::getMembers() {
-   return subop::StateMembersAttr::get(this->getContext(), std::make_shared<Members>(getKeyMembers().getMembers(), getValueMembers().getMembers()));
+   return subop::StateMembersAttr::get(this->getContext(), combineMembers(getKeyMembers(), getValueMembers()));
 }
 subop::StateMembersAttr subop::HashIndexedViewType::getMembers() {
-   return subop::StateMembersAttr::get(this->getContext(), std::make_shared<Members>(getKeyMembers().getMembers(), getValueMembers().getMembers()));
+   return subop::StateMembersAttr::get(this->getContext(), combineMembers(getKeyMembers(), getValueMembers()));
 }
 subop::StateMembersAttr subop::SegmentTreeViewType::getMembers() {
-   return subop::StateMembersAttr::get(this->getContext(), std::make_shared<Members>(getKeyMembers().getMembers(), getValueMembers().getMembers()));
+   return subop::StateMembersAttr::get(this->getContext(), combineMembers(getKeyMembers(), getValueMembers()));
 }
 subop::StateMembersAttr subop::SimpleStateType::getValueMembers() {
    return getMembers();

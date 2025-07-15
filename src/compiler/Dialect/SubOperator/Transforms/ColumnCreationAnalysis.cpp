@@ -11,11 +11,11 @@ void subop::ColumnCreationAnalysis::analyze(mlir::Operation* op, mlir::Attribute
          analyze(op, x);
       }
    }else if (auto mappingDefAttr = mlir::dyn_cast_or_null<subop::ColumnDefMemberMappingAttr>(attr)) {
-      for (auto x : mappingDefAttr.getMapping()->getMapping()) {
+      for (auto x : mappingDefAttr.getMapping()) {
          analyze(op, x.second);
       }
    }  else if (auto mappingRefAttr = mlir::dyn_cast_or_null<subop::ColumnRefMemberMappingAttr>(attr)) {
-      for (auto x : mappingRefAttr.getMapping()->getMapping()) {
+      for (auto x : mappingRefAttr.getMapping()){
          analyze(op, x.second);
       }
    } else if (auto columnDefAttr = mlir::dyn_cast_or_null<tuples::ColumnDefAttr>(attr)) {

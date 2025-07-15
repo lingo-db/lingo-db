@@ -411,7 +411,7 @@ class ToJson {
    nlohmann::json serializeDefMapping(subop::ColumnDefMemberMappingAttr dictAttr) {
       auto& memberManager = dictAttr.getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
       auto result = nlohmann::json::array();
-      for (auto x : dictAttr.getMapping()->getMapping()) {
+      for (auto x : dictAttr.getMapping()) {
          result.push_back(nlohmann::json{{"member", memberManager.getName(x.first)}, {"column", columnToJSON(x.second)}});
       }
       return result;
@@ -419,7 +419,7 @@ class ToJson {
    nlohmann::json serializeRefMapping(subop::ColumnRefMemberMappingAttr dictAttr) {
       auto& memberManager = dictAttr.getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
       auto result = nlohmann::json::array();
-      for (auto x : dictAttr.getMapping()->getMapping()) {
+      for (auto x : dictAttr.getMapping()) {
          result.push_back(nlohmann::json{{"member", memberManager.getName(x.first)}, {"column", columnToJSON(x.second)}});
       }
       return result;

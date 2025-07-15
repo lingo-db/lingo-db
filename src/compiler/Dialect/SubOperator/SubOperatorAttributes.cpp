@@ -10,7 +10,7 @@ namespace lingodb::compiler::dialect::subop {
 ::mlir::Attribute StateMembersAttr::parse(::mlir::AsmParser& odsParser, ::mlir::Type odsType) {
    auto& memberManager = odsParser.getContext()->getOrLoadDialect<SubOperatorDialect>()->getMemberManager();
    if (odsParser.parseLSquare()) return {};
-   std::vector<Member> members;
+   llvm::SmallVector<Member> members;
    while (true) {
       if (!odsParser.parseOptionalRSquare()) { break; }
       llvm::StringRef colName;
@@ -21,7 +21,7 @@ namespace lingodb::compiler::dialect::subop {
       if (odsParser.parseRSquare()) { return {}; }
       break;
    }
-   return StateMembersAttr::get(odsParser.getContext(), std::make_shared<Members>(members));
+   return StateMembersAttr::get(odsParser.getContext(), members);
 }
 void StateMembersAttr::print(::mlir::AsmPrinter& odsPrinter) const {
    auto& memberManager = getContext()->getOrLoadDialect<SubOperatorDialect>()->getMemberManager();
@@ -46,7 +46,7 @@ void ColumnRefMemberMappingAttr::print(::mlir::AsmPrinter& odsPrinter) const {
    auto& memberManager = getContext()->getOrLoadDialect<SubOperatorDialect>()->getMemberManager();
    odsPrinter << "[";
    auto first = true;
-   for (auto& [member, col] : getMapping()->getMapping()) {
+   for (auto& [member, col] : getMapping()) {
       if (first) {
          first = false;
       } else {
@@ -75,6 +75,117 @@ void MemberAttr::print(::mlir::AsmPrinter& odsPrinter) const {
 }
 
 } // namespace lingodb::compiler::dialect::subop
+
+namespace lingodb::compiler::dialect::subop::detail {
+struct StateMembersAttrStorage : public ::mlir::AttributeStorage {
+   using KeyTy = llvm::SmallVector<Member>;
+
+   StateMembersAttrStorage(KeyTy members) : members(std::move(members)) {}
+
+   static StateMembersAttrStorage* construct(::mlir::AttributeStorageAllocator& allocator, const KeyTy& key) {
+      return new (allocator.allocate<StateMembersAttrStorage>()) StateMembersAttrStorage(key);
+   }
+   bool operator==(const StateMembersAttrStorage& other) const {
+      if (members.size() != other.members.size()) return false;
+      for (size_t i = 0; i < members.size(); ++i) {
+         if (members[i] != other.members[i]) return false;
+      }
+      return true;
+   }
+   static ::llvm::hash_code hashKey(const KeyTy& key) {
+      ::llvm::hash_code hash = 0;
+      for (const auto& member : key) {
+         hash = llvm::hash_combine(hash, member.internal);
+      }
+      return hash;
+   }
+   KeyTy members;
+};
+struct MemberAttrStorage : public ::mlir::AttributeStorage {
+   using KeyTy = subop::Member;
+
+   MemberAttrStorage(KeyTy member) : member(std::move(member)) {}
+
+   static MemberAttrStorage* construct(::mlir::AttributeStorageAllocator& allocator, const KeyTy& key) {
+      return new (allocator.allocate<MemberAttrStorage>()) MemberAttrStorage(key);
+   }
+   bool operator==(const MemberAttrStorage& other) const {
+      return member == other.member;
+   }
+   static ::llvm::hash_code hashKey(const KeyTy& key) {
+      return llvm::hash_value(key.internal);
+   }
+   KeyTy member;
+};
+struct ColumnDefMemberMappingAttrStorage : public ::mlir::AttributeStorage {
+   using KeyTy = llvm::SmallVector<std::pair<Member, tuples::ColumnDefAttr>>;
+
+   ColumnDefMemberMappingAttrStorage(KeyTy mapping) : mapping(std::move(mapping)) {}
+
+   static ColumnDefMemberMappingAttrStorage* construct(::mlir::AttributeStorageAllocator& allocator, const KeyTy& key) {
+      return new (allocator.allocate<ColumnDefMemberMappingAttrStorage>()) ColumnDefMemberMappingAttrStorage(key);
+   }
+   bool operator==(const ColumnDefMemberMappingAttrStorage& other) const {
+      if (mapping.size() != other.mapping.size()) return false;
+      for (size_t i = 0; i < mapping.size(); ++i) {
+         if (mapping[i].first != other.mapping[i].first || mapping[i].second != other.mapping[i].second) {
+            return false;
+         }
+      }
+      return true;
+   }
+   static ::llvm::hash_code hashKey(const KeyTy& key) {
+      ::llvm::hash_code hash = 0;
+      for (const auto& pair : key) {
+         hash = llvm::hash_combine(hash, pair.first.internal, pair.second);
+      }
+      return hash;
+   }
+   KeyTy mapping;
+};
+struct ColumnRefMemberMappingAttrStorage : public ::mlir::AttributeStorage {
+   using KeyTy = llvm::SmallVector<std::pair<Member, tuples::ColumnRefAttr>>;
+
+   ColumnRefMemberMappingAttrStorage(KeyTy mapping) : mapping(std::move(mapping)) {}
+
+   static ColumnRefMemberMappingAttrStorage* construct(::mlir::AttributeStorageAllocator& allocator, const KeyTy& key) {
+      return new (allocator.allocate<ColumnRefMemberMappingAttrStorage>()) ColumnRefMemberMappingAttrStorage(key);
+   }
+   bool operator==(const ColumnRefMemberMappingAttrStorage& other) const {
+      if (mapping.size() != other.mapping.size()) return false;
+      for (size_t i = 0; i < mapping.size(); ++i) {
+         if (mapping[i].first != other.mapping[i].first || mapping[i].second != other.mapping[i].second) {
+            return false;
+         }
+      }
+      return true;
+   }
+   static ::llvm::hash_code hashKey(const KeyTy& key) {
+      ::llvm::hash_code hash = 0;
+      for (const auto& pair : key) {
+         hash = llvm::hash_combine(hash, pair.first.internal, pair.second);
+      }
+      return hash;
+   }
+   KeyTy mapping;
+};
+} // namespace lingodb::compiler::dialect::subop::detail
+
+namespace lingodb::compiler::dialect::subop {
+llvm::SmallVector<std::pair<Member, tuples::ColumnDefAttr>> ColumnDefMemberMappingAttr::getMapping() const {
+   return getImpl()->mapping;
+}
+llvm::SmallVector<std::pair<Member, tuples::ColumnRefAttr>> ColumnRefMemberMappingAttr::getMapping() const {
+   return getImpl()->mapping;
+}
+llvm::SmallVector<Member> StateMembersAttr::getMembers() const {
+   return getImpl()->members;
+}
+Member MemberAttr::getMember() const {
+   return getImpl()->member;
+}
+} // namespace lingodb::compiler::dialect::subop
+
 
 #define GET_ATTRDEF_CLASSES
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOpsAttributes.cpp.inc"

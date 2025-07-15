@@ -66,38 +66,38 @@ mlir::ArrayAttr SubOpStateUsageTransformer::updateMembers(mlir::ArrayAttr curren
 
 subop::ColumnDefMemberMappingAttr SubOpStateUsageTransformer::updateMapping(subop::ColumnDefMemberMappingAttr currentMapping) {
    bool anyNeedsReplacement = false;
-   for (auto m : currentMapping.getMapping()->getMapping()) {
+   for (auto m : currentMapping.getMapping()) {
       anyNeedsReplacement |= memberMapping.contains(m.first);
    }
    if (anyNeedsReplacement) {
       llvm::SmallVector<std::pair<subop::Member, tuples::ColumnDefAttr>> newMapping;
-      for (auto m : currentMapping.getMapping()->getMapping()) {
+      for (auto m : currentMapping.getMapping()) {
          if (memberMapping.contains(m.first)) {
             newMapping.push_back({memberMapping.at(m.first), m.second});
          } else {
             newMapping.push_back(m);
          }
       }
-      return subop::ColumnDefMemberMappingAttr::get(currentMapping.getContext(), std::make_shared<ColumnDefMemberMapping>(newMapping));
+      return subop::ColumnDefMemberMappingAttr::get(currentMapping.getContext(), newMapping);
    }else{
         return currentMapping;
    }
 }
 subop::ColumnRefMemberMappingAttr SubOpStateUsageTransformer::updateMapping(subop::ColumnRefMemberMappingAttr currentMapping) {
    bool anyNeedsReplacement = false;
-   for (auto m : currentMapping.getMapping()->getMapping()) {
+   for (auto m : currentMapping.getMapping()) {
       anyNeedsReplacement |= memberMapping.contains(m.first);
    }
    if (anyNeedsReplacement) {
       llvm::SmallVector<std::pair<subop::Member, tuples::ColumnRefAttr>> newMapping;
-      for (auto m : currentMapping.getMapping()->getMapping()) {
+      for (auto m : currentMapping.getMapping()) {
          if (memberMapping.contains(m.first)) {
             newMapping.push_back({memberMapping.at(m.first), m.second});
          } else {
             newMapping.push_back(m);
          }
       }
-      return subop::ColumnRefMemberMappingAttr::get(currentMapping.getContext(), std::make_shared<ColumnRefMemberMapping>(newMapping));
+      return subop::ColumnRefMemberMappingAttr::get(currentMapping.getContext(), newMapping);
    } else {
       return currentMapping;
    }

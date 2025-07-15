@@ -90,22 +90,22 @@ ExecutionStepAnalyzed analyze(subop::ExecutionStepOp executionStepOp, subop::Col
          auto currentReadMembers = subOp.getReadMembers();
          auto currentWrittenMembers = subOp.getWrittenMembers();
 
-         for (auto r : currentReadMembers->getMembers()) {
+         for (auto r : currentReadMembers) {
             if (writtenMembers.contains(r)) {
                collisions.insert(writtenMembers[r].begin(), writtenMembers[r].end());
             }
          }
-         for (auto w : currentWrittenMembers->getMembers()) {
+         for (auto w : currentWrittenMembers) {
             if (readMembers.contains(w)) {
                collisions.insert(readMembers[w].begin(), readMembers[w].end());
             }
          }
-         for (auto r : currentReadMembers->getMembers()) {
+         for (auto r : currentReadMembers) {
             if (extMembers.contains(r)) {
                readMembers[r].push_back(subOp);
             }
          }
-         for (auto r : currentWrittenMembers->getMembers()) {
+         for (auto r : currentWrittenMembers) {
             if (extMembers.contains(r)) {
                writtenMembers[r].push_back(subOp);
             }

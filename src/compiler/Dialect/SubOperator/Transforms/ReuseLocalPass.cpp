@@ -14,12 +14,13 @@
 namespace {
 using namespace lingodb::compiler::dialect;
 
-static std::vector<subop::SubOperator> findWritingOps(mlir::Block& block, std::shared_ptr<subop::Members>& members) {
+static std::vector<subop::SubOperator> findWritingOps(mlir::Block& block, llvm::SmallVector<subop::Member>& members) {
+   llvm::DenseSet<subop::Member> memberSet(members.begin(), members.end());
    std::vector<subop::SubOperator> res;
-   block.walk([&members, &res](subop::SubOperator subop) {
+   block.walk([&memberSet, &res](subop::SubOperator subop) {
       auto writtenBySubOp = subop.getWrittenMembers();
-      for (auto writtenMember : writtenBySubOp->getMembers()) {
-         if (members->contains(writtenMember)) {
+      for (auto writtenMember : writtenBySubOp) {
+         if (memberSet.contains(writtenMember)) {
             res.push_back(subop);
             break;
          }
@@ -69,16 +70,16 @@ class AvoidUnnecessaryMaterialization : public mlir::RewritePattern {
       if (auto materializeOp = mlir::dyn_cast_or_null<subop::MaterializeOp>(writingOps[0].getOperation())) {
          if (materializeOp->getBlock() == scanOp->getBlock() && materializeOp->isBeforeInBlock(scanOp)) {
             if (auto scanOp2 = mlir::dyn_cast_or_null<subop::ScanOp>(materializeOp.getStream().getDefiningOp())) {
-               llvm::SmallVector<subop::ColumnDefMemberMapping::pairType> newMapping;
-               for (auto curr : scanOp.getMapping().getMapping()->getMapping()) {
+               llvm::SmallVector<subop::DefMappingPairT> newMapping;
+               for (auto curr : scanOp.getMapping().getMapping()) {
                   auto currentMember = curr.first;
-                  auto otherColumnDef = colManager.createDef(&materializeOp.getMapping().getMapping()->getRefAttr(currentMember).getColumn());
-                  auto otherMember = scanOp2.getMapping().getMapping()->getMember(otherColumnDef);
+                  auto otherColumnDef = colManager.createDef(&materializeOp.getMapping().getColumnRef(currentMember).getColumn());
+                  auto otherMember = scanOp2.getMapping().getMember(otherColumnDef);
                   newMapping.push_back({otherMember, otherColumnDef});
                }
                rewriter.modifyOpInPlace(op, [&] {
                   scanOp.setOperand(scanOp2.getState());
-                  scanOp.setMappingAttr(subop::ColumnDefMemberMappingAttr::get(rewriter.getContext(), std::make_shared<subop::ColumnDefMemberMapping>(newMapping)));
+                  scanOp.setMappingAttr(subop::ColumnDefMemberMappingAttr::get(rewriter.getContext(), newMapping));
                });
                return mlir::success();
             }
@@ -178,7 +179,7 @@ class AvoidArrayMaterialization : public mlir::RewritePattern {
                            offsetByOp = offsetBy;
                            replaceWith = colManager.createRef(&otherScanRefsOp.getRef().getColumn());
                            auto writtenMembers = localScatterOp.getWrittenMembers();
-                           if (writtenMembers->getMembers().size() != mlir::cast<subop::State>(scanRefsOp.getState().getType()).getMembers().getMembers().size()) {
+                           if (writtenMembers.size() != mlir::cast<subop::State>(scanRefsOp.getState().getType()).getMembers().getMembers().size()) {
                               return mlir::failure();
                            }
                         } else {
@@ -203,11 +204,11 @@ class AvoidArrayMaterialization : public mlir::RewritePattern {
          }
       }
       if (scatterOp) {
-         auto scatterMapping= scatterOp.getMapping().getMapping();
+         auto scatterMapping= scatterOp.getMapping();
          std::vector<mlir::Attribute> renamed;
          for (auto gatherOp : gatherOps) {
-            for (auto m : gatherOp.getMapping().getMapping()->getMapping()) {
-               renamed.push_back(colManager.createDef(&m.second.getColumn(), rewriter.getArrayAttr(scatterMapping->getRefAttr(m.first))));
+            for (auto m : gatherOp.getMapping().getMapping()) {
+               renamed.push_back(colManager.createDef(&m.second.getColumn(), rewriter.getArrayAttr(scatterMapping.getColumnRef(m.first))));
             }
             rewriter.replaceOp(gatherOp, gatherOp.getStream());
          }
@@ -274,12 +275,12 @@ class ReuseHashtable : public mlir::RewritePattern {
          if (auto htType = mlir::dyn_cast_or_null<subop::MapType>(scanOp.getState().getType())) {
             std::vector<tuples::Column*> hashedColumns;
             for (auto m : keyMembers) {
-               hashedColumns.push_back(&insertOp.getMapping().getMapping()->getRefAttr(m).getColumn());
+               hashedColumns.push_back(&insertOp.getMapping().getColumnRef(m).getColumn());
             }
             std::unordered_map<subop::Member, subop::Member> memberMapping;
-            for (auto m : insertOp.getMapping().getMapping()->getMapping()) {
+            for (auto m : insertOp.getMapping().getMapping()) {
                auto colDef = colManager.createDef(&m.second.getColumn());
-               auto hmMember = scanOp.getMapping().getMapping()->getMember(colDef);
+               auto hmMember = scanOp.getMapping().getMember(colDef);
                auto bufferMember = m.first;
                if (hmMember) {
                   memberMapping[bufferMember] = hmMember;
@@ -289,7 +290,7 @@ class ReuseHashtable : public mlir::RewritePattern {
             std::unordered_map<subop::Member, tuples::Column*> keyMemberToColumn;
             auto htKeyMembers = htType.getKeyMembers().getMembers();
             for (auto keyMember : htKeyMembers) {
-               auto colDef =scanOp.getMapping().getMapping()->getDefAttr(keyMember);
+               auto colDef =scanOp.getMapping().getColumnDef(keyMember);
                hashMapKey.insert(&colDef.getColumn());
                keyMemberToColumn[keyMember] = &colDef.getColumn();
             }

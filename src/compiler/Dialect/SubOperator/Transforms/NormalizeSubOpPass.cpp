@@ -35,11 +35,11 @@ class SplitTableScan : public mlir::RewritePattern {
          llvm::SmallVector<subop::Member> memberList;
          auto tableMembers = tableType.getMembers();
          for (auto m : tableMembers.getMembers()) {
-            if (scanOp.getMapping().getMapping()->hasMember(m)) {
+            if (scanOp.getMapping().hasMember(m)) {
                memberList.push_back(m);
             }
          }
-         auto members = subop::StateMembersAttr::get(getContext(), std::make_shared<subop::Members>(memberList));
+         auto members = subop::StateMembersAttr::get(getContext(), memberList);
 
          auto [refDef, refRef] = createColumn(subop::TableEntryRefType::get(getContext(), members), "scan", "ref");
          mlir::Value scanRefsOp = rewriter.create<subop::ScanRefsOp>(op->getLoc(), scanOp.getState(), refDef);
@@ -50,11 +50,11 @@ class SplitTableScan : public mlir::RewritePattern {
          llvm::SmallVector<subop::Member> memberList;
          auto tableMembers = tableType.getMembers();
          for (auto m : tableMembers.getMembers()) {
-            if (scanOp.getMapping().getMapping()->hasMember(m)) {
+            if (scanOp.getMapping().hasMember(m)) {
                memberList.push_back(m);
             }
          }
-         auto members = subop::StateMembersAttr::get(getContext(), std::make_shared<subop::Members>(memberList));
+         auto members = subop::StateMembersAttr::get(getContext(), memberList);
          auto [refDef, refRef] = createColumn(subop::TableEntryRefType::get(getContext(), members), "scan", "ref");
          mlir::Value scanRefsOp = rewriter.create<subop::ScanRefsOp>(op->getLoc(), scanOp.getState(), refDef);
          rewriter.replaceOpWithNewOp<subop::GatherOp>(op, scanRefsOp, refRef, scanOp.getMapping());
@@ -172,8 +172,8 @@ class NormalizeSubOpPass : public mlir::PassWrapper<NormalizeSubOpPass, mlir::Op
                auto& colManager = builder.getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
 
                llvm::SmallVector<subop::Member> members;
-               llvm::SmallVector<subop::ColumnDefMemberMapping::pairType> defMapping;
-               llvm::SmallVector<subop::ColumnRefMemberMapping::pairType> refMapping;
+               llvm::SmallVector<subop::DefMappingPairT> defMapping;
+               llvm::SmallVector<subop::RefMappingPairT> refMapping;
 
                for (auto* col : requiredColumns) {
                   auto member = memberManager.createMember("tmp_union", col->type);
@@ -182,17 +182,17 @@ class NormalizeSubOpPass : public mlir::PassWrapper<NormalizeSubOpPass, mlir::Op
                   refMapping.push_back({member, colManager.createRef(col)});
                }
                builder.setInsertionPointToStart(unionOp->getBlock());
-               auto bufferType = subop::BufferType::get(builder.getContext(), subop::StateMembersAttr::get(builder.getContext(), std::make_shared<subop::Members>(members)));
+               auto bufferType = subop::BufferType::get(builder.getContext(), subop::StateMembersAttr::get(builder.getContext(), members));
                mlir::Value tmpBuffer = builder.create<subop::GenericCreateOp>(unionOp->getLoc(), bufferType);
                builder.setInsertionPoint(unionOp);
                for (auto stream : unionOp.getStreams()) {
-                  builder.create<subop::MaterializeOp>(unionOp->getLoc(), stream, tmpBuffer, subop::ColumnRefMemberMappingAttr::get(builder.getContext(), std::make_shared<subop::ColumnRefMemberMapping>(refMapping)));
+                  builder.create<subop::MaterializeOp>(unionOp->getLoc(), stream, tmpBuffer, subop::ColumnRefMemberMappingAttr::get(builder.getContext(), refMapping));
                }
                auto scanRefDef = colManager.createDef(colManager.getUniqueScope("tmp_union"), "scan_ref");
                scanRefDef.getColumn().type = subop::EntryRefType::get(builder.getContext(), mlir::cast<subop::State>(tmpBuffer.getType()));
                auto scan = builder.create<subop::ScanRefsOp>(unionOp->getLoc(), tmpBuffer, scanRefDef);
                mlir::Value loaded = builder.create<subop::GatherOp>(unionOp->getLoc(), scan, colManager.createRef(&scanRefDef.getColumn()),
-                                                                    subop::ColumnDefMemberMappingAttr::get(builder.getContext(), std::make_shared<subop::ColumnDefMemberMapping>(defMapping)));
+                                                                    subop::ColumnDefMemberMappingAttr::get(builder.getContext(), defMapping));
                unionOp.getRes().replaceAllUsesWith(loaded);
                unionOp.erase();
             }
@@ -249,8 +249,8 @@ class NormalizeSubOpPass : public mlir::PassWrapper<NormalizeSubOpPass, mlir::Op
                      auto& colManager = builder.getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
 
                      llvm::SmallVector<subop::Member> members;
-                     llvm::SmallVector<subop::ColumnDefMemberMapping::pairType> defMapping;
-                     llvm::SmallVector<subop::ColumnRefMemberMapping::pairType> refMapping;
+                     llvm::SmallVector<subop::DefMappingPairT> defMapping;
+                     llvm::SmallVector<subop::RefMappingPairT> refMapping;
 
                      for (auto* col : requiredColumns) {
                         auto member = memberManager.createMember("tmp_union", col->type);
@@ -259,16 +259,16 @@ class NormalizeSubOpPass : public mlir::PassWrapper<NormalizeSubOpPass, mlir::Op
                         refMapping.push_back({member, colManager.createRef(col)});
                      }
                      builder.setInsertionPointToStart(op->getBlock());
-                     auto bufferType = subop::BufferType::get(builder.getContext(), subop::StateMembersAttr::get(builder.getContext(), std::make_shared<subop::Members>(members)));
+                     auto bufferType = subop::BufferType::get(builder.getContext(), subop::StateMembersAttr::get(builder.getContext(), members));
                      mlir::Value tmpBuffer = builder.create<subop::GenericCreateOp>(op->getLoc(), bufferType);
                      builder.setInsertionPointAfter(op);
                      auto materializeOp = builder.create<subop::MaterializeOp>(op->getLoc(), op->getResult(0), tmpBuffer,
-                                                                               subop::ColumnRefMemberMappingAttr::get(builder.getContext(), std::make_shared<subop::ColumnRefMemberMapping>(refMapping)));
+                                                                               subop::ColumnRefMemberMappingAttr::get(builder.getContext(), refMapping));
                      auto scanRefDef = colManager.createDef(colManager.getUniqueScope("tmp_union"), "scan_ref");
                      scanRefDef.getColumn().type = subop::EntryRefType::get(builder.getContext(), mlir::cast<subop::State>(tmpBuffer.getType()));
                      auto scan = builder.create<subop::ScanRefsOp>(op->getLoc(), tmpBuffer, scanRefDef);
                      mlir::Value loaded = builder.create<subop::GatherOp>(op->getLoc(), scan, colManager.createRef(&scanRefDef.getColumn()),
-                                                                          subop::ColumnDefMemberMappingAttr::get(builder.getContext(), std::make_shared<subop::ColumnDefMemberMapping>(defMapping)));
+                                                                          subop::ColumnDefMemberMappingAttr::get(builder.getContext(), defMapping));
                      op->getResult(0).replaceAllUsesExcept(loaded, materializeOp);
                   }
                } else {

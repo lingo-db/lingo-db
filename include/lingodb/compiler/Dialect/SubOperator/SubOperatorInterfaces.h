@@ -24,19 +24,19 @@ class ColumnMapping {
    dialect::tuples::ColumnDefAttr remap(dialect::tuples::ColumnDefAttr defAttr) {
       return defAttr.getContext()->getLoadedDialect<dialect::tuples::TupleStreamDialect>()->getColumnManager().createDef(mapping[&defAttr.getColumn()], defAttr.getFromExisting());
    }
-   subop::ColumnDefMemberMappingAttr remap(subop::ColumnDefMemberMappingAttr attr){
-      llvm::SmallVector<subop::ColumnDefMemberMapping::pairType> remapped;
-      for (auto p:      attr.getMapping()->getMapping()){
-         remapped.push_back({p.first,remap(p.second)});
+   subop::ColumnDefMemberMappingAttr remap(subop::ColumnDefMemberMappingAttr attr) {
+      llvm::SmallVector<subop::DefMappingPairT> remapped;
+      for (auto p : attr.getMapping()) {
+         remapped.push_back({p.first, remap(p.second)});
       }
-      return subop::ColumnDefMemberMappingAttr::get(attr.getContext(), std::make_shared<subop::ColumnDefMemberMapping>(std::move(remapped)));
+      return subop::ColumnDefMemberMappingAttr::get(attr.getContext(), remapped);
    }
-   subop::ColumnRefMemberMappingAttr remap(subop::ColumnRefMemberMappingAttr attr){
-      llvm::SmallVector<subop::ColumnRefMemberMapping::pairType> remapped;
-      for (auto p:      attr.getMapping()->getMapping()){
-         remapped.push_back({p.first,remap(p.second)});
+   subop::ColumnRefMemberMappingAttr remap(subop::ColumnRefMemberMappingAttr attr) {
+      llvm::SmallVector<subop::RefMappingPairT> remapped;
+      for (auto p : attr.getMapping()) {
+         remapped.push_back({p.first, remap(p.second)});
       }
-      return subop::ColumnRefMemberMappingAttr::get(attr.getContext(), std::make_shared<subop::ColumnRefMemberMapping>(std::move(remapped)));
+      return subop::ColumnRefMemberMappingAttr::get(attr.getContext(), remapped);
    }
    mlir::Attribute remap(mlir::Attribute attr) {
       if (auto refAttr = mlir::dyn_cast_or_null<dialect::tuples::ColumnRefAttr>(attr)) {
@@ -78,11 +78,11 @@ class ColumnMapping {
       return newDef;
    }
    subop::ColumnDefMemberMappingAttr clone(subop::ColumnDefMemberMappingAttr mapping) {
-      llvm::SmallVector<subop::ColumnDefMemberMapping::pairType> remapped;
-      for (auto p : mapping.getMapping()->getMapping()) {
+      llvm::SmallVector<subop::DefMappingPairT> remapped;
+      for (auto p : mapping.getMapping()) {
          remapped.push_back({p.first, clone(mlir::cast<dialect::tuples::ColumnDefAttr>(p.second))});
       }
-      return subop::ColumnDefMemberMappingAttr::get(mapping.getContext(), std::make_shared<subop::ColumnDefMemberMapping>(std::move(remapped)));
+      return subop::ColumnDefMemberMappingAttr::get(mapping.getContext(), remapped);
    }
    mlir::DictionaryAttr clone(mlir::DictionaryAttr mapping) {
       std::vector<mlir::NamedAttribute> remapped;

@@ -23,7 +23,7 @@ class PullGatherUpPass : public mlir::PassWrapper<PullGatherUpPass, mlir::Operat
          gatherOps.push_back(gatherOp);
       });
       for (auto gatherOp : gatherOps) {
-         auto remaining = gatherOp.getMapping().getMapping()->getMapping();
+         auto remaining = gatherOp.getMapping().getMapping();
          gatherOp.getRes().replaceAllUsesWith(gatherOp.getStream());
          auto* currentChild = gatherOp.getStream().getDefiningOp();
          mlir::Block* safeBlock = gatherOp->getBlock();
@@ -69,8 +69,8 @@ class PullGatherUpPass : public mlir::PassWrapper<PullGatherUpPass, mlir::Operat
             }
             if (otherStreams) break;
             auto usedColumns = columnUsageAnalysis.getUsedColumns(currentParent);
-            llvm::SmallVector<subop::ColumnDefMemberMapping::pairType> usedByCurrent;
-            llvm::SmallVector<subop::ColumnDefMemberMapping::pairType> notUsedByCurrent;
+            llvm::SmallVector<subop::DefMappingPairT> usedByCurrent;
+            llvm::SmallVector<subop::DefMappingPairT> notUsedByCurrent;
             for (auto x : remaining) {
                if (usedColumns.contains(&x.second.getColumn())) {
                   usedByCurrent.push_back(x);
@@ -80,7 +80,7 @@ class PullGatherUpPass : public mlir::PassWrapper<PullGatherUpPass, mlir::Operat
             }
             if (!usedByCurrent.empty()) {
                mlir::OpBuilder builder(currentParent);
-               auto newGatherOp = builder.create<subop::GatherOp>(gatherOp->getLoc(), currStream, gatherOp.getRef(), subop::ColumnDefMemberMappingAttr::get(&getContext(),std::make_shared<subop::ColumnDefMemberMapping>(usedByCurrent)));
+               auto newGatherOp = builder.create<subop::GatherOp>(gatherOp->getLoc(), currStream, gatherOp.getRef(), subop::ColumnDefMemberMappingAttr::get(&getContext(),usedByCurrent));
                currStream.replaceAllUsesWith(newGatherOp.getResult());
                newGatherOp->setOperand(0, currStream);
                lastStream = newGatherOp.getResult();

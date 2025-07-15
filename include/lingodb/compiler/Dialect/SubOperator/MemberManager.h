@@ -1,21 +1,19 @@
 #ifndef LINGODB_COMPILER_DIALECT_SUBOPERATOR_MEMBERMANAGER_H
 #define LINGODB_COMPILER_DIALECT_SUBOPERATOR_MEMBERMANAGER_H
+#include "llvm/ADT/SmallVector.h"
+#include <mlir/IR/Types.h>
+
+#include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
+#include <algorithm>
+#include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <iostream>
 #include <memory>
 namespace lingodb::compiler::dialect::subop {
 namespace internal {
 struct MemberInternal;
 } // namespace internal
-template <class T>
-struct Holder {
-   std::shared_ptr<T> ptr;
-   Holder() : ptr(nullptr) {}
-   Holder(std::shared_ptr<T> ptr) : ptr(std::move(ptr)) {}
-
-   bool operator==(const Holder& other) const {
-      return *ptr == *other.ptr;
-   }
-};
 struct Member {
    internal::MemberInternal* internal;
    Member() : internal(nullptr) {}
@@ -37,33 +35,9 @@ struct Member {
       return internal != nullptr;
    }
 };
-class Members;
-class ColumnRefMemberMapping;
-class ColumnDefMemberMapping;
+
+
 } // namespace lingodb::compiler::dialect::subop
-namespace llvm {
-class hash_code; // NOLINT (readability-identifier-naming)
-
-llvm::hash_code hash_value(const lingodb::compiler::dialect::subop::Member& m); // NOLINT (readability-identifier-naming)
-llvm::hash_code hash_value(lingodb::compiler::dialect::subop::Holder<lingodb::compiler::dialect::subop::Members> arg); // NOLINT (readability-identifier-naming)
-llvm::hash_code hash_value(std::shared_ptr<lingodb::compiler::dialect::subop::ColumnDefMemberMapping> arg); // NOLINT (readability-identifier-naming)
-llvm::hash_code hash_value(std::shared_ptr<lingodb::compiler::dialect::subop::ColumnRefMemberMapping> arg); // NOLINT (readability-identifier-naming)
-
-} // end namespace llvm
-#include <mlir/IR/Types.h>
-
-#include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
-#include <algorithm>
-#include <string>
-#include <unordered_map>
-#include <unordered_set>
-
-namespace llvm {
-inline hash_code hash_value(const lingodb::compiler::dialect::subop::Member& m) {
-   // Assuming Member has `id` and `name` fields for example
-   return hash_value(m.internal);
-}
-} // namespace llvm
 
 namespace lingodb::compiler::dialect::subop {
 namespace internal {
@@ -85,12 +59,14 @@ class MemberManager {
 
    private:
    std::unordered_map<std::string, std::shared_ptr<internal::MemberInternal>> members;
+   std::unordered_set<internal::MemberInternal*> memberSet;
 
    public:
    Member createMember(std::string name, mlir::Type type) {
       auto uniqueName = getUniqueName(name);
       auto member = std::make_shared<internal::MemberInternal>(uniqueName, type);
       members[uniqueName] = member;
+      memberSet.insert(member.get());
       return member.get();
    }
    Member createMemberDirect(std::string name, mlir::Type type) {
@@ -100,6 +76,7 @@ class MemberManager {
       } else {
          auto member = std::make_shared<internal::MemberInternal>(name, type);
          members[name] = member;
+         memberSet.insert(member.get());
          return member.get();
       }
    }
@@ -112,9 +89,11 @@ class MemberManager {
       return nullptr;
    }
    const std::string& getName(Member member) const {
+      assert(memberSet.contains(member.internal) && "Member not found in member set");
       return member.internal->name;
    }
    mlir::Type getType(Member member) const {
+      assert(memberSet.contains(member.internal) && "Member not found in member set");
       return member.internal->type;
    }
 };
@@ -152,134 +131,5 @@ struct DenseMapInfo<lingodb::compiler::dialect::subop::Member> {
 };
 } // namespace llvm
 
-namespace lingodb::compiler::dialect::subop {
-class Members {
-   llvm::SmallVector<Member> members;
-   llvm::SmallDenseSet<Member> memberSet;
-
-   public:
-   Members() = default;
-   Members(std::initializer_list<Member> membersList) {
-      members.reserve(membersList.size());
-      for (Member member : membersList) {
-         members.push_back(member);
-         memberSet.insert(member);
-      }
-   }
-   Members(const llvm::SmallVectorImpl<std::shared_ptr<Members>>& membersList) {
-      for (const auto& memberGroup : membersList) {
-         members.insert(members.end(), memberGroup->members.begin(), memberGroup->members.end());
-         memberSet.insert(memberGroup->memberSet.begin(), memberGroup->memberSet.end());
-      }
-   }
-   Members(const std::vector<Member>& membersList) : members(membersList.begin(), membersList.end()), memberSet(membersList.begin(), membersList.end()) {}
-   Members(const llvm::SmallVector<Member>& membersList)
-      : members(membersList.begin(), membersList.end()), memberSet(membersList.begin(), membersList.end()) {}
-
-   Members(const llvm::SmallVector<Member>& membersListA, const llvm::SmallVector<Member>& membersListB) {
-      members.reserve(membersListA.size() + membersListB.size());
-      members.insert(members.end(), membersListA.begin(), membersListA.end());
-      members.insert(members.end(), membersListB.begin(), membersListB.end());
-      memberSet.insert(membersListA.begin(), membersListA.end());
-      memberSet.insert(membersListB.begin(), membersListB.end());
-   }
-   const llvm::SmallVector<Member>& getMembers() const {
-      return members;
-   }
-   bool empty() const {
-      return members.empty();
-   }
-   bool contains(const Member& member) const {
-      return memberSet.contains(member);
-   }
-   bool operator==(const Members& other) const {
-      for (auto [m1, m2] : llvm::zip(members, other.members)) {
-         if (m1 != m2) {
-            return false;
-         }
-      }
-      return true;
-   }
-};
-
-class ColumnRefMemberMapping {
-   llvm::SmallVector<std::pair<Member, tuples::ColumnRefAttr>> mapping;
-
-   public:
-   using pairType = std::pair<Member, tuples::ColumnRefAttr>;
-   ColumnRefMemberMapping() = default;
-   ColumnRefMemberMapping(llvm::SmallVector<std::pair<Member, tuples::ColumnRefAttr>> mapping) : mapping(std::move(mapping)) {}
-   tuples::ColumnRefAttr getRefAttr(Member member) const {
-      for (const auto& pair : mapping) {
-         if (pair.first == member) {
-            return pair.second;
-         }
-      }
-      assert(false && "Member not found in mapping");
-      return tuples::ColumnRefAttr();
-   }
-   Member getMember(tuples::ColumnRefAttr columnRef) const {
-      for (const auto& pair : mapping) {
-         if (pair.second == columnRef) {
-            return pair.first;
-         }
-      }
-      assert(false && "ColumnRef not found in mapping");
-      return Member(nullptr);
-   }
-   std::shared_ptr<Members> toMembers() {
-      llvm::SmallVector<Member> members;
-      for (const auto& pair : mapping) {
-         members.push_back(pair.first);
-      }
-      return std::make_shared<Members>(std::move(members));
-   }
-
-   const llvm::SmallVector<std::pair<Member, tuples::ColumnRefAttr>>& getMapping() const {
-      return mapping;
-   }
-};
-class ColumnDefMemberMapping {
-   llvm::SmallVector<std::pair<Member, tuples::ColumnDefAttr>> mapping;
-
-   public:
-   using pairType = std::pair<Member, tuples::ColumnDefAttr>;
-   ColumnDefMemberMapping() = default;
-   ColumnDefMemberMapping(llvm::SmallVector<std::pair<Member, tuples::ColumnDefAttr>> mapping) : mapping(std::move(mapping)) {}
-   tuples::ColumnDefAttr getDefAttr(Member member) const {
-      for (const auto& pair : mapping) {
-         if (pair.first == member) {
-            return pair.second;
-         }
-      }
-      assert(false && "Member not found in mapping");
-      return tuples::ColumnDefAttr();
-   }
-   Member getMember(tuples::ColumnDefAttr columnDef) const {
-      for (const auto& pair : mapping) {
-         if (pair.second == columnDef) {
-            return pair.first;
-         }
-      }
-      assert(false && "ColumnDef not found in mapping");
-      return Member(nullptr);
-   }
-
-   bool hasMember(Member member) const {
-      return std::any_of(mapping.begin(), mapping.end(), [&member](const pairType& pair) { return pair.first == member; });
-   }
-   const llvm::SmallVector<std::pair<Member, tuples::ColumnDefAttr>>& getMapping() const {
-      return mapping;
-   }
-
-   std::shared_ptr<Members> toMembers() {
-      llvm::SmallVector<Member> members;
-      for (const auto& pair : mapping) {
-         members.push_back(pair.first);
-      }
-      return std::make_shared<Members>(std::move(members));
-   }
-};
-} // namespace lingodb::compiler::dialect::subop
 
 #endif //LINGODB_COMPILER_DIALECT_SUBOPERATOR_MEMBERMANAGER_H

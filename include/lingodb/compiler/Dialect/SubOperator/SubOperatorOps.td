@@ -42,29 +42,111 @@ class SubOperator_Attr<string name> : AttrDef<SubOperator_Dialect, name>;
 
 def StateMembers : SubOperator_Attr<"StateMembers"> {
     let mnemonic = "state_members";
-    let parameters = (ins "Holder<Members>":$membersHolder);
-    let hasCustomAssemblyFormat = 1;
-    let extraClassDeclaration = [{
-        const auto& getMembers() const { return getMembersHolder().ptr->getMembers();}
-        std::shared_ptr<Members> getMembersPtr() const { return getMembersHolder().ptr; }
-    }];
+  // Turn off the ODS storage generation.
+  let genStorageClass = 0;
+  // Tell ODS what your storage class is called...
+  let storageClass = "StateMembersAttrStorage";
+  // ...and (optionally) what namespace it's in (defaults to `detail`).
+  let storageNamespace = "::lingodb::compiler::dialect::subop::detail";
+
+  // Your parameters, printers, builders, etc.
+  let parameters = (ins "llvm::SmallVector<Member>":$members);
+  let hasCustomAssemblyFormat = 1;
+
 }
 
 def ColumnRefMemberMapping : SubOperator_Attr<"ColumnRefMemberMapping"> {
     let mnemonic = "column_ref_member_mapping";
-    let parameters = (ins "std::shared_ptr<ColumnRefMemberMapping>":$mapping);
+    let parameters = (ins "llvm::SmallVector<std::pair<Member, tuples::ColumnRefAttr>>":$mapping);
+
+      let genStorageClass = 0;
+      // Tell ODS what your storage class is called...
+      let storageClass = "ColumnRefMemberMappingAttrStorage";
     let hasCustomAssemblyFormat = 1;
+    let extraClassDeclaration = [{
+        llvm::SmallVector<Member> getMembers() {
+            llvm::SmallVector<Member> members;
+            for (auto& pair : getMapping()) {
+                members.push_back(pair.first);
+            }
+            return members;
+        }
+        Member getMember(tuples::ColumnRefAttr ref) {
+            for (auto& pair : getMapping()) {
+                if (pair.second == ref) {
+                    return pair.first;
+                }
+            }
+            llvm_unreachable("Member not found for ColumnRefAttr");
+        }
+        tuples::ColumnRefAttr getColumnRef(Member member) {
+            for (auto& pair : getMapping()) {
+                if (pair.first == member) {
+                    return pair.second;
+                }
+            }
+            llvm_unreachable("ColumnRefAttr not found for Member");
+        }
+        bool hasMember(Member member) {
+            for (auto& pair : getMapping()) {
+                if (pair.first == member) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }];
 }
 def ColumnDefMemberMapping : SubOperator_Attr<"ColumnDefMemberMapping"> {
     let mnemonic = "column_def_member_mapping";
-    let parameters = (ins "std::shared_ptr<ColumnDefMemberMapping>":$mapping);
+    let parameters = (ins "llvm::SmallVector<std::pair<Member, tuples::ColumnDefAttr>>":$mapping);
+
+      let genStorageClass = 0;
+      // Tell ODS what your storage class is called...
+      let storageClass = "ColumnDefMemberMappingAttrStorage";
     let hasCustomAssemblyFormat = 1;
+    let extraClassDeclaration = [{
+        llvm::SmallVector<Member> getMembers() {
+            llvm::SmallVector<Member> members;
+            for (auto& pair : getMapping()) {
+                members.push_back(pair.first);
+            }
+            return members;
+        }
+        Member getMember(tuples::ColumnDefAttr def) {
+            for (auto& pair : getMapping()) {
+                if (pair.second == def) {
+                    return pair.first;
+                }
+            }
+            llvm_unreachable("Member not found for ColumnDefAttr");
+        }
+        tuples::ColumnDefAttr getColumnDef(Member member) {
+            for (auto& pair : getMapping()) {
+                if (pair.first == member) {
+                    return pair.second;
+                }
+            }
+            llvm_unreachable("ColumnDefAttr not found for Member");
+        }
+        bool hasMember(Member member) {
+            for (auto& pair : getMapping()) {
+                if (pair.first == member) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }];
 }
 
 
 def Member : SubOperator_Attr<"Member"> {
     let mnemonic = "member";
     let parameters = (ins "subop::Member":$member);
+    let genStorageClass = 0;
+    // Tell ODS what your storage class is called...
+    let storageClass = "MemberAttrStorage";
     let hasCustomAssemblyFormat = 1;
 }
 
@@ -102,7 +184,7 @@ def SimpleState : SubOperator_Type<"SimpleState", "simple_state",[State,LookupAb
     let assemblyFormat = "`<` custom<StateMembers>($members) `>`";
         let extraClassDeclaration = [{
             StateMembersAttr getKeyMembers(){
-            return lingodb::compiler::dialect::subop::StateMembersAttr::get(getContext(), std::make_shared<Members>());
+            return lingodb::compiler::dialect::subop::StateMembersAttr::get(getContext(), {});
             }
             StateMembersAttr getValueMembers();
         }];
@@ -401,8 +483,8 @@ def MergeOp : SubOperator_Op<"merge", [Pure,SubOperator]> {
   let arguments = (ins ThreadLocal: $threadLocal);
   let results = (outs AnyType : $res);
   let extraClassDeclaration = [{
-    std::shared_ptr<Members> getWrittenMembers();
-    std::shared_ptr<Members> getReadMembers();
+    llvm::SmallVector<Member> getWrittenMembers();
+    llvm::SmallVector<Member> getReadMembers();
   }];
   let regions = (region AnyRegion:$combineFn,AnyRegion:$eqFn);
   let assemblyFormat = [{ type($res)  attr-dict }];
@@ -413,8 +495,8 @@ def LockOp : SubOperator_Op<"lock", [SubOperator,DeclareOpInterfaceMethods<State
   let arguments = (ins TupleStream: $stream, ColumnRefAttr:$ref);
   let results = (outs TupleStream : $res);
   let extraClassDeclaration = [{
-    std::shared_ptr<Members> getWrittenMembers();
-    std::shared_ptr<Members> getReadMembers();
+    llvm::SmallVector<Member> getWrittenMembers();
+    llvm::SmallVector<Member> getReadMembers();
     mlir::Operation* cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, lingodb::compiler::dialect::subop::ColumnMapping& columnMapping);
   }];
   let regions = (region SizedRegion<1>:$nested);
@@ -433,7 +515,7 @@ def ScanOp : SubOperator_Op<"scan", [Pure,SubOperator,DeclareOpInterfaceMethods<
     let results = (outs TupleStream : $res);
     let assemblyFormat = [{  $state `:` type($state) custom<StateColumnMapping>($mapping) attr-dict }];
     let extraClassDeclaration = [{
-        std::shared_ptr<Members> getReadMembers();
+        llvm::SmallVector<Member> getReadMembers();
             mlir::Operation* cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, lingodb::compiler::dialect::subop::ColumnMapping& columnMapping);
 
     }];
@@ -556,8 +638,8 @@ def NestedMapOp : SubOperator_Op<"nested_map",[DeclareOpInterfaceMethods<SubOper
     let regions = (region SizedRegion<1>:$region);
     let hasCustomAssemblyFormat = 1;
     let extraClassDeclaration = [{
-        std::shared_ptr<Members> getWrittenMembers();
-        std::shared_ptr<Members> getReadMembers();
+        llvm::SmallVector<Member> getWrittenMembers();
+        llvm::SmallVector<Member> getReadMembers();
         mlir::Block* getBody(){ return &getRegion().front();}
        	mlir::Operation* cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, lingodb::compiler::dialect::subop::ColumnMapping& columnMapping);
     }];
@@ -572,8 +654,8 @@ def CreateFrom: SubOperator_Op<"create_from", [Pure,SubOperator]> {
     let results = (outs State:$result);
     let assemblyFormat = [{$columns $state `:` type($state) `->` type($result) attr-dict }];
       let extraClassDeclaration = [{
-          std::shared_ptr<Members> getWrittenMembers();
-          std::shared_ptr<Members> getReadMembers();
+          llvm::SmallVector<Member> getWrittenMembers();
+          llvm::SmallVector<Member> getReadMembers();
       }];
 }
 def CreateSimpleStateOp : SubOperator_Op<"create_simple_state", [Pure]> {
@@ -597,7 +679,7 @@ def GenericCreateOp : SubOperator_Op<"create", [Pure,StateCreator]> {
     let results = (outs AnyType : $res);
     let assemblyFormat = [{ type($res) attr-dict }];
       let extraClassDeclaration = [{
-           std::shared_ptr<Members> getCreatedMembers();
+           llvm::SmallVector<Member> getCreatedMembers();
           }];
 }
 def CreateArrayOp : SubOperator_Op<"create_array", [Pure,SubOperator]> {
@@ -607,8 +689,8 @@ def CreateArrayOp : SubOperator_Op<"create_array", [Pure,SubOperator]> {
     let assemblyFormat = [{ $numElements `:` type($numElements) `->` type($res) attr-dict }];
       let hasCustomAssemblyFormat = 1;
           let extraClassDeclaration = [{
-              std::shared_ptr<Members> getWrittenMembers();
-              std::shared_ptr<Members> getReadMembers();
+              llvm::SmallVector<Member> getWrittenMembers();
+              llvm::SmallVector<Member> getReadMembers();
           }];
 }
 
@@ -623,8 +705,8 @@ def CreateSortedViewOp : SubOperator_Op<"create_sorted_view", [IsolatedFromAbove
     let regions = (region SizedRegion<1>:$region);
   let hasCustomAssemblyFormat = 1;
       let extraClassDeclaration = [{
-          std::shared_ptr<Members> getWrittenMembers();
-          std::shared_ptr<Members> getReadMembers();
+          llvm::SmallVector<Member> getWrittenMembers();
+          llvm::SmallVector<Member> getReadMembers();
       }];
 }
 def CreateHashIndexedView : SubOperator_Op<"create_hash_indexed_view", [SubOperator]> {
@@ -632,8 +714,8 @@ def CreateHashIndexedView : SubOperator_Op<"create_hash_indexed_view", [SubOpera
     let results = (outs HashIndexedView:$result);
     let assemblyFormat = [{ $source `:` type($source) `hash` `(` $hash_member `)` `link` `(` $link_member `)` `->` type($result) attr-dict }];
       let extraClassDeclaration = [{
-          std::shared_ptr<Members> getWrittenMembers();
-          std::shared_ptr<Members> getReadMembers();
+          llvm::SmallVector<Member> getWrittenMembers();
+          llvm::SmallVector<Member> getReadMembers();
       }];
 }
 def CreateContinuousView : SubOperator_Op<"create_continuous_view", [SubOperator]> {
@@ -641,8 +723,8 @@ def CreateContinuousView : SubOperator_Op<"create_continuous_view", [SubOperator
     let results = (outs ContinuousView:$result);
     let assemblyFormat = [{ $source `:` type($source)  `->` type($result) attr-dict }];
     let extraClassDeclaration = [{
-      std::shared_ptr<Members> getWrittenMembers();
-      std::shared_ptr<Members> getReadMembers();
+      llvm::SmallVector<Member> getWrittenMembers();
+      llvm::SmallVector<Member> getReadMembers();
     }];
 }
 
@@ -652,8 +734,8 @@ def CreateSegmentTreeView : SubOperator_Op<"create_segment_tree_view",[SubOperat
   let results = (outs SegmentTreeView:$result);
   let hasCustomAssemblyFormat = 1;
         let extraClassDeclaration = [{
-            std::shared_ptr<Members> getWrittenMembers();
-            std::shared_ptr<Members> getReadMembers();
+            llvm::SmallVector<Member> getWrittenMembers();
+            llvm::SmallVector<Member> getReadMembers();
         }];
 }
 //todo: add subop.create_view
@@ -668,7 +750,7 @@ def MaterializeOp : SubOperator_Op<"materialize",[SubOperator,DeclareOpInterface
     let arguments = (ins TupleStream : $stream, AnyType : $state, ColumnRefMemberMapping : $mapping );
     let assemblyFormat = [{  $stream custom<ColumnStateMapping>($mapping) `,` $state `:` type($state)  attr-dict }];
     let extraClassDeclaration = [{
-        std::shared_ptr<Members> getWrittenMembers();
+        llvm::SmallVector<Member> getWrittenMembers();
 		mlir::Operation* cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, lingodb::compiler::dialect::subop::ColumnMapping& columnMapping);
     }];
 }
@@ -680,7 +762,7 @@ def LookupOrInsertOp : SubOperator_Op<"lookup_or_insert",[SubOperator,ReferenceP
     let regions = (region AnyRegion:$eqFn, AnyRegion:$initFn);
       let hasCustomAssemblyFormat = 1;
       let extraClassDeclaration = [{
-          std::shared_ptr<Members> getWrittenMembers();
+          llvm::SmallVector<Member> getWrittenMembers();
           dialect::tuples::ColumnDefAttr getProducedReference(){ return getRef(); }
           mlir::Operation* cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, lingodb::compiler::dialect::subop::ColumnMapping& columnMapping);
       }];
@@ -691,7 +773,7 @@ def InsertOp : SubOperator_Op<"insert",[SubOperator,DeclareOpInterfaceMethods<St
     let regions = (region AnyRegion:$eqFn);
       let hasCustomAssemblyFormat = 1;
       let extraClassDeclaration = [{
-          std::shared_ptr<Members> getWrittenMembers();
+          llvm::SmallVector<Member> getWrittenMembers();
           mlir::Operation* cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, lingodb::compiler::dialect::subop::ColumnMapping& columnMapping);
       }];
 }
@@ -707,7 +789,7 @@ def LookupOp : SubOperator_Op<"lookup",[SubOperator,DeclareOpInterfaceMethods<St
     let regions = (region AnyRegion:$eqFn, AnyRegion:$initFn);
     let hasCustomAssemblyFormat = 1;
     let extraClassDeclaration = [{
-          std::shared_ptr<Members> getReadMembers();
+          llvm::SmallVector<Member> getReadMembers();
           dialect::tuples::ColumnDefAttr getProducedReference(){ return getRef(); }
           mlir::Operation* cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, lingodb::compiler::dialect::subop::ColumnMapping& columnMapping);
       }];
@@ -768,7 +850,7 @@ def GatherOp : SubOperator_Op<"gather",[SubOperator,DeclareOpInterfaceMethods<St
     let results = (outs TupleStream : $res);
     let assemblyFormat = [{  $stream custom<CustRef>($ref) custom<StateColumnMapping>($mapping)  attr-dict }];
     let extraClassDeclaration = [{
-        std::shared_ptr<Members> getReadMembers();
+        llvm::SmallVector<Member> getReadMembers();
         mlir::Operation* cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, lingodb::compiler::dialect::subop::ColumnMapping& columnMapping);
     }];
 }
@@ -778,7 +860,7 @@ def ScatterOp : SubOperator_Op<"scatter",[SubOperator,DeclareOpInterfaceMethods<
     let arguments = (ins TupleStream : $stream, ColumnRefAttr: $ref, ColumnRefMemberMapping : $mapping );
     let assemblyFormat = [{  $stream custom<CustRef>($ref) custom<ColumnStateMapping>($mapping)  attr-dict }];
     let extraClassDeclaration = [{
-        std::shared_ptr<Members> getWrittenMembers();
+        llvm::SmallVector<Member> getWrittenMembers();
         mlir::Operation* cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, lingodb::compiler::dialect::subop::ColumnMapping& columnMapping);
     }];
 }
@@ -798,8 +880,8 @@ def ReduceOp : SubOperator_Op<"reduce",[SubOperator,DeclareOpInterfaceMethods<St
   let arguments = (ins TupleStream: $stream, ColumnRefAttr: $ref, ArrayAttr: $columns, ArrayAttr: $members);
   let hasCustomAssemblyFormat = 1;
         let extraClassDeclaration = [{
-            std::shared_ptr<Members> getWrittenMembers();
-            std::shared_ptr<Members> getReadMembers();
+            llvm::SmallVector<Member> getWrittenMembers();
+            llvm::SmallVector<Member> getReadMembers();
             mlir::Operation* cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, lingodb::compiler::dialect::subop::ColumnMapping& columnMapping);
         }];
 }
@@ -842,8 +924,8 @@ def LoopOp : SubOperator_Op<"loop",[SubOperator,ContainsNestedSubOps]> {
   let results = (outs Variadic<AnyType>:$res);
   let hasCustomAssemblyFormat = 1;
   let extraClassDeclaration = [{
-    std::shared_ptr<Members> getWrittenMembers();
-    std::shared_ptr<Members> getReadMembers();
+    llvm::SmallVector<Member> getWrittenMembers();
+    llvm::SmallVector<Member> getReadMembers();
             mlir::Block* getBody(){ return &getRegion().front();}
 
   }];
@@ -857,7 +939,7 @@ def SetTrackedCountOp : SubOperator_Op<"set_tracked_count",[SubOperator,DeclareO
    let summary = "set tracked count";
    let arguments = (ins SimpleState:$tupleCount, I32Attr:$resultId, Member:$readState);
    let extraClassDeclaration = [{
-      std::shared_ptr<Members> getReadMembers();
+      llvm::SmallVector<Member> getReadMembers();
    }];
 }
 
@@ -870,7 +952,7 @@ def SimpleStateGetScalar : SubOperator_Op<"simple_state_get_scalar",[SubOperator
       let results = (outs AnyType : $res);
       let assemblyFormat = [{ $member $state `:` type($state) `->` type($res) attr-dict }];
       let extraClassDeclaration = [{
-          std::shared_ptr<Members> getReadMembers();
+          llvm::SmallVector<Member> getReadMembers();
       }];
 }
 

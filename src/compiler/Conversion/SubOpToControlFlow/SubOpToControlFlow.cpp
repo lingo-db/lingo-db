@@ -442,7 +442,7 @@ class EntryStorageHelper {
    std::vector<mlir::Value> resolve(mlir::Operation* op, subop::ColumnRefMemberMappingAttr mapping, ColumnMapping columnMapping) {
       std::vector<mlir::Value> result;
       for (auto m : members.getMembers()) {
-         result.push_back(columnMapping.resolve(op, mapping.getMapping()->getRefAttr(m)));
+         result.push_back(columnMapping.resolve(op, mapping.getColumnRef(m)));
       }
       return result;
    }
@@ -467,14 +467,14 @@ class EntryStorageHelper {
 
    void storeFromColumns(subop::ColumnRefMemberMappingAttr mapping, ColumnMapping& columnMapping, mlir::Value ref, mlir::OpBuilder& rewriter, mlir::Location loc) {
       auto values = getValueMap(ref, rewriter, loc);
-      for (auto x : mapping.getMapping()->getMapping()) {
+      for (auto x : mapping.getMapping()) {
          values.set(x.first, columnMapping.resolve(op, x.second));
       }
       values.store();
    }
    void loadIntoColumns(subop::ColumnDefMemberMappingAttr mapping, ColumnMapping& columnMapping, mlir::Value ref, mlir::OpBuilder& rewriter, mlir::Location loc) {
       auto values = getValueMap(ref, rewriter, loc);
-      for (auto x : mapping.getMapping()->getMapping()) {
+      for (auto x : mapping.getMapping()) {
          if (memberInfos.contains(x.first)) {
             columnMapping.define(x.second, values.get(x.first));
          }
@@ -964,8 +964,8 @@ class TableRefGatherOpLowering : public SubOpTupleStreamConsumerConversionPatter
       rewriter.createOrFold<util::UnPackOp>(unPackedColumns, gatherOp->getLoc(), unpacked[1]);
       for (size_t i = 0; i < columns.getMembers().size(); i++) {
          auto c = columns.getMembers()[i];
-         if (gatherOp.getMapping().getMapping()->hasMember(c)) {
-            auto columnDefAttr = gatherOp.getMapping().getMapping()->getDefAttr(c);
+         if (gatherOp.getMapping().hasMember(c)) {
+            auto columnDefAttr = gatherOp.getMapping().getColumnDef(c);
             auto colArray = unPackedColumns[i];
             auto type = columnDefAttr.getColumn().type;
             //todo: use MLIR interfaces to get the "right" operation for loading a certain type from an arrow array?
@@ -987,7 +987,7 @@ class MaterializeTableLowering : public SubOpTupleStreamConsumerConversionPatter
       mlir::Value loaded = rewriter.create<util::LoadOp>(materializeOp->getLoc(), adaptor.getState());
       auto columnBuilders = rewriter.create<util::UnPackOp>(materializeOp->getLoc(), loaded);
       for (size_t i = 0; i < stateType.getMembers().getMembers().size(); i++) {
-         auto attribute = materializeOp.getMapping().getMapping()->getRefAttr(stateType.getMembers().getMembers()[i]);
+         auto attribute = materializeOp.getMapping().getColumnRef(stateType.getMembers().getMembers()[i]);
          auto val = mapping.resolve(materializeOp, attribute);
          auto asArrayBuilder = rewriter.create<arrow::BuilderFromPtr>(materializeOp->getLoc(), columnBuilders.getResult(i));
          rewriter.create<db::AppendArrowOp>(materializeOp->getLoc(), asArrayBuilder, val);
@@ -3371,10 +3371,11 @@ class ExternalHashIndexRefGatherOpLowering : public SubOpTupleStreamConsumerConv
       auto currRow = unPacked[0];
       llvm::SmallVector<mlir::Value> unPackedColumns;
       rewriter.createOrFold<util::UnPackOp>(unPackedColumns, gatherOp->getLoc(), unPacked[1]);
-      for (size_t i = 0; i < columns.getMembers().size(); i++) {
-         auto member = columns.getMembers()[i];
-         if (gatherOp.getMapping().getMapping()->hasMember(member)) {
-            auto columnDefAttr = gatherOp.getMapping().getMapping()->getDefAttr(member);
+      auto members=columns.getMembers();
+      for (size_t i = 0; i < members.size(); i++) {
+         auto member = members[i];
+         if (gatherOp.getMapping().hasMember(member)) {
+            auto columnDefAttr = gatherOp.getMapping().getColumnDef(member);
             auto colArray = unPackedColumns[i];
             auto type = columnDefAttr.getColumn().type;
             //todo: use MLIR interfaces to get the "right" operation for loading a certain type from an arrow array?
@@ -3410,7 +3411,7 @@ class ContinuousRefScatterOpLowering : public SubOpTupleStreamConsumerConversion
       auto baseRef = rewriter.create<util::BufferGetRef>(scatterOp->getLoc(), ptrType, unpackedReference[1]);
       auto elementRef = rewriter.create<util::ArrayElementPtrOp>(scatterOp->getLoc(), ptrType, baseRef, unpackedReference[0]);
       auto values = storageHelper.getValueMap(elementRef, rewriter, scatterOp->getLoc());
-      for (auto x : scatterOp.getMapping().getMapping()->getMapping()) {
+      for (auto x : scatterOp.getMapping().getMapping()) {
          values.set(x.first, mapping.resolve(scatterOp, x.second));
       }
       values.store();
@@ -3430,7 +3431,7 @@ class ScatterOpLowering : public SubOpTupleStreamConsumerConversionPattern<subop
       EntryStorageHelper storageHelper(scatterOp, columns, referenceType.hasLock(), typeConverter);
       auto ref = mapping.resolve(scatterOp, scatterOp.getRef());
       auto values = storageHelper.getValueMap(ref, rewriter, scatterOp->getLoc());
-      for (auto x : scatterOp.getMapping().getMapping()->getMapping()) {
+      for (auto x : scatterOp.getMapping().getMapping()) {
          values.set(x.first, mapping.resolve(scatterOp, x.second));
       }
       values.store();
@@ -3451,7 +3452,7 @@ class HashMultiMapScatterOp : public SubOpTupleStreamConsumerConversionPattern<s
       rewriter.createOrFold<util::UnPackOp>(unPacked, scatterOp.getLoc(), mapping.resolve(scatterOp, scatterOp.getRef()));
       auto ref = unPacked[1];
       auto values = storageHelper.getValueMap(ref, rewriter, scatterOp->getLoc());
-      for (auto x : scatterOp.getMapping().getMapping()->getMapping()) {
+      for (auto x : scatterOp.getMapping().getMapping()) {
          values.set(x.first, mapping.resolve(scatterOp, x.second));
       }
       values.store();

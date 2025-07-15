@@ -40,8 +40,8 @@ namespace {
 using namespace lingodb::compiler::dialect;
 using Member = subop::Member;
 using MemberCollector = llvm::SmallVector<Member>;
-using DefMappingCollector = llvm::SmallVector<subop::ColumnDefMemberMapping::pairType>;
-using RefMappingCollector = llvm::SmallVector<subop::ColumnRefMemberMapping::pairType>;
+using DefMappingCollector = llvm::SmallVector<subop::DefMappingPairT>;
+using RefMappingCollector = llvm::SmallVector<subop::RefMappingPairT>;
 struct RelalgToSubOpLoweringPass
    : public PassWrapper<RelalgToSubOpLoweringPass, OperationPass<ModuleOp>> {
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(RelalgToSubOpLoweringPass)
@@ -57,14 +57,14 @@ static Member createMember(MLIRContext* context, std::string name, mlir::Type ty
    auto& memberManager = context->getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager();
    return memberManager.createMember(name, type);
 }
-static subop::StateMembersAttr createStateMembersAttr(MLIRContext* context, llvm::SmallVector<Member> members) {
-   return subop::StateMembersAttr::get(context, std::make_shared<subop::Members>(members));
+static subop::StateMembersAttr createStateMembersAttr(MLIRContext* context, const llvm::SmallVector<Member>& members) {
+   return subop::StateMembersAttr::get(context, members);
 }
 static subop::ColumnDefMemberMappingAttr createColumnDefMemberMappingAttr(MLIRContext* context, DefMappingCollector pairs) {
-   return subop::ColumnDefMemberMappingAttr::get(context, std::make_shared<subop::ColumnDefMemberMapping>(pairs));
+   return subop::ColumnDefMemberMappingAttr::get(context, pairs);
 }
 static subop::ColumnRefMemberMappingAttr createColumnRefMemberMappingAttr(MLIRContext* context, RefMappingCollector pairs) {
-   return subop::ColumnRefMemberMappingAttr::get(context, std::make_shared<subop::ColumnRefMemberMapping>(pairs));
+   return subop::ColumnRefMemberMappingAttr::get(context, pairs);
 }
 
 static subop::MemberAttr createMemberAttr(MLIRContext* context, Member member) {
@@ -99,7 +99,7 @@ class BaseTableLowering : public OpConversionPattern<relalg::BaseTableOp> {
       auto& memberManager = getContext()->getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager();
       auto required = getRequired(baseTableOp);
       llvm::SmallVector<Member> members;
-      llvm::SmallVector<subop::ColumnDefMemberMapping::pairType> defMapping;
+      llvm::SmallVector<subop::DefMappingPairT> defMapping;
 
       std::vector<mlir::Type> types;
       std::string tableName = mlir::cast<mlir::StringAttr>(baseTableOp->getAttr("table_identifier")).str();
@@ -327,7 +327,7 @@ class ProjectionDistinctLowering : public OpConversionPattern<relalg::Projection
 
       llvm::SmallVector<Member> keyMemberList;
       std::vector<mlir::Type> keyTypes;
-      llvm::SmallVector<subop::ColumnDefMemberMapping::pairType> defMapping;
+      llvm::SmallVector<subop::DefMappingPairT> defMapping;
       for (auto x : projectionOp.getCols()) {
          auto ref = mlir::cast<tuples::ColumnRefAttr>(x);
          auto member = createMember(context, "keyval", ref.getColumn().type);
@@ -624,7 +624,7 @@ class UnionDistinctLowering : public OpConversionPattern<relalg::UnionOp> {
 
       auto& colManager = context->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
       llvm::SmallVector<Member> members;
-      llvm::SmallVector<subop::ColumnDefMemberMapping::pairType> defMapping;
+      llvm::SmallVector<subop::DefMappingPairT> defMapping;
       std::vector<mlir::Type> keyTypes;
       std::vector<mlir::Attribute> refs;
       for (auto x : projectionOp.getMapping()) {
@@ -721,7 +721,7 @@ class CountingSetOperationLowering : public ConversionPattern {
       auto& colManager = context->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
 
       llvm::SmallVector<Member> members;
-      llvm::SmallVector<subop::ColumnDefMemberMapping::pairType> defMapping;
+      llvm::SmallVector<subop::DefMappingPairT> defMapping;
       std::vector<mlir::Type> keyTypes;
       std::vector<mlir::Attribute> refs;
       auto mapping = op->getAttrOfType<mlir::ArrayAttr>("mapping");
@@ -1128,7 +1128,7 @@ static mlir::Value translateINLJ(mlir::Value left, mlir::Value right, mlir::Arra
 
    // Create description for external index get operation
    std::string externalIndexDescription = R"({"type": "hash", "index": ")" + op->getAttrOfType<mlir::StringAttr>("index").str() + R"(", "relation": ")" + tableName + R"(", "mapping": { )";
-   for (auto mappingEntry : rightScan.getMapping().getMapping()->getMapping()) {
+   for (auto mappingEntry : rightScan.getMapping().getMapping()) {
       auto attrDef = mappingEntry.second;
       if (!first) {
          externalIndexDescription += ",";
@@ -1259,7 +1259,7 @@ static std::pair<mlir::Value, mlir::Value> translateHJWithMarker(mlir::Value lef
       mlir::OpBuilder::InsertionGuard guard(rewriter);
       rewriter.setInsertionPointToStart(b);
       mlir::Value scan = rewriter.create<subop::ScanListOp>(loc, list, entryDef);
-      mlir::Value gathered = rewriter.create<subop::GatherOp>(loc, scan, entryRef, keyHelper.createStateColumnMapping(valueHelper.createStateColumnMapping({}, {flagMember}).getMapping()->getMapping()));
+      mlir::Value gathered = rewriter.create<subop::GatherOp>(loc, scan, entryRef, keyHelper.createStateColumnMapping(valueHelper.createStateColumnMapping({}, {flagMember}).getMapping()));
       mlir::Value combined = rewriter.create<subop::CombineTupleOp>(loc, gathered, tuple);
       auto res = fn(combined, tuple, rewriter, entryRef, flagMember);
       if (res) {
@@ -2355,7 +2355,7 @@ class WindowLowering : public OpConversionPattern<relalg::WindowOp> {
             auto sourceColumn = aggrFn->getSourceAttribute();
             mlir::Value initValue = aggrFn->createDefaultValue(rewriter, loc);
             if (sourceColumn) {
-               for (auto x : continuousViewMapping.getMapping()->getMapping()) {
+               for (auto x : continuousViewMapping.getMapping()) {
                   if (&x.second.getColumn() == &sourceColumn.getColumn()) {
                      relevantMembers.push_back(subop::MemberAttr::get(getContext(), x.first));
                   }

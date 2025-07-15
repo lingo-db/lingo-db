@@ -96,7 +96,7 @@ void printCustDef(OpAsmPrinter& p, mlir::Operation* op, tuples::ColumnDefAttr at
 ParseResult parseStateColumnMapping(OpAsmParser& parser, subop::ColumnDefMemberMappingAttr& attr) {
    auto& memberManager = parser.getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
    if (parser.parseLBrace()) return failure();
-   llvm::SmallVector<subop::ColumnDefMemberMapping::pairType> columns;
+   llvm::SmallVector<subop::DefMappingPairT> columns;
    while (true) {
       if (!parser.parseOptionalRBrace()) { break; }
       StringRef colName;
@@ -111,14 +111,13 @@ ParseResult parseStateColumnMapping(OpAsmParser& parser, subop::ColumnDefMemberM
       if (parser.parseRBrace()) { return failure(); }
       break;
    }
-   attr = subop::ColumnDefMemberMappingAttr::get(parser.getBuilder().getContext(),
-                                                 std::make_shared<subop::ColumnDefMemberMapping>(std::move(columns)));
+   attr = subop::ColumnDefMemberMappingAttr::get(parser.getBuilder().getContext(),columns);
    return success();
 }
 ParseResult parseColumnStateMapping(OpAsmParser& parser, subop::ColumnRefMemberMappingAttr& attr) {
    auto& memberManager = parser.getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
    if (parser.parseLBrace()) return failure();
-   llvm::SmallVector<subop::ColumnRefMemberMapping::pairType> columns;
+   llvm::SmallVector<subop::RefMappingPairT> columns;
    while (true) {
       if (!parser.parseOptionalRBrace()) { break; }
       tuples::ColumnRefAttr columnRefAttr;
@@ -135,15 +134,14 @@ ParseResult parseColumnStateMapping(OpAsmParser& parser, subop::ColumnRefMemberM
       if (parser.parseRBrace()) { return failure(); }
       break;
    }
-   attr = subop::ColumnRefMemberMappingAttr::get(parser.getBuilder().getContext(),
-                                                 std::make_shared<subop::ColumnRefMemberMapping>(std::move(columns)));
+   attr = subop::ColumnRefMemberMappingAttr::get(parser.getBuilder().getContext(),columns);
    return success();
 }
 void printStateColumnMapping(OpAsmPrinter& p, mlir::Operation* op, subop::ColumnDefMemberMappingAttr attr) {
    auto& memberManager = op->getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
    p << "{";
    auto first = true;
-   for (auto mapping : attr.getMapping()->getMapping()) {
+   for (auto mapping : attr.getMapping()) {
       auto columnName = memberManager.getName(mapping.first);
       auto relationDefAttr = mapping.second;
       if (first) {
@@ -160,7 +158,7 @@ void printColumnStateMapping(OpAsmPrinter& p, mlir::Operation* op, subop::Column
    auto& memberManager = op->getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
    p << "{";
    auto first = true;
-   for (auto mapping : attr.getMapping()->getMapping()) {
+   for (auto mapping : attr.getMapping()) {
       auto columnName = memberManager.getName(mapping.first);
       auto relationRefAttr = mapping.second;
       if (first) {
@@ -1097,27 +1095,27 @@ void subop::GenerateOp::print(OpAsmPrinter& p) {
    p.printOptionalAttrDict(getOperation()->getAttrs(), {"generated_columns"});
 }
 
-std::shared_ptr<subop::Members> subop::ScanOp::getReadMembers() {
-   return getMapping().getMapping()->toMembers();
+llvm::SmallVector<subop::Member> subop::ScanOp::getReadMembers() {
+   return getMapping().getMembers();
 }
-std::shared_ptr<subop::Members> subop::MaterializeOp::getWrittenMembers() {
-   return getMapping().getMapping()->toMembers();
+llvm::SmallVector<subop::Member> subop::MaterializeOp::getWrittenMembers() {
+   return getMapping().getMembers();
 }
-std::shared_ptr<subop::Members> subop::LockOp::getReadMembers() {
-   llvm::SmallVector<std::shared_ptr<subop::Members>> res;
+llvm::SmallVector<subop::Member> subop::LockOp::getReadMembers() {
+   llvm::SmallVector<subop::Member> res;
    this->getNested().walk([&](subop::SubOperator subop) {
       auto read = subop.getReadMembers();
-      res.push_back(read);
+      res.insert(res.end(), read.begin(), read.end());
    });
-   return std::make_shared<subop::Members>(res);
+   return res;
 }
-std::shared_ptr<subop::Members> subop::LockOp::getWrittenMembers() {
-   llvm::SmallVector<std::shared_ptr<subop::Members>> res;
+llvm::SmallVector<subop::Member> subop::LockOp::getWrittenMembers() {
+   llvm::SmallVector<subop::Member> res;
    this->getNested().walk([&](subop::SubOperator subop) {
       auto written = subop.getWrittenMembers();
-      res.push_back(written);
+      res.insert(res.end(), written.begin(), written.end());
    });
-   return std::make_shared<subop::Members>(res);
+   return res;
 }
 namespace {
 void cloneRegionInto(mlir::OpBuilder& builder, mlir::IRMapping& mapping, subop::ColumnMapping& columnMapping, mlir::Region& region, mlir::Region& newRegion) {
@@ -1153,27 +1151,27 @@ mlir::Operation* subop::LockOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMap
    mapResults(mapping, this->getOperation(), newOp.getOperation());
    return newOp;
 }
-std::shared_ptr<subop::Members> subop::NestedMapOp::getReadMembers() {
-   llvm::SmallVector<std::shared_ptr<subop::Members>> res;
+llvm::SmallVector<subop::Member> subop::NestedMapOp::getReadMembers() {
+   llvm::SmallVector<subop::Member> res;
    getRegion().walk([&](subop::SubOperator subop) {
       auto read = subop.getReadMembers();
-      res.push_back(read);
+      res.insert(res.end(), read.begin(), read.end());
    });
-   return std::make_shared<subop::Members>(res);
+   return res;
 }
-std::shared_ptr<subop::Members> subop::NestedMapOp::getWrittenMembers() {
+llvm::SmallVector<subop::Member> subop::NestedMapOp::getWrittenMembers() {
    llvm::DenseSet<Member> res;
    this->getRegion().walk([&](subop::SubOperator subop) {
       auto written = subop.getWrittenMembers();
-      res.insert(written->getMembers().begin(), written->getMembers().end());
+      res.insert(written.begin(), written.end());
    });
    this->getRegion().walk([&](subop::StateCreator creator) {
       auto created = creator.getCreatedMembers();
-      for (auto m : created->getMembers()) {
+      for (auto m : created) {
          res.erase(m);
       }
    });
-   return std::make_shared<Members>(llvm::SmallVector<Member>(res.begin(), res.end()));
+   return llvm::SmallVector<Member>(res.begin(), res.end());
 }
 mlir::Operation* subop::NestedMapOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, subop::ColumnMapping& columnMapping) {
    auto newMap = builder.create<NestedMapOp>(this->getLoc(), mapping.lookupOrDefault(getStream()), columnMapping.remap(getParameters()));
@@ -1181,93 +1179,95 @@ mlir::Operation* subop::NestedMapOp::cloneSubOp(mlir::OpBuilder& builder, mlir::
    mapResults(mapping, this->getOperation(), newMap.getOperation());
    return newMap;
 }
-std::shared_ptr<subop::Members> subop::LoopOp::getReadMembers() {
-   llvm::SmallVector<std::shared_ptr<subop::Members>> res;
+llvm::SmallVector<subop::Member> subop::LoopOp::getReadMembers() {
+   llvm::SmallVector<subop::Member> res;
    for (auto arg : getArgs()) {
       if (auto stateType = mlir::dyn_cast_or_null<subop::State>(arg.getType())) {
-         res.push_back(stateType.getMembers().getMembersPtr());
+         auto members= stateType.getMembers().getMembers();
+         res.insert(res.end(), members.begin(), members.end());
       }
    }
    this->getRegion().walk([&](subop::SubOperator subop) {
       auto read = subop.getReadMembers();
-      res.push_back(read);
+      res.insert(res.end(), read.begin(), read.end());
    });
-   return std::make_shared<subop::Members>(res);
+   return res;
 }
-std::shared_ptr<subop::Members> subop::LoopOp::getWrittenMembers() {
-   llvm::SmallVector<std::shared_ptr<subop::Members>> res;
+llvm::SmallVector<subop::Member> subop::LoopOp::getWrittenMembers() {
+   llvm::SmallVector<subop::Member> res;
    this->getRegion().walk([&](subop::SubOperator subop) {
       auto written = subop.getWrittenMembers();
-      res.push_back(written);
+      res.insert(res.end(), written.begin(), written.end());
    });
    for (auto resT : getResultTypes()) {
       if (auto stateType = mlir::dyn_cast_or_null<subop::State>(resT)) {
-         res.push_back(stateType.getMembers().getMembersPtr());
+         auto members= stateType.getMembers().getMembers();
+         res.insert(res.end(), members.begin(), members.end());
       }
    }
-   return std::make_shared<subop::Members>(res);
+   return res;
 }
-std::shared_ptr<subop::Members> subop::CreateArrayOp::getReadMembers() {
-   return getNumElements().getType().getMembers().getMembersPtr();
+llvm::SmallVector<subop::Member> subop::CreateArrayOp::getReadMembers() {
+   return getNumElements().getType().getMembers().getMembers();
 }
-std::shared_ptr<subop::Members> subop::CreateArrayOp::getWrittenMembers() {
-   return getRes().getType().getMembers().getMembersPtr();
+llvm::SmallVector<subop::Member> subop::CreateArrayOp::getWrittenMembers() {
+   return getRes().getType().getMembers().getMembers();
 }
-std::shared_ptr<subop::Members> subop::CreateSortedViewOp::getWrittenMembers() {
-   return mlir::cast<subop::BufferType>(getToSort().getType()).getMembers().getMembersPtr();
+llvm::SmallVector<subop::Member> subop::CreateSortedViewOp::getWrittenMembers() {
+   return mlir::cast<subop::BufferType>(getToSort().getType()).getMembers().getMembers();
 }
-std::shared_ptr<subop::Members> subop::CreateHashIndexedView::getWrittenMembers() {
-   return std::make_shared<subop::Members>(llvm::SmallVector<Member>{getLinkMember().getMember(), getHashMember().getMember()}); //todo: hack
+llvm::SmallVector<subop::Member> subop::CreateHashIndexedView::getWrittenMembers() {
+   return llvm::SmallVector<Member>{getLinkMember().getMember(), getHashMember().getMember()}; //todo: hack
 }
-std::shared_ptr<subop::Members> subop::CreateHashIndexedView::getReadMembers() {
-   return std::make_shared<subop::Members>(llvm::SmallVector<Member>{getHashMember().getMember()});
+llvm::SmallVector<subop::Member> subop::CreateHashIndexedView::getReadMembers() {
+   return llvm::SmallVector<Member>{getHashMember().getMember()};
 }
-std::shared_ptr<subop::Members> subop::MergeOp::getReadMembers() {
-   return getThreadLocal().getType().getWrapped().getMembers().getMembersPtr();
+llvm::SmallVector<subop::Member> subop::MergeOp::getReadMembers() {
+   return getThreadLocal().getType().getWrapped().getMembers().getMembers();
 }
-std::shared_ptr<subop::Members> subop::MergeOp::getWrittenMembers() {
-   return getThreadLocal().getType().getWrapped().getMembers().getMembersPtr();
+llvm::SmallVector<subop::Member> subop::MergeOp::getWrittenMembers() {
+   return getThreadLocal().getType().getWrapped().getMembers().getMembers();
 }
-std::shared_ptr<subop::Members> subop::CreateSegmentTreeView::getWrittenMembers() {
-   return mlir::cast<subop::SegmentTreeViewType>(getType()).getValueMembers().getMembersPtr();
+llvm::SmallVector<subop::Member> subop::CreateSegmentTreeView::getWrittenMembers() {
+   return mlir::cast<subop::SegmentTreeViewType>(getType()).getValueMembers().getMembers();
 }
-std::shared_ptr<subop::Members> subop::CreateSegmentTreeView::getReadMembers() {
+llvm::SmallVector<subop::Member> subop::CreateSegmentTreeView::getReadMembers() {
    llvm::SmallVector<Member> res;
    for (auto name : getRelevantMembers()) {
       res.push_back(mlir::cast<MemberAttr>(name).getMember());
    }
-   return std::make_shared<subop::Members>(res);
+   return res;
 }
-std::shared_ptr<subop::Members> subop::CreateContinuousView::getWrittenMembers() {
-   return mlir::cast<State>(getSource().getType()).getMembers().getMembersPtr();
+llvm::SmallVector<subop::Member> subop::CreateContinuousView::getWrittenMembers() {
+   return mlir::cast<State>(getSource().getType()).getMembers().getMembers();
 }
-std::shared_ptr<subop::Members> subop::CreateContinuousView::getReadMembers() {
-   return mlir::cast<subop::State>(getSource().getType()).getMembers().getMembersPtr();
+llvm::SmallVector<subop::Member> subop::CreateContinuousView::getReadMembers() {
+   return mlir::cast<subop::State>(getSource().getType()).getMembers().getMembers();
 }
 
-std::shared_ptr<subop::Members> subop::SimpleStateGetScalar::getReadMembers() {
-   return std::make_shared<Members>(llvm::SmallVector<Member>{getMember().getMember()});
+llvm::SmallVector<subop::Member> subop::SimpleStateGetScalar::getReadMembers() {
+   return {getMember().getMember()};
 }
-std::shared_ptr<subop::Members> subop::CreateSortedViewOp::getReadMembers() {
+llvm::SmallVector<subop::Member> subop::CreateSortedViewOp::getReadMembers() {
    llvm::SmallVector<Member> res;
    for (auto x : getSortBy()) {
       res.push_back(mlir::cast<MemberAttr>(x).getMember());
    }
-   return std::make_shared<subop::Members>(res);
+   return res;
 }
-std::shared_ptr<subop::Members> subop::ReduceOp::getWrittenMembers() {
+llvm::SmallVector<subop::Member> subop::ReduceOp::getWrittenMembers() {
    llvm::SmallVector<Member> res;
    for (auto x : getMembers()) {
       res.push_back(mlir::cast<MemberAttr>(x).getMember());
    }
-   return std::make_shared<subop::Members>(res);
+   return res;
 }
-std::shared_ptr<subop::Members> subop::ReduceOp::getReadMembers() {
+llvm::SmallVector<subop::Member> subop::ReduceOp::getReadMembers() {
    llvm::SmallVector<Member> res;
    for (auto x : getMembers()) {
       res.push_back(mlir::cast<MemberAttr>(x).getMember());
    }
-   return std::make_shared<subop::Members>(res);
+   return res
    ;
 }
 
@@ -1278,16 +1278,16 @@ mlir::Operation* subop::ReduceOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRM
    mapResults(mapping, this->getOperation(), newOp.getOperation());
    return newOp;
 }
-std::shared_ptr<subop::Members> subop::ScatterOp::getWrittenMembers() {
-   return getMapping().getMapping()->toMembers();
+llvm::SmallVector<subop::Member> subop::ScatterOp::getWrittenMembers() {
+   return getMapping().getMembers();
 }
 mlir::Operation* subop::ScatterOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, subop::ColumnMapping& columnMapping) {
    auto newOp = builder.create<ScatterOp>(this->getLoc(), mapping.lookupOrDefault(getStream()), columnMapping.remap(getRef()), columnMapping.remap(getMapping()));
    mapResults(mapping, this->getOperation(), newOp.getOperation());
    return newOp;
 }
-std::shared_ptr<subop::Members> subop::LookupOrInsertOp::getWrittenMembers() {
-   return mlir::cast<subop::State>(getState().getType()).getMembers().getMembersPtr();
+llvm::SmallVector<subop::Member> subop::LookupOrInsertOp::getWrittenMembers() {
+   return mlir::cast<subop::State>(getState().getType()).getMembers().getMembers();
 }
 mlir::Operation* subop::LookupOrInsertOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, subop::ColumnMapping& columnMapping) {
    auto newOp = builder.create<LookupOrInsertOp>(this->getLoc(), mapping.lookupOrDefault(getStream()), mapping.lookupOrDefault(getState()), columnMapping.remap(getKeys()), columnMapping.clone(getRef()));
@@ -1296,8 +1296,8 @@ mlir::Operation* subop::LookupOrInsertOp::cloneSubOp(mlir::OpBuilder& builder, m
    mapResults(mapping, this->getOperation(), newOp.getOperation());
    return newOp;
 }
-std::shared_ptr<subop::Members> subop::InsertOp::getWrittenMembers() {
-   return mlir::cast<subop::State>(getState().getType()).getMembers().getMembersPtr();
+llvm::SmallVector<subop::Member> subop::InsertOp::getWrittenMembers() {
+   return mlir::cast<subop::State>(getState().getType()).getMembers().getMembers();
 }
 
 mlir::Operation* subop::InsertOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, subop::ColumnMapping& columnMapping) {
@@ -1306,11 +1306,11 @@ mlir::Operation* subop::InsertOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRM
    mapResults(mapping, this->getOperation(), newOp.getOperation());
    return newOp;
 }
-std::shared_ptr<subop::Members> subop::LookupOp::getReadMembers() {
+llvm::SmallVector<subop::Member> subop::LookupOp::getReadMembers() {
    if (auto lookableState = mlir::dyn_cast_or_null<subop::LookupAbleState>(getState().getType())) {
-      return lookableState.getKeyMembers().getMembersPtr();
+      return lookableState.getKeyMembers().getMembers();
    }
-   return std::make_shared<subop::Members>();
+   return {};
 }
 mlir::Operation* subop::LookupOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, subop::ColumnMapping& columnMapping) {
    auto newOp = builder.create<LookupOp>(this->getLoc(), mapping.lookupOrDefault(getStream()), mapping.lookupOrDefault(getState()), columnMapping.remap(getKeys()), columnMapping.clone(getRef()));
@@ -1319,8 +1319,8 @@ mlir::Operation* subop::LookupOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRM
    mapResults(mapping, this->getOperation(), newOp.getOperation());
    return newOp;
 }
-std::shared_ptr<subop::Members> subop::GatherOp::getReadMembers() {
-   return getMapping().getMapping()->toMembers();
+llvm::SmallVector<subop::Member> subop::GatherOp::getReadMembers() {
+   return getMapping().getMembers();
 }
 
 mlir::Operation* subop::GatherOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, subop::ColumnMapping& columnMapping) {
@@ -1544,27 +1544,27 @@ void subop::SetTrackedCountOp::updateStateType(subop::SubOpStateUsageTransformer
    assert(false && "should not happen");
 }
 
-std::shared_ptr<subop::Members> subop::SetTrackedCountOp::getReadMembers() {
-   return std::make_shared<Members>(llvm::SmallVector<Member>{getReadState().getMember()});
+llvm::SmallVector<subop::Member> subop::SetTrackedCountOp::getReadMembers() {
+   return {getReadState().getMember()};
 }
-std::shared_ptr<subop::Members> subop::GenericCreateOp::getCreatedMembers() {
+llvm::SmallVector<subop::Member> subop::GenericCreateOp::getCreatedMembers() {
    if (auto stateType = mlir::cast<subop::State>(getRes().getType())) {
-      return stateType.getMembers().getMembersPtr();
+      return stateType.getMembers().getMembers();
    }
-   return std::make_shared<subop::Members>();
+   return {};
 }
 
-std::shared_ptr<subop::Members> subop::CreateFrom::getReadMembers() {
+llvm::SmallVector<subop::Member> subop::CreateFrom::getReadMembers() {
    if (auto stateType = mlir::cast<subop::State>(getState().getType())) {
-      return stateType.getMembers().getMembersPtr();
+      return stateType.getMembers().getMembers();
    }
-   return std::make_shared<subop::Members>();
+   return {};
 }
-std::shared_ptr<subop::Members> subop::CreateFrom::getWrittenMembers() {
+llvm::SmallVector<subop::Member> subop::CreateFrom::getWrittenMembers() {
    if (auto stateType = mlir::cast<subop::State>(getState().getType())) {
-      return stateType.getMembers().getMembersPtr();
+      return stateType.getMembers().getMembers();
    }
-   return std::make_shared<subop::Members>();
+   return {};
 }
 
 mlir::Operation* subop::RenamingOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, subop::ColumnMapping& columnMapping) {

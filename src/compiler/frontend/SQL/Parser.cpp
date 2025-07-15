@@ -1317,7 +1317,7 @@ std::optional<mlir::Value> frontend::sql::Parser::translate(mlir::OpBuilder& bui
                   members.push_back(colMemberName);
                   attrs.push_back(attrManager.createRef(x.second));
                }
-               localTableType = subop::LocalTableType::get(builder.getContext(), subop::StateMembersAttr::get(builder.getContext(), std::make_shared<subop::Members>(members)), builder.getArrayAttr(names));
+               localTableType = subop::LocalTableType::get(builder.getContext(), subop::StateMembersAttr::get(builder.getContext(), members), builder.getArrayAttr(names));
                mlir::Value result = builder.create<relalg::MaterializeOp>(builder.getUnknownLoc(), localTableType, tree, builder.getArrayAttr(attrs), builder.getArrayAttr(names));
                builder.create<relalg::QueryReturnOp>(builder.getUnknownLoc(), result);
             }
@@ -1569,7 +1569,7 @@ void frontend::sql::Parser::translateInsertStmt(mlir::OpBuilder& builder, Insert
          orderedColNamesAttrs.push_back(builder.getStringAttr(x));
          orderedColAttrs.push_back(insertedCols.at(x));
       }
-      localTableType = subop::LocalTableType::get(builder.getContext(), subop::StateMembersAttr::get(builder.getContext(), std::make_shared<subop::Members>(members)), builder.getArrayAttr(orderedColNamesAttrs));
+      localTableType = subop::LocalTableType::get(builder.getContext(), subop::StateMembersAttr::get(builder.getContext(), members), builder.getArrayAttr(orderedColNamesAttrs));
       mlir::Value newRows = builder.create<relalg::MaterializeOp>(builder.getUnknownLoc(), localTableType, mapOp.getResult(), builder.getArrayAttr(orderedColAttrs), builder.getArrayAttr(orderedColNamesAttrs));
       builder.create<relalg::QueryReturnOp>(builder.getUnknownLoc(), newRows);
    }
