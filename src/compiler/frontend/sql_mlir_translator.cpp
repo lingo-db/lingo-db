@@ -82,7 +82,7 @@ std::optional<mlir::Value> SQLMlirTranslator::translateStart(mlir::OpBuilder& bu
 
          auto tree = translateTableProducer(builder, tableProducer, context);
 
-         context->currentScope->evalBeforeAggr.clear();
+         context->currentScope->evalBefore.clear();
          std::vector<mlir::Attribute> attrs;
          std::vector<mlir::Attribute> names;
          std::vector<mlir::Attribute> colMemberNames;
@@ -393,9 +393,11 @@ mlir::Value SQLMlirTranslator::translatePipeOperator(mlir::OpBuilder& builder, s
          assert(pipeOperator->node->nodeType == ast::NodeType::BOUND_AGGREGATION);
          auto aggregationNode = std::static_pointer_cast<ast::BoundAggregationNode>(pipeOperator->node);
          //TODO logic here
+         tree = createMap(builder, attrManager.getUniqueScope("mapBeforeAggr"), aggregationNode->evalBeforeAggr, context, tree);
+
          tree = translateAggregation(builder, aggregationNode, context, tree);
-         tree = createMap(builder, attrManager.getUniqueScope("map2"), context->currentScope->evalBeforeAggr, context, tree);
-         context->currentScope->evalBeforeAggr.clear();
+         tree = createMap(builder, attrManager.getUniqueScope("map2"), context->currentScope->evalBefore, context, tree);
+         context->currentScope->evalBefore.clear();
          return tree;
       }
       case ast::PipeOperatorType::EXTEND: {
@@ -1099,7 +1101,7 @@ mlir::Value SQLMlirTranslator::translateSetOperation(mlir::OpBuilder& builder, s
 
 mlir::Value SQLMlirTranslator::translateAggregation(mlir::OpBuilder& builder, std::shared_ptr<ast::BoundAggregationNode> aggregation, std::shared_ptr<analyzer::SQLContext> context, mlir::Value tree) {
    //Ignore empty aggregations
-   if ((!aggregation->groupByNode || aggregation->groupByNode->groupExpressions.empty()) && aggregation->aggregations.empty()) {
+   if ((!aggregation->groupByNode || aggregation->groupByNode->groupNamedResults.empty()) && aggregation->aggregations.empty()) {
       return tree;
    }
    //create map
@@ -1109,20 +1111,12 @@ mlir::Value SQLMlirTranslator::translateAggregation(mlir::OpBuilder& builder, st
    std::vector<mlir::Attribute> groupByAttrs;
    std::unordered_map<std::string, mlir::Attribute> groupedExpressions;
    std::unordered_map<std::string, size_t> groupByAttrToPos;
-   for (auto& groupBy : aggregation->groupByNode->groupExpressions) {
-      if (groupBy->type == ast::ExpressionType::BOUND_COLUMN_REF) {
-         auto columnRef = std::static_pointer_cast<ast::BoundColumnRefExpression>(groupBy);
-         assert(columnRef->namedResult.has_value());
-         auto namedResult = columnRef->namedResult.value();
-
-         auto attrDef = namedResult->createRef(builder, attrManager);
-         //TODO
-         /*auto attrName = fieldsToString(columnRef->fields_);
-         groupByAttrToPos[attrName] = i;*/
-         groupByAttrs.push_back(attrDef);
-      } else {
-         error("Not implemented", groupBy->loc);
-      }
+   for (auto& groupByNamedResult : aggregation->groupByNode->groupNamedResults) {
+      auto attrDef = groupByNamedResult->createRef(builder, attrManager);
+      //TODO
+      /*auto attrName = fieldsToString(columnRef->fields_);
+      groupByAttrToPos[attrName] = i;*/
+      groupByAttrs.push_back(attrDef);
    }
 
    //TODO maby split logic into two different methods!
@@ -1240,7 +1234,8 @@ mlir::Value SQLMlirTranslator::translateAggregation(mlir::OpBuilder& builder, st
                if (mlir::isa<db::NullableType>(refAttr.getColumn().type)) {
                   aggrResultType = db::NullableType::get(builder.getContext(), aggrResultType);
                }*/
-               aggrFunction->functionInfo->resultType.isNullable = true;
+               assert(aggrFunction->namedResult.has_value());
+               aggrFunction->namedResult.value()->resultType.isNullable = true;
             }
             //TODO move to analyzer
             if (!mlir::isa<db::NullableType>(aggrResultType) && (groupByAttrs.empty()) && aggrFunction->functionName != "count") {
@@ -1248,7 +1243,8 @@ mlir::Value SQLMlirTranslator::translateAggregation(mlir::OpBuilder& builder, st
 
             }
             if (mlir::isa<db::NullableType>(aggrResultType)) {
-               aggrFunction->functionInfo->resultType.isNullable = true;
+               assert(aggrFunction->namedResult.has_value());
+               aggrFunction->namedResult.value()->resultType.isNullable = true;
             }
 
             expr = aggrBuilder.create<relalg::AggrFuncOp>(builder.getUnknownLoc(), aggrResultType, relalgAggrFunc, currRel, refAttr);

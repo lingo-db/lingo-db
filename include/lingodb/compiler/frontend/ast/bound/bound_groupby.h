@@ -6,9 +6,9 @@
 namespace lingodb::ast {
 class BoundGroupByNode : public AstNode {
    public:
-   BoundGroupByNode(std::vector<std::shared_ptr<BoundExpression>> groupExpressions);
+   BoundGroupByNode(std::vector<std::shared_ptr<NamedResult>> groupNamedResults);
    //! The total set of all group expressions
-   std::vector<std::shared_ptr<BoundExpression>> groupExpressions;
+   std::vector<std::shared_ptr<NamedResult>> groupNamedResults;
 
    //TODO having clause
 
