@@ -56,7 +56,6 @@ TEST_CASE("DateTrunc:YearTruncation") {
       auto date3 = toDateLike(1999, 12, 31);
       auto date4 = toDateLike(1999);
       REQUIRE(DateRuntime::dateTrunc(partVarLen, date3) == date4);
-
    });
 }
 
@@ -156,8 +155,6 @@ TEST_CASE("DateTrunc:AllMinutes") {
       VarLen32 partVarLen = VarLen32::fromString("minute");
 
       for (int minute = 0; minute < 60; ++minute) {
-         REQUIRE(comparator("minute", 2025, 6, 26, 14, minute, 59, 2025, 6, 26, 14, minute, 0));
-      }
          auto date = toDateLike(2025, 6, 26, 14, minute, 59);
          auto truncated = toDateLike(2025, 6, 26, 14, minute);
          REQUIRE(DateRuntime::dateTrunc(partVarLen, date) == truncated);
@@ -165,6 +162,48 @@ TEST_CASE("DateTrunc:AllMinutes") {
    });
 }
 
+TEST_CASE("DateDiff:DayDiff") {
+   withContext([]() {
+      REQUIRE(DateRuntime::dateDiffDay(toDateLike(2025, 5, 17),
+                                       toDateLike(2025, 5, 10)) == 7);
+
+      REQUIRE(DateRuntime::dateDiffDay(toDateLike(2020, 2, 29),
+                                       toDateLike(2020, 2, 28)) == 1); // Leap year
+
+      REQUIRE(DateRuntime::dateDiffDay(toDateLike(2000, 1, 1),
+                                       toDateLike(2000, 1, 2)) == -1);
+   });
+}
+
+TEST_CASE("DateDiff:HourDiff") {
+   withContext([]() {
+      REQUIRE(DateRuntime::dateDiffHour(
+                 toDateLike(2025, 6, 26, 14), toDateLike(2025, 6, 26, 10)) == 4);
+
+      REQUIRE(DateRuntime::dateDiffHour(
+                 toDateLike(1999, 12, 31, 23), toDateLike(2000, 1, 1, 0)) == -1);
+   });
+}
+
+TEST_CASE("DateDiff:MinuteDiff") {
+   withContext([]() {
+      REQUIRE(DateRuntime::dateDiffMinute(
+                 toDateLike(2025, 6, 26, 14, 30), toDateLike(2025, 6, 26, 14, 0)) == 30);
+
+      REQUIRE(DateRuntime::dateDiffMinute(
+                 toDateLike(2025, 6, 26, 14, 30), toDateLike(2025, 6, 26, 15, 0)) == -30);
+   });
+}
+
+TEST_CASE("DateDiff:SecondDiff") {
+   withContext([]() {
+      REQUIRE(DateRuntime::dateDiffSecond(
+                 toDateLike(2025, 6, 26, 14, 30, 10),
+                 toDateLike(2025, 6, 26, 14, 30, 0)) == 10);
+
+      REQUIRE(DateRuntime::dateDiffSecond(
+                 toDateLike(2025, 6, 26, 14, 30, 0),
+                 toDateLike(2025, 6, 26, 14, 30, 10)) == -10);
    });
 }
 } // namespace lingodb::runtime
