@@ -320,16 +320,18 @@ mlir::Value frontend::sql::Parser::translateWhenCaseExpression(mlir::OpBuilder& 
 }
 mlir::Value frontend::sql::Parser::translateFuncCallExpression(Node* node, mlir::OpBuilder& builder, mlir::Location loc, TranslationContext& context) {
    auto* funcCall = reinterpret_cast<FuncCall*>(node);
-   //expr = FuncCallTransform(parse_result,,context);
    std::string funcName = reinterpret_cast<value*>(funcCall->funcname_->head->data.ptr_value)->val_.str_;
+
+   // The "name" of runtime functions is added in /compiler/Dialect/DB/RuntimeFunctions
+
    if (funcName == "pg_catalog") {
       funcName = reinterpret_cast<value*>(funcCall->funcname_->tail->data.ptr_value)->val_.str_;
    }
-   if (funcName == "date_diff") {
+   if (funcName == "date_diff" || funcName == "DATEDIFF" || funcName == "datediff") {
       auto unit = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->data.ptr_value), context);
       auto arg1 = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->next->data.ptr_value), context);
       auto arg2 = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->tail->data.ptr_value), context);
-      return builder.create<db::RuntimeCall>(loc, wrapNullableType(builder.getContext(), builder.getI64Type(), {arg1, arg2}), "DateDiff", mlir::ValueRange({unit, arg1, arg2})).getRes();
+      return builder.create<db::RuntimeCall>(loc, wrapNullableType(builder.getContext(), builder.getI64Type(), {unit, arg1, arg2}), "DateDiff", mlir::ValueRange({unit, arg1, arg2})).getRes();
    }
    if (funcName == "date_part") {
       auto part = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->data.ptr_value), context);
