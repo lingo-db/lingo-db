@@ -487,7 +487,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableProducer(std::
 
                }
 
-               context->mapAttribute(resolverScope, setOperationNode->alias.empty() ? context->getUniqueScope("union") : setOperationNode->alias, newTargetInfos);
+               context->mapAttribute(resolverScope, setOperationNode->alias.empty() ? context->getUniqueScope("setOp") : setOperationNode->alias, newTargetInfos);
                context->currentScope->targetInfo.targetColumns = newTargetInfos;
                auto boundSetOperationNode = drv.nf.node<ast::BoundSetOperationNode>(setOperationNode->loc, setOperationNode->alias, setOperationNode->setType, setOperationNode->setOpAll, boundLeft, boundRight, leftScope, rightScope);
                return boundSetOperationNode;
@@ -1152,7 +1152,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
          //TODO better solution!!!!
          for (auto [scope, namedResult] : topDefinedColumnsAll) {
             if (std::find_if(topDefinedColumnsWithoutDuplicates.begin(), topDefinedColumnsWithoutDuplicates.end(), [&](std::pair<std::string, std::shared_ptr<ast::NamedResult>> p) {
-               return (p.first == scope || star->relationName.empty()) && p.second->name == namedResult->name;
+               return p.second->name == namedResult->name && namedResult->scope == p.second->scope;
             }) == topDefinedColumnsWithoutDuplicates.end()) {
                topDefinedColumnsWithoutDuplicates.emplace_back(std::pair{scope, namedResult});
             }
