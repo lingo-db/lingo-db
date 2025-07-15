@@ -37,89 +37,134 @@ void withContext(const F& f) {
    }));
 }
 
-bool comparator(const std::string& part,
-                const int yearFrom, const unsigned monthFrom, const unsigned dayFrom, const int hourFrom, const int minuteFrom, const int secondFrom,
-                const int yearTo, const int monthTo, const int dayTo, const int hourTo, const int minuteTo, const int secondTo) {
+int64_t toDateLike(const int yearIn, const unsigned monthIn = 1, const unsigned dayIn = 1, const int hourIn = 0, const int minuteIn = 0, const int secondIn = 0) {
    using namespace std::chrono;
-
-   VarLen32 partVarLen = VarLen32::fromString(part);
-
-   auto tpFrom = sys_days{year{yearFrom} / month{monthFrom} / day{dayFrom}} + hours{hourFrom} + minutes{minuteFrom} + seconds{secondFrom};
-   auto tpTo = sys_days{year{yearTo} / monthTo / dayTo} + hours{hourTo} + minutes{minuteTo} + seconds{secondTo};
-
-   // Convert to nanoseconds since epoch
-   auto nsFrom = duration_cast<nanoseconds>(tpFrom.time_since_epoch()).count();
-   auto nsTo = duration_cast<nanoseconds>(tpTo.time_since_epoch()).count();
-
-   return DateRuntime::dateTrunc(partVarLen, nsFrom) == nsTo;
+   const auto tp = sys_days{year{yearIn} / month{monthIn} / day{dayIn}} + hours{hourIn} + minutes{minuteIn} + seconds{secondIn};
+   const auto ns = duration_cast<nanoseconds>(tp.time_since_epoch()).count();
+   return ns;
 }
 
 } // namespace
 
 TEST_CASE("DateTrunc:YearTruncation") {
    withContext([]() {
-      REQUIRE(comparator("year", 2025, 5, 17, 0, 0, 0, 2025, 1, 1, 0, 0, 0));
-      REQUIRE(comparator("year", 1999, 12, 31, 0, 0, 0, 1999, 1, 1, 0, 0, 0));
+      VarLen32 partVarLen = VarLen32::fromString("year");
+      auto date1 = toDateLike(2025, 5, 17);
+      auto date2 = toDateLike(2025);
+      REQUIRE(DateRuntime::dateTrunc(partVarLen, date1) == date2);
+
+      auto date3 = toDateLike(1999, 12, 31);
+      auto date4 = toDateLike(1999);
+      REQUIRE(DateRuntime::dateTrunc(partVarLen, date3) == date4);
+
    });
 }
 
 TEST_CASE("DateTrunc:MonthTruncation") {
    withContext([]() {
-      REQUIRE(comparator("month", 2025, 5, 17, 0, 0, 0, 2025, 5, 1, 0, 0, 0));
-      REQUIRE(comparator("month", 2020, 2, 29, 0, 0, 0, 2020, 2, 1, 0, 0, 0)); // Leap year
+      VarLen32 partVarLen = VarLen32::fromString("month");
+      auto date1 = toDateLike(2025, 5, 17);
+      auto date2 = toDateLike(2025, 5, 1);
+      REQUIRE(DateRuntime::dateTrunc(partVarLen, date1) == date2);
+
+      auto date3 = toDateLike(2020, 2, 29);
+      auto date4 = toDateLike(2020, 2, 1);
+      REQUIRE(DateRuntime::dateTrunc(partVarLen, date3) == date4);
    });
 }
 
 TEST_CASE("DateTrunc:DayTruncation") {
    withContext([]() {
-      REQUIRE(comparator("day", 2025, 5, 17, 0, 0, 0, 2025, 5, 17, 0, 0, 0)); // identity
+      VarLen32 partVarLen = VarLen32::fromString("day");
+      auto date = toDateLike(2025, 5, 17);
+      REQUIRE(DateRuntime::dateTrunc(partVarLen, date) == date); // identity
    });
 }
 
 TEST_CASE("DateTrunc:AllMonths") {
    withContext([]() {
+      VarLen32 partVarLen = VarLen32::fromString("month");
       for (int month = 1; month <= 12; ++month) {
-         REQUIRE(comparator("month", 2021, month, 15, 0, 0, 0, 2021, month, 1, 0, 0, 0));
+         auto date = toDateLike(2021, month, 15);
+         auto truncated = toDateLike(2021, month, 1);
+         REQUIRE(DateRuntime::dateTrunc(partVarLen, date) == truncated);
       }
    });
 }
 
 TEST_CASE("DateTrunc:HourTruncation") {
    withContext([]() {
-      REQUIRE(comparator("hour", 2025, 6, 26, 14, 53, 22, 2025, 6, 26, 14, 0, 0));
-      REQUIRE(comparator("hour", 2025, 1, 1, 0, 1, 1, 2025, 1, 1, 0, 0, 0));
-      REQUIRE(comparator("hour", 1999, 12, 31, 23, 59, 59, 1999, 12, 31, 23, 0, 0));
+      VarLen32 partVarLen = VarLen32::fromString("hour");
+
+      auto d1 = toDateLike(2025, 6, 26, 14, 53, 22);
+      auto d2 = toDateLike(2025, 6, 26, 14);
+      REQUIRE(DateRuntime::dateTrunc(partVarLen, d1) == d2);
+
+      auto d3 = toDateLike(2025, 1, 1, 0, 1, 1);
+      auto d4 = toDateLike(2025, 1, 1, 0);
+      REQUIRE(DateRuntime::dateTrunc(partVarLen, d3) == d4);
+
+      auto d5 = toDateLike(1999, 12, 31, 23, 59, 59);
+      auto d6 = toDateLike(1999, 12, 31, 23);
+      REQUIRE(DateRuntime::dateTrunc(partVarLen, d5) == d6);
    });
 }
 
 TEST_CASE("DateTrunc:MinuteTruncation") {
    withContext([]() {
-      REQUIRE(comparator("minute", 2025, 6, 26, 14, 53, 22, 2025, 6, 26, 14, 53, 0));
-      REQUIRE(comparator("minute", 2025, 1, 1, 0, 0, 59, 2025, 1, 1, 0, 0, 0));
-      REQUIRE(comparator("minute", 1999, 12, 31, 23, 59, 1, 1999, 12, 31, 23, 59, 0));
+      VarLen32 partVarLen = VarLen32::fromString("minute");
+
+      auto d1 = toDateLike(2025, 6, 26, 14, 53, 22);
+      auto d2 = toDateLike(2025, 6, 26, 14, 53);
+      REQUIRE(DateRuntime::dateTrunc(partVarLen, d1) == d2);
+
+      auto d3 = toDateLike(2025, 1, 1, 0, 0, 59);
+      auto d4 = toDateLike(2025, 1, 1, 0, 0);
+      REQUIRE(DateRuntime::dateTrunc(partVarLen, d3) == d4);
+
+      auto d5 = toDateLike(1999, 12, 31, 23, 59, 1);
+      auto d6 = toDateLike(1999, 12, 31, 23, 59);
+      REQUIRE(DateRuntime::dateTrunc(partVarLen, d5) == d6);
    });
 }
 
 TEST_CASE("DateTrunc:SecondTruncation") {
    withContext([]() {
-      REQUIRE(comparator("second", 2025, 6, 26, 14, 53, 22, 2025, 6, 26, 14, 53, 22));
-      REQUIRE(comparator("second", 2025, 6, 26, 14, 53, 22, 2025, 6, 26, 14, 53, 22)); // idempotent
+      VarLen32 partVarLen = VarLen32::fromString("second");
+
+      auto d1 = toDateLike(2025, 6, 26, 14, 53, 22);
+      REQUIRE(DateRuntime::dateTrunc(partVarLen, d1) == d1); // identity
+
+      REQUIRE(DateRuntime::dateTrunc(partVarLen, DateRuntime::dateTrunc(partVarLen, d1)) == d1); // idempotent
    });
 }
 
 TEST_CASE("DateTrunc:AllHours") {
    withContext([]() {
+      VarLen32 partVarLen = VarLen32::fromString("hour");
+
       for (int hour = 0; hour < 24; ++hour) {
-         REQUIRE(comparator("hour", 2025, 6, 26, hour, 30, 45, 2025, 6, 26, hour, 0, 0));
+         auto date = toDateLike(2025, 6, 26, hour, 30, 45);
+         auto truncated = toDateLike(2025, 6, 26, hour);
+         REQUIRE(DateRuntime::dateTrunc(partVarLen, date) == truncated);
       }
    });
 }
 
 TEST_CASE("DateTrunc:AllMinutes") {
    withContext([]() {
+      VarLen32 partVarLen = VarLen32::fromString("minute");
+
       for (int minute = 0; minute < 60; ++minute) {
          REQUIRE(comparator("minute", 2025, 6, 26, 14, minute, 59, 2025, 6, 26, 14, minute, 0));
       }
+         auto date = toDateLike(2025, 6, 26, 14, minute, 59);
+         auto truncated = toDateLike(2025, 6, 26, 14, minute);
+         REQUIRE(DateRuntime::dateTrunc(partVarLen, date) == truncated);
+      }
+   });
+}
+
    });
 }
 } // namespace lingodb::runtime
