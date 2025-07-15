@@ -974,7 +974,6 @@ static mlir::Value translateNLJ(mlir::Value left, mlir::Value right, relalg::Col
       {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPointToStart(b);
-         auto [markerState, markerName] = createMarkerState(rewriter, loc);
          auto generateOp = rewriter.create<subop::GenerateOp>(loc, std::vector<mlir::Type>{tuples::TupleStreamType::get(rewriter.getContext()), tuples::TupleStreamType::get(rewriter.getContext())}, rewriter.getArrayAttr({}));
          {
             auto* generateBlock = new Block;
@@ -1006,7 +1005,6 @@ static mlir::Value translateNLJ(mlir::Value left, mlir::Value right, relalg::Col
       {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPointToStart(b);
-         auto [markerState, markerName] = createMarkerState(rewriter, loc);
          mlir::Value scan = rewriter.create<subop::ScanOp>(loc, vector, helper.createStateColumnMapping());
          mlir::Value combined = rewriter.create<subop::CombineTupleOp>(loc, scan, tuple);
          rewriter.create<tuples::ReturnOp>(loc, fn(combined, rewriter));
@@ -1101,7 +1099,6 @@ static mlir::Value translateHJ(mlir::Value left, mlir::Value right, mlir::ArrayA
    {
       mlir::OpBuilder::InsertionGuard guard(rewriter);
       rewriter.setInsertionPointToStart(b);
-      auto [markerState, markerName] = createMarkerState(rewriter, loc);
       mlir::Value scan = rewriter.create<subop::ScanListOp>(loc, list, entryDef);
       mlir::Value gathered = rewriter.create<subop::GatherOp>(loc, scan, entryRef, keyHelper.createStateColumnMapping(valueHelper.getRawDefMapping()));
       mlir::Value combined = rewriter.create<subop::CombineTupleOp>(loc, gathered, tuple);
@@ -1172,7 +1169,6 @@ static mlir::Value translateINLJ(mlir::Value left, mlir::Value right, mlir::Arra
    {
       mlir::OpBuilder::InsertionGuard guard(rewriter);
       rewriter.setInsertionPointToStart(b);
-      auto [markerState, markerName] = createMarkerState(rewriter, loc);
       auto scan = rewriter.create<subop::ScanListOp>(loc, list, entryDef);
       auto gathered = rewriter.create<subop::GatherOp>(loc, scan, entryRef, createColumnDefMemberMappingAttr(ctxt, mapping));
       auto combined = rewriter.create<subop::CombineTupleOp>(loc, gathered, tuple);

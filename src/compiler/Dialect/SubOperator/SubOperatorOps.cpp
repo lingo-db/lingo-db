@@ -111,7 +111,7 @@ ParseResult parseStateColumnMapping(OpAsmParser& parser, subop::ColumnDefMemberM
       if (parser.parseRBrace()) { return failure(); }
       break;
    }
-   attr = subop::ColumnDefMemberMappingAttr::get(parser.getBuilder().getContext(),columns);
+   attr = subop::ColumnDefMemberMappingAttr::get(parser.getBuilder().getContext(), columns);
    return success();
 }
 ParseResult parseColumnStateMapping(OpAsmParser& parser, subop::ColumnRefMemberMappingAttr& attr) {
@@ -134,7 +134,7 @@ ParseResult parseColumnStateMapping(OpAsmParser& parser, subop::ColumnRefMemberM
       if (parser.parseRBrace()) { return failure(); }
       break;
    }
-   attr = subop::ColumnRefMemberMappingAttr::get(parser.getBuilder().getContext(),columns);
+   attr = subop::ColumnRefMemberMappingAttr::get(parser.getBuilder().getContext(), columns);
    return success();
 }
 void printStateColumnMapping(OpAsmPrinter& p, mlir::Operation* op, subop::ColumnDefMemberMappingAttr attr) {
@@ -330,7 +330,7 @@ ParseResult subop::CreateHeapOp::parse(::mlir::OpAsmParser& parser, ::mlir::Oper
 }
 
 void subop::CreateHeapOp::print(OpAsmPrinter& p) {
-   p << " "<<getType() << " ";
+   p << " " << getType() << " ";
    printCustMemberArrayAttr(p, getOperation(), getSortBy());
    p << " ([";
    bool first = true;
@@ -845,7 +845,7 @@ void subop::LoopOp::print(::mlir::OpAsmPrinter& p) {
 void subop::CreateSegmentTreeView::print(::mlir::OpAsmPrinter& p) {
    p << " " << getSource() << " : " << getSource().getType() << " -> " << getType() << " ";
    p << "initial";
-   printCustMemberArrayAttr(p,getOperation(),getRelevantMembers());
+   printCustMemberArrayAttr(p, getOperation(), getRelevantMembers());
    p << ":(";
    bool first = true;
    for (auto arg : getInitialFn().getArguments()) {
@@ -907,8 +907,6 @@ ParseResult subop::ReduceOp::parse(::mlir::OpAsmParser& parser, ::mlir::Operatio
    if (parser.parseLParen() || parser.parseLSquare()) {
       return failure();
    }
-   auto referenceType = mlir::cast<subop::StateEntryReference>(reference.getColumn().type);
-   auto stateMembers = referenceType.getMembers();
    for (size_t i = 0; i < columns.size(); i++) {
       leftArgs[i].type = mlir::cast<tuples::ColumnRefAttr>(columns[i]).getColumn().type;
       if (i > 0 && parser.parseComma().failed()) return failure();
@@ -1183,7 +1181,7 @@ llvm::SmallVector<subop::Member> subop::LoopOp::getReadMembers() {
    llvm::SmallVector<subop::Member> res;
    for (auto arg : getArgs()) {
       if (auto stateType = mlir::dyn_cast_or_null<subop::State>(arg.getType())) {
-         auto members= stateType.getMembers().getMembers();
+         auto members = stateType.getMembers().getMembers();
          res.insert(res.end(), members.begin(), members.end());
       }
    }
@@ -1201,7 +1199,7 @@ llvm::SmallVector<subop::Member> subop::LoopOp::getWrittenMembers() {
    });
    for (auto resT : getResultTypes()) {
       if (auto stateType = mlir::dyn_cast_or_null<subop::State>(resT)) {
-         auto members= stateType.getMembers().getMembers();
+         auto members = stateType.getMembers().getMembers();
          res.insert(res.end(), members.begin(), members.end());
       }
    }
@@ -1267,8 +1265,7 @@ llvm::SmallVector<subop::Member> subop::ReduceOp::getReadMembers() {
    for (auto x : getMembers()) {
       res.push_back(mlir::cast<MemberAttr>(x).getMember());
    }
-   return res
-   ;
+   return res;
 }
 
 mlir::Operation* subop::ReduceOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, subop::ColumnMapping& columnMapping) {

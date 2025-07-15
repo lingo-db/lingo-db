@@ -114,9 +114,9 @@ class ToJson {
    // Convert mlir Type to umbra json type
    std::string convertDataType(mlir::Type type) {
       auto& memberManager = type.getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
-      auto membersToString = [this,&memberManager](subop::StateMembersAttr attr) {
+      auto membersToString = [this, &memberManager](subop::StateMembersAttr attr) {
          std::string result = "[";
-         for (auto m:attr.getMembers()) {
+         for (auto m : attr.getMembers()) {
             result += memberManager.getName(m) + ":" + convertDataType(memberManager.getType(m)) + ",";
          }
          result += "]";

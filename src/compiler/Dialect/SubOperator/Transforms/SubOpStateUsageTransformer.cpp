@@ -51,9 +51,9 @@ mlir::ArrayAttr SubOpStateUsageTransformer::updateMembers(mlir::ArrayAttr curren
    if (anyNeedsReplacement) {
       std::vector<mlir::Attribute> newMembers;
       for (auto m : currentMembers) {
-         auto member=mlir::cast<subop::MemberAttr>(m).getMember();
+         auto member = mlir::cast<subop::MemberAttr>(m).getMember();
          if (memberMapping.contains(member)) {
-            newMembers.push_back(subop::MemberAttr::get(currentMembers.getContext(),memberMapping.at(member)));
+            newMembers.push_back(subop::MemberAttr::get(currentMembers.getContext(), memberMapping.at(member)));
          } else {
             newMembers.push_back(m);
          }
@@ -79,8 +79,8 @@ subop::ColumnDefMemberMappingAttr SubOpStateUsageTransformer::updateMapping(subo
          }
       }
       return subop::ColumnDefMemberMappingAttr::get(currentMapping.getContext(), newMapping);
-   }else{
-        return currentMapping;
+   } else {
+      return currentMapping;
    }
 }
 subop::ColumnRefMemberMappingAttr SubOpStateUsageTransformer::updateMapping(subop::ColumnRefMemberMappingAttr currentMapping) {

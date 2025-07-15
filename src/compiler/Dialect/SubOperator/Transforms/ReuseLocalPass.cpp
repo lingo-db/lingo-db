@@ -29,14 +29,6 @@ static std::vector<subop::SubOperator> findWritingOps(mlir::Block& block, llvm::
    return res;
 }
 
-static std::optional<std::string> lookupByValue(mlir::DictionaryAttr mapping, mlir::Attribute value) {
-   for (auto m : mapping) {
-      if (m.getValue() == value) {
-         return m.getName().str();
-      }
-   }
-   return {};
-}
 static std::pair<tuples::ColumnDefAttr, tuples::ColumnRefAttr> createColumn(mlir::Type type, std::string scope, std::string name) {
    auto& columnManager = type.getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
    std::string scopeName = columnManager.getUniqueScope(scope);
@@ -204,7 +196,7 @@ class AvoidArrayMaterialization : public mlir::RewritePattern {
          }
       }
       if (scatterOp) {
-         auto scatterMapping= scatterOp.getMapping();
+         auto scatterMapping = scatterOp.getMapping();
          std::vector<mlir::Attribute> renamed;
          for (auto gatherOp : gatherOps) {
             for (auto m : gatherOp.getMapping().getMapping()) {
@@ -290,7 +282,7 @@ class ReuseHashtable : public mlir::RewritePattern {
             std::unordered_map<subop::Member, tuples::Column*> keyMemberToColumn;
             auto htKeyMembers = htType.getKeyMembers().getMembers();
             for (auto keyMember : htKeyMembers) {
-               auto colDef =scanOp.getMapping().getColumnDef(keyMember);
+               auto colDef = scanOp.getMapping().getColumnDef(keyMember);
                hashMapKey.insert(&colDef.getColumn());
                keyMemberToColumn[keyMember] = &colDef.getColumn();
             }

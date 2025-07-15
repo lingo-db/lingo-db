@@ -80,7 +80,7 @@ class PullGatherUpPass : public mlir::PassWrapper<PullGatherUpPass, mlir::Operat
             }
             if (!usedByCurrent.empty()) {
                mlir::OpBuilder builder(currentParent);
-               auto newGatherOp = builder.create<subop::GatherOp>(gatherOp->getLoc(), currStream, gatherOp.getRef(), subop::ColumnDefMemberMappingAttr::get(&getContext(),usedByCurrent));
+               auto newGatherOp = builder.create<subop::GatherOp>(gatherOp->getLoc(), currStream, gatherOp.getRef(), subop::ColumnDefMemberMappingAttr::get(&getContext(), usedByCurrent));
                currStream.replaceAllUsesWith(newGatherOp.getResult());
                newGatherOp->setOperand(0, currStream);
                lastStream = newGatherOp.getResult();

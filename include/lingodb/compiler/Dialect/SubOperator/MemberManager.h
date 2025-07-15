@@ -1,15 +1,17 @@
 #ifndef LINGODB_COMPILER_DIALECT_SUBOPERATOR_MEMBERMANAGER_H
 #define LINGODB_COMPILER_DIALECT_SUBOPERATOR_MEMBERMANAGER_H
-#include "llvm/ADT/SmallVector.h"
-#include <mlir/IR/Types.h>
 
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
+
+#include <mlir/IR/Types.h>
+
 #include <algorithm>
+#include <iostream>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
-#include <iostream>
-#include <memory>
+
 namespace lingodb::compiler::dialect::subop {
 namespace internal {
 struct MemberInternal;
@@ -36,7 +38,6 @@ struct Member {
    }
 };
 
-
 } // namespace lingodb::compiler::dialect::subop
 
 namespace lingodb::compiler::dialect::subop {
@@ -59,14 +60,12 @@ class MemberManager {
 
    private:
    std::unordered_map<std::string, std::shared_ptr<internal::MemberInternal>> members;
-   std::unordered_set<internal::MemberInternal*> memberSet;
 
    public:
    Member createMember(std::string name, mlir::Type type) {
       auto uniqueName = getUniqueName(name);
       auto member = std::make_shared<internal::MemberInternal>(uniqueName, type);
       members[uniqueName] = member;
-      memberSet.insert(member.get());
       return member.get();
    }
    Member createMemberDirect(std::string name, mlir::Type type) {
@@ -76,7 +75,6 @@ class MemberManager {
       } else {
          auto member = std::make_shared<internal::MemberInternal>(name, type);
          members[name] = member;
-         memberSet.insert(member.get());
          return member.get();
       }
    }
@@ -89,11 +87,9 @@ class MemberManager {
       return nullptr;
    }
    const std::string& getName(Member member) const {
-      assert(memberSet.contains(member.internal) && "Member not found in member set");
       return member.internal->name;
    }
    mlir::Type getType(Member member) const {
-      assert(memberSet.contains(member.internal) && "Member not found in member set");
       return member.internal->type;
    }
 };
@@ -130,6 +126,5 @@ struct DenseMapInfo<lingodb::compiler::dialect::subop::Member> {
    }
 };
 } // namespace llvm
-
 
 #endif //LINGODB_COMPILER_DIALECT_SUBOPERATOR_MEMBERMANAGER_H

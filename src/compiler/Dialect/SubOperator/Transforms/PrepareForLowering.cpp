@@ -78,7 +78,7 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
                op->walk([&](mlir::Operation* nestedOp) {
                   if (subop::SubOperator potentialSubOp = mlir::dyn_cast_or_null<subop::SubOperator>(nestedOp)) {
                      auto readMembers = potentialSubOp.getReadMembers();
-                         auto writtenMembers = potentialSubOp.getWrittenMembers();
+                     auto writtenMembers = potentialSubOp.getWrittenMembers();
                      for (auto member : readMembers) {
                         memberUsage[member].push_back({potentialSubOp, op, READ});
                      }

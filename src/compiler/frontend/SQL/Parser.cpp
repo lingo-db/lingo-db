@@ -1313,7 +1313,7 @@ std::optional<mlir::Value> frontend::sql::Parser::translate(mlir::OpBuilder& bui
                for (auto x : targetInfo.namedResults) {
                   names.push_back(builder.getStringAttr(x.first));
                   auto columnType = x.second->type;
-                  auto colMemberName = memberManager.createMember(x.first.empty() ? "unnamed" : x.first,columnType);
+                  auto colMemberName = memberManager.createMember(x.first.empty() ? "unnamed" : x.first, columnType);
                   members.push_back(colMemberName);
                   attrs.push_back(attrManager.createRef(x.second));
                }
@@ -1563,8 +1563,8 @@ void frontend::sql::Parser::translateInsertStmt(mlir::OpBuilder& builder, Insert
       std::vector<mlir::Attribute> orderedColAttrs;
       auto& memberManager = builder.getContext()->getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager();
       for (auto x : rel->getColumnNames()) {
-         auto columnType=mlir::cast<tuples::ColumnRefAttr>(insertedCols.at(x)).getColumn().type;
-         auto colMemberName = memberManager.createMember(x,columnType);
+         auto columnType = mlir::cast<tuples::ColumnRefAttr>(insertedCols.at(x)).getColumn().type;
+         auto colMemberName = memberManager.createMember(x, columnType);
          members.push_back(colMemberName);
          orderedColNamesAttrs.push_back(builder.getStringAttr(x));
          orderedColAttrs.push_back(insertedCols.at(x));

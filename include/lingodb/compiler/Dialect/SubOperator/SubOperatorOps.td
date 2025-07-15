@@ -42,6 +42,7 @@ class SubOperator_Attr<string name> : AttrDef<SubOperator_Dialect, name>;
 
 def StateMembers : SubOperator_Attr<"StateMembers"> {
     let mnemonic = "state_members";
+    let description = "A list of members that are part of the state";
   // Turn off the ODS storage generation.
   let genStorageClass = 0;
   // Tell ODS what your storage class is called...
@@ -57,6 +58,7 @@ def StateMembers : SubOperator_Attr<"StateMembers"> {
 
 def ColumnRefMemberMapping : SubOperator_Attr<"ColumnRefMemberMapping"> {
     let mnemonic = "column_ref_member_mapping";
+    let description = "A mapping from column references to members, e.g., for materializing operations";
     let parameters = (ins "llvm::SmallVector<std::pair<Member, tuples::ColumnRefAttr>>":$mapping);
 
       let genStorageClass = 0;
@@ -99,6 +101,7 @@ def ColumnRefMemberMapping : SubOperator_Attr<"ColumnRefMemberMapping"> {
 }
 def ColumnDefMemberMapping : SubOperator_Attr<"ColumnDefMemberMapping"> {
     let mnemonic = "column_def_member_mapping";
+    let description = "A mapping from members to column definitions, e.g., for scans";
     let parameters = (ins "llvm::SmallVector<std::pair<Member, tuples::ColumnDefAttr>>":$mapping);
 
       let genStorageClass = 0;
@@ -143,6 +146,7 @@ def ColumnDefMemberMapping : SubOperator_Attr<"ColumnDefMemberMapping"> {
 
 def Member : SubOperator_Attr<"Member"> {
     let mnemonic = "member";
+    let description = "References a member in a state, e.g., for specifying the members to sort for etc";
     let parameters = (ins "subop::Member":$member);
     let genStorageClass = 0;
     // Tell ODS what your storage class is called...

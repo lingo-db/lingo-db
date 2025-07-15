@@ -67,7 +67,7 @@ llvm::SmallVector<subop::Member> combineMembers(
    return combined;
 }
 } // namespace
-subop::StateMembersAttr subop::HashMapType::getMembers() {   
+subop::StateMembersAttr subop::HashMapType::getMembers() {
    return subop::StateMembersAttr::get(this->getContext(), combineMembers(getKeyMembers(), getValueMembers()));
 }
 subop::StateMembersAttr subop::PreAggrHtFragmentType::getMembers() {

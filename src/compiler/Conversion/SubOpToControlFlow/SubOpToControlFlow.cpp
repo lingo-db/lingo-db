@@ -96,7 +96,7 @@ static std::vector<mlir::Value> inlineBlock(mlir::Block* b, mlir::OpBuilder& rew
 static std::vector<Type> unpackTypes(subop::StateMembersAttr membersAttr) {
    auto& memberManager = membersAttr.getContext()->getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager();
    std::vector<Type> res;
-   for (auto x: membersAttr.getMembers()){
+   for (auto x : membersAttr.getMembers()) {
       res.push_back(memberManager.getType(x));
    }
    return res;
@@ -290,8 +290,8 @@ class EntryStorageHelper {
       LazyValueMap(mlir::Value ref, mlir::OpBuilder& rewriter, mlir::Location loc, const EntryStorageHelper& esh, std::optional<llvm::SmallVector<Member>> relevantMembers) : ref(ref), rewriter(rewriter), loc(loc), esh(esh) {
          if (!relevantMembers) {
             this->relevantMembers = esh.members.getMembers();
-         }else{
-            this->relevantMembers= *relevantMembers;
+         } else {
+            this->relevantMembers = *relevantMembers;
          }
       }
       void set(const Member& member, mlir::Value value) {
@@ -448,17 +448,17 @@ class EntryStorageHelper {
    }
    LazyValueMap getValueMap(mlir::Value ref, mlir::OpBuilder& rewriter, mlir::Location loc, ArrayAttr relevantMembers = {}) {
       llvm::SmallVector<Member> relevantMembersVec;
-      if(relevantMembers){
-         for (auto mAttr:relevantMembers){
+      if (relevantMembers) {
+         for (auto mAttr : relevantMembers) {
             relevantMembersVec.push_back(mlir::cast<subop::MemberAttr>(mAttr).getMember());
          }
       }
-      return LazyValueMap(ref, rewriter, loc, *this, relevantMembers?relevantMembersVec:std::optional<llvm::SmallVector<Member>>());
+      return LazyValueMap(ref, rewriter, loc, *this, relevantMembers ? relevantMembersVec : std::optional<llvm::SmallVector<Member>>());
    }
    template <class L>
    void storeOrderedValues(mlir::Value ref, L list, mlir::OpBuilder& rewriter, mlir::Location loc) {
       auto values = getValueMap(ref, rewriter, loc);
-      auto membersList=members.getMembers();
+      auto membersList = members.getMembers();
       for (size_t i = 0; i < membersList.size() && i < list.size(); ++i) {
          values.set(membersList[i], list[i]);
       }
@@ -1295,8 +1295,8 @@ class CreateTableLowering : public SubOpConversionPattern<subop::GenericCreateOp
       std::string descr;
       std::vector<mlir::Value> columnBuilders;
       auto loc = createOp->getLoc();
-      auto members=tableType.getMembers().getMembers();
-      for (auto m: members) {
+      auto members = tableType.getMembers().getMembers();
+      for (auto m : members) {
          auto type = memberManager.getType(m);
          auto baseType = getBaseType(type);
          mlir::Value typeDescr = rewriter.create<util::CreateConstVarLen>(loc, util::VarLen32Type::get(getContext()), arrowDescrFromType(baseType));
@@ -3371,7 +3371,7 @@ class ExternalHashIndexRefGatherOpLowering : public SubOpTupleStreamConsumerConv
       auto currRow = unPacked[0];
       llvm::SmallVector<mlir::Value> unPackedColumns;
       rewriter.createOrFold<util::UnPackOp>(unPackedColumns, gatherOp->getLoc(), unPacked[1]);
-      auto members=columns.getMembers();
+      auto members = columns.getMembers();
       for (size_t i = 0; i < members.size(); i++) {
          auto member = members[i];
          if (gatherOp.getMapping().hasMember(member)) {
@@ -3657,7 +3657,7 @@ class ReduceOpLowering : public SubOpTupleStreamConsumerConversionPattern<subop:
             arguments.push_back(arg);
          }
          for (auto member : reduceOp.getMembers()) {
-            mlir::Value arg = values.get( mlir::cast<subop::MemberAttr>(member).getMember());
+            mlir::Value arg = values.get(mlir::cast<subop::MemberAttr>(member).getMember());
             if (arg.getType() != reduceOp.getRegion().getArgument(arguments.size()).getType()) {
                arg = rewriter.create<mlir::UnrealizedConversionCastOp>(reduceOp->getLoc(), reduceOp.getRegion().getArgument(arguments.size()).getType(), arg).getResult(0);
             }
@@ -3688,7 +3688,7 @@ class CreateHashIndexedViewLowering : public SubOpConversionPattern<subop::Creat
    LogicalResult matchAndRewrite(subop::CreateHashIndexedView createOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
       auto bufferType = mlir::dyn_cast<subop::BufferType>(createOp.getSource().getType());
       if (!bufferType) return failure();
-      auto linkIsFirst =  bufferType.getMembers().getMembers()[0]== createOp.getLinkMember().getMember();
+      auto linkIsFirst = bufferType.getMembers().getMembers()[0] == createOp.getLinkMember().getMember();
       auto hashIsSecond = bufferType.getMembers().getMembers()[1] == createOp.getHashMember().getMember();
       if (!linkIsFirst || !hashIsSecond) return failure();
       auto htView = rt::HashIndexedView::build(rewriter, createOp->getLoc())({adaptor.getSource()})[0];

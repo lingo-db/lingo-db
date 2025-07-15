@@ -1,7 +1,6 @@
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/ColumnCreationAnalysis.h"
-#include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOpsAttributes.h"
-
+#include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
 
 using namespace lingodb::compiler::dialect;
 void subop::ColumnCreationAnalysis::analyze(mlir::Operation* op, mlir::Attribute attr) {
@@ -10,12 +9,12 @@ void subop::ColumnCreationAnalysis::analyze(mlir::Operation* op, mlir::Attribute
       for (auto x : arrayAttr) {
          analyze(op, x);
       }
-   }else if (auto mappingDefAttr = mlir::dyn_cast_or_null<subop::ColumnDefMemberMappingAttr>(attr)) {
+   } else if (auto mappingDefAttr = mlir::dyn_cast_or_null<subop::ColumnDefMemberMappingAttr>(attr)) {
       for (auto x : mappingDefAttr.getMapping()) {
          analyze(op, x.second);
       }
-   }  else if (auto mappingRefAttr = mlir::dyn_cast_or_null<subop::ColumnRefMemberMappingAttr>(attr)) {
-      for (auto x : mappingRefAttr.getMapping()){
+   } else if (auto mappingRefAttr = mlir::dyn_cast_or_null<subop::ColumnRefMemberMappingAttr>(attr)) {
+      for (auto x : mappingRefAttr.getMapping()) {
          analyze(op, x.second);
       }
    } else if (auto columnDefAttr = mlir::dyn_cast_or_null<tuples::ColumnDefAttr>(attr)) {

@@ -66,7 +66,7 @@ ExecutionStepAnalyzed analyze(subop::ExecutionStepOp executionStepOp, subop::Col
       auto argType = a.getType();
       extStates.insert({a, i});
       if (auto stateType = mlir::dyn_cast_or_null<subop::State>(argType)) {
-         auto stateMembers=stateType.getMembers().getMembers();
+         auto stateMembers = stateType.getMembers().getMembers();
          extMembers.insert(stateMembers.begin(), stateMembers.end());
       }
    }

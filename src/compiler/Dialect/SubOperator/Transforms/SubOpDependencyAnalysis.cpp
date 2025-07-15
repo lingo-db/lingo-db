@@ -74,8 +74,8 @@ subop::SubOpDependencyAnalysis::SubOpDependencyAnalysis(mlir::Operation* op, mli
                }
             }
          }
-         auto opReadMembers =subop.getReadMembers();
-                auto opWrittenMembers = subop.getWrittenMembers();
+         auto opReadMembers = subop.getReadMembers();
+         auto opWrittenMembers = subop.getWrittenMembers();
          for (auto readMember : opReadMembers) {
             for (auto* conflict : writtenMembers[readMember]) {
                addDependency(subopRoot, conflict, roots);

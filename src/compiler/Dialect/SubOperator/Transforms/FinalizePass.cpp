@@ -87,19 +87,18 @@ class FinalizePass : public mlir::PassWrapper<FinalizePass, mlir::OperationPass<
          }
          mlir::Value tmpBuffer;
 
-         auto bufferType = subop::BufferType::get(builder.getContext(), subop::StateMembersAttr::get(builder.getContext(),members));
+         auto bufferType = subop::BufferType::get(builder.getContext(), subop::StateMembersAttr::get(builder.getContext(), members));
          tmpBuffer = builder.create<subop::GenericCreateOp>(loc, bufferType);
 
          builder.setInsertionPointAfter(generateOp);
          for (auto stream : generateOp.getStreams()) {
-            builder.create<subop::MaterializeOp>(loc, stream, tmpBuffer, subop::ColumnRefMemberMappingAttr::get(
-               builder.getContext(), refMapping));
+            builder.create<subop::MaterializeOp>(loc, stream, tmpBuffer, subop::ColumnRefMemberMappingAttr::get(builder.getContext(), refMapping));
          }
          auto scanRefDef = colManager.createDef(colManager.getUniqueScope("tmp_union"), "scan_ref");
          scanRefDef.getColumn().type = subop::EntryRefType::get(builder.getContext(), mlir::cast<subop::State>(tmpBuffer.getType()));
          auto scan = builder.create<subop::ScanRefsOp>(loc, tmpBuffer, scanRefDef);
          mlir::Value loaded = builder.create<subop::GatherOp>(loc, scan, colManager.createRef(&scanRefDef.getColumn()),
-            subop::ColumnDefMemberMappingAttr::get(builder.getContext(), defMapping));
+                                                              subop::ColumnDefMemberMappingAttr::get(builder.getContext(), defMapping));
          generateOp.getRes().replaceAllUsesWith(loaded);
       }
    }

@@ -13,17 +13,17 @@ void subop::ColumnUsageAnalysis::analyze(mlir::Operation* op, mlir::Attribute at
       for (auto x : mappingDefAttr.getMapping()) {
          analyze(op, x.second);
       }
-   }  else if (auto mappingRefAttr = mlir::dyn_cast_or_null<subop::ColumnRefMemberMappingAttr>(attr)) {
+   } else if (auto mappingRefAttr = mlir::dyn_cast_or_null<subop::ColumnRefMemberMappingAttr>(attr)) {
       for (auto x : mappingRefAttr.getMapping()) {
          analyze(op, x.second);
       }
-   }   else if (auto columnRefAttr = mlir::dyn_cast_or_null<tuples::ColumnRefAttr>(attr)) {
+   } else if (auto columnRefAttr = mlir::dyn_cast_or_null<tuples::ColumnRefAttr>(attr)) {
       usedColumns[op].insert(&columnRefAttr.getColumn());
       operationsUsingColumn[&columnRefAttr.getColumn()].insert(op);
 
    } else if (auto columnDefAttr = mlir::dyn_cast_or_null<tuples::ColumnDefAttr>(attr)) {
       analyze(op, columnDefAttr.getFromExisting());
-   }else if (mlir::isa<mlir::DictionaryAttr>(attr)){
+   } else if (mlir::isa<mlir::DictionaryAttr>(attr)) {
       //assert(false);
    }
 }

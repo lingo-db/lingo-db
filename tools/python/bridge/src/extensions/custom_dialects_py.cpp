@@ -154,9 +154,7 @@ NB_MODULE(mlir_lingodb, m) {
          return "<SubOpMember>";
       })
       // add static method to create a member
-     .def_static("create", [](std::string name, MlirType type) {
-        return mlirSubOpCreateMember(toMlirStringRef(name), type);
-     }, nb::arg("name"), nb::arg("type"));
+      .def_static("create", [](std::string name, MlirType type) { return mlirSubOpCreateMember(toMlirStringRef(name), type); }, nb::arg("name"), nb::arg("type"));
    mlir::python::nanobind_adaptors::mlir_attribute_subclass(subOpModule, "StateMembersAttr", mlirAttributeIsASubOpStateMembersAttribute)
       // add class method to get state members attribute (from list of members)
       .def_classmethod(
@@ -166,26 +164,26 @@ NB_MODULE(mlir_lingodb, m) {
          },
          nb::arg("cls"), nb::arg("context"), nb::arg("members"));
    mlir::python::nanobind_adaptors::mlir_attribute_subclass(subOpModule, "ColumnRefMemberMappingAttr", mlirAttributeIsAColumnRefMemberMappingAttribute)
-        .def_classmethod(
-           "get",
-           [](nb::object cls, MlirContext context, std::vector<SubOpMember> members, std::vector<MlirAttribute> columnRefs) {
-                return cls(mlirSubOpColumnRefMemberMappingAttributeGet(context, members.data(), members.size(), columnRefs.data(), columnRefs.size()));
-           },
-           nb::arg("cls"), nb::arg("context"), nb::arg("members"), nb::arg("columnRefs"));
+      .def_classmethod(
+         "get",
+         [](nb::object cls, MlirContext context, std::vector<SubOpMember> members, std::vector<MlirAttribute> columnRefs) {
+            return cls(mlirSubOpColumnRefMemberMappingAttributeGet(context, members.data(), members.size(), columnRefs.data(), columnRefs.size()));
+         },
+         nb::arg("cls"), nb::arg("context"), nb::arg("members"), nb::arg("columnRefs"));
    mlir::python::nanobind_adaptors::mlir_attribute_subclass(subOpModule, "ColumnDefMemberMappingAttr", mlirAttributeIsAColumnDefMemberMappingAttribute)
       .def_classmethod(
-           "get",
-           [](nb::object cls, MlirContext context, std::vector<SubOpMember> members, std::vector<MlirAttribute> columnDefs) {
-                return cls(mlirSubOpColumnDefMemberMappingAttributeGet(context, members.data(), members.size(), columnDefs.data(), columnDefs.size()));
-           },
-           nb::arg("cls"), nb::arg("context"), nb::arg("members"), nb::arg("columnDefs"));
+         "get",
+         [](nb::object cls, MlirContext context, std::vector<SubOpMember> members, std::vector<MlirAttribute> columnDefs) {
+            return cls(mlirSubOpColumnDefMemberMappingAttributeGet(context, members.data(), members.size(), columnDefs.data(), columnDefs.size()));
+         },
+         nb::arg("cls"), nb::arg("context"), nb::arg("members"), nb::arg("columnDefs"));
    mlir::python::nanobind_adaptors::mlir_attribute_subclass(subOpModule, "MemberAttr", mlirAttributeIsASubOpMemberAttribute)
-     .def_classmethod(
-        "get",
-        [](nb::object cls, MlirContext context, SubOpMember member) {
-             return cls(mlirSubOpMemberAttributeGet(context, member));
-        },
-        nb::arg("cls"), nb::arg("context"), nb::arg("member"));
+      .def_classmethod(
+         "get",
+         [](nb::object cls, MlirContext context, SubOpMember member) {
+            return cls(mlirSubOpMemberAttributeGet(context, member));
+         },
+         nb::arg("cls"), nb::arg("context"), nb::arg("member"));
    mlir::python::nanobind_adaptors::mlir_type_subclass(subOpModule, "TableType", mlirTypeIsASubOpTableType, mlirSubOpTableTypeGetTypeID)
       .def_classmethod(
          "get",
