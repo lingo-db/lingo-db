@@ -31,6 +31,8 @@ class BoundExpression : public AstNode {
 
    //If this expression is a column reference or (SELECT 2*d from t), it can be used to find the named result
    std::optional<std::shared_ptr<NamedResult>> namedResult;
+
+
 };
 
 class BoundColumnRefExpression : public BoundExpression {
@@ -71,6 +73,16 @@ class BoundConjunctionExpression : public BoundExpression {
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 
+
+
+
+
+
+
+
+
+
+
    private:
    std::string typeToAscii(ExpressionType type) const;
 };
@@ -108,7 +120,7 @@ class BoundTargetsExpression : public BoundExpression {
 class BoundFunctionExpression : public BoundExpression {
    public:
    static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_FUNCTION;
-   BoundFunctionExpression(ExpressionType type, catalog::NullableType resultType, std::string functionName, std::string scope, std::string aliasOrUniqueIdentifier, bool distinct, std::vector<std::shared_ptr<BoundExpression>> arguments, std::shared_ptr<FunctionInfo> functionInfo);
+   BoundFunctionExpression(ExpressionType type, catalog::NullableType resultType, std::string functionName, std::string scope, std::string aliasOrUniqueIdentifier, bool distinct, std::vector<std::shared_ptr<BoundExpression>> arguments);
 
    std::string functionName;
    std::string scope;
@@ -116,10 +128,10 @@ class BoundFunctionExpression : public BoundExpression {
    //TODO!!!!!!!
    std::string aliasOrUniqueIdentifier;
    std::vector<std::shared_ptr<BoundExpression>> arguments;
-   std::shared_ptr<FunctionInfo> functionInfo;
 
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
+
 };
 
 class BoundStarExpression : public BoundExpression {

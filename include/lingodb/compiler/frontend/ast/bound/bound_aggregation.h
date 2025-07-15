@@ -4,7 +4,7 @@
 namespace lingodb::ast {
 class BoundAggregationNode : public AstNode {
    public:
-   BoundAggregationNode(std::shared_ptr<BoundGroupByNode> groupByNode, std::vector<std::shared_ptr<BoundFunctionExpression>> aggregations, std::vector<std::shared_ptr<BoundExpression>> toMapExpressions, std::string mapName);
+   BoundAggregationNode(std::shared_ptr<BoundGroupByNode> groupByNode, std::vector<std::shared_ptr<BoundFunctionExpression>> aggregations, std::vector<std::shared_ptr<BoundExpression>> toMapExpressions, std::string mapName, std::vector<std::shared_ptr<BoundExpression>> evalBeforeAggr);
 
    std::shared_ptr<BoundGroupByNode> groupByNode;
    std::vector<std::shared_ptr<BoundFunctionExpression>> aggregations;
@@ -13,7 +13,8 @@ class BoundAggregationNode : public AstNode {
    //TODO use context for this kind of information in future. context->getAttribute(id)....
    [[deprecated]]
    std::string mapName;
-   //TODO having clause
+
+   std::vector<std::shared_ptr<BoundExpression>> evalBeforeAggr;
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
