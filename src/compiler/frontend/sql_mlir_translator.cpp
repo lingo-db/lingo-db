@@ -69,6 +69,17 @@ std::optional<mlir::Value> SQLMlirTranslator::translateStart(mlir::OpBuilder& bu
          mlir::OpBuilder::InsertionGuard guard(builder);
          builder.setInsertionPointToStart(block);
 
+
+         //Translate the cteNodes
+         for (auto [name, cte]: context->ctes) {
+            auto cteNode = cte.second;
+            context->pushNewScope(std::make_shared<analyzer::SQLScope>(cteNode->subQueryScope));
+            auto _tree = translateTableProducer(builder, cteNode->query, context);
+            context->popCurrentScope();
+            context->translatedCtes.insert({name, _tree});
+
+         }
+
          auto tree = translateTableProducer(builder, tableProducer, context);
 
          context->currentScope->evalBeforeAggr.clear();
@@ -185,6 +196,7 @@ mlir::Value SQLMlirTranslator::translateTableProducer(mlir::OpBuilder& builder, 
                if (cteNode->child) {
                   tree = translateTableProducer(builder, cteNode->child, context);
                }
+
 
                return tree;
             }
@@ -1062,9 +1074,23 @@ mlir::Value SQLMlirTranslator::translateSetOperation(mlir::OpBuilder& builder, s
       delete rightMapBlock;
    }
 
+   mlir::Value tree;
+   switch (boundSetOp->setType) {
+      case ast::SetOperationType::UNION: {
+         tree = builder.create<relalg::UnionOp>(builder.getUnknownLoc(), lingodb::compiler::dialect::relalg::SetSemanticAttr::get(builder.getContext(), setSemantic), leftTree, rightTree, builder.getArrayAttr(attributes));
+         break;
+      }
+      case ast::SetOperationType::INTERSECT: {
+         tree = builder.create<relalg::IntersectOp>(builder.getUnknownLoc(), lingodb::compiler::dialect::relalg::SetSemanticAttr::get(builder.getContext(), setSemantic), leftTree, rightTree, builder.getArrayAttr(attributes));
+         break;
+      }
+      case ast::SetOperationType::EXCEPT: {
+         tree = builder.create<relalg::ExceptOp>(builder.getUnknownLoc(), lingodb::compiler::dialect::relalg::SetSemanticAttr::get(builder.getContext(), setSemantic), leftTree, rightTree, builder.getArrayAttr(attributes));
+         break;
+      }
+      default: error("Set operation type not implemented", boundSetOp->loc);
+   }
 
-
-   auto tree = builder.create<relalg::UnionOp>(builder.getUnknownLoc(), lingodb::compiler::dialect::relalg::SetSemanticAttr::get(builder.getContext(), setSemantic), leftTree, rightTree, builder.getArrayAttr(attributes));
 
    return tree;
 

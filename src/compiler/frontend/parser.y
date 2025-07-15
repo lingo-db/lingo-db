@@ -221,8 +221,8 @@
 %token		FORMAT_LA NOT_LA NULLS_LA WITH_LA WITHOUT_LA
 %type <std::vector<std::shared_ptr<lingodb::ast::AstNode>>> stmtmulti
 %type <std::shared_ptr<lingodb::ast::AstNode>> toplevel_stmt stmt 
-%type <std::shared_ptr<lingodb::ast::TableProducer>> select_no_parens SelectStmt  select_with_parens PreparableStmt common_table_expr cte_list with_clause
-%type <std::shared_ptr<lingodb::ast::QueryNode>> simple_select select_clause  
+%type <std::shared_ptr<lingodb::ast::TableProducer>> select_no_parens SelectStmt  select_with_parens PreparableStmt common_table_expr cte_list with_clause 
+%type <std::shared_ptr<lingodb::ast::QueryNode>> simple_select select_clause
 
 %type<std::vector<std::shared_ptr<lingodb::ast::ParsedExpression>>> target_list group_by_list func_arg_list func_arg_list_opt extract_list expr_list substr_list distinct_clause
 
@@ -583,8 +583,19 @@ simple_select:
         $$ = setOpNode;
 
     }
-    //TODO | select_clause INTERSECT set_quantifier select_clause
-    //TODO | select_clause EXCEPT set_quantifier select_clause
+    | select_clause[clause1] INTERSECT set_quantifier select_clause[clause2]
+    {
+        auto setOpNode = mkNode<lingodb::ast::SetOperationNode>(@$, lingodb::ast::SetOperationType::INTERSECT, $clause1, $clause2);
+        setOpNode->setOpAll = $set_quantifier;
+        $$ = setOpNode;
+
+    }
+    | select_clause[clause1] EXCEPT set_quantifier select_clause[clause2]
+    {
+        auto setOpNode = mkNode<lingodb::ast::SetOperationNode>(@$, lingodb::ast::SetOperationType::EXCEPT, $clause1, $clause2);
+        setOpNode->setOpAll = $set_quantifier;
+        $$ = setOpNode;
+    }
     ;
 //TODO Add missing rules
 with_clause:
