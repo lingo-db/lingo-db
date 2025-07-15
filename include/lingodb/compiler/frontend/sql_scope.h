@@ -19,7 +19,8 @@ class SQLScope {
    std::map<std::string, std::vector<std::pair<size_t, ast::FunctionInfo>>> functionsEntry;
    //Stores the columns that should be produced at the end
    ast::TargetInfo targetInfo;
-   std::vector<std::shared_ptr<ast::BoundExpression>> evalBeforeAggr;
+   std::vector<std::shared_ptr<ast::BoundExpression>> evalBefore;
+
    std::shared_ptr<SQLScope> parent;
    size_t id = 0;
 };
