@@ -39,8 +39,22 @@ void StateMembersAttr::print(::mlir::AsmPrinter& odsPrinter) const {
 }
 
 ::mlir::Attribute ColumnRefMemberMappingAttr::parse(::mlir::AsmParser& odsParser, ::mlir::Type odsType) {
-   assert(false);
-   //todo
+   auto& memberManager = odsParser.getContext()->getOrLoadDialect<SubOperatorDialect>()->getMemberManager();
+   if (odsParser.parseLSquare()) return {};
+   llvm::SmallVector<std::pair<Member, tuples::ColumnRefAttr>> columns;
+   while (true) {
+      if (!odsParser.parseOptionalRSquare()) { break; }
+      llvm::StringRef colName;
+      tuples::ColumnRefAttr colRefAttr;
+      if (odsParser.parseKeyword(&colName) || odsParser.parseColon() || odsParser.parseAttribute(colRefAttr)) {
+         return {};
+      }
+      columns.push_back({memberManager.lookupMember(colName.str()), colRefAttr});
+      if (!odsParser.parseOptionalComma()) { continue; }
+      if (odsParser.parseRSquare()) { return {}; }
+      break;
+   }
+   return ColumnRefMemberMappingAttr::get(odsParser.getContext(), columns);
 }
 void ColumnRefMemberMappingAttr::print(::mlir::AsmPrinter& odsPrinter) const {
    auto& memberManager = getContext()->getOrLoadDialect<SubOperatorDialect>()->getMemberManager();
@@ -57,12 +71,35 @@ void ColumnRefMemberMappingAttr::print(::mlir::AsmPrinter& odsPrinter) const {
 }
 
 void ColumnDefMemberMappingAttr::print(::mlir::AsmPrinter& odsPrinter) const {
-   assert(false);
-   //todo
+   auto& memberManager = getContext()->getOrLoadDialect<SubOperatorDialect>()->getMemberManager();
+   odsPrinter << "[";
+   auto first = true;
+   for (auto& [member, col] : getMapping()) {
+      if (first) {
+         first = false;
+      } else {
+         odsPrinter << ", ";
+      }
+      odsPrinter << memberManager.getName(member) << " : " << col;
+   }
 }
 ::mlir::Attribute ColumnDefMemberMappingAttr::parse(::mlir::AsmParser& odsParser, ::mlir::Type odsType) {
-   assert(false);
-   //todo
+   auto& memberManager = odsParser.getContext()->getOrLoadDialect<SubOperatorDialect>()->getMemberManager();
+   if (odsParser.parseLSquare()) return {};
+   llvm::SmallVector<std::pair<Member, tuples::ColumnDefAttr>> columns;
+   while (true) {
+      if (!odsParser.parseOptionalRSquare()) { break; }
+      llvm::StringRef colName;
+      tuples::ColumnDefAttr colDefAttr;
+      if (odsParser.parseKeyword(&colName) || odsParser.parseColon() || odsParser.parseAttribute(colDefAttr)) {
+         return {};
+      }
+      columns.push_back({memberManager.lookupMember(colName.str()), colDefAttr});
+      if (!odsParser.parseOptionalComma()) { continue; }
+      if (odsParser.parseRSquare()) { return {}; }
+      break;
+   }
+   return ColumnDefMemberMappingAttr::get(odsParser.getContext(), columns);
 }
 
 void MemberAttr::print(::mlir::AsmPrinter& odsPrinter) const {
@@ -185,7 +222,6 @@ Member MemberAttr::getMember() const {
    return getImpl()->member;
 }
 } // namespace lingodb::compiler::dialect::subop
-
 
 #define GET_ATTRDEF_CLASSES
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOpsAttributes.cpp.inc"
