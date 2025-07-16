@@ -126,6 +126,13 @@ NB_MODULE(mlir_lingodb, m) {
             return cls(mlirDBStringTypeGet(context));
          },
          nb::arg("cls"), nb::arg("context"));
+   mlir::python::nanobind_adaptors::mlir_type_subclass(dbModule, "ListType", mlirTypeIsADBListType, mlirDBListTypeGetTypeID)
+      .def_classmethod(
+         "get",
+         [](nb::object cls, MlirType elementType) {
+            return cls(mlirDBListTypeGet(elementType));
+         },
+         nb::arg("cls"), nb::arg("elementType"));
    //----------------------------------------------------------------------------------------------------------------------
    // RelAlg Dialect
    //----------------------------------------------------------------------------------------------------------------------

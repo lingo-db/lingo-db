@@ -158,6 +158,16 @@ bool mlirTypeIsADBStringType(MlirType type) {
    return llvm::isa<db::StringType>(unwrap(type));
 }
 
+MlirType mlirDBListTypeGet(MlirType elementType) {
+   return wrap(db::ListType::get(unwrap(elementType).getContext(), unwrap(elementType)));
+}
+MlirTypeID mlirDBListTypeGetTypeID() {
+   return wrap(db::ListType::getTypeID());
+}
+bool mlirTypeIsADBListType(MlirType type) {
+   return llvm::isa<db::ListType>(unwrap(type));
+}
+
 //----------------------------------------------------------------------------------------------------------------------
 // RelAlg Dialect
 //----------------------------------------------------------------------------------------------------------------------
