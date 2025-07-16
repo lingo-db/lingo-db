@@ -70,6 +70,10 @@ MLIR_CAPI_EXPORTED MlirType mlirDBStringTypeGet(MlirContext context);
 MLIR_CAPI_EXPORTED MlirTypeID mlirDBStringTypeGetTypeID();
 MLIR_CAPI_EXPORTED bool mlirTypeIsADBStringType(MlirType type);
 
+MLIR_CAPI_EXPORTED MlirType mlirDBListTypeGet(MlirType elementType);
+MLIR_CAPI_EXPORTED MlirTypeID mlirDBListTypeGetTypeID();
+MLIR_CAPI_EXPORTED bool mlirTypeIsADBListType(MlirType type);
+
 //----------------------------------------------------------------------------------------------------------------------
 // RelAlg Dialect
 //----------------------------------------------------------------------------------------------------------------------

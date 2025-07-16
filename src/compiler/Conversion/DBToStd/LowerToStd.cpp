@@ -10,6 +10,7 @@
 #include "lingodb/compiler/Dialect/util/UtilDialect.h"
 #include "lingodb/compiler/Dialect/util/UtilOps.h"
 #include "lingodb/compiler/mlir-support/parsing.h"
+#include "lingodb/compiler/runtime/ListRuntime.h"
 #include "lingodb/compiler/runtime/StringRuntime.h"
 
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
@@ -33,6 +34,7 @@ using namespace mlir;
 
 namespace {
 using namespace lingodb::compiler::dialect;
+namespace rt = lingodb::compiler::runtime;
 struct DBToStdLoweringPass
    : public PassWrapper<DBToStdLoweringPass, OperationPass<ModuleOp>> {
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(DBToStdLoweringPass)
@@ -1041,6 +1043,63 @@ class HashLowering : public ConversionPattern {
       return success();
    }
 };
+class CreateListLowering : public OpConversionPattern<db::CreateListOp> {
+   public:
+   using OpConversionPattern<db::CreateListOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(db::CreateListOp createListOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto typeSize = rewriter.create<util::SizeOfOp>(createListOp.getLoc(), rewriter.getIndexType(), typeConverter->convertType(createListOp.getType().getElementType()));
+      auto list = rt::List::create(rewriter, createListOp.getLoc())({typeSize})[0];
+      rewriter.replaceOp(createListOp, list);
+      return success();
+   }
+};
+class ListLengthLowering : public OpConversionPattern<db::ListLengthOp> {
+   public:
+   using OpConversionPattern<db::ListLengthOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(db::ListLengthOp listLengthOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      mlir::Value length = rt::List::size(rewriter, listLengthOp.getLoc())({adaptor.getList()})[0];
+      length = rewriter.create<arith::IndexCastOp>(listLengthOp.getLoc(), rewriter.getIndexType(), length);
+      rewriter.replaceOp(listLengthOp, length);
+      return success();
+   }
+};
+class ListAppendLowering : public OpConversionPattern<db::ListAppendOp> {
+   public:
+   using OpConversionPattern<db::ListAppendOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(db::ListAppendOp listAppendOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      mlir::Value ptr = rt::List::append(rewriter, listAppendOp.getLoc())({adaptor.getList()})[0];
+      ptr = rewriter.create<util::GenericMemrefCastOp>(listAppendOp.getLoc(), util::RefType::get(rewriter.getContext(), typeConverter->convertType(listAppendOp.getElement().getType())), ptr);
+      rewriter.create<util::StoreOp>(listAppendOp.getLoc(), adaptor.getElement(), ptr, mlir::Value());
+      rewriter.eraseOp(listAppendOp);
+      return success();
+   }
+};
+class ListGetLowering : public OpConversionPattern<db::ListGetOp> {
+   public:
+   using OpConversionPattern<db::ListGetOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(db::ListGetOp listGetOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = listGetOp.getLoc();
+      auto elementType = typeConverter->convertType(listGetOp.getType());
+      mlir::Value ptr = rt::List::at(rewriter, loc)({adaptor.getList(), adaptor.getIndex()})[0];
+      ptr = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(rewriter.getContext(), elementType), ptr);
+      auto loadOp = rewriter.create<util::LoadOp>(loc, ptr);
+      rewriter.replaceOp(listGetOp, loadOp.getVal());
+      return success();
+   }
+};
+class ListSetLowering : public OpConversionPattern<db::ListSetOp> {
+   public:
+   using OpConversionPattern<db::ListSetOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(db::ListSetOp listSetOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = listSetOp.getLoc();
+      auto elementType = typeConverter->convertType(listSetOp.getElement().getType());
+      mlir::Value ptr = rt::List::at(rewriter, loc)({adaptor.getList(), adaptor.getIndex()})[0];
+      ptr = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(rewriter.getContext(), elementType), ptr);
+      rewriter.create<util::StoreOp>(loc, adaptor.getElement(), ptr, mlir::Value());
+      rewriter.eraseOp(listSetOp);
+      return success();
+   }
+};
 } // end anonymous namespace
 void DBToStdLoweringPass::runOnOperation() {
    auto module = getOperation();
@@ -1077,6 +1136,9 @@ void DBToStdLoweringPass::runOnOperation() {
    });
    typeConverter.addConversion([&](::db::StringType t) {
       return util::VarLen32Type::get(ctxt);
+   });
+   typeConverter.addConversion([&](db::ListType) {
+      return util::RefType::get(ctxt, mlir::IntegerType::get(ctxt, 8));
    });
    typeConverter.addConversion([&](::db::TimestampType t) {
       return mlir::IntegerType::get(ctxt, 64);
@@ -1183,6 +1245,11 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<CastNoneOpLowering>(typeConverter, ctxt);
 
    patterns.insert<HashLowering>(typeConverter, ctxt);
+   patterns.insert<CreateListLowering>(typeConverter, ctxt);
+   patterns.insert<ListLengthLowering>(typeConverter, ctxt);
+   patterns.insert<ListAppendLowering>(typeConverter, ctxt);
+   patterns.insert<ListGetLowering>(typeConverter, ctxt);
+   patterns.insert<ListSetLowering>(typeConverter, ctxt);
 
    if (failed(applyFullConversion(module, target, std::move(patterns))))
       signalPassFailure();

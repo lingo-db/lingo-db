@@ -18,6 +18,7 @@ add_library(runtime OBJECT
         PreAggregationHashtable.cpp
         HashMultiMap.cpp
         StringRuntime.cpp
+        ListRuntime.cpp
         FloatRuntime.cpp
         DecimalRuntime.cpp
         IntegerRuntime.cpp

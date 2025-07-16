@@ -7,6 +7,7 @@ add_mlir_conversion_library(MLIRDBToArrowStd
         DEPENDS
         dump-rt-defs
         string-rt-defs
+        list-rt-defs
         date-rt-defs
         decimal-rt-defs
         LINK_COMPONENTS

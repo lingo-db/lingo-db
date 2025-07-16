@@ -129,6 +129,12 @@ def DB_StringType : DB_Type<"String","string"> {
     }];
 }
 
+def ListType: DB_Type<"List", "list">{
+  let parameters = (ins "mlir::Type":$elementType);
+  let assemblyFormat = "`<` $elementType `>`";
+}
+
+
 def AnyBool: AnyTypeOf<[I1,NullableType]>;
 def NullableDBType: AnyTypeOf<[AnyType,NullableType]>;
 
@@ -139,6 +145,43 @@ def DB_ConstantOp : DB_Op<"constant", [ConstantLike,Pure]> {
     let results = (outs AnyType:$result);
     let assemblyFormat = "`(` $value `)` `:` type($result) attr-dict";
     let hasFolder = 1;
+}
+
+
+def CreateListOp : DB_Op<"create_list", []> {
+    let summary = "Create list";
+    let results = (outs ListType:$list);
+    let assemblyFormat = "type($list) attr-dict";
+}
+
+def DB_ListGetOp : DB_Op<"list_get", []> {
+    let summary = "Get element from list";
+
+    let arguments = (ins ListType:$list, Index:$index);
+    let results = (outs AnyType:$element);
+    let assemblyFormat = "$list `:` type($list) `[` $index `]` `:` type($element) attr-dict";
+}
+
+def DB_ListSetOp : DB_Op<"list_set", []> {
+    let summary = "Set element in list";
+
+    let arguments = (ins ListType:$list, Index:$index, AnyType:$element);
+    let assemblyFormat = "$list `:` type($list) `[` $index `]` `=` $element `:` type($element) attr-dict";
+}
+
+def DB_ListAppendOp : DB_Op<"list_append"> {
+    let summary = "Append element to list";
+
+    let arguments = (ins ListType:$list, AnyType:$element);
+    let assemblyFormat = "$list `:` type($list)  `,` $element `:` type($element) attr-dict";
+}
+
+def ListLengthOp : DB_Op<"list_length", []> {
+    let summary = "Get length of list";
+
+    let arguments = (ins ListType:$list);
+    let results = (outs Index:$length);
+    let assemblyFormat = "$list `:` type($list) attr-dict";
 }
 
 def DB_NullOp : DB_Op<"null", [Pure]> {
