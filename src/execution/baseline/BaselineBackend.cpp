@@ -3,6 +3,7 @@
 #error "Baseline backend is only supported on Linux systems."
 #endif
 
+#include "lingodb/execution/BackendPasses.h"
 #include "lingodb/execution/BaselineBackend.h"
 #include "lingodb/compiler/Dialect/util/UtilOps.h"
 #include "lingodb/compiler/Dialect/util/FunctionHelper.h"
@@ -1898,6 +1899,8 @@ namespace lingodb::execution::baseline {
             pm2.enableVerifier(verify);
             lingodb::execution::addLingoDBInstrumentation(pm2, serializationState);
             pm2.addPass(mlir::createConvertSCFToCFPass());
+            pm2.addPass(createDecomposeTuplePass());
+            pm2.addPass(mlir::createCanonicalizerPass());
             pm2.addPass(mlir::createCSEPass()); // TODO: evaluate whether we need this
             if (mlir::failed(pm2.run(moduleOp))) {
                 return false;
