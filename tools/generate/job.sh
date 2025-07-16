@@ -2,7 +2,6 @@
 set -euo pipefail
 TMPDIR=`mktemp --directory`
 echo $TMPDIR
-cp  resources/sql/job/initialize.sql $TMPDIR/initialize.sql
 pushd $TMPDIR
 
 # MD5 check that works on both macOS and Linux

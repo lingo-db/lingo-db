@@ -3,7 +3,6 @@ set -euo pipefail
 set -x
 TMPDIR=`mktemp --directory`
 echo $TMPDIR
-cp  resources/sql/tpcds/initialize.sql $TMPDIR/initialize.sql
 pushd $TMPDIR
 wget -q https://github.com/lingo-db/tpcds-kit/archive/refs/heads/master.zip -O tpcds-dbgen.zip
 unzip -q tpcds-dbgen.zip

@@ -125,43 +125,42 @@ void QueryGraphBuilder::ensureConnected() {
    }
 }
 NodeSet QueryGraphBuilder::calcTES(Operator op) {
-   if (teSs.count(op.getOperation())) {
+   if (teSs.contains(op.getOperation())) {
       return teSs[op.getOperation()];
-   } else {
-      NodeSet tes = calcSES(op);
-      auto children = op.getChildren();
-      if (auto b = mlir::dyn_cast_or_null<BinaryOperator>(op.getOperation())) {
-         auto bLeft = mlir::cast<Operator>(b.getOperation()).getChildren()[0];
-         auto bRight = mlir::cast<Operator>(b.getOperation()).getChildren()[1];
+   }
+   NodeSet tes = calcSES(op);
+   auto children = op.getChildren();
+   if (auto b = mlir::dyn_cast_or_null<BinaryOperator>(op.getOperation())) {
+      auto bLeft = mlir::cast<Operator>(b.getOperation()).getChildren()[0];
+      auto bRight = mlir::cast<Operator>(b.getOperation()).getChildren()[1];
 
-         for (auto subOp : bLeft.getAllSubOperators()) {
-            if (auto a = mlir::dyn_cast_or_null<BinaryOperator>(subOp.getOperation())) {
-               auto aLeft = subOp.getChildren()[0];
-               auto aRight = subOp.getChildren()[1];
-               if (!a.isAssoc(b)) {
-                  tes |= calcT(aLeft);
-               }
-               if (!a.isLAsscom(b)) {
-                  tes |= calcT(aRight);
-               }
+      for (auto subOp : bLeft.getAllSubOperators()) {
+         if (auto a = mlir::dyn_cast_or_null<BinaryOperator>(subOp.getOperation())) {
+            auto aLeft = subOp.getChildren()[0];
+            auto aRight = subOp.getChildren()[1];
+            if (!a.isAssoc(b)) {
+               tes |= calcT(aLeft);
             }
-         }
-         for (auto subOp : bRight.getAllSubOperators()) {
-            if (auto a = mlir::dyn_cast_or_null<BinaryOperator>(subOp.getOperation())) {
-               auto aLeft = subOp.getChildren()[0];
-               auto aRight = subOp.getChildren()[1];
-               if (!b.isAssoc(a)) {
-                  tes |= calcT(aRight);
-               }
-               if (!b.isRAsscom(a)) {
-                  tes |= calcT(aLeft);
-               }
+            if (!a.isLAsscom(b)) {
+               tes |= calcT(aRight);
             }
          }
       }
-      teSs[op.getOperation()] = tes;
-      return tes;
+      for (auto subOp : bRight.getAllSubOperators()) {
+         if (auto a = mlir::dyn_cast_or_null<BinaryOperator>(subOp.getOperation())) {
+            auto aLeft = subOp.getChildren()[0];
+            auto aRight = subOp.getChildren()[1];
+            if (!b.isAssoc(a)) {
+               tes |= calcT(aRight);
+            }
+            if (!b.isRAsscom(a)) {
+               tes |= calcT(aLeft);
+            }
+         }
+      }
    }
+   teSs[op.getOperation()] = tes;
+   return tes;
 }
 NodeSet QueryGraphBuilder::calcSES(Operator op) const {
    NodeSet res = NodeSet(numNodes);

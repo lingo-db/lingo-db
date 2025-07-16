@@ -2,7 +2,6 @@
 set -euo pipefail
 TMPDIR=`mktemp --directory`
 echo $TMPDIR
-cp  resources/sql/ssb/initialize.sql $TMPDIR/initialize.sql
 pushd $TMPDIR
 git clone https://github.com/lingo-db/ssb-dbgen.git
 cmake -B . ssb-dbgen && cmake --build .
