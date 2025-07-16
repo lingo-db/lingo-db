@@ -363,6 +363,10 @@ mlir::Value frontend::sql::Parser::translateFuncCallExpression(Node* node, mlir:
       auto val = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->data.ptr_value), context);
       return builder.create<db::RuntimeCall>(loc, val.getType(), mlir::isa<db::DecimalType>(getBaseType(val.getType())) ? "AbsDecimal" : "AbsInt", val).getRes();
    }
+   if (funcName == "sqrt" || funcName == "SQRT") {
+      auto val = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->data.ptr_value), context);
+      return builder.create<db::RuntimeCall>(loc, val.getType(), "Sqrt", val).getRes();
+   }
    if (funcName == "upper") {
       auto val = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->data.ptr_value), context);
       return builder.create<db::RuntimeCall>(loc, val.getType(), "ToUpper", val).getRes();
