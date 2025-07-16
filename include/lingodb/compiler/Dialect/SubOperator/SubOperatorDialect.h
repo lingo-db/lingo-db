@@ -6,4 +6,5 @@
 #include "mlir/IR/Dialect.h"
 
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOpsDialect.h.inc"
+
 #endif //LINGODB_COMPILER_DIALECT_SUBOPERATOR_SUBOPERATORDIALECT_H

@@ -32,18 +32,14 @@ class SplitTableScan : public mlir::RewritePattern {
       auto scanOp = mlir::cast<subop::ScanOp>(op);
       if (mlir::isa<subop::TableType>(scanOp.getState().getType())) {
          auto tableType = mlir::cast<subop::TableType>(scanOp.getState().getType());
-         std::vector<mlir::Attribute> memberNames;
-         std::vector<mlir::Attribute> memberTypes;
+         llvm::SmallVector<subop::Member> memberList;
          auto tableMembers = tableType.getMembers();
-         for (auto i = 0ul; i < tableMembers.getTypes().size(); i++) {
-            auto type = mlir::cast<mlir::TypeAttr>(tableMembers.getTypes()[i]);
-            auto name = mlir::cast<mlir::StringAttr>(tableMembers.getNames()[i]);
-            if (scanOp.getMapping().contains(name)) {
-               memberNames.push_back(name);
-               memberTypes.push_back(type);
+         for (auto m : tableMembers.getMembers()) {
+            if (scanOp.getMapping().hasMember(m)) {
+               memberList.push_back(m);
             }
          }
-         auto members = subop::StateMembersAttr::get(getContext(), mlir::ArrayAttr::get(getContext(), memberNames), mlir::ArrayAttr::get(getContext(), memberTypes));
+         auto members = subop::StateMembersAttr::get(getContext(), memberList);
 
          auto [refDef, refRef] = createColumn(subop::TableEntryRefType::get(getContext(), members), "scan", "ref");
          mlir::Value scanRefsOp = rewriter.create<subop::ScanRefsOp>(op->getLoc(), scanOp.getState(), refDef);
@@ -51,19 +47,14 @@ class SplitTableScan : public mlir::RewritePattern {
          return mlir::success();
       } else if (mlir::isa<subop::LocalTableType>(scanOp.getState().getType())) {
          auto tableType = mlir::cast<subop::LocalTableType>(scanOp.getState().getType());
-         std::vector<mlir::Attribute> memberNames;
-         std::vector<mlir::Attribute> memberTypes;
+         llvm::SmallVector<subop::Member> memberList;
          auto tableMembers = tableType.getMembers();
-         for (auto i = 0ul; i < tableMembers.getTypes().size(); i++) {
-            auto type = mlir::cast<mlir::TypeAttr>(tableMembers.getTypes()[i]);
-            auto name = mlir::cast<mlir::StringAttr>(tableMembers.getNames()[i]);
-            if (scanOp.getMapping().contains(name)) {
-               memberNames.push_back(name);
-               memberTypes.push_back(type);
+         for (auto m : tableMembers.getMembers()) {
+            if (scanOp.getMapping().hasMember(m)) {
+               memberList.push_back(m);
             }
          }
-         auto members = subop::StateMembersAttr::get(getContext(), mlir::ArrayAttr::get(getContext(), memberNames), mlir::ArrayAttr::get(getContext(), memberTypes));
-
+         auto members = subop::StateMembersAttr::get(getContext(), memberList);
          auto [refDef, refRef] = createColumn(subop::TableEntryRefType::get(getContext(), members), "scan", "ref");
          mlir::Value scanRefsOp = rewriter.create<subop::ScanRefsOp>(op->getLoc(), scanOp.getState(), refDef);
          rewriter.replaceOpWithNewOp<subop::GatherOp>(op, scanRefsOp, refRef, scanOp.getMapping());
@@ -180,28 +171,28 @@ class NormalizeSubOpPass : public mlir::PassWrapper<NormalizeSubOpPass, mlir::Op
                auto& memberManager = builder.getContext()->getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager();
                auto& colManager = builder.getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
 
-               std::vector<mlir::Attribute> types;
-               std::vector<mlir::Attribute> names;
-               std::vector<mlir::NamedAttribute> defMapping;
-               std::vector<mlir::NamedAttribute> refMapping;
-               for (auto* column : requiredColumns) {
-                  auto name = memberManager.getUniqueMember("tmp_union");
-                  types.push_back(mlir::TypeAttr::get(column->type));
-                  names.push_back(builder.getStringAttr(name));
-                  defMapping.push_back(builder.getNamedAttr(name, colManager.createDef(column)));
-                  refMapping.push_back(builder.getNamedAttr(name, colManager.createRef(column)));
+               llvm::SmallVector<subop::Member> members;
+               llvm::SmallVector<subop::DefMappingPairT> defMapping;
+               llvm::SmallVector<subop::RefMappingPairT> refMapping;
+
+               for (auto* col : requiredColumns) {
+                  auto member = memberManager.createMember("tmp_union", col->type);
+                  members.push_back(member);
+                  defMapping.push_back({member, colManager.createDef(col)});
+                  refMapping.push_back({member, colManager.createRef(col)});
                }
                builder.setInsertionPointToStart(unionOp->getBlock());
-               auto bufferType = subop::BufferType::get(builder.getContext(), subop::StateMembersAttr::get(builder.getContext(), builder.getArrayAttr(names), builder.getArrayAttr(types)));
+               auto bufferType = subop::BufferType::get(builder.getContext(), subop::StateMembersAttr::get(builder.getContext(), members));
                mlir::Value tmpBuffer = builder.create<subop::GenericCreateOp>(unionOp->getLoc(), bufferType);
                builder.setInsertionPoint(unionOp);
                for (auto stream : unionOp.getStreams()) {
-                  builder.create<subop::MaterializeOp>(unionOp->getLoc(), stream, tmpBuffer, builder.getDictionaryAttr(refMapping));
+                  builder.create<subop::MaterializeOp>(unionOp->getLoc(), stream, tmpBuffer, subop::ColumnRefMemberMappingAttr::get(builder.getContext(), refMapping));
                }
                auto scanRefDef = colManager.createDef(colManager.getUniqueScope("tmp_union"), "scan_ref");
                scanRefDef.getColumn().type = subop::EntryRefType::get(builder.getContext(), mlir::cast<subop::State>(tmpBuffer.getType()));
                auto scan = builder.create<subop::ScanRefsOp>(unionOp->getLoc(), tmpBuffer, scanRefDef);
-               mlir::Value loaded = builder.create<subop::GatherOp>(unionOp->getLoc(), scan, colManager.createRef(&scanRefDef.getColumn()), builder.getDictionaryAttr(defMapping));
+               mlir::Value loaded = builder.create<subop::GatherOp>(unionOp->getLoc(), scan, colManager.createRef(&scanRefDef.getColumn()),
+                                                                    subop::ColumnDefMemberMappingAttr::get(builder.getContext(), defMapping));
                unionOp.getRes().replaceAllUsesWith(loaded);
                unionOp.erase();
             }
@@ -257,26 +248,27 @@ class NormalizeSubOpPass : public mlir::PassWrapper<NormalizeSubOpPass, mlir::Op
                      auto& memberManager = builder.getContext()->getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager();
                      auto& colManager = builder.getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
 
-                     std::vector<mlir::Attribute> types;
-                     std::vector<mlir::Attribute> names;
-                     std::vector<mlir::NamedAttribute> defMapping;
-                     std::vector<mlir::NamedAttribute> refMapping;
-                     for (auto* column : requiredColumns) {
-                        auto name = memberManager.getUniqueMember("tmp_union");
-                        types.push_back(mlir::TypeAttr::get(column->type));
-                        names.push_back(builder.getStringAttr(name));
-                        defMapping.push_back(builder.getNamedAttr(name, colManager.createDef(column)));
-                        refMapping.push_back(builder.getNamedAttr(name, colManager.createRef(column)));
+                     llvm::SmallVector<subop::Member> members;
+                     llvm::SmallVector<subop::DefMappingPairT> defMapping;
+                     llvm::SmallVector<subop::RefMappingPairT> refMapping;
+
+                     for (auto* col : requiredColumns) {
+                        auto member = memberManager.createMember("tmp_union", col->type);
+                        members.push_back(member);
+                        defMapping.push_back({member, colManager.createDef(col)});
+                        refMapping.push_back({member, colManager.createRef(col)});
                      }
                      builder.setInsertionPointToStart(op->getBlock());
-                     auto bufferType = subop::BufferType::get(builder.getContext(), subop::StateMembersAttr::get(builder.getContext(), builder.getArrayAttr(names), builder.getArrayAttr(types)));
+                     auto bufferType = subop::BufferType::get(builder.getContext(), subop::StateMembersAttr::get(builder.getContext(), members));
                      mlir::Value tmpBuffer = builder.create<subop::GenericCreateOp>(op->getLoc(), bufferType);
                      builder.setInsertionPointAfter(op);
-                     auto materializeOp = builder.create<subop::MaterializeOp>(op->getLoc(), op->getResult(0), tmpBuffer, builder.getDictionaryAttr(refMapping));
+                     auto materializeOp = builder.create<subop::MaterializeOp>(op->getLoc(), op->getResult(0), tmpBuffer,
+                                                                               subop::ColumnRefMemberMappingAttr::get(builder.getContext(), refMapping));
                      auto scanRefDef = colManager.createDef(colManager.getUniqueScope("tmp_union"), "scan_ref");
                      scanRefDef.getColumn().type = subop::EntryRefType::get(builder.getContext(), mlir::cast<subop::State>(tmpBuffer.getType()));
                      auto scan = builder.create<subop::ScanRefsOp>(op->getLoc(), tmpBuffer, scanRefDef);
-                     mlir::Value loaded = builder.create<subop::GatherOp>(op->getLoc(), scan, colManager.createRef(&scanRefDef.getColumn()), builder.getDictionaryAttr(defMapping));
+                     mlir::Value loaded = builder.create<subop::GatherOp>(op->getLoc(), scan, colManager.createRef(&scanRefDef.getColumn()),
+                                                                          subop::ColumnDefMemberMappingAttr::get(builder.getContext(), defMapping));
                      op->getResult(0).replaceAllUsesExcept(loaded, materializeOp);
                   }
                } else {

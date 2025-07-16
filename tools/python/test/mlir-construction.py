@@ -1,6 +1,6 @@
 import lingodbbridge
 from lingodbbridge.mlir import ir
-from lingodbbridge.mlir.dialects import func,arith,scf,util,tuples,db,relalg, builtin
+from lingodbbridge.mlir.dialects import func,arith,scf,util,tuples,db,relalg, builtin, subop
 import lingodbbridge.mlir._mlir_libs.mlir_init as mlir_init
 
 con=lingodbbridge.ext.in_memory()
@@ -75,3 +75,35 @@ with context4, ir.Location.unknown():
             rel2 = relalg.SortOp(rel1,ir.ArrayAttr.get([relalg.SortSpecificationAttr.get(col1_ref,relalg.SortSpec.desc)]))
             ret = func.ReturnOp([])
     print(module)
+
+
+
+context5=ir.Context()
+mlir_init.init_context(context5)
+with context5, ir.Location.unknown():
+    module = ir.Module.create()
+    member = subop.Member.create("test_member", ir.IntegerType.get_signless(32))
+    res_member = subop.Member.create("test_member_res", ir.IntegerType.get_signless(32))
+    tableMembers=subop.StateMembersAttr.get(context5, [member])
+    resTableMembers = subop.StateMembersAttr.get(context5, [res_member])
+    tableType = subop.TableType.get(tableMembers)
+    resultTableType = subop.ResultTableType.get(resTableMembers)
+    localTableType = subop.LocalTableType.get(resTableMembers, ir.ArrayAttr.get([ir.StringAttr.get("foo")]))
+    columnRefMemberMapping = subop.ColumnRefMemberMappingAttr.get(context5, [member],[tuples.ColumnRefAttr.get(context5,"test_table","test_col")])
+    columnDefMemberMapping = subop.ColumnDefMemberMappingAttr.get(context5, [res_member],[tuples.ColumnDefAttr.get(context5,"test_table","test_col",ir.IntegerType.get_signless(32))])
+    memberAttr = subop.MemberAttr.get(context5, member)
+
+    with ir.InsertionPoint(module.body), ir.Location.unknown():
+        f = func.FuncOp("main", ([], []))
+    with ir.InsertionPoint(f.body.blocks.append()):
+        group=subop.ExecutionGroupOp([localTableType],[])
+        with ir.InsertionPoint(group.sub_ops.blocks.append()):
+            external = subop.GetExternalOp(tableType,ir.StringAttr.get("test_external"))
+            res_table = subop.GenericCreateOp(resultTableType)
+            scan = subop.ScanOp(external, columnDefMemberMapping)
+            subop.MaterializeOp(scan, res_table, columnRefMemberMapping)
+            subop.ExecutionGroupReturnOp([res_table])
+        subop.set_result(ir.IntegerAttr.get(ir.IntegerType.get_signless(32),0), group.result)
+        ret = func.ReturnOp([])
+    print(module)
+

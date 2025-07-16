@@ -1,6 +1,8 @@
 #ifndef LINGODB_COMPILER_DIALECT_SUBOPERATOR_TRANSFORMS_SUBOPDEPENDENCYANALYSIS_H
 #define LINGODB_COMPILER_DIALECT_SUBOPERATOR_TRANSFORMS_SUBOPDEPENDENCYANALYSIS_H
 #include "mlir/Pass/AnalysisManager.h"
+
+#include "lingodb/compiler/Dialect/SubOperator/MemberManager.h"
 #include <mlir/IR/Operation.h>
 
 #include <unordered_map>
@@ -17,8 +19,8 @@ struct SubOpRootAnalysis {
 struct SubOpDependencyAnalysis {
    std::unordered_map<mlir::Operation*, std::unordered_set<mlir::Operation*>> dependencies;
    std::unordered_map<mlir::Operation*, std::unordered_set<mlir::Operation*>> inverseDependencies;
-   std::unordered_map<std::string, std::unordered_set<mlir::Operation*>> readMembers;
-   std::unordered_map<std::string, std::unordered_set<mlir::Operation*>> writtenMembers;
+   std::unordered_map<Member, std::unordered_set<mlir::Operation*>> readMembers;
+   std::unordered_map<Member, std::unordered_set<mlir::Operation*>> writtenMembers;
    std::unordered_map<mlir::Block*, std::vector<mlir::Operation*>> validOrder;
    void addNonTupleStreamDependencies(mlir::Value x, std::vector<mlir::Operation*>& roots, mlir::Operation* subopRoot, std::unordered_map<mlir::Operation*, std::vector<mlir::Operation*>>& pipelineRequirements);
    SubOpDependencyAnalysis(mlir::Operation* op, mlir::AnalysisManager& am);

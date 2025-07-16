@@ -211,7 +211,8 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
                                 canPushThrough = false;
                              }
                              if (auto subop = mlir::dyn_cast_or_null<subop::SubOperator>(definingOp)) {
-                                if (!subop.getWrittenMembers().empty()) {
+                                auto writtenMembers = subop.getWrittenMembers();
+                                if (!writtenMembers.empty()) {
                                    canPushThrough = false;
                                 }
                              }

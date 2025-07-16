@@ -83,8 +83,23 @@ MLIR_CAPI_EXPORTED bool mlirAttributeIsARelalgTableMetaDataAttr(MlirAttribute at
 //----------------------------------------------------------------------------------------------------------------------
 // SubOp Dialect
 //----------------------------------------------------------------------------------------------------------------------
-MLIR_CAPI_EXPORTED MlirAttribute mlirSubOpStateMembersAttributeGet(MlirAttribute names, MlirAttribute types);
+
+struct SubOpMember {
+   void* storage;
+};
+MLIR_CAPI_EXPORTED SubOpMember mlirSubOpCreateMember(MlirStringRef name, MlirType type);
+
+MLIR_CAPI_EXPORTED MlirAttribute mlirSubOpStateMembersAttributeGet(MlirContext, SubOpMember* members, size_t nMembers);
 MLIR_CAPI_EXPORTED bool mlirAttributeIsASubOpStateMembersAttribute(MlirAttribute attribute);
+
+MLIR_CAPI_EXPORTED MlirAttribute mlirSubOpColumnRefMemberMappingAttributeGet(MlirContext, SubOpMember* members, size_t nMembers, MlirAttribute* columnRefs, size_t nColumnRefs);
+MLIR_CAPI_EXPORTED bool mlirAttributeIsAColumnRefMemberMappingAttribute(MlirAttribute attribute);
+
+MLIR_CAPI_EXPORTED MlirAttribute mlirSubOpColumnDefMemberMappingAttributeGet(MlirContext, SubOpMember* members, size_t nMembers, MlirAttribute* columnRefs, size_t nColumnRefs);
+MLIR_CAPI_EXPORTED bool mlirAttributeIsAColumnDefMemberMappingAttribute(MlirAttribute attribute);
+
+MLIR_CAPI_EXPORTED MlirAttribute mlirSubOpMemberAttributeGet(MlirContext context, SubOpMember member);
+MLIR_CAPI_EXPORTED bool mlirAttributeIsASubOpMemberAttribute(MlirAttribute attribute);
 
 MLIR_CAPI_EXPORTED MlirType mlirSubOpTableTypeGet(MlirAttribute members);
 MLIR_CAPI_EXPORTED MlirTypeID mlirSubOpTableTypeGetTypeID();

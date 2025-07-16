@@ -64,7 +64,7 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
             WRITE
          };
 
-         std::unordered_map<std::string, std::vector<std::tuple<subop::SubOperator, mlir::Operation*, Kind>>> memberUsage;
+         std::unordered_map<subop::Member, std::vector<std::tuple<subop::SubOperator, mlir::Operation*, Kind>>> memberUsage;
 
          for (auto& step : steps) {
             for (auto* op : step.second) {
@@ -77,10 +77,12 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
                //check how states are used
                op->walk([&](mlir::Operation* nestedOp) {
                   if (subop::SubOperator potentialSubOp = mlir::dyn_cast_or_null<subop::SubOperator>(nestedOp)) {
-                     for (auto member : potentialSubOp.getReadMembers()) {
+                     auto readMembers = potentialSubOp.getReadMembers();
+                     auto writtenMembers = potentialSubOp.getWrittenMembers();
+                     for (auto member : readMembers) {
                         memberUsage[member].push_back({potentialSubOp, op, READ});
                      }
-                     for (auto member : potentialSubOp.getWrittenMembers()) {
+                     for (auto member : writtenMembers) {
                         memberUsage[member].push_back({potentialSubOp, op, WRITE});
                      }
                   }
