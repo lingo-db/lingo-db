@@ -1284,10 +1284,10 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
          std::ranges::transform(operatorExpr->children, std::back_inserter(boundChildren), [&](auto c) {
             return analyzeExpression(c, context, resolverScope);
          });
-         auto resultType = std::find_if(boundChildren.begin(), boundChildren.end(), [](auto c) {
+         auto it = std::find_if(boundChildren.begin(), boundChildren.end(), [](auto c) {
             return !c->resultType.has_value();
          });
-         if (resultType != boundChildren.end()) {
+         if (it != boundChildren.end()) {
             error("Operator expression has children with different types", boundChildren[0]->loc);
          }
          //Get common type
@@ -1305,7 +1305,19 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
             return c;
 
          });
-         auto commonType = SQLTypeUtils::getCommonBaseType(castValues, operatorExpr->type);
+         catalog::NullableType resultType = SQLTypeUtils::getCommonBaseType(castValues, operatorExpr->type);
+         switch (operatorExpr->type) {
+            case ast::ExpressionType::OPERATOR_IS_NOT_NULL:
+            case ast::ExpressionType::OPERATOR_IS_NULL: {
+               if (!resultType.isNullable) {
+                  return drv.nf.node<ast::BoundConstantExpression>(operatorExpr->loc, catalog::Type::boolean(), std::make_shared<ast::BoolValue>(operatorExpr->type == ast::ExpressionType::OPERATOR_IS_NOT_NULL), operatorExpr->alias);
+               }
+               resultType = catalog::Type::boolean();
+               break;
+            }
+               default: ;
+         }
+
          size_t t = 0;
          for (auto boundChild : boundChildren) {
             boundChild->resultType = commonNumbers[t];
@@ -1314,7 +1326,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
          //TODO base
          //TODO hardcode
 
-         return drv.nf.node<ast::BoundOperatorExpression>(operatorExpr->loc, operatorExpr->type, commonType, operatorExpr->alias, boundChildren);
+         return drv.nf.node<ast::BoundOperatorExpression>(operatorExpr->loc, operatorExpr->type, resultType, operatorExpr->alias, boundChildren);
       }
       case ast::ExpressionClass::FUNCTION: {
          auto function = std::static_pointer_cast<ast::FunctionExpression>(rootNode);

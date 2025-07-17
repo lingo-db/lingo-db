@@ -11,6 +11,7 @@ enum class ConstantType : uint8_t {
    STRING = 4,
    INTERVAL = 5,
    NULL_P = 6,
+   BOOLEAN = 7,
 
    INVALID = 99,
 
@@ -65,6 +66,15 @@ class StringValue : public Value {
    std::string sVal;
    std::string toString() override{
       return "string: " + sVal;
+   }
+};
+
+class BoolValue : public Value {
+   public:
+   explicit BoolValue(bool bVal) : Value(ConstantType::BOOLEAN), bVal(bVal) {}
+   bool bVal;
+   std::string toString() override {
+      return "bool:" + std::to_string(bVal);
    }
 };
 
