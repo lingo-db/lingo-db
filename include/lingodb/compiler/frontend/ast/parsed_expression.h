@@ -264,7 +264,26 @@ class ParsedExpression : public BaseExpression {
    }
 
    virtual std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) = 0;
+
+   virtual size_t hash();
+   virtual bool operator==(ParsedExpression& other);
 };
+
+struct ParsedExprPtrHash {
+   size_t operator()(const std::shared_ptr<ParsedExpression>& expr) const {
+      return expr ? expr->hash() : 0;
+   }
+};
+struct ParsedExprPtrEqual {
+   bool operator()(const std::shared_ptr<ParsedExpression>& lhs,
+                  const std::shared_ptr<ParsedExpression>& rhs) const {
+      if (lhs == rhs) return true;  // Same pointer or both null
+      if (!lhs || !rhs) return false;  // One is null, other isn't
+      return *lhs == *rhs;  // Compare actual expressions
+   }
+};
+
+
 
 class ColumnRefExpression : public ParsedExpression {
    public:
@@ -282,16 +301,8 @@ class ColumnRefExpression : public ParsedExpression {
    //! The stack of names in order of which they appear (column_names[0].column_names[1].column_names[2]....)
    std::vector<std::string> column_names;
 
-   /*
-    * Semantic
-    */
-   std::vector<catalog::Column> columns;
-   //TODO is this here good practice
-   ///The scope of the this->columns. Commonly the name of the table
-   std::string scope;
-   // If ColumnRefs refs a Function
-   bool refsAggregationFunction = false;
-   std::string fName;
+   size_t hash() override;
+   bool operator==(ParsedExpression& other) override;
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
@@ -339,6 +350,9 @@ class ConstantExpression : public ParsedExpression {
    std::shared_ptr<Value> value;
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
+
+   size_t hash() override;
+   bool operator==(ParsedExpression& other) override;
 };
 
 class FunctionExpression : public ParsedExpression {
@@ -369,6 +383,9 @@ class FunctionExpression : public ParsedExpression {
    bool star = false;
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
+
+   size_t hash() override;
+   bool operator==(ParsedExpression& other) override;
 };
 static std::vector<std::string> aggregationFunctions{
    "min",
