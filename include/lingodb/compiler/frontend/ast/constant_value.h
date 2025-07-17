@@ -22,6 +22,12 @@ class Value {
    ConstantType type;
 
    virtual std::string toString() = 0;
+   size_t hash() {
+      return std::hash<std::string>{}(toString());
+   }
+   bool operator==(Value& other) {
+       return toString() == other.toString();
+    }
 };
 
 class UnsignedIntValue : public Value {
@@ -31,6 +37,7 @@ class UnsignedIntValue : public Value {
    std::string toString() override {
       return "uint:" + std::to_string(iVal);
    }
+
 };
 
 class IntValue : public Value {

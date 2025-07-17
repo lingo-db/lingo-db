@@ -7,7 +7,7 @@ class ExtendNode : public AstNode {
    public:
    static constexpr auto TYPE = NodeType::EXTEND_NODE;
    ExtendNode();
-   std::vector< std::shared_ptr<ParsedExpression>> extensions;
+   std::vector<std::shared_ptr<ParsedExpression>> extensions;
 
 
 

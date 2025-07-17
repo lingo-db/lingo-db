@@ -26,6 +26,7 @@ class ASTTransformScope {
    ASTTransformScope() : aggregationNode(std::make_shared<ast::AggregationNode>()), extendNode(std::make_shared<ast::ExtendNode>()) {}
    std::shared_ptr<ast::AggregationNode> aggregationNode;
    std::shared_ptr<ast::ExtendNode> extendNode;
+   std::unordered_map<size_t, std::shared_ptr<ast::ParsedExpression>> groupByExpressions;
 };
 class ASTTransformContext {
    public:
