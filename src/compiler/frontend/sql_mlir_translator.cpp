@@ -483,6 +483,10 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
                assert(constExpr->resultType.has_value());
                return builder.create<db::NullOp>(builder.getUnknownLoc(), db::NullableType::get(builder.getContext(), builder.getNoneType()));
             }
+            case ast::ConstantType::BOOLEAN: {
+               auto value = std::static_pointer_cast<ast::BoolValue>(constExpr->value);
+               return builder.create<db::ConstantOp>(builder.getUnknownLoc(),  builder.getI1Type(), builder.getIntegerAttr(builder.getI1Type(), value->bVal));
+            }
 
             default: error("Not implemented", expression->loc);
          }
@@ -583,6 +587,17 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
                left = translateExpression(builder, operatorExpr->children[0], context);
                right = translateExpression(builder, operatorExpr->children[1], context);
                return translateBinaryOperatorExpression(builder, operatorExpr, context, left, right);
+            }
+            case ast::ExpressionType::OPERATOR_IS_NOT_NULL:
+            case ast::ExpressionType::OPERATOR_IS_NULL: {
+               assert(operatorExpr->children.size() == 1);
+               auto childTree = translateExpression(builder, operatorExpr->children[0], context);
+               mlir::Value isNull = builder.create<db::IsNullOp>(builder.getUnknownLoc(), childTree);
+               if (operatorExpr->type == ast::ExpressionType::OPERATOR_IS_NOT_NULL) {
+                  return builder.create<db::NotOp>(builder.getUnknownLoc(), isNull);
+               } else {
+                  return isNull;
+               }
             }
             default: error("Not implemented", expression->loc);
          }
