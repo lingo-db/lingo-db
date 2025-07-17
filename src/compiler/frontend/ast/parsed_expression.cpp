@@ -4,6 +4,17 @@
 #include <clang/AST/Type.h>
 namespace lingodb::ast {
 
+size_t ParsedExpression::hash() {
+   size_t result = std::hash<uint8_t>{}(static_cast<uint8_t>(type));
+   result = result * 31 + std::hash<uint8_t>{}(static_cast<uint8_t>(exprClass));
+   result = result * 31 + std::hash<std::string>{}(alias);
+   return result;
+
+}
+bool ParsedExpression::operator==(ParsedExpression& other) {
+   return type == other.type && exprClass == other.exprClass;
+}
+
 ///ColumnRef
 //TODO Find better solution for ColumnRefExpression than duckdb does with columnName and tableName
 ColumnRefExpression::ColumnRefExpression(std::string columnName, std::string tableName)
@@ -48,6 +59,24 @@ std::string ColumnRefExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idG
    }
    dot.append("\"];\n");
    return dot;
+}
+
+size_t ColumnRefExpression::hash() {
+   size_t result = ParsedExpression::hash();
+   for (const auto& name : column_names) {
+      result = result * 31 + std::hash<std::string>{}(name);
+   }
+
+   return result;
+
+
+}
+bool ColumnRefExpression::operator==(ParsedExpression& other) {
+   if (!ParsedExpression::operator==(other)) return false;
+
+   const auto& otherRef = static_cast<ColumnRefExpression&>(other);
+   return column_names == otherRef.column_names;
+
 }
 
 /// ComparisonExpression
@@ -175,6 +204,34 @@ std::string ConstantExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGe
 
    return dot;
 }
+
+size_t ConstantExpression::hash() {
+   size_t result = ParsedExpression::hash();
+   if (value) {
+      result = result * 31 + value->hash();
+   }
+   return result;
+}
+
+bool ConstantExpression::operator==(ParsedExpression& other) {
+   if (!ParsedExpression::operator==(other)) return false;
+
+   const auto& otherConst = static_cast<const ConstantExpression&>(other);
+
+   // Handle cases where one value is null and the other isn't
+   if ((value && !otherConst.value) || (!value && otherConst.value)) {
+      return false;
+   }
+
+   // If both values are null, they're equal
+   if (!value && !otherConst.value) {
+      return true;
+   }
+
+   // Compare the actual values
+   return *value == *otherConst.value;
+
+}
 /// FunctionExpression
 FunctionExpression::FunctionExpression(std::string catalog, std::string schema, std::string functionName, bool isOperator, bool distinct, bool exportState) : ParsedExpression(ExpressionType::FUNCTION, TYPE), catalog(catalog), schema(schema), functionName(functionName), isOperator(isOperator), distinct(distinct), exportState(exportState) {
    auto found = std::find(aggregationFunctions.begin(), aggregationFunctions.end(), functionName);
@@ -251,6 +308,73 @@ std::string FunctionExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGe
 
    return dot;
 }
+
+size_t FunctionExpression::hash() {
+   size_t result = ParsedExpression::hash();
+   // Hash basic function properties
+   result = result * 31 + std::hash<std::string>{}(catalog);
+   result = result * 31 + std::hash<std::string>{}(schema);
+   result = result * 31 + std::hash<std::string>{}(functionName);
+   result = result * 31 + std::hash<bool>{}(isOperator);
+   result = result * 31 + std::hash<bool>{}(distinct);
+   result = result * 31 + std::hash<bool>{}(exportState);
+   result = result * 31 + std::hash<bool>{}(star);
+
+   // Hash function arguments
+   for (const auto& arg : arguments) {
+      result = result * 31 + arg->hash();
+   }
+
+   // Hash optional components
+   if (filter) {
+      result = result * 31 + filter->hash();
+   }
+   if (orderBy) {
+      result = result * 31 + orderBy->hash();
+   }
+
+   return result;
+
+}
+bool FunctionExpression::operator==(ParsedExpression& other) {
+   if (!ParsedExpression::operator==(other)) return false;
+   const auto& otherFunc = static_cast<const FunctionExpression&>(other);
+   if (catalog != otherFunc.catalog ||
+       schema != otherFunc.schema ||
+       functionName != otherFunc.functionName ||
+       isOperator != otherFunc.isOperator ||
+       distinct != otherFunc.distinct ||
+       exportState != otherFunc.exportState ||
+       arguments.size() != otherFunc.arguments.size()) {
+      return false;
+       }
+
+   // Compare function arguments
+   for (size_t i = 0; i < arguments.size(); i++) {
+      if (*arguments[i] != *(otherFunc.arguments[i])) {
+         return false;
+      }
+   }
+
+   // Compare optional filter and orderBy if present
+   if ((filter && !otherFunc.filter) || (!filter && otherFunc.filter)) {
+      return false;
+   }
+   if (filter && *filter != *otherFunc.filter) {
+      return false;
+   }
+
+   if ((orderBy && !otherFunc.orderBy) || (!orderBy && otherFunc.orderBy)) {
+      return false;
+   }
+   if (orderBy && *orderBy != *otherFunc.orderBy) {
+      return false;
+   }
+
+   return star == otherFunc.star;
+}
+
+
 ///StarExpression
 StarExpression::StarExpression(std::string relationName)
    : ParsedExpression(ExpressionType::STAR, ExpressionClass::STAR), relationName(std::move(relationName)) {
