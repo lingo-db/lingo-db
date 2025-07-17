@@ -257,6 +257,7 @@ class Scheduler {
    std::mutex coolingDownMutex;
    TaskWrapper* coolingDownHead = nullptr;
    TaskWrapper* coolingDownTail = nullptr;
+   std::atomic<size_t> stoppedWorkers = 0;
 
    public:
    Scheduler(size_t numWorkers = std::thread::hardware_concurrency()) : numWorkers(numWorkers) {
@@ -277,7 +278,10 @@ class Scheduler {
 
    void join() {
       for (auto& workerThread : workerThreads) {
-         workerThread.join();
+         assert(workerThread.joinable() && "Worker thread is not joinable");
+         if (workerThread.joinable()) {
+            workerThread.join();
+         }
       }
    }
 
@@ -652,6 +656,7 @@ void Scheduler::start() {
          Worker worker(*this, i);
          currentWorker = &worker;
          worker.work();
+         stoppedWorkers++;
          currentWorker = nullptr;
       });
    }
@@ -659,14 +664,20 @@ void Scheduler::start() {
 
 void Scheduler::stop() {
    shutdown.store(true);
-   std::unique_lock<std::mutex> lock(taskQueueMutex);
    size_t cntr = 0;
-   while (idleWorkers) {
-      assert(cntr++ < numWorkers);
-      auto* currWorker = idleWorkers;
-      currWorker->isInIdleList = false;
-      idleWorkers = currWorker->nextIdleWorker;
-      currWorker->cv.notify_one();
+   while (stoppedWorkers.load() < numWorkers) {
+      usleep(100);
+      {
+         std::unique_lock<std::mutex> lock(taskQueueMutex);
+         while (idleWorkers) {
+            assert(cntr++ < numWorkers);
+            auto* currWorker = idleWorkers;
+            currWorker->isInIdleList = false;
+            idleWorkers = currWorker->nextIdleWorker;
+            std::unique_lock<std::mutex> workerLock(currWorker->mutex);
+            currWorker->cv.notify_one();
+         }
+      }
    }
 }
 
@@ -730,6 +741,7 @@ void awaitEntryTask(std::unique_ptr<Task> task) {
    std::unique_lock<std::mutex> blockDelete;
    bool finished = false;
    taskWrapper->onFinalize = [&]() {
+      // todo: undefined behavior when moving accross threads
       blockDelete = std::unique_lock<std::mutex>(scheduler->getTaskDeleteMutex());
       finished = true;
       cvFinished.notify_one();
