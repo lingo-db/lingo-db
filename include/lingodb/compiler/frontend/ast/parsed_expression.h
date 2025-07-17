@@ -443,6 +443,7 @@ class TargetsExpression : public ParsedExpression {
 class OperatorExpression : public ParsedExpression {
    public:
    static constexpr const ExpressionClass TYPE = ExpressionClass::OPERATOR;
+   OperatorExpression(ExpressionType type, std::shared_ptr<ParsedExpression> left);
    OperatorExpression(ExpressionType type, std::shared_ptr<ParsedExpression> left, std::shared_ptr<ParsedExpression> right);
    std::vector<std::shared_ptr<ParsedExpression>> children;
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
