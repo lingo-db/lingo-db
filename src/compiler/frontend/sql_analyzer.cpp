@@ -47,29 +47,31 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                   transformed = transFormededWhereClause;
                }
 
+               //Transform Group by
+               if (selectNode->groups) {
+                  context->currentScope->aggregationNode->groupByNode = std::move(selectNode->groups);
+               }
                auto aggPipeNode = drv.nf.node<ast::PipeOperator>(selectNode->loc, ast::PipeOperatorType::AGGREGATE, context->currentScope->aggregationNode);
                auto transFormedAggregation = canonicalizeCast<ast::PipeOperator>(aggPipeNode, context);
                transFormedAggregation->input = transformed;
                transformed = transFormedAggregation;
 
                //Transform target selection
-               auto select_list = selectNode->select_list;
-               if (select_list) {
-                  auto pipe = drv.nf.node<ast::PipeOperator>(select_list->loc, ast::PipeOperatorType::SELECT, select_list);
-                  auto transformedSelect = canonicalizeCast<ast::PipeOperator>(pipe, context);
+               std::shared_ptr<ast::PipeOperator> transformedSelect = nullptr;
+               if (selectNode->select_list) {
+                  auto pipe = drv.nf.node<ast::PipeOperator>(selectNode->select_list->loc, ast::PipeOperatorType::SELECT, selectNode->select_list);
+                  transformedSelect = canonicalizeCast<ast::PipeOperator>(pipe, context);
                   transformedSelect->input = transformed;
                   transformed = transformedSelect;
                   selectNode->select_list = nullptr;
                }
 
-               //Transform Group by
-               if (selectNode->groups) {
-                  auto loc = selectNode->groups->loc;
-                  context->currentScope->aggregationNode->groupByNode = std::move(selectNode->groups);
-               }
+
+
+
 
                if (selectNode->having) {
-                  auto pipe = drv.nf.node<ast::PipeOperator>(select_list->loc, ast::PipeOperatorType::WHERE, selectNode->having);
+                  auto pipe = drv.nf.node<ast::PipeOperator>(selectNode->having->loc, ast::PipeOperatorType::WHERE, selectNode->having);
                   auto transformedHaving = canonicalizeCast<ast::PipeOperator>(pipe, context);
                   transformedHaving->input = transformed;
                   transformed = transformedHaving;
@@ -135,7 +137,11 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                std::vector<std::shared_ptr<ast::ParsedExpression>> toRemove{};
                int i = 0;
                //Canonicalize target expressions
-               std::ranges::transform(selectNode->targets, selectNode->targets.begin(), [&](auto& target) {
+               std::ranges::transform(selectNode->targets, selectNode->targets.begin(), [&](std::shared_ptr<ast::ParsedExpression>& target) {
+                  auto it = context->currentScope->groupByExpressions.find(target->hash());
+                  if (it != context->currentScope->groupByExpressions.end()) {
+                     return it->second;
+                  }
                   return canonicalizeParsedExpression(target, context);
                });
                //Canonicalize distinct expressions list
@@ -145,15 +151,16 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                   });
                }
 
-
                for (auto& target : selectNode->targets) {
-
                   if (target->exprClass == ast::ExpressionClass::FUNCTION) {
                      auto function = std::static_pointer_cast<ast::FunctionExpression>(target);
                      if (target->type == ast::ExpressionType::AGGREGATE) {
                         context->currentScope->aggregationNode->aggregations.push_back(function);
                      } else {
-                        context->currentScope->extendNode->extensions.push_back(function);
+                        if (!context->currentScope->groupByExpressions.contains(function->hash())) {
+                           context->currentScope->extendNode->extensions.push_back(function);
+                        }
+
                      }
                      //TODO better
                      if (function->alias.empty()) {
@@ -175,6 +182,36 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                assert(pipeOp->node->nodeType == ast::NodeType::EXPRESSION);
                pipeOp->node = canonicalizeParsedExpression(std::static_pointer_cast<ast::ParsedExpression>(pipeOp->node), context);
                return pipeOp;
+            }
+            case ast::PipeOperatorType::AGGREGATE: {
+               auto aggNode = std::dynamic_pointer_cast<ast::AggregationNode>(pipeOp->node);
+               assert(aggNode);
+               std::vector<std::shared_ptr<ast::ParsedExpression>> newGroupByExpressions{};
+               if (aggNode->groupByNode) {
+                  int i = 0;
+                  for (auto e: aggNode->groupByNode->group_expressions) {
+                     context->currentScope->groupByExpressions.emplace(e->hash(), e);
+                     switch (e->type) {
+                        case ast::ExpressionType::FUNCTION: {
+                           auto function = std::static_pointer_cast<ast::FunctionExpression>(e);
+                           context->currentScope->extendNode->extensions.push_back(function);
+                           if (function->alias.empty()) {
+                              //TODO make unique alias
+                              function->alias = function->functionName + "_" + std::to_string(i);
+                           }
+                           newGroupByExpressions.emplace_back(drv.nf.node<ast::ColumnRefExpression>(function->loc, function->alias));
+                           break;
+                        }
+                           default: newGroupByExpressions.emplace_back(e);
+                     }
+                     i++;
+                  }
+                  aggNode->groupByNode->group_expressions = std::move(newGroupByExpressions);
+               }
+
+               return pipeOp;
+
+
             }
 
             case ast::PipeOperatorType::RESULT_MODIFIER: {
