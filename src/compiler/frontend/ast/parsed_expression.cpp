@@ -454,10 +454,9 @@ std::string TargetsExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen
 
    return dot;
 }
-
-OperatorExpression::OperatorExpression(ExpressionType type, std::shared_ptr<ParsedExpression> left, std::shared_ptr<ParsedExpression> right) : ParsedExpression(type, TYPE), children(std::vector<std::shared_ptr<ParsedExpression>>{}) {
-   children.push_back(std::move(left));
-   children.push_back(std::move(right));
+OperatorExpression::OperatorExpression(ExpressionType type, std::shared_ptr<ParsedExpression> left) : ParsedExpression(type, TYPE), children(std::vector{left}){
+}
+OperatorExpression::OperatorExpression(ExpressionType type, std::shared_ptr<ParsedExpression> left, std::shared_ptr<ParsedExpression> right) : ParsedExpression(type, TYPE), children(std::vector{left, right}) {
 }
 std::string OperatorExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    std::string dot{};

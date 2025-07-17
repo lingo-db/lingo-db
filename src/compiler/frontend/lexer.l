@@ -196,6 +196,7 @@ boolean [fF][aA][lL][sS][eE]
 [iI][nN][tT][eE][rR][sS][eE][cC][tT]  { MAKE_KEYWORD(INTERSECT); }
 [iI][nN][tT][eE][rR][vV][aA][lL]      { MAKE_KEYWORD(INTERVAL); }
 [iI][nN][tT][oO]                      { MAKE_KEYWORD(INTO); }
+[iI][sS]                              { MAKE_KEYWORD(IS); }
 [nN][uU][mM][eE][rR][iI][cC]          { MAKE_KEYWORD(NUMERIC); }
 
 [jJ][oO][iI][nN]                      { MAKE_KEYWORD(JOIN); }

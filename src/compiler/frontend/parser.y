@@ -1209,6 +1209,14 @@ a_expr:
         node->asymmetric = $opt_asymmetric;
         $$ = node;
     }
+    | a_expr IS NULL_P 
+    {
+        $$ = mkNode<lingodb::ast::OperatorExpression>(@$, lingodb::ast::ExpressionType::OPERATOR_IS_NULL, $1);
+    }
+    | a_expr IS NOT NULL_P 
+    {
+        $$ = mkNode<lingodb::ast::OperatorExpression>(@$, lingodb::ast::ExpressionType::OPERATOR_IS_NOT_NULL, $1);
+    }
     ;
 b_expr:
     c_expr { $$ = $c_expr;}
