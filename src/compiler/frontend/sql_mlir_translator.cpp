@@ -894,14 +894,17 @@ mlir::Value SQLMlirTranslator::translateTableRef(mlir::OpBuilder& builder, std::
          context->popCurrentScope();
          switch (boundJoin->type) {
             case ast::JoinType::INNER: {
-               switch (boundJoin->refType) {
-                  case ast::JoinCondType::CROSS: {
-                  }
-                  default: error("Not implemented", tableRef->loc);
+               mlir::Block* pred;
+               if (!std::holds_alternative<std::shared_ptr<ast::BoundExpression>>(boundJoin->condition)) {
+                  error("Not implemented", tableRef->loc);
                }
+
+               pred = translatePredicate(builder, std::get<std::shared_ptr<ast::BoundExpression>>(boundJoin->condition), context);
+
 
                //TODO translate predicate
                auto joinOp = builder.create<relalg::InnerJoinOp>(builder.getUnknownLoc(), tuples::TupleStreamType::get(builder.getContext()), left, right);
+               joinOp.getPredicate().push_back(pred);
 
                return joinOp;
             }
