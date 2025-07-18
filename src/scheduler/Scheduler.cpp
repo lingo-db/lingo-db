@@ -249,7 +249,6 @@ class Scheduler {
    Worker* idleWorkers = nullptr;
    std::mutex taskQueueMutex;
    std::mutex taskReturnMutex;
-   std::mutex taskDeleteMutex;
    TaskWrapper* taskHead = nullptr;
    TaskWrapper* taskTail = nullptr;
 
@@ -264,10 +263,6 @@ class Scheduler {
    }
    size_t getNumWorkers() {
       return numWorkers;
-   }
-
-   std::mutex& getTaskDeleteMutex() {
-      return taskDeleteMutex;
    }
 
    void putWorkerToSleep(Worker* worker);
@@ -353,19 +348,16 @@ class Scheduler {
       return minYieldTask;
    }
 
-   bool returnTask(TaskWrapper* task) {
+   void returnTask(TaskWrapper* task) {
       // Multiple worker may call here concurrently. Avoid one worker already called `delete task`
       // but another worker is still at `task->finalized`
       std::lock_guard<std::mutex> lock(taskReturnMutex);
       auto deployedNum = task->deployedOnWorkers.fetch_sub(1);
       if (task->finalized) {
          if (deployedNum == 1) {
-            std::lock_guard<std::mutex> guardDelete(taskDeleteMutex);
             delete task;
-            return true;
          }
       }
-      return false;
    }
 
    void finalizeTask(TaskWrapper* task) {
@@ -737,18 +729,21 @@ void TaskWrapper::finalize() {
 
 void awaitEntryTask(std::unique_ptr<Task> task) {
    TaskWrapper* taskWrapper = new TaskWrapper{std::move(task)};
+   taskWrapper->deployedOnWorkers = 1; // make sure that this task is not auto-deleted by scheduler
    std::condition_variable cvFinished;
-   std::unique_lock<std::mutex> blockDelete;
    bool finished = false;
    taskWrapper->onFinalize = [&]() {
-      // todo: undefined behavior when moving accross threads
-      blockDelete = std::unique_lock<std::mutex>(scheduler->getTaskDeleteMutex());
       finished = true;
       cvFinished.notify_one();
    };
    std::unique_lock<std::mutex> lk(taskWrapper->finalizeMutex);
    scheduler->enqueueTask(taskWrapper);
    cvFinished.wait(lk, [&]() { return finished; });
+   while (taskWrapper->deployedOnWorkers.load() > 1) {
+      // wait for all workers to return the task
+   }
+   // taskWrapper is not used anymore, so we can delete it
+   delete taskWrapper;
 }
 void awaitChildTask(std::unique_ptr<Task> task) {
    currentWorker->awaitChildTask(std::move(task));
