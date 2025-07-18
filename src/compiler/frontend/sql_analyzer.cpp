@@ -887,6 +887,8 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableRef(std::share
 
          auto join = std::static_pointer_cast<ast::JoinRef>(tableRef);
          switch (join->type) {
+            //TOD check for correctness
+            case ast::JoinType::INNER:
             case ast::JoinType::CROSS: {
                std::shared_ptr<ast::TableProducer> left, right;
                std::shared_ptr<SQLScope> leftScope, rightScope;
@@ -925,9 +927,22 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableRef(std::share
                for (auto& [name, column] : mapping) {
                   context->mapAttribute(resolverScope, name, column);
                }
-               auto boundJoin = drv.nf.node<ast::BoundJoinRef>(join->loc, join->type, join->refType, left, right, nullptr);
+               std::shared_ptr<ast::BoundExpression> boundCondition;
+               {
+                  auto predScope = context->createResolverScope();
+                  if (!std::holds_alternative<std::shared_ptr<ast::ParsedExpression>>(join->condition)) {
+                     error("Not implemented", join->loc);
+                  }
+                  if (std::get<std::shared_ptr<ast::ParsedExpression>>(join->condition)) {
+                     boundCondition = analyzeExpression(std::get<std::shared_ptr<ast::ParsedExpression>>(join->condition), context, resolverScope);
+                  }
+
+               }
+
+               auto boundJoin = drv.nf.node<ast::BoundJoinRef>(join->loc, join->type, join->refType, left, right, boundCondition);
                boundJoin->leftScope = leftScope;
                boundJoin->rightScope = rightScope;
+
                return boundJoin;
 
             }
@@ -975,7 +990,8 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableRef(std::share
                   outerjoinName = "oj" + std::to_string(id++);
                   std::unordered_map<std::shared_ptr<ast::NamedResult>, std::shared_ptr<ast::NamedResult>> remapped;
                   for (auto x : mapping) {
-                     if (!remapped.contains(x.second)) {
+                     auto it = remapped.find(x.second);
+                     if (it == remapped.end()) {
                         auto scope = x.second->scope;
                         auto name = x.second->name;
                         auto namedResult = std::make_shared<ast::NamedResult>(x.second->type, outerjoinName, x.second->resultType, name);
@@ -983,9 +999,12 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableRef(std::share
 
                         //Make mapping output nullable
                         namedResult->resultType.isNullable = true;
+                        namedResult->displayName = x.second->displayName;
                         outerJoinMapping.push_back({scope, namedResult});
                         remapped.insert({x.second, namedResult});
                         context->mapAttribute(resolverScope, x.first, namedResult);
+                     } else {
+                        context->mapAttribute(resolverScope, x.first, it->second);
                      }
 
                   }
