@@ -89,13 +89,18 @@ class OptimizeRuntimeFunctions : public mlir::PassWrapper<OptimizeRuntimeFunctio
       //transform "standalone" aggregation functions
       {
          mlir::RewritePatternSet patterns(&getContext());
-         patterns.insert<ReplaceFnWithFn>(&getContext(), "ExtractFromDate", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("month"), std::make_shared<AnyMatcher>()}, "ExtractMonthFromDate");
          patterns.insert<ReplaceFnWithFn>(&getContext(), "ExtractFromDate", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("year"), std::make_shared<AnyMatcher>()}, "ExtractYearFromDate");
+         patterns.insert<ReplaceFnWithFn>(&getContext(), "ExtractFromDate", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("month"), std::make_shared<AnyMatcher>()}, "ExtractMonthFromDate");
          patterns.insert<ReplaceFnWithFn>(&getContext(), "ExtractFromDate", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("day"), std::make_shared<AnyMatcher>()}, "ExtractDayFromDate");
          patterns.insert<ReplaceFnWithFn>(&getContext(), "ExtractFromDate", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("hour"), std::make_shared<AnyMatcher>()}, "ExtractHourFromDate");
          patterns.insert<ReplaceFnWithFn>(&getContext(), "ExtractFromDate", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("minute"), std::make_shared<AnyMatcher>()}, "ExtractMinuteFromDate");
          patterns.insert<ReplaceFnWithFn>(&getContext(), "ExtractFromDate", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("second"), std::make_shared<AnyMatcher>()}, "ExtractSecondFromDate");
+
          patterns.insert<ReplaceFnWithFn>(&getContext(), "DateDiff", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("second"), std::make_shared<AnyMatcher>(), std::make_shared<AnyMatcher>()}, "DateDiffSecond");
+         patterns.insert<ReplaceFnWithFn>(&getContext(), "DateDiff", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("minute"), std::make_shared<AnyMatcher>(), std::make_shared<AnyMatcher>()}, "DateDiffMinute");
+         patterns.insert<ReplaceFnWithFn>(&getContext(), "DateDiff", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("hour"), std::make_shared<AnyMatcher>(), std::make_shared<AnyMatcher>()}, "DateDiffHour");
+         patterns.insert<ReplaceFnWithFn>(&getContext(), "DateDiff", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("day"), std::make_shared<AnyMatcher>(), std::make_shared<AnyMatcher>()}, "DateDiffDay");
+
          patterns.insert<ReplaceFnWithFn>(&getContext(), "Like", std::vector<std::shared_ptr<Matcher>>{std::make_shared<AnyMatcher>(), std::make_shared<ConstStringMatcher>()}, "ConstLike");
          if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
             assert(false && "should not happen");

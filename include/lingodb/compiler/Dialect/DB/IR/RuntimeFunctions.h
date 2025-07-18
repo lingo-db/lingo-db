@@ -17,7 +17,7 @@ namespace lingodb::compiler::dialect::db {
 struct RuntimeFunction {
    enum NullHandleType {
       HandlesNulls,
-      HandlesInvalidVaues,
+      HandlesInvalidValues,
       NeedsWrapping
    };
    std::string name;
@@ -62,7 +62,7 @@ struct RuntimeFunction {
       return *this;
    }
    RuntimeFunction& handlesInvalid() {
-      nullHandleType = HandlesInvalidVaues;
+      nullHandleType = HandlesInvalidValues;
       return *this;
    }
    RuntimeFunction& needsWrapping() {

@@ -98,14 +98,18 @@ class LoadArrowOpLowering : public OpConversionPattern<db::LoadArrowOp> {
          }
       } else if (auto dateType = mlir::dyn_cast_or_null<db::DateType>(baseType)) {
          size_t multiplier;
-         if (dateType.getUnit() == db::DateUnitAttr::day) {
-            loaded = rewriter.create<lingodb::compiler::dialect::arrow::LoadFixedSizedOp>(loc, rewriter.getI32Type(), array, offset);
-            loaded = rewriter.create<arith::ExtSIOp>(loc, rewriter.getI64Type(), loaded);
-            multiplier = 86400000000000;
-
-         } else {
-            loaded = rewriter.create<lingodb::compiler::dialect::arrow::LoadFixedSizedOp>(loc, rewriter.getI64Type(), array, offset);
-            multiplier = 1000000;
+         switch (dateType.getUnit()) {
+            case db::DateUnitAttr::day:
+               loaded = rewriter.create<lingodb::compiler::dialect::arrow::LoadFixedSizedOp>(loc, rewriter.getI32Type(), array, offset);
+               loaded = rewriter.create<arith::ExtSIOp>(loc, rewriter.getI64Type(), loaded);
+               multiplier = 86400000000000;
+               break;
+            case db::DateUnitAttr::millisecond:
+               loaded = rewriter.create<lingodb::compiler::dialect::arrow::LoadFixedSizedOp>(loc, rewriter.getI64Type(), array, offset);
+               multiplier = 1000000;
+               break;
+            default:
+               return mlir::failure();
          }
          mlir::Value multiplierConst = rewriter.create<mlir::arith::ConstantIntOp>(loc, multiplier, 64);
          loaded = rewriter.create<mlir::arith::MulIOp>(loc, loaded, multiplierConst);
@@ -1058,7 +1062,7 @@ void DBToStdLoweringPass::runOnOperation() {
       return mlir::IntegerType::get(ctxt, 64);
    });
    typeConverter.addConversion([&](::db::DecimalType t) {
-      if (t.getP() < 19) {
+      if (t.getP() < 19) { // an int64 can store up to 18 decimal digits
          return mlir::IntegerType::get(ctxt, 64);
 
       } else {

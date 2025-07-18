@@ -2,7 +2,6 @@
 set -euo pipefail
 TMPDIR=`mktemp --directory`
 echo $TMPDIR
-cp  resources/sql/ssb_simplified/initialize.sql $TMPDIR/initialize.sql
 cp  tools/scripts/ssb_convert_to_simplified.py $TMPDIR/ssb_convert_to_simplified.py
 
 pushd $TMPDIR

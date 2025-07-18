@@ -279,7 +279,7 @@ LogicalResult inferRemReturnType(MLIRContext* context, std::optional<Location> l
 bool db::RuntimeCall::supportsInvalidValues() {
    auto reg = getContext()->getLoadedDialect<db::DBDialect>()->getRuntimeFunctionRegistry();
    if (auto* fn = reg->lookup(this->getFn().str())) {
-      return fn->nullHandleType == RuntimeFunction::HandlesInvalidVaues;
+      return fn->nullHandleType == RuntimeFunction::HandlesInvalidValues;
    }
    return false;
 }

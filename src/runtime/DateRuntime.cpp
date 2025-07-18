@@ -80,9 +80,21 @@ int64_t lingodb::runtime::DateRuntime::subtractMonths(int64_t date, int64_t mont
 int64_t lingodb::runtime::DateRuntime::addMonths(int64_t nanos, int64_t months) {
    return DateHelper(nanos).addMonths(months).nanosSinceEpoch();
 }
-int64_t lingodb::runtime::DateRuntime::dateDiffSeconds(int64_t start, int64_t end) {
+int64_t lingodb::runtime::DateRuntime::dateDiffSecond(int64_t end, int64_t start) {
    auto diffNanos = end - start;
-   return diffNanos / (1000000000ull);
+   return diffNanos / (1000000000ll);
+}
+int64_t lingodb::runtime::DateRuntime::dateDiffMinute(int64_t end, int64_t start) {
+   auto diffNanos = end - start;
+   return diffNanos / (1000000000ll) / (60ll);
+}
+int64_t lingodb::runtime::DateRuntime::dateDiffHour(int64_t end, int64_t start) {
+   auto diffNanos = end - start;
+   return diffNanos / (1000000000ll) / (60ll * 60ll);
+}
+int64_t lingodb::runtime::DateRuntime::dateDiffDay(int64_t end, int64_t start) { // ignores leap seconds
+   auto diffNanos = end - start;
+   return diffNanos / (1000000000ll) / (60ll * 60ll * 24ll);
 }
 int64_t lingodb::runtime::DateRuntime::extractYear(int64_t date) {
    return DateHelper(date).tmYear() + 1900;
