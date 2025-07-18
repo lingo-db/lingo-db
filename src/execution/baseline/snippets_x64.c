@@ -130,3 +130,25 @@ uint64_t util_hash_64(uint64_t val) {
     uint64_t reversed = __builtin_bswap64(m1);
     return m1 ^ reversed;
 }
+
+bool util_ptr_tag_matches(void* ref, uint64_t hash, void* bloomMaskPtr) {
+    uint64_t shiftAmount = 53;
+    uint64_t slot = hash >> shiftAmount;
+    uint64_t tag = ((uint16_t*)bloomMaskPtr)[slot];
+    uint16_t entry = (uint16_t)(uintptr_t)ref;
+    uint16_t negatedEntry = entry ^ 0xFFFF;
+    uint16_t anded = tag & negatedEntry;
+    bool isMatch = anded == 0;
+    return isMatch;
+}
+
+void* util_untag_ptr(void* ref) {
+    uintptr_t ptrAsInt = (uintptr_t)ref;
+    uint64_t shiftAmount = 16;
+    uintptr_t ptrWithoutTag = ptrAsInt >> shiftAmount;
+    return (void*)ptrWithoutTag;
+}
+
+bool util_is_ref_valid(void* ref) {
+    return ref != NULL;
+}

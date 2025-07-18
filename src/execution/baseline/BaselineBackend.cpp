@@ -81,6 +81,19 @@ namespace lingodb::execution::baseline {
         }
     };
 
+    static std::optional<size_t> get_size(mlir::Type type) noexcept {
+        return mlir::TypeSwitch<mlir::Type, size_t>(type)
+                .Case<mlir::IntegerType>([](auto intType) { return intType.getIntOrFloatBitWidth() / 8; })
+                .Case<dialect::util::VarLen32Type, dialect::util::BufferType>([](auto) { return 16; })
+                .Case<mlir::TupleType>([](auto t) { return TupleHelper{t}.sizeAndPadding().first; })
+                .Case<mlir::IndexType, dialect::util::RefType>([](auto) { return 8; })
+                .Default([](mlir::Type t) {
+                    t.dump();
+                    assert(0 && "Unsupported type for size calculation");
+                    return 0;
+                });
+    }
+
     // adaptor mlir -> tpde
     // NOLINTBEGIN(readability-identifier-naming)
     struct IRAdaptor {
@@ -303,17 +316,27 @@ namespace lingodb::execution::baseline {
         [[maybe_unused]] uint32_t val_alloca_size(IRValueRef val) const noexcept {
             assert(mlir::isa<dialect::util::AllocaOp>(val.getDefiningOp()) && "Value is not an alloca operation");
             auto allocaOp = cast<dialect::util::AllocaOp>(val.getDefiningOp());
+            unsigned count = 1; // default size for an alloca without a size is 1
             if (const auto size = allocaOp.getSize()) {
                 if (auto const_int = mlir::dyn_cast<mlir::arith::ConstantIntOp>(size.getDefiningOp())) {
-                    return static_cast<uint32_t>(const_int.value());
+                    count = const_int.value();
                 }
                 if (auto const_index = mlir::dyn_cast<mlir::arith::ConstantIndexOp>(size.getDefiningOp())) {
-                    return static_cast<uint32_t>(const_index.value());
+                    count = const_index.value();
                 }
                 error.emit() << "Value is not an arith int constant";
                 abort();
             }
-            return 1; // default size for an alloca without a size is 1 byte
+
+            const mlir::TypedValue<dialect::util::RefType> res_ptr = allocaOp.getRef();
+            const mlir::Type element_type = res_ptr.getType().getElementType();
+            const auto size = get_size(element_type);
+            if (!size) {
+                error.emit() << "Value is not a supported type for alloca size calculation: ";
+                element_type.dump();
+                abort();
+            }
+            return *size * count;
         }
 
         [[maybe_unused]] uint32_t val_alloca_align(IRValueRef val) const noexcept {
@@ -645,7 +668,9 @@ namespace lingodb::execution::baseline {
             if (auto undef_op = mlir::dyn_cast<dialect::util::UndefOp>(ref.value.getDefiningOp())) {
                 auto ret_type = undef_op.getRes().getType();
                 if (mlir::isa<mlir::IntegerType>(ret_type)) {
-                    return ValuePartRef(this, 0, ret_type.getIntOrFloatBitWidth() / 8, Config::GP_BANK);
+                    const unsigned width = ret_type.getIntOrFloatBitWidth();
+                    const unsigned register_width = width == 128 ? 8 : width / 8;
+                    return ValuePartRef(this, 0, register_width, Config::GP_BANK);
                 } else if (mlir::isa<mlir::FloatType>(ret_type)) {
                     return ValuePartRef(this, 0, ret_type.getIntOrFloatBitWidth() / 8, Config::FP_BANK);
                 } else {
@@ -943,19 +968,6 @@ namespace lingodb::execution::baseline {
             auto [_, res_vr] = this->result_ref_single(dst);
             this->set_value(res_vr, res_scratch);
             return true;
-        }
-
-        static std::optional<size_t> get_size(mlir::Type type) noexcept {
-            return mlir::TypeSwitch<mlir::Type, size_t>(type)
-                    .Case<mlir::IntegerType>([](auto intType) { return intType.getIntOrFloatBitWidth() / 8; })
-                    .template Case<dialect::util::VarLen32Type, dialect::util::BufferType>([](auto) { return 16; })
-                    .template Case<mlir::TupleType>([](auto t) { return TupleHelper{t}.sizeAndPadding().first; })
-                    .template Case<mlir::IndexType, dialect::util::RefType>([](auto) { return 8; })
-                    .Default([](mlir::Type t) {
-                        t.dump();
-                        assert(0 && "Unsupported type for size calculation");
-                        return 0;
-                    });
         }
 
         bool compile_util_store_op(dialect::util::StoreOp op) {
@@ -1524,6 +1536,49 @@ namespace lingodb::execution::baseline {
             return true;
         }
 
+        bool compile_util_ptr_tag_matches_op(dialect::util::PtrTagMatches op) {
+            auto hash_vr = this->val_ref(op.getHash());
+            auto ref_vr = this->val_ref(op.getRef());
+
+            assert(externFuncMap.contains("bloomMasks"));
+            ValuePartRef bloom_masks_array_vpr{
+                this, std::bit_cast<uint64_t>(externFuncMap["bloomMasks"]), 8, Config::GP_BANK
+            };
+
+            ScratchReg res_scratch{derived()};
+            derived()->encode_util_ptr_tag_matches(ref_vr.part(0), hash_vr.part(0), std::move(bloom_masks_array_vpr),
+                                                   res_scratch);
+            auto res_ref = this->result_ref(op.getMatches());
+            this->set_value(res_ref.part(0), res_scratch);
+            return true;
+        }
+
+        bool compile_util_untag_ptr_op(dialect::util::UnTagPtr op) {
+            auto ref_vr = this->val_ref(op.getRef());
+
+            ScratchReg res_scratch{derived()};
+            derived()->encode_util_untag_ptr(ref_vr.part(0), res_scratch);
+            auto res_ref = this->result_ref(op.getRes());
+            this->set_value(res_ref.part(0), res_scratch);
+            return true;
+        }
+
+        bool compile_util_is_ref_valid_op(dialect::util::IsRefValidOp op) {
+            auto ref_vr = this->val_ref(op.getRef());
+            ScratchReg res_scratch{derived()};
+            derived()->encode_util_is_ref_valid(ref_vr.part(0), res_scratch);
+            auto res_vr = this->result_ref(op.getValid());
+            this->set_value(res_vr.part(0), res_scratch);
+            return true;
+        }
+
+        bool compile_util_invalid_ref_op(dialect::util::InvalidRefOp op) {
+            auto res_ref = this->result_ref(op.getResult());
+            ValuePartRef null_ref{this, 0, 8, Config::GP_BANK};
+            res_ref.part(0).set_value(std::move(null_ref));
+            return true;
+        }
+
         bool compile_inst(const IRInstRef inst, InstRange) noexcept {
             return mlir::TypeSwitch<IRInstRef, bool>(inst)
                     .Case<mlir::arith::AddIOp, mlir::arith::SubIOp, mlir::arith::MulIOp, mlir::arith::DivSIOp,
@@ -1578,6 +1633,18 @@ namespace lingodb::execution::baseline {
                     })
                     .template Case<dialect::util::Hash64>([&](auto op) {
                         return compile_util_hash_64_op(op);
+                    })
+                    .template Case<dialect::util::PtrTagMatches>([&](auto op) {
+                        return compile_util_ptr_tag_matches_op(op);
+                    })
+                    .template Case<dialect::util::UnTagPtr>([&](auto op) {
+                        return compile_util_untag_ptr_op(op);
+                    })
+                    .template Case<dialect::util::IsRefValidOp>([&](auto op) {
+                        return compile_util_is_ref_valid_op(op);
+                    })
+                    .template Case<dialect::util::InvalidRefOp>([&](auto op) {
+                        return compile_util_invalid_ref_op(op);
                     })
                     .template Case<dialect::util::VarLenCmp>([&](auto op) { return compile_util_varlen_cmp_op(op); })
                     .Default([&](IRInstRef op) {
@@ -1670,55 +1737,90 @@ namespace lingodb::execution::baseline {
             auto rhs = this->val_ref(op.getRhs());
             ScratchReg res_scratch{this};
 
-            ValuePartRef lhs_pr = lhs.part(0);
-            ValuePartRef rhs_pr = rhs.part(0);
+            if (int_width == 128) {
+                if ((jump == Jump::ja) || (jump == Jump::jbe) || (jump == Jump::jle) ||
+                    (jump == Jump::jg)) {
+                    std::swap(lhs, rhs);
+                    jump = swap_jump(jump);
+                }
 
-            if (lhs_pr.is_const() && !rhs_pr.is_const()) {
-                std::swap(lhs_pr, rhs_pr);
-                jump = swap_jump(jump);
-            }
+                auto rhs_lo = rhs.part(0);
+                auto rhs_hi = rhs.part(1);
+                auto rhs_reg_lo = rhs_lo.load_to_reg();
+                auto rhs_reg_hi = rhs_hi.load_to_reg();
 
-            if (int_width != 32 && int_width != 64) {
-                unsigned ext_bits = tpde::util::align_up(int_width, 32);
-                lhs_pr = std::move(lhs_pr).into_extended(is_signed, int_width, ext_bits);
-                rhs_pr = std::move(rhs_pr).into_extended(is_signed, int_width, ext_bits);
-            }
+                // Compare the ints using carried subtraction
+                if ((jump == Jump::je) || (jump == Jump::jne)) {
+                    // for eq,neq do something a bit quicker
+                    ScratchReg scratch{this};
+                    lhs.part(0).reload_into_specific_fixed(this, res_scratch.alloc_gp());
+                    lhs.part(1).reload_into_specific_fixed(this, scratch.alloc_gp());
 
-            AsmReg lhs_reg = lhs_pr.has_reg() ? lhs_pr.cur_reg() : lhs_pr.load_to_reg();
-            if (rhs_pr.is_const()) {
-                uint64_t rhs_const = rhs_pr.const_data()[0];
-                switch (int_width) {
-                    case 8:
-                    case 16:
-                    case 32: ASM(CMP32ri, lhs_reg, static_cast<uint32_t>(rhs_const));
-                        break;
-                    case 64:
-                        // test if the constant fits into a signed 32-bit integer
-                        if (static_cast<int32_t>(rhs_const) == static_cast<int64_t>(rhs_const)) {
-                            ASM(CMP64ri, lhs_reg, static_cast<int32_t>(rhs_const));
-                        } else {
-                            // ScratchReg scratch3{this};
-                            // auto tmp = scratch3.alloc_gp();
-                            // ASM(MOV64ri, tmp, rhs_const);
-                            // ASM(CMP64rr, lhs_reg, tmp);
-                            AsmReg rhs_reg = rhs_pr.has_reg() ? rhs_pr.cur_reg() : rhs_pr.load_to_reg();
-                            ASM(CMP64rr, lhs_reg, rhs_reg);
-                        }
-                        break;
-                    default: assert(0);
-                        return false;
+                    ASM(XOR64rr, res_scratch.cur_reg(), rhs_reg_lo);
+                    ASM(XOR64rr, scratch.cur_reg(), rhs_reg_hi);
+                    ASM(OR64rr, res_scratch.cur_reg(), scratch.cur_reg());
+                } else {
+                    auto lhs_lo = lhs.part(0);
+                    auto lhs_reg_lo = lhs_lo.load_to_reg();
+                    auto lhs_high_tmp =
+                            lhs.part(1).reload_into_specific_fixed(this, res_scratch.alloc_gp());
+
+                    ASM(CMP64rr, lhs_reg_lo, rhs_reg_lo);
+                    ASM(SBB64rr, lhs_high_tmp, rhs_reg_hi);
                 }
             } else {
-                auto rhs_reg = rhs_pr.load_to_reg();
-                switch (int_width) {
-                    case 8:
-                    case 16:
-                    case 32: ASM(CMP32rr, lhs_reg, rhs_reg);
-                        break;
-                    case 64: ASM(CMP64rr, lhs_reg, rhs_reg);
-                        break;
-                    default: assert(0);
-                        return false;
+                ValuePartRef lhs_pr = lhs.part(0);
+                ValuePartRef rhs_pr = rhs.part(0);
+
+                if (lhs_pr.is_const() && !rhs_pr.is_const()) {
+                    std::swap(lhs_pr, rhs_pr);
+                    jump = swap_jump(jump);
+                }
+
+                if (int_width != 32 && int_width != 64) {
+                    unsigned ext_bits = tpde::util::align_up(int_width, 32);
+                    lhs_pr = std::move(lhs_pr).into_extended(is_signed, int_width, ext_bits);
+                    rhs_pr = std::move(rhs_pr).into_extended(is_signed, int_width, ext_bits);
+                }
+
+                AsmReg lhs_reg = lhs_pr.has_reg() ? lhs_pr.cur_reg() : lhs_pr.load_to_reg();
+                if (rhs_pr.is_const()) {
+                    uint64_t rhs_const = rhs_pr.const_data()[0];
+                    switch (int_width) {
+                        case 1:
+                        case 8:
+                        case 16:
+                        case 32: ASM(CMP32ri, lhs_reg, static_cast<uint32_t>(rhs_const));
+                            break;
+                        case 64:
+                            // test if the constant fits into a signed 32-bit integer
+                            if (static_cast<int32_t>(rhs_const) == static_cast<int64_t>(rhs_const)) {
+                                ASM(CMP64ri, lhs_reg, static_cast<int32_t>(rhs_const));
+                            } else {
+                                // ScratchReg scratch3{this};
+                                // auto tmp = scratch3.alloc_gp();
+                                // ASM(MOV64ri, tmp, rhs_const);
+                                // ASM(CMP64rr, lhs_reg, tmp);
+                                AsmReg rhs_reg = rhs_pr.has_reg() ? rhs_pr.cur_reg() : rhs_pr.load_to_reg();
+                                ASM(CMP64rr, lhs_reg, rhs_reg);
+                            }
+                            break;
+                        default: assert(0);
+                            return false;
+                    }
+                } else {
+                    auto rhs_reg = rhs_pr.load_to_reg();
+                    switch (int_width) {
+                        case 1:
+                        case 8:
+                        case 16:
+                        case 32: ASM(CMP32rr, lhs_reg, rhs_reg);
+                            break;
+                        case 64: ASM(CMP64rr, lhs_reg, rhs_reg);
+                            break;
+                        default: assert(0);
+                            return false;
+                    }
                 }
             }
             // TODO: why does this not work?
