@@ -376,19 +376,12 @@ LogicalResult printOperation(CppEmitter& emitter, util::AllocOp op) {
       return printStandardOperation(emitter, op, [&](auto& os) { os << "(" << baseType << "*) malloc(sizeof(" << baseType << "))"; });
    }
 }
-static std::string escapeQuotes(std::string s) {
-   std::stringstream sstream;
-   sstream << std::quoted(s);
-   auto quoteEscaped = sstream.str().substr(1, sstream.str().length() - 2);
-   auto nlEscaped = std::regex_replace(quoteEscaped, std::regex("\n"), "\\n");
-   return nlEscaped;
-}
 LogicalResult printOperation(CppEmitter& emitter, util::DeAllocOp op) {
    emitter.ostream() << "free(" << emitter.getOrCreateName(op.getRef()) << ")";
    return mlir::success();
 }
 LogicalResult printOperation(CppEmitter& emitter, util::CreateConstVarLen op) {
-   return printStandardOperation(emitter, op, [&](auto& os) { os << "runtime::VarLen32{reinterpret_cast<const uint8_t*>(\"" << escapeQuotes(op.getStr().str()) << "\"), " << op.getStr().size() << "}"; });
+   return printStandardOperation(emitter, op, [&](auto& os) { os << "runtime::VarLen32{reinterpret_cast<const uint8_t*>(R\"RAW(" << (op.getStr().str()) << ")RAW\"), " << op.getStr().size() << "}"; });
 }
 LogicalResult printOperation(CppEmitter& emitter, util::PackOp op) {
    return printStandardOperation(emitter, op, [&](auto& os) {
