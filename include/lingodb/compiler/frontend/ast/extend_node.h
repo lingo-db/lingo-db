@@ -9,8 +9,6 @@ class ExtendNode : public AstNode {
    ExtendNode();
    std::vector<std::shared_ptr<ParsedExpression>> extensions;
 
-
-
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 }

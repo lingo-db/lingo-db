@@ -120,7 +120,6 @@ std::string SubqueryRef::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
 
 /// ExpressionListRef
 ExpressionListRef::ExpressionListRef(std::vector<std::vector<std::shared_ptr<ParsedExpression>>> values) : TableRef(TYPE), values(std::move(values)) {
-
 }
 std::string ExpressionListRef::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    std::string dot;

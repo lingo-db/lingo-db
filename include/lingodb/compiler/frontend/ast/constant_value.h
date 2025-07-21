@@ -27,8 +27,8 @@ class Value {
       return std::hash<std::string>{}(toString());
    }
    bool operator==(Value& other) {
-       return toString() == other.toString();
-    }
+      return toString() == other.toString();
+   }
 };
 
 class UnsignedIntValue : public Value {
@@ -38,7 +38,6 @@ class UnsignedIntValue : public Value {
    std::string toString() override {
       return "uint:" + std::to_string(iVal);
    }
-
 };
 
 class IntValue : public Value {
@@ -64,7 +63,7 @@ class StringValue : public Value {
    public:
    explicit StringValue(std::string sVal) : Value(ConstantType::STRING), sVal(sVal) {}
    std::string sVal;
-   std::string toString() override{
+   std::string toString() override {
       return "string: " + sVal;
    }
 };
@@ -81,7 +80,7 @@ class BoolValue : public Value {
 class NullValue : public Value {
    public:
    explicit NullValue() : Value(ConstantType::NULL_P) {}
-   std::string toString() override{
+   std::string toString() override {
       return "NULL";
    }
 };
@@ -97,7 +96,7 @@ class IntervalValue : public Value {
    public:
    explicit IntervalValue(Interval iVal) : Value(ConstantType::INTERVAL), iVal(iVal) {}
    Interval iVal;
-   std::string toString() override{
+   std::string toString() override {
       return "interval[...]";
    }
 };

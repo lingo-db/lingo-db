@@ -11,7 +11,6 @@ class BoundExpression;
 }
 namespace lingodb::analyzer {
 
-
 class SQLScope {
    public:
    std::map<std::string, std::pair<size_t, ast::ColumnInfo>> tables;
