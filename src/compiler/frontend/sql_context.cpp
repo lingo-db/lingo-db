@@ -5,7 +5,7 @@
 #include <iostream>
 namespace lingodb::analyzer {
 using ResolverScope = llvm::ScopedHashTable<std::string, std::shared_ptr<ast::NamedResult>, StringInfo>::ScopeTy;
-ASTTransformContext::ASTTransformContext() : currentScope(std::make_shared<ASTTransformScope>()){
+ASTTransformContext::ASTTransformContext() : currentScope(std::make_shared<ASTTransformScope>()) {
    scopeStack.push(currentScope);
 }
 
@@ -15,7 +15,6 @@ DefineScope::DefineScope(SQLContext& sqlContext) : sqlContext(sqlContext) {
 DefineScope::~DefineScope() {
    sqlContext.definedAttributes.pop();
 }
-
 
 void SQLContext::pushNewScope() {
    auto newScope = std::make_shared<SQLScope>();
@@ -62,10 +61,8 @@ std::vector<std::shared_ptr<ast::NamedResult>> SQLContext::mapAttribute(Resolver
 
       mapAttribute(scope, c.getColumnName(), columnInfo);
       result.push_back(columnInfo);
-
    }
    return result;
-
 }
 
 void SQLContext::mapAttribute(ResolverScope& scope, std::string name, std::vector<std::shared_ptr<ast::NamedResult>> targetInfos) {
@@ -73,19 +70,16 @@ void SQLContext::mapAttribute(ResolverScope& scope, std::string name, std::vecto
       //Better
       std::string cName = c->displayName.empty() ? c->name : c->displayName;
 
-      mapAttribute(scope, name + "." +  cName, c);
+      mapAttribute(scope, name + "." + cName, c);
 
       mapAttribute(scope, cName, c);
-
-
    }
-
 }
 std::shared_ptr<ast::NamedResult> SQLContext::getNamedResultInfo(location loc, std::string name) {
    if (!resolver.count(name)) {
       std::stringstream ss;
-      ss << "could not resolve '" << name << "' at "  << loc;
-      throw std::runtime_error( ss.str());
+      ss << "could not resolve '" << name << "' at " << loc;
+      throw std::runtime_error(ss.str());
    }
    const auto res = resolver.lookup(name);
    return res;
@@ -123,8 +117,6 @@ std::string SQLContext::getUniqueScope(std::string base) {
    }
    return columns;
 }*/
-
-
 
 std::string SQLContext::toString() const {
    return "";
