@@ -33,10 +33,6 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                   selectNode->from_clause = nullptr;
                   transformed = transformedFrom;
                }
-
-               auto extendPipeOp = drv.nf.node<ast::PipeOperator>(selectNode->select_list->loc, ast::PipeOperatorType::EXTEND, context->currentScope->extendNode);
-               extendPipeOp->input = transformed;
-               transformed = extendPipeOp;
                //Transform where_clause
                if (selectNode->where_clause) {
                   auto pipe = drv.nf.node<ast::PipeOperator>(selectNode->where_clause->loc, ast::PipeOperatorType::WHERE, selectNode->where_clause);
@@ -45,6 +41,10 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                   selectNode->where_clause = nullptr;
                   transformed = transFormededWhereClause;
                }
+
+               auto extendPipeOp = drv.nf.node<ast::PipeOperator>(selectNode->select_list->loc, ast::PipeOperatorType::EXTEND, context->currentScope->extendNode);
+               extendPipeOp->input = transformed;
+               transformed = extendPipeOp;
 
                //Transform Group by
                if (selectNode->groups) {
@@ -140,7 +140,6 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                      return canonicalizeParsedExpression(target, context, true);
                   });
                }
-
 
                for (auto& target : toRemove) {
                   std::transform(selectNode->targets.begin(), selectNode->targets.end(), selectNode->targets.begin(), [&](std::shared_ptr<ast::ParsedExpression>& t) -> std::shared_ptr<ast::ParsedExpression> {
