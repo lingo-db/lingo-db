@@ -344,12 +344,14 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
          auto functionExpr = std::static_pointer_cast<ast::FunctionExpression>(rootNode);
          static int i = 0;
          if (functionExpr->type == ast::ExpressionType::AGGREGATE) {
+            std::string alias = functionExpr->alias.empty() ? functionExpr->functionName : functionExpr->alias;
             if (functionExpr->alias.empty()) {
                //TODO make unique alias
                functionExpr->alias = functionExpr->functionName + "_" + std::to_string(i);
                i++;
             }
             auto columnRef = drv.nf.node<ast::ColumnRefExpression>(functionExpr->loc, functionExpr->alias);
+            columnRef->alias = alias;
             context->currentScope->aggregationNode->aggregations.push_back(functionExpr);
 
             return columnRef;
