@@ -221,26 +221,12 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
          switch (resultModifier->modifierType) {
             case ast::ResultModifierType::ORDER_BY: {
                auto orderBy = std::static_pointer_cast<ast::OrderByModifier>(resultModifier);
-               int i = 0;
                for (auto expr : orderBy->orderByElements) {
-                  switch (expr->expression->exprClass) {
-                     case ast::ExpressionClass::FUNCTION: {
-                        auto function = std::static_pointer_cast<ast::FunctionExpression>(expr->expression);
-                        if (expr->expression->type == ast::ExpressionType::AGGREGATE) {
-                           context->currentScope->aggregationNode->aggregations.push_back(function);
-                        } else {
-                           context->currentScope->extendNode->extensions.push_back(function);
-                        }
-                        if (function->alias.empty()) {
-                           //TODO make unique alias
-                           function->alias = function->functionName + "_" + std::to_string(i);
-                        }
-                        expr->expression = drv.nf.node<ast::ColumnRefExpression>(function->loc, function->alias);
-                        i++;
-                     }
-                     default:;
-                  }
+                  auto canonicalized = canonicalizeParsedExpression(expr->expression, context, true);
+                  context->currentScope->groupByExpressions.emplace(expr->expression);
+                  expr->expression = canonicalized;
                }
+
                break;
             }
             default:;
