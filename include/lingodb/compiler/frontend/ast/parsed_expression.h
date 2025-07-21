@@ -1,8 +1,8 @@
 #pragma once
+#include "ast_node.h"
 #include "constant_value.h"
 #include "lingodb/catalog/Column.h"
 #include "lingodb/catalog/Types.h"
-#include "ast_node.h"
 #include "table_producer.h"
 
 #include <string>
@@ -24,7 +24,7 @@ enum LogicalType : uint8_t {
    SMALLINT = 8,
    INT = 9,
    BIGINT = 10,
-   DECIMAL= 11,
+   DECIMAL = 11,
    TIMESTAMP = 12,
    FLOAT4 = 13,
    FLOAT8 = 14,
@@ -34,9 +34,9 @@ class LogicalTypeWithMods {
    public:
    LogicalTypeWithMods() : LogicalTypeWithMods(LogicalType::INVALID) {}
    LogicalTypeWithMods(LogicalType logicalType)
-                : logicalType(logicalType), typeModifiers({}) {}
-        LogicalTypeWithMods(LogicalType logicalType, std::vector<std::shared_ptr<Value>> typeModifiers)
-                : logicalType(logicalType), typeModifiers(std::move(typeModifiers)) {}
+      : logicalType(logicalType), typeModifiers({}) {}
+   LogicalTypeWithMods(LogicalType logicalType, std::vector<std::shared_ptr<Value>> typeModifiers)
+      : logicalType(logicalType), typeModifiers(std::move(typeModifiers)) {}
    LogicalType logicalType;
    std::vector<std::shared_ptr<Value>> typeModifiers;
 };
@@ -276,14 +276,12 @@ struct ParsedExprPtrHash {
 };
 struct ParsedExprPtrEqual {
    bool operator()(const std::shared_ptr<ParsedExpression>& lhs,
-                  const std::shared_ptr<ParsedExpression>& rhs) const {
-      if (lhs == rhs) return true;  // Same pointer or both null
-      if (!lhs || !rhs) return false;  // One is null, other isn't
-      return *lhs == *rhs;  // Compare actual expressions
+                   const std::shared_ptr<ParsedExpression>& rhs) const {
+      if (lhs == rhs) return true; // Same pointer or both null
+      if (!lhs || !rhs) return false; // One is null, other isn't
+      return *lhs == *rhs; // Compare actual expressions
    }
 };
-
-
 
 class ColumnRefExpression : public ParsedExpression {
    public:
@@ -508,13 +506,13 @@ class BetweenExpression : public ParsedExpression {
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 
-   enum class SubqueryType : uint8_t {
+enum class SubqueryType : uint8_t {
    INVALID = 0,
-   SCALAR = 1,     // Regular scalar subquery
-   EXISTS = 2,     // EXISTS (SELECT...)
+   SCALAR = 1, // Regular scalar subquery
+   EXISTS = 2, // EXISTS (SELECT...)
    NOT_EXISTS = 3, // NOT EXISTS(SELECT...)
-   ANY = 4,        // x = ANY(SELECT...) OR x IN (SELECT...)
-   NOT_ANY = 5,   // x != ANY(SELECT...) OR x NOT IN (SELECT...)
+   ANY = 4, // x = ANY(SELECT...) OR x IN (SELECT...)
+   NOT_ANY = 5, // x != ANY(SELECT...) OR x NOT IN (SELECT...)
 };
 
 class SubqueryExpression : public ParsedExpression {
@@ -548,9 +546,6 @@ class CaseExpression : public ParsedExpression {
    std::shared_ptr<ParsedExpression> elseExpr;
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
-
-
-
 };
 
 } // namespace lingodb::ast

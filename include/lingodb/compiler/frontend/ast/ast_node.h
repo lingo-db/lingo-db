@@ -11,7 +11,7 @@ enum class NodeType : uint8_t {
    GROUP_BY = 5,
    AGGREGATION = 6,
    RESULT_MODIFIER = 7,
-   EXTEND_NODE=8,
+   EXTEND_NODE = 8,
    CREATE_NODE = 9,
    INSERT_NODE = 10,
 
@@ -27,12 +27,12 @@ enum class NodeType : uint8_t {
 //used for getting unique ids when printing the AST for debugging purposes as Dot graph
 class NodeIdGenerator {
    public:
-   void reset(){
+   void reset() {
       currentId = 0;
       idMap.clear();
    }
 
-   uint64_t getId(uintptr_t id){
+   uint64_t getId(uintptr_t id) {
       if (!idMap.contains(id)) {
          idMap[id] = currentId;
          currentId++;
@@ -40,7 +40,7 @@ class NodeIdGenerator {
       return idMap[id];
    }
 
-   void setId(uint64_t id, uint64_t setID){
+   void setId(uint64_t id, uint64_t setID) {
       idMap[id] = setID;
    }
 

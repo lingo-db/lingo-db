@@ -4,15 +4,12 @@
 namespace lingodb::ast {
 
 class BoundExtendNode : public AstNode {
-
    public:
    static constexpr auto TYPE = NodeType::BOUND_EXTEND_NODE;
-   BoundExtendNode(std::string mapName, std::vector< std::shared_ptr<BoundExpression>> extensions);
+   BoundExtendNode(std::string mapName, std::vector<std::shared_ptr<BoundExpression>> extensions);
 
    std::string mapName;
-   std::vector< std::shared_ptr<BoundExpression>> extensions;
-
-
+   std::vector<std::shared_ptr<BoundExpression>> extensions;
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };

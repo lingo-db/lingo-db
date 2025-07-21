@@ -21,19 +21,18 @@ struct NamedResult {
    std::string displayName{};
    NamedResult(NamedResultType type, std::string scope, catalog::NullableType resultType, std::string name) : type(type), scope(scope), resultType(resultType), name(name) {}
 
-    virtual  compiler::dialect::tuples::ColumnRefAttr createRef(mlir::OpBuilder& builder, compiler::dialect::tuples::ColumnManager& attrManager) {
+   virtual compiler::dialect::tuples::ColumnRefAttr createRef(mlir::OpBuilder& builder, compiler::dialect::tuples::ColumnManager& attrManager) {
       auto ref = attrManager.createRef(this->scope, name);
       ref.getColumn().type = resultType.toMlirType(builder.getContext());
       return ref;
    };
 
-   virtual  compiler::dialect::tuples::ColumnDefAttr createDef(mlir::OpBuilder& builder,compiler::dialect::tuples::ColumnManager& attrManager) {
+   virtual compiler::dialect::tuples::ColumnDefAttr createDef(mlir::OpBuilder& builder, compiler::dialect::tuples::ColumnManager& attrManager) {
       auto def = attrManager.createDef(this->scope, name);
       def.getColumn().type = resultType.toMlirType(builder.getContext());
       return def;
    };
-   virtual  compiler::dialect::tuples::ColumnDefAttr createDef(mlir::OpBuilder& builder, compiler::dialect::tuples::ColumnManager& attrManager, mlir::Attribute fromExisting) {
-
+   virtual compiler::dialect::tuples::ColumnDefAttr createDef(mlir::OpBuilder& builder, compiler::dialect::tuples::ColumnManager& attrManager, mlir::Attribute fromExisting) {
       auto def = attrManager.createDef(this->scope, name, fromExisting);
       def.getColumn().type = resultType.toMlirType(builder.getContext());
       return def;
@@ -41,17 +40,13 @@ struct NamedResult {
 };
 struct FunctionInfo : public NamedResult {
    FunctionInfo(std::string scope, std::string name, catalog::NullableType resultType) : NamedResult(NamedResultType::Function, scope, resultType, name) {}
-
-
 };
 struct ColumnInfo : public NamedResult {
    catalog::Column column;
 
-
-   ColumnInfo(std::string scope, catalog::Column column) : NamedResult(NamedResultType::Column, scope,catalog::NullableType(column.getLogicalType(), column.getIsNullable()), column.getColumnName()), column(column) {
+   ColumnInfo(std::string scope, catalog::Column column) : NamedResult(NamedResultType::Column, scope, catalog::NullableType(column.getLogicalType(), column.getIsNullable()), column.getColumnName()), column(column) {
       displayName = column.getColumnName();
    }
-
 };
 
 class BoundColumnEntry {

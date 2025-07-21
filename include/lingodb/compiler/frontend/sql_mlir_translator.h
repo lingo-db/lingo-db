@@ -34,10 +34,7 @@ class SQLMlirTranslator {
    mlir::ModuleOp moduleOp;
    compiler::dialect::tuples::ColumnManager& attrManager;
 
-
    std::optional<mlir::Value> translateStart(mlir::OpBuilder& builder, std::shared_ptr<ast::AstNode> astNode, std::shared_ptr<analyzer::SQLContext> context);
-
-
 
    private:
    std::shared_ptr<TranslationContext> translationContext;
@@ -48,7 +45,6 @@ class SQLMlirTranslator {
    void translateCreateNode(mlir::OpBuilder& builder, std::shared_ptr<ast::CreateNode> createNode, std::shared_ptr<analyzer::SQLContext> context);
    void translateInsertNode(mlir::OpBuilder& builder, std::shared_ptr<ast::BoundInsertNode> insertNode, std::shared_ptr<analyzer::SQLContext> context);
    catalog::CreateTableDef translateTableElements(mlir::OpBuilder& builder, std::vector<std::shared_ptr<ast::TableElement>> tableElements, std::shared_ptr<analyzer::SQLContext> context);
-
 
    mlir::Value translatePipeOperator(mlir::OpBuilder& builder, std::shared_ptr<ast::PipeOperator> pipeOperator, std::shared_ptr<analyzer::SQLContext> context, mlir::Value tree);
 

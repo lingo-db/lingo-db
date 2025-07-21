@@ -1,7 +1,7 @@
 #pragma once
 
-#include "lingodb/compiler/frontend/sql-parser/gen/parser.hpp"
 #include "lingodb/compiler/frontend/node_factory.h"
+#include "lingodb/compiler/frontend/sql-parser/gen/parser.hpp"
 #define YY_DECL \
    lingodb::parser::symbol_type yylex(driver& drv)
 // ... and declare it for the parser's sake.
