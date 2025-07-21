@@ -1522,7 +1522,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
                   switch (castExpr->optInterval.value()) {
                      case ast::LogicalType::YEARS: {
                         resultType = catalog::Type::intervalMonths();
-                        stringRepresentation += "years";
+                        stringRepresentation = std::to_string(std::stol(stringRepresentation) * 12);
                         break;
                      }
                      default: stringRepresentation += "days";
