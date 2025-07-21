@@ -19,10 +19,53 @@ using ResolverScope = llvm::ScopedHashTable<std::string, std::shared_ptr<ast::Na
 class Analyzer;
 class SQLCanonicalizer {
    public:
+   /**
+    * Transforms a query tree into a canonical form based on the pipeline execution model.
+    * Converts a nested SELECT statement into a sequence of pipe operations.
+    *
+    * Key transformations:
+    * - SELECT node is converted into a pipeline of operations:
+    *   FROM -> WHERE -> EXTEND -> AGGREGATE -> SELECT -> HAVING -> MODIFIERS
+    *   Functions inside SELECT are moved to the corresponding EXTEND/AGGREGATE PIPE
+    * - Handles SET operations (UNION, etc.) by canonicalizing both branches
+    * - Processes CTEs by canonicalizing both the CTE query and its child
+    * - Maintains proper scoping for subqueries and nested operations
+    *
+    * @param rootNode Root of the query tree to canonicalize
+    * @param context Transformation context for managing scopes and intermediate nodes
+    * @return Transformed query tree in canonical form
+    */
    std::shared_ptr<ast::TableProducer> canonicalize(std::shared_ptr<ast::TableProducer> rootNode, std::shared_ptr<ASTTransformContext> context);
+   /**
+    * Canonicalizes a parsed expression by transforming it into a canonical form.
+    * This method recursively processes different types of expressions and applies specific
+    * canonicalization rules based on the expression class.
+    *
+    * Key transformations include:
+    * - Canonicalizes all child expressions recursively
+    * - Functions: Special handling for aggregate and non-aggregate functions:
+    *   - For aggregates: Creates a unique alias and adds to aggregation node, returns ColumnReference
+    *   - For non-aggregate functions:
+    *     - If extend=true: Adds to extension node if not already present, returns ColumnReference
+    *     - If extend=false: Returns function unchanged (needed for SELECT list and GROUP BY)
+    *
+    * @param rootNode The expression tree to canonicalize
+    * @param context The transformation context containing scoping and other metadata
+    * @param extend Controls whether non-aggregate functions should be added to extension node
+    * @return The canonicalized expression
+    */
    std::shared_ptr<ast::ParsedExpression> canonicalizeParsedExpression(std::shared_ptr<ast::ParsedExpression> rootNode, std::shared_ptr<ASTTransformContext> context, bool extend);
 
    private:
+   /**
+    * Helper template method that combines canonicalization with static type casting.
+    * Canonicalizes the node first, then casts it to the desired type.
+    *
+    * @tparam T Target type to cast the canonicalized node to
+    * @param rootNode Node to be canonicalized
+    * @param context Transformation context
+    * @return Canonicalized node statically cast to type T
+    */
    template <class T>
    std::shared_ptr<T> canonicalizeCast(std::shared_ptr<ast::TableProducer> rootNode, std::shared_ptr<ASTTransformContext> context);
 
