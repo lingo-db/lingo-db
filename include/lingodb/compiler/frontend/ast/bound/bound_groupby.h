@@ -1,6 +1,6 @@
 #pragma once
-#include "lingodb/compiler/frontend/ast/bound/bound_expression.h"
 #include "lingodb/compiler/frontend/ast/ast_node.h"
+#include "lingodb/compiler/frontend/ast/bound/bound_expression.h"
 #include <memory>
 #include <vector>
 namespace lingodb::ast {

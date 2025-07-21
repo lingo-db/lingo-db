@@ -9,8 +9,8 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 //#include "lingodb/compiler/frontend/SQL/Parser.h"
-#include "lingodb/compiler/frontend/sql_analyzer.h"
 #include "lingodb/compiler/frontend/driver.h"
+#include "lingodb/compiler/frontend/sql_analyzer.h"
 #include "lingodb/compiler/frontend/sql_mlir_translator.h"
 #include "lingodb/compiler/mlir-support/eval.h"
 #include "lingodb/execution/Execution.h"
@@ -34,7 +34,7 @@ int main(int argc, char* argv[]) {
       }
       std::vector<std::shared_ptr<lingodb::analyzer::SQLContext>> contexts;
       for (size_t i = 0; i < results.size(); ++i) {
-         std::cout << "------------------" << i <<"----------------------" << std::endl;
+         std::cout << "------------------" << i << "----------------------" << std::endl;
 
          std::cout << "digraph ast {" << std::endl;
          lingodb::ast::NodeIdGenerator idGen{};
@@ -55,7 +55,7 @@ int main(int argc, char* argv[]) {
          std::cout << "}" << std::endl;
       }
       for (size_t i = 0; i < results.size(); ++i) {
-         std::cout << "------------------" << i <<"----------------------" << std::endl;
+         std::cout << "------------------" << i << "----------------------" << std::endl;
          /*
           * Translator
           */
