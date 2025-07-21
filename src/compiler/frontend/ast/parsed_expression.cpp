@@ -7,9 +7,7 @@ namespace lingodb::ast {
 size_t ParsedExpression::hash() {
    size_t result = std::hash<uint8_t>{}(static_cast<uint8_t>(type));
    result = result * 31 + std::hash<uint8_t>{}(static_cast<uint8_t>(exprClass));
-   result = result * 31 + std::hash<std::string>{}(alias);
    return result;
-
 }
 bool ParsedExpression::operator==(ParsedExpression& other) {
    return type == other.type && exprClass == other.exprClass;
@@ -24,9 +22,6 @@ ColumnRefExpression::ColumnRefExpression(std::string columnName) : ColumnRefExpr
 }
 
 ColumnRefExpression::ColumnRefExpression(std::vector<std::string> columnNames) : ParsedExpression(ExpressionType::COLUMN_REF, TYPE), column_names(columnNames) {
-   for (auto& columnName : columnNames) {
-      assert(!columnName.empty());
-   }
 }
 
 std::string ColumnRefExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
@@ -68,15 +63,12 @@ size_t ColumnRefExpression::hash() {
    }
 
    return result;
-
-
 }
 bool ColumnRefExpression::operator==(ParsedExpression& other) {
    if (!ParsedExpression::operator==(other)) return false;
 
    const auto& otherRef = static_cast<ColumnRefExpression&>(other);
    return column_names == otherRef.column_names;
-
 }
 
 /// ComparisonExpression
@@ -98,7 +90,7 @@ std::string ComparisonExpression::typeToAscii(ExpressionType type) const {
       case ExpressionType::COMPARE_NOTEQUAL: return "<>";
       case ExpressionType::COMPARE_LIKE: return "LIKE";
       case ExpressionType::COMPARE_NOT_LIKE: return "NOT LIKE";
-      default: return  "Unknown";
+      default: return "Unknown";
    }
 }
 std::string ComparisonExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
@@ -230,7 +222,6 @@ bool ConstantExpression::operator==(ParsedExpression& other) {
 
    // Compare the actual values
    return *value == *otherConst.value;
-
 }
 /// FunctionExpression
 FunctionExpression::FunctionExpression(std::string catalog, std::string schema, std::string functionName, bool isOperator, bool distinct, bool exportState) : ParsedExpression(ExpressionType::FUNCTION, TYPE), catalog(catalog), schema(schema), functionName(functionName), isOperator(isOperator), distinct(distinct), exportState(exportState) {
@@ -258,6 +249,9 @@ std::string FunctionExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGe
    if (type == ExpressionType::AGGREGATE) {
       dot.append("\nagg\n");
    }
+   dot.append("\\n alias: ");
+   dot.append(alias);
+   dot.append("\n");
    dot.append("\"];\n");
 
    // Add all function arguments
@@ -334,7 +328,6 @@ size_t FunctionExpression::hash() {
    }
 
    return result;
-
 }
 bool FunctionExpression::operator==(ParsedExpression& other) {
    if (!ParsedExpression::operator==(other)) return false;
@@ -347,7 +340,7 @@ bool FunctionExpression::operator==(ParsedExpression& other) {
        exportState != otherFunc.exportState ||
        arguments.size() != otherFunc.arguments.size()) {
       return false;
-       }
+   }
 
    // Compare function arguments
    for (size_t i = 0; i < arguments.size(); i++) {
@@ -373,7 +366,6 @@ bool FunctionExpression::operator==(ParsedExpression& other) {
 
    return star == otherFunc.star;
 }
-
 
 ///StarExpression
 StarExpression::StarExpression(std::string relationName)
@@ -454,7 +446,7 @@ std::string TargetsExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen
 
    return dot;
 }
-OperatorExpression::OperatorExpression(ExpressionType type, std::shared_ptr<ParsedExpression> left) : ParsedExpression(type, TYPE), children(std::vector{left}){
+OperatorExpression::OperatorExpression(ExpressionType type, std::shared_ptr<ParsedExpression> left) : ParsedExpression(type, TYPE), children(std::vector{left}) {
 }
 OperatorExpression::OperatorExpression(ExpressionType type, std::shared_ptr<ParsedExpression> left, std::shared_ptr<ParsedExpression> right) : ParsedExpression(type, TYPE), children(std::vector{left, right}) {
 }
@@ -626,7 +618,7 @@ std::string BetweenExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen
    return dot;
 }
 
-SubqueryExpression::SubqueryExpression(SubqueryType subQueryType, std::shared_ptr<TableProducer> subquery) : ParsedExpression(ExpressionType::SUBQUERY,TYPE), subQueryType(subQueryType),  subquery(subquery) {
+SubqueryExpression::SubqueryExpression(SubqueryType subQueryType, std::shared_ptr<TableProducer> subquery) : ParsedExpression(ExpressionType::SUBQUERY, TYPE), subQueryType(subQueryType), subquery(subquery) {
 }
 std::string SubqueryExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    std::string dot;
