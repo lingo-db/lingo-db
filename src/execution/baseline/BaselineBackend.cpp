@@ -1275,7 +1275,7 @@ namespace lingodb::execution::baseline {
         }
 
         bool compile_util_buffer_get_len_op(dialect::util::BufferGetLen op) {
-            auto elem_size = get_size(op.getBuffer().getType());
+            auto elem_size = get_size(op.getBuffer().getType().getT());
             if (!elem_size) {
                 assert(0 && "Unsupported type for buffer length operation");
                 error.emit() << "Unsupported type for buffer length operation.";
