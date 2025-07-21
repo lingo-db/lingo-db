@@ -152,3 +152,8 @@ void* util_untag_ptr(void* ref) {
 bool util_is_ref_valid(void* ref) {
     return ref != NULL;
 }
+
+uint64_t util_hash_combine(uint64_t h1, uint64_t h2) {
+    uint64_t reversed = __builtin_bswap64(h1);
+    return h2 ^ reversed;
+}

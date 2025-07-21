@@ -673,6 +673,8 @@ namespace lingodb::execution::baseline {
                     return ValuePartRef(this, 0, register_width, Config::GP_BANK);
                 } else if (mlir::isa<mlir::FloatType>(ret_type)) {
                     return ValuePartRef(this, 0, ret_type.getIntOrFloatBitWidth() / 8, Config::FP_BANK);
+                } else if (mlir::isa<dialect::util::VarLen32Type, dialect::util::BufferType>(ret_type)) {
+                    return ValuePartRef(this, 0, 8, Config::FP_BANK);
                 } else {
                     assert(0);
                     return ValuePartRef{this};
@@ -1292,6 +1294,13 @@ namespace lingodb::execution::baseline {
             return true;
         }
 
+        bool compile_util_varlen_get_len_op(dialect::util::VarLenGetLen op) {
+            auto varlen_vr = this->val_ref(op.getVarlen());
+            auto res_vr = this->result_ref(op.getResult());
+            res_vr.part(0).set_value(varlen_vr.part(0));
+            return true;
+        }
+
         bool compile_util_const_varlen_op(const dialect::util::CreateConstVarLen op) {
             const mlir::StringRef content = mlir::cast<mlir::StringAttr>(op->getAttrs().front().getValue()).
                     getValue();
@@ -1325,12 +1334,15 @@ namespace lingodb::execution::baseline {
             assert(
                 mlir::isa<mlir::IntegerType>(dst.getType()) &&
                 "Destination value must be an integer type for truncation");
-            assert(src.getType().getIntOrFloatBitWidth() == 128 && dst.getType().getIntOrFloatBitWidth() == 64 &&
-                "Source width must be 128 bits and destination width must be 64 or 32 bits for truncation");
-            auto src_vr = this->val_ref(src);
-            auto [_, dst_vpr] = this->result_ref_single(dst);
-            dst_vpr.set_value(src_vr.part(0));
-            return true;
+            unsigned dest_width = dst.getType().getIntOrFloatBitWidth();
+            if (dest_width <= 64) {
+                auto src_vr = this->val_ref(src);
+                auto [_, dst_vpr] = this->result_ref_single(dst);
+                dst_vpr.set_value(src_vr.part(0));
+                return true;
+            }
+            assert(false && "invalid truncation");
+            return false;
         }
 
         bool compile_func_constant_op(mlir::func::ConstantOp op) {
@@ -1579,7 +1591,21 @@ namespace lingodb::execution::baseline {
             return true;
         }
 
+        bool compile_util_hash_combine_op(dialect::util::HashCombine op) {
+            auto h1_vr = this->val_ref(op.getH1());
+            auto h2_vr = this->val_ref(op.getH2());
+            ScratchReg res_scratch{derived()};
+            if (!derived()->encode_util_hash_combine(h1_vr.part(0), h2_vr.part(0), res_scratch)) {
+                error.emit() << "Failed to compile hash combine operation\n";
+                return false;
+            }
+            auto res_ref = this->result_ref(op.getResult());
+            this->set_value(res_ref.part(0), res_scratch);
+            return true;
+        }
+
         bool compile_inst(const IRInstRef inst, InstRange) noexcept {
+            dialect::util::CreateConstVarLen
             return mlir::TypeSwitch<IRInstRef, bool>(inst)
                     .Case<mlir::arith::AddIOp, mlir::arith::SubIOp, mlir::arith::MulIOp, mlir::arith::DivSIOp,
                         mlir::arith::DivUIOp, mlir::arith::RemSIOp, mlir::arith::RemUIOp,
@@ -1645,6 +1671,12 @@ namespace lingodb::execution::baseline {
                     })
                     .template Case<dialect::util::InvalidRefOp>([&](auto op) {
                         return compile_util_invalid_ref_op(op);
+                    })
+                    .template Case<dialect::util::HashCombine>([&](auto op) {
+                        return compile_util_hash_combine_op(op);
+                    })
+                    .template Case<dialect::util::VarLenGetLen>([&](auto op) {
+                        return compile_util_varlen_get_len_op(op);
                     })
                     .template Case<dialect::util::VarLenCmp>([&](auto op) { return compile_util_varlen_cmp_op(op); })
                     .Default([&](IRInstRef op) {
