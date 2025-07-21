@@ -132,38 +132,15 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                std::ranges::transform(selectNode->targets, selectNode->targets.begin(), [&](std::shared_ptr<ast::ParsedExpression>& target) {
                   auto it = context->currentScope->groupByExpressions.find(target);
 
-                  return canonicalizeParsedExpression(target, context);
+                  return canonicalizeParsedExpression(target, context, true);
                });
                //Canonicalize distinct expressions list
                if (selectNode->distinctExpressions.has_value()) {
                   std::ranges::transform(selectNode->distinctExpressions.value(), selectNode->distinctExpressions->begin(), [&](auto& target) {
-                     return canonicalizeParsedExpression(target, context);
+                     return canonicalizeParsedExpression(target, context, true);
                   });
                }
-               for (auto& target : selectNode->targets) {
-                  std::string alias = target->alias;
-                  if (target->exprClass == ast::ExpressionClass::FUNCTION) {
-                     auto function = std::static_pointer_cast<ast::FunctionExpression>(target);
-                     if (target->type == ast::ExpressionType::AGGREGATE) {
-                        context->currentScope->aggregationNode->aggregations.push_back(function);
-                     } else {
-                        auto find = context->currentScope->groupByExpressions.find(function);
-                        if (find == context->currentScope->groupByExpressions.end()) {
-                           context->currentScope->extendNode->extensions.push_back(function);
-                        } else {
-                           function->alias = function->functionName + "_" + std::to_string(i);
-                           find->get()->alias = function->functionName + "_" + std::to_string(i);
-                        }
-                     }
-                     //TODO better
-                     if (function->alias.empty()) {
-                        //TODO make unique alias
-                        function->alias = function->functionName + "_" + std::to_string(i);
-                     }
-                     toRemove.emplace_back(alias, target);
-                     i++;
-                  }
-               }
+
 
                for (auto& target : toRemove) {
                   std::transform(selectNode->targets.begin(), selectNode->targets.end(), selectNode->targets.begin(), [&](std::shared_ptr<ast::ParsedExpression>& t) -> std::shared_ptr<ast::ParsedExpression> {
@@ -180,7 +157,7 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
             }
             case ast::PipeOperatorType::WHERE: {
                assert(pipeOp->node->nodeType == ast::NodeType::EXPRESSION);
-               pipeOp->node = canonicalizeParsedExpression(std::static_pointer_cast<ast::ParsedExpression>(pipeOp->node), context);
+               pipeOp->node = canonicalizeParsedExpression(std::static_pointer_cast<ast::ParsedExpression>(pipeOp->node), context, false);
                return pipeOp;
             }
             case ast::PipeOperatorType::AGGREGATE: {
@@ -188,16 +165,13 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                assert(aggNode);
                std::vector<std::shared_ptr<ast::ParsedExpression>> newGroupByExpressions{};
                if (aggNode->groupByNode) {
-                  int i = 0;
+                  static int x = 0;
                   for (auto e : aggNode->groupByNode->group_expressions) {
                      switch (e->type) {
                         case ast::ExpressionType::FUNCTION: {
                            auto function = std::static_pointer_cast<ast::FunctionExpression>(e);
+                           function->alias = function->functionName + "_agg" + std::to_string(x);
 
-                           if (function->alias.empty()) {
-                              //TODO make unique alias
-                              function->alias = function->functionName + "_" + std::to_string(i);
-                           }
                            context->currentScope->extendNode->extensions.emplace_back(function);
                            auto cRef = drv.nf.node<ast::ColumnRefExpression>(function->loc, function->alias);
                            newGroupByExpressions.emplace_back(cRef);
@@ -209,7 +183,7 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                            context->currentScope->groupByExpressions.emplace(e);
                            break;
                      }
-                     i++;
+                     x++;
                   }
                   aggNode->groupByNode->group_expressions = std::move(newGroupByExpressions);
                }
@@ -260,7 +234,7 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                auto expressionListRef = std::static_pointer_cast<ast::ExpressionListRef>(tableRef);
                for (auto exprList : expressionListRef->values) {
                   std::ranges::transform(exprList, exprList.begin(), [&](auto& value) {
-                     return canonicalizeParsedExpression(value, context);
+                     return canonicalizeParsedExpression(value, context, false);
                   });
                }
                return expressionListRef;
@@ -307,7 +281,7 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
    }
 }
 
-std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpression(std::shared_ptr<ast::ParsedExpression> rootNode, std::shared_ptr<ASTTransformContext> context) {
+std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpression(std::shared_ptr<ast::ParsedExpression> rootNode, std::shared_ptr<ASTTransformContext> context, bool extend) {
    switch (rootNode->exprClass) {
       case ast::ExpressionClass::SUBQUERY: {
          auto subqueryExpr = std::static_pointer_cast<ast::SubqueryExpression>(rootNode);
@@ -317,7 +291,7 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
       case ast::ExpressionClass::OPERATOR: {
          auto operatorExpr = std::static_pointer_cast<ast::OperatorExpression>(rootNode);
          std::ranges::transform(operatorExpr->children, operatorExpr->children.begin(), [&](auto& child) {
-            return canonicalizeParsedExpression(child, context);
+            return canonicalizeParsedExpression(child, context, false);
          });
          return operatorExpr;
       }
@@ -325,35 +299,51 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
          auto conjunctionExpr = std::static_pointer_cast<ast::ConjunctionExpression>(rootNode);
 
          std::ranges::transform(conjunctionExpr->children, conjunctionExpr->children.begin(), [&](auto& child) {
-            return canonicalizeParsedExpression(child, context);
+            return canonicalizeParsedExpression(child, context, false);
          });
          return conjunctionExpr;
       }
       case ast::ExpressionClass::COMPARISON: {
          auto comparisonExpr = std::static_pointer_cast<ast::ComparisonExpression>(rootNode);
          if (comparisonExpr->left) {
-            comparisonExpr->left = canonicalizeParsedExpression(comparisonExpr->left, context);
+            comparisonExpr->left = canonicalizeParsedExpression(comparisonExpr->left, context, false);
          }
          std::ranges::transform(comparisonExpr->rightChildren, comparisonExpr->rightChildren.begin(), [&](auto& child) {
-            return canonicalizeParsedExpression(child, context);
+            return canonicalizeParsedExpression(child, context, false);
          });
 
          return comparisonExpr;
       }
       case ast::ExpressionClass::FUNCTION: {
          auto functionExpr = std::static_pointer_cast<ast::FunctionExpression>(rootNode);
+         std::string alias = functionExpr->alias.empty() ? functionExpr->functionName : functionExpr->alias;
          static int i = 0;
          if (functionExpr->type == ast::ExpressionType::AGGREGATE) {
-            std::string alias = functionExpr->alias.empty() ? functionExpr->functionName : functionExpr->alias;
-            if (functionExpr->alias.empty()) {
-               //TODO make unique alias
-               functionExpr->alias = functionExpr->functionName + "_" + std::to_string(i);
-               i++;
-            }
+            functionExpr->alias = functionExpr->functionName + "_" + std::to_string(i);
+            i++;
+
             auto columnRef = drv.nf.node<ast::ColumnRefExpression>(functionExpr->loc, functionExpr->alias);
             columnRef->alias = alias;
             context->currentScope->aggregationNode->aggregations.push_back(functionExpr);
 
+            return columnRef;
+         } else {
+            i++;
+            if (!extend)
+               return rootNode;
+            auto find = context->currentScope->groupByExpressions.find(functionExpr);
+            if (find == context->currentScope->groupByExpressions.end()) {
+               if (functionExpr->alias.empty()) {
+                  functionExpr->alias = functionExpr->functionName + "_" + std::to_string(i);
+               }
+
+               context->currentScope->extendNode->extensions.push_back(functionExpr);
+            } else {
+               functionExpr->alias = find->get()->alias;
+            }
+
+            auto columnRef = drv.nf.node<ast::ColumnRefExpression>(functionExpr->loc, functionExpr->alias);
+            columnRef->alias = alias;
             return columnRef;
          }
          return functionExpr;
@@ -361,10 +351,10 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
       case ast::ExpressionClass::CASE: {
          auto caseExpr = std::static_pointer_cast<ast::CaseExpression>(rootNode);
          for (auto& caseCheck : caseExpr->caseChecks) {
-            caseCheck.thenExpr = canonicalizeParsedExpression(caseCheck.thenExpr, context);
-            caseCheck.whenExpr = canonicalizeParsedExpression(caseCheck.whenExpr, context);
+            caseCheck.thenExpr = canonicalizeParsedExpression(caseCheck.thenExpr, context, false);
+            caseCheck.whenExpr = canonicalizeParsedExpression(caseCheck.whenExpr, context, false);
          }
-         caseExpr->elseExpr = canonicalizeParsedExpression(caseExpr->elseExpr, context);
+         caseExpr->elseExpr = canonicalizeParsedExpression(caseExpr->elseExpr, context, false);
          return caseExpr;
       }
       default: return rootNode;
