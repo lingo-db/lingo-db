@@ -12,9 +12,6 @@ class InsertNode : public AstNode {
    InsertNode(std::string schema, std::string tableName, std::shared_ptr<TableProducer> producer);
    InsertNode(std::string schema, std::string tableName, std::shared_ptr<TableProducer> producer, std::vector<std::string> columns);
 
-
-
-
    std::string schema;
    std::string tableName;
 

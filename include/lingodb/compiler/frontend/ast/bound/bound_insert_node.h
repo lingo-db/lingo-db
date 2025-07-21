@@ -10,17 +10,13 @@ namespace lingodb::ast {
 
 class BoundInsertNode : public AstNode {
    public:
-
-   BoundInsertNode(std::string schema, std::string tableName, std::shared_ptr<TableProducer> producer, std::vector<std::string> columnsToInsert, std::unordered_map<std::string, catalog::NullableType>  allColumnsAndTypes);
-
+   BoundInsertNode(std::string schema, std::string tableName, std::shared_ptr<TableProducer> producer, std::vector<std::string> columnsToInsert, std::unordered_map<std::string, catalog::NullableType> allColumnsAndTypes);
 
    std::string schema;
    std::string tableName;
 
-
    std::shared_ptr<TableProducer> producer;
    std::vector<std::string> columnsToInsert;
-
 
    std::unordered_map<std::string, catalog::NullableType> allColumnsAndTypes;
 

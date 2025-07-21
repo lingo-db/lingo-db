@@ -9,19 +9,15 @@ namespace lingodb::ast {
 
 class BoundSetPipeOperator : public PipeOperator {
    public:
-   BoundSetPipeOperator(PipeOperatorType pipeOpType, std::shared_ptr<TableProducer> node, std::shared_ptr<TableProducer> input) ;
+   BoundSetPipeOperator(PipeOperatorType pipeOpType, std::shared_ptr<TableProducer> node, std::shared_ptr<TableProducer> input);
    PipeOperatorType pipeOpType;
    std::shared_ptr<TableProducer> node;
 
-
    //analyzer::SQLContext leftContext;
-
 
    std::shared_ptr<analyzer::SQLScope> leftScope;
 
    std::shared_ptr<analyzer::SQLScope> rightScope;
-
-
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };

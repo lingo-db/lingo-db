@@ -25,13 +25,12 @@ std::string BoundBaseTableRef::toDotGraph(uint32_t depth, NodeIdGenerator& idGen
 }
 
 BoundJoinRef::BoundJoinRef(JoinType type, JoinCondType refType, std::shared_ptr<TableProducer> left, std::shared_ptr<TableProducer> right, boundJoinCond condition) : BoundTableRef(TYPE), type(type), refType(refType), left(std::move(left)), right(std::move(right)), condition(std::move(condition)) {
-
 }
 std::string BoundJoinRef::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    return "";
 }
 
-BoundSubqueryRef::BoundSubqueryRef(std::shared_ptr<analyzer::SQLScope> sqlScope, std::shared_ptr<TableProducer> subSelect) : BoundTableRef(TYPE), sqlScope(sqlScope), subSelect(subSelect){
+BoundSubqueryRef::BoundSubqueryRef(std::shared_ptr<analyzer::SQLScope> sqlScope, std::shared_ptr<TableProducer> subSelect) : BoundTableRef(TYPE), sqlScope(sqlScope), subSelect(subSelect) {
 }
 std::string BoundSubqueryRef::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    return "";

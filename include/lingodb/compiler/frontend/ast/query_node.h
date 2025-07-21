@@ -30,7 +30,7 @@ class QueryNode : public TableProducer {
    public:
    virtual ~QueryNode() override = default;
 
-   explicit QueryNode(QueryNodeType type) : TableProducer(NodeType::QUERY_NODE), type(type){};
+   explicit QueryNode(QueryNodeType type) : TableProducer(NodeType::QUERY_NODE), type(type) {};
 
    //! The type of the query node, either SetOperation or Select
    QueryNodeType type;
@@ -45,10 +45,15 @@ class QueryNode : public TableProducer {
    virtual std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) = 0;
 };
 enum class SetOperationType {
-   NONE = 0, UNION = 1, EXCEPT = 2, INTERSECT = 3, UNION_BY_NAME = 4
+   NONE = 0,
+   UNION = 1,
+   EXCEPT = 2,
+   INTERSECT = 3,
+   UNION_BY_NAME = 4
 };
-class SetOperationNode : public  QueryNode {
+class SetOperationNode : public QueryNode {
    static constexpr QueryNodeType TYPE = QueryNodeType::SET_OPERATION_NODE;
+
    public:
    SetOperationNode(SetOperationType setType, std::shared_ptr<TableProducer> left, std::shared_ptr<TableProducer> right);
    SetOperationType setType;
@@ -58,7 +63,6 @@ class SetOperationNode : public  QueryNode {
 
    std::string toString(uint32_t depth) override;
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
-
 };
 
 } // namespace lingodb::ast
