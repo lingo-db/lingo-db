@@ -74,13 +74,13 @@ std::shared_ptr<TypeInfo> TypeInfo::deserialize(utility::Deserializer& deseriali
          return IntervalTypeInfo::deserialize(deserializer);
    }
 }
-NullableType::NullableType(Type type) : type(type), isNullable(false){
+NullableType::NullableType(Type type) : type(type), isNullable(false) {
 }
 NullableType::NullableType(Type type, bool isNullable) : type(type), isNullable(isNullable) {
 }
 mlir::Type NullableType::toMlirType(mlir::MLIRContext* context) const {
    mlir::Type t = type.getMLIRTypeCreator()->createType(context);
-   assert((this->type.getTypeId() == LogicalTypeId::NONE && isNullable) || this->type.getTypeId() != LogicalTypeId::NONE  );
+   assert((this->type.getTypeId() == LogicalTypeId::NONE && isNullable) || this->type.getTypeId() != LogicalTypeId::NONE);
    if (isNullable) {
       return compiler::dialect::db::NullableType::get(context, t);
    }
@@ -163,27 +163,26 @@ mlir::Value NullableType::castValue(mlir::OpBuilder& builder, mlir::Value valueT
 bool NullableType::isNumeric() const {
    return type.getTypeId() == LogicalTypeId::DOUBLE || type.getTypeId() == LogicalTypeId::DECIMAL || type.getTypeId() == LogicalTypeId::INT;
 }
-bool NullableType::operator==( NullableType& other)  {
+bool NullableType::operator==(NullableType& other) {
    return this->type.getTypeId() == other.type.getTypeId() && this->isNullable == other.isNullable;
 }
-bool NullableType::operator!=( NullableType& other)  {
+bool NullableType::operator!=(NullableType& other) {
    if (this->isNullable != other.isNullable || this->type.getTypeId() != other.type.getTypeId()) {
-       return true;
+      return true;
    }
    switch (this->type.getTypeId()) {
       case LogicalTypeId::INT: {
          auto info = this->type.getInfo<IntTypeInfo>();
-         auto info2 =other.type.getInfo<IntTypeInfo>();
+         auto info2 = other.type.getInfo<IntTypeInfo>();
          return info->getBitWidth() != info2->getBitWidth() || info->getIsSigned() != info2->getIsSigned();
       }
       case LogicalTypeId::DECIMAL: {
          auto info = this->type.getInfo<DecimalTypeInfo>();
-         auto info2 =other.type.getInfo<DecimalTypeInfo>();
+         auto info2 = other.type.getInfo<DecimalTypeInfo>();
          return info->getPrecision() != info2->getPrecision() || info->getScale() != info2->getScale();
       }
       default: return false;
    }
-
 }
 
 void IntTypeInfo::serializeConcrete(utility::Serializer& serializer) const {
@@ -249,7 +248,7 @@ std::string Type::toString() const {
       case LogicalTypeId::STRING:
          return std::dynamic_pointer_cast<StringTypeInfo>(info)->toString();
       case LogicalTypeId::NONE:
-            return "none";
+         return "none";
    }
 }
 std::string IntTypeInfo::toString() {

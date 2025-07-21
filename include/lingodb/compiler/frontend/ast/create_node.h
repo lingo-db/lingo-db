@@ -49,17 +49,15 @@ class TableElement;
 class CreateInfo;
 class CreateNode : public AstNode {
    public:
-   explicit  CreateNode(std::shared_ptr<CreateInfo>  createInfo);
+   explicit CreateNode(std::shared_ptr<CreateInfo> createInfo);
    std::shared_ptr<CreateInfo> createInfo;
-
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 class CreateInfo {
    public:
    CreateInfo(CatalogType type, std::string catalog, std::string schema, bool temporary)
-         : type(type), catalog(std::move(catalog)), schema(std::move(schema)), temporary(temporary) {}
-
+      : type(type), catalog(std::move(catalog)), schema(std::move(schema)), temporary(temporary) {}
 
    //! The to-be-created catalog type
    CatalogType type;
@@ -86,7 +84,7 @@ class CreateInfo {
 class CreateTableInfo : public CreateInfo {
    public:
    CreateTableInfo(std::string catalog, std::string schema, bool temporary)
-         : CreateInfo(CatalogType::TABLE_ENTRY, std::move(catalog), std::move(schema), temporary) {}
+      : CreateInfo(CatalogType::TABLE_ENTRY, std::move(catalog), std::move(schema), temporary) {}
    //! The table name
    std::string tableName;
 
@@ -98,14 +96,13 @@ class TableElement {
    TableElement(TableElementType type) : type(type) {}
    TableElementType type;
 
-
    location loc;
 };
 
 class ColumnElement : public TableElement {
    public:
    ColumnElement(std::string name, LogicalTypeWithMods typeMods)
-         : TableElement(TableElementType::COLUMN), name(std::move(name)), logicalTypeWithMods(typeMods) {}
+      : TableElement(TableElementType::COLUMN), name(std::move(name)), logicalTypeWithMods(typeMods) {}
 
    LogicalTypeWithMods logicalTypeWithMods;
    std::string name;
@@ -115,13 +112,8 @@ class ColumnElement : public TableElement {
 class TableConstraintElement : public TableElement {
    public:
    TableConstraintElement(std::shared_ptr<Constraint> constraint)
-         : TableElement(TableElementType::CONSTRAINT), constraint(std::move(constraint)) {}
+      : TableElement(TableElementType::CONSTRAINT), constraint(std::move(constraint)) {}
 
    std::shared_ptr<Constraint> constraint;
-
-
-
-
-
 };
 }

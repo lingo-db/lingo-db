@@ -166,15 +166,14 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                }
 
                for (auto& target : toRemove) {
-                  std::transform(selectNode->targets.begin(), selectNode->targets.end(),selectNode->targets.begin(), [&] (std::shared_ptr<ast::ParsedExpression>& t) -> std::shared_ptr<ast::ParsedExpression> {
+                  std::transform(selectNode->targets.begin(), selectNode->targets.end(), selectNode->targets.begin(), [&](std::shared_ptr<ast::ParsedExpression>& t) -> std::shared_ptr<ast::ParsedExpression> {
                      if (t == target.second) {
                         auto c = drv.nf.node<ast::ColumnRefExpression>(target.second->loc, target.second->alias);
                         c->alias = target.first;
                         return c;
                      }
                      return t;
-
-                  } );
+                  });
                }
 
                return pipeOp;
@@ -191,7 +190,6 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                if (aggNode->groupByNode) {
                   int i = 0;
                   for (auto e : aggNode->groupByNode->group_expressions) {
-
                      switch (e->type) {
                         case ast::ExpressionType::FUNCTION: {
                            auto function = std::static_pointer_cast<ast::FunctionExpression>(e);
@@ -206,7 +204,10 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                            context->currentScope->groupByExpressions.emplace(function);
                            break;
                         }
-                        default: newGroupByExpressions.emplace_back(e); context->currentScope->groupByExpressions.emplace(e); break;
+                        default:
+                           newGroupByExpressions.emplace_back(e);
+                           context->currentScope->groupByExpressions.emplace(e);
+                           break;
                      }
                      i++;
                   }

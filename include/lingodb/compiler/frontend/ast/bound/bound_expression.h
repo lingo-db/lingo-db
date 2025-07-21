@@ -1,8 +1,8 @@
 #pragma once
-#include "lingodb/compiler/frontend/sql_scope.h"
 #include "lingodb/compiler/frontend/ast/ast_node.h"
-#include "lingodb/compiler/frontend/column_semantic.h"
 #include "lingodb/compiler/frontend/ast/parsed_expression.h"
+#include "lingodb/compiler/frontend/column_semantic.h"
+#include "lingodb/compiler/frontend/sql_scope.h"
 
 #include <mlir/Dialect/MLProgram/Transforms/Passes.h.inc>
 #include <mlir/IR/Types.h>
@@ -26,13 +26,8 @@ class BoundExpression : public AstNode {
 
    std::optional<catalog::NullableType> resultType = std::nullopt;
 
-
-
-
    //If this expression is a column reference or (SELECT 2*d from t), it can be used to find the named result
    std::optional<std::shared_ptr<NamedResult>> namedResult;
-
-
 };
 
 class BoundColumnRefExpression : public BoundExpression {
@@ -54,7 +49,6 @@ class BoundComparisonExpression : public BoundExpression {
    public:
    static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_COMPARISON;
 
-
    BoundComparisonExpression(ExpressionType type, std::string alias, std::shared_ptr<BoundExpression> left, std::vector<std::shared_ptr<BoundExpression>> rightChildren);
 
    std::shared_ptr<BoundExpression> left;
@@ -72,16 +66,6 @@ class BoundConjunctionExpression : public BoundExpression {
    std::vector<std::shared_ptr<BoundExpression>> children;
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
-
-
-
-
-
-
-
-
-
-
 
    private:
    std::string typeToAscii(ExpressionType type) const;
@@ -102,7 +86,7 @@ class BoundTargetsExpression : public BoundExpression {
    public:
    static constexpr ExpressionClass TYPE = ExpressionClass::BOUND_TARGETS;
    //BoundTargetsExpression(std::vector<std::shared_ptr<BoundExpression>> targets, std::vector<std::pair<std::string, catalog::Column>> targetColumns);
-   BoundTargetsExpression(std::string alias, std::vector<std::shared_ptr<BoundExpression>> targets, std::optional<std::vector<std::shared_ptr<BoundExpression>>> distinctExpressions ,std::vector<std::shared_ptr<NamedResult>> targetColumns);
+   BoundTargetsExpression(std::string alias, std::vector<std::shared_ptr<BoundExpression>> targets, std::optional<std::vector<std::shared_ptr<BoundExpression>>> distinctExpressions, std::vector<std::shared_ptr<NamedResult>> targetColumns);
 
    std::vector<std::shared_ptr<BoundExpression>> targets;
    //std::vector<std::pair<std::string, catalog::Column>> targetColumns;
@@ -129,9 +113,7 @@ class BoundFunctionExpression : public BoundExpression {
    std::string aliasOrUniqueIdentifier;
    std::vector<std::shared_ptr<BoundExpression>> arguments;
 
-
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
-
 };
 
 class BoundStarExpression : public BoundExpression {
@@ -173,7 +155,6 @@ class BoundBetweenExpression : public BoundExpression {
 
    BoundBetweenExpression(ExpressionType type, catalog::Type resultType, std::string alias, std::shared_ptr<BoundExpression> input, std::shared_ptr<BoundExpression> lower, std::shared_ptr<BoundExpression> upper);
 
-
    std::shared_ptr<BoundExpression> input;
    std::shared_ptr<BoundExpression> lower;
    std::shared_ptr<BoundExpression> upper;
@@ -186,7 +167,7 @@ class BoundSubqueryExpression : public BoundExpression {
    public:
    static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_SUBQUERY;
 
-   BoundSubqueryExpression(SubqueryType subqueryType, catalog::NullableType resultType, std::string alias, std::shared_ptr<NamedResult> namedResult, std::shared_ptr<analyzer::SQLScope> sqlScope, std::shared_ptr<TableProducer> subquery,  std::shared_ptr<BoundExpression> testExpr);
+   BoundSubqueryExpression(SubqueryType subqueryType, catalog::NullableType resultType, std::string alias, std::shared_ptr<NamedResult> namedResult, std::shared_ptr<analyzer::SQLScope> sqlScope, std::shared_ptr<TableProducer> subquery, std::shared_ptr<BoundExpression> testExpr);
 
    SubqueryType subqueryType = SubqueryType::INVALID;
    //! The subquery expression
@@ -194,7 +175,6 @@ class BoundSubqueryExpression : public BoundExpression {
    std::shared_ptr<analyzer::SQLScope> sqlScope;
    //! Expression to test against. The left side expression of an IN expression.
    std::shared_ptr<BoundExpression> testExpr;
-
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
@@ -207,7 +187,7 @@ class BoundCaseExpression : public BoundExpression {
    };
    static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_CASE;
 
-   BoundCaseExpression( catalog::NullableType resultType, std::string alias, std::vector<BoundCaseCheck> caseChecks, std::shared_ptr<BoundExpression> caseExpr);
+   BoundCaseExpression(catalog::NullableType resultType, std::string alias, std::vector<BoundCaseCheck> caseChecks, std::shared_ptr<BoundExpression> caseExpr);
 
    std::vector<BoundCaseCheck> caseChecks;
    std::shared_ptr<BoundExpression> elseExpr;

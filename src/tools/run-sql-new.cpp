@@ -9,8 +9,8 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 //#include "lingodb/compiler/frontend/SQL/Parser.h"
-#include "lingodb/compiler/frontend/sql_analyzer.h"
 #include "lingodb/compiler/frontend/driver.h"
+#include "lingodb/compiler/frontend/sql_analyzer.h"
 #include "lingodb/compiler/frontend/sql_mlir_translator.h"
 #include "lingodb/compiler/mlir-support/eval.h"
 #include "lingodb/execution/Execution.h"
@@ -34,8 +34,8 @@ int main(int argc, char* argv[]) {
          return 1;
       }
 
-      for (size_t i =0; i<results.size(); ++i) {
-         std::cout << "------------------" << i <<"----------------------" << std::endl;
+      for (size_t i = 0; i < results.size(); ++i) {
+         std::cout << "------------------" << i << "----------------------" << std::endl;
          std::cout << "digraph ast {" << std::endl;
          lingodb::ast::NodeIdGenerator idGen{};
          std::cout << drv.result[i]->toDotGraph(1, idGen) << std::endl;
@@ -53,7 +53,7 @@ int main(int argc, char* argv[]) {
          std::cout << "digraph ast {" << std::endl;
          std::cout << drv.result[i]->toDotGraph(1, idGen) << std::endl;
          std::cout << "}" << std::endl;
-          mlir::MLIRContext context;
+         mlir::MLIRContext context;
          mlir::DialectRegistry registry;
          registry.insert<mlir::BuiltinDialect>();
          registry.insert<lingodb::compiler::dialect::relalg::RelAlgDialect>();
@@ -96,7 +96,6 @@ int main(int argc, char* argv[]) {
          moduleOp.erase();
          std::cout << output << std::endl;
 
-
          std::cout << "execute" << std::endl;
          lingodb::compiler::support::eval::init();
          lingodb::execution::ExecutionMode runMode = lingodb::execution::getExecutionMode();
@@ -115,9 +114,6 @@ int main(int argc, char* argv[]) {
          executer->fromData(output);
          lingodb::scheduler::awaitEntryTask(std::make_unique<lingodb::execution::QueryExecutionTask>(std::move(executer)));
       }
-
-
-
 
    } else {
       return 1;

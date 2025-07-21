@@ -27,26 +27,21 @@ class SQLCanonicalizer {
    std::shared_ptr<T> canonicalizeCast(std::shared_ptr<ast::TableProducer> rootNode, std::shared_ptr<ASTTransformContext> context);
 
    driver drv{};
-
 };
 class SQLQueryAnalyzer {
    public:
    SQLQueryAnalyzer(std::shared_ptr<catalog::Catalog> catalog);
    std::shared_ptr<SQLContext> context = std::make_shared<SQLContext>();
 
-
    std::shared_ptr<ast::AstNode> canonicalizeAndAnalyze(std::shared_ptr<ast::AstNode> rootNode, std::shared_ptr<SQLContext> context);
    std::shared_ptr<ast::TableProducer> analyzeTableProducer(std::shared_ptr<ast::TableProducer> rootNode, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope);
    std::shared_ptr<ast::CreateNode> analyzeCreateNode(std::shared_ptr<ast::CreateNode> createNode, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope);
    std::shared_ptr<ast::BoundInsertNode> analyzeInsertNode(std::shared_ptr<ast::InsertNode> insertNode, std::shared_ptr<SQLContext> context, SQLContext::ResolverScope& resolverScope);
 
-
    private:
    std::shared_ptr<catalog::Catalog> catalog;
    driver drv{};
    SQLCanonicalizer sqlCanonicalizer{};
-
-
 
    private:
    std::shared_ptr<ast::TableProducer> analyzePipeOperator(std::shared_ptr<ast::PipeOperator> pipeOperator, std::shared_ptr<SQLContext>& context, ResolverScope& resolverScope);
@@ -70,8 +65,6 @@ class SQLQueryAnalyzer {
       mapName.append(std::to_string(mapCounter++));
       return mapName;
    }
-
-
 };
 
 struct SQLTypeUtils {
@@ -82,12 +75,10 @@ struct SQLTypeUtils {
    static catalog::NullableType getCommonBaseType(std::vector<catalog::NullableType> types);
    static catalog::NullableType getCommonTypeAfterOperation(catalog::NullableType type1, catalog::NullableType type2, ast::ExpressionType operationType);
 
-
    static std::vector<catalog::NullableType> toCommonTypes(std::vector<catalog::NullableType> types);
    static std::vector<catalog::NullableType> toCommonNumber(std::vector<catalog::NullableType> types);
 
    static catalog::NullableType typemodsToCatalogType(ast::LogicalType logicalType, std::vector<std::shared_ptr<ast::Value>>& typeModifiers);
-
 
    [[nodiscard]]
    static std::pair<unsigned long, unsigned long> getAdaptedDecimalPAndSAfterMulDiv(unsigned long p, unsigned long s);
