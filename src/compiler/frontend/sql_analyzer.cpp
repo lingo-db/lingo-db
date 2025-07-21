@@ -1051,6 +1051,20 @@ std::shared_ptr<ast::BoundResultModifier> SQLQueryAnalyzer::analyzeResultModifie
                      namedResult = columnRef->namedResult.value();
                      break;
                   }
+                  case ast::ExpressionType::VALUE_CONSTANT: {
+                     auto boundConstant = std::static_pointer_cast<ast::BoundConstantExpression>(boundExpression);
+                     assert(boundConstant->resultType.has_value());
+                     if (!boundConstant->resultType->isNumeric() || boundConstant->value->type != ast::ConstantType::INT) {
+                        error("Order by element not supported", boundConstant->loc);
+                     }
+                     assert(boundConstant->value);
+                     auto constantValue = std::static_pointer_cast<ast::IntValue>(boundConstant->value);
+                     if (context->currentScope->targetInfo.targetColumns.size() < constantValue->iVal || constantValue->iVal <= 0) {
+                        error("Invalid order by element", boundConstant->loc);
+                     }
+                     namedResult = context->currentScope->targetInfo.targetColumns.at(constantValue->iVal - 1);
+                     break;
+                  }
                   default: error("Order by element not implemented", orderByElement->expression->loc);
                }
                assert(namedResult);
