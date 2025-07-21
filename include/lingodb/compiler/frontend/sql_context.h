@@ -1,6 +1,5 @@
 #pragma once
 
-
 #include "lingodb/compiler/frontend/ast/aggregation_node.h"
 #include "lingodb/compiler/frontend/ast/extend_node.h"
 #include "lingodb/compiler/frontend/sql_scope.h"
@@ -9,6 +8,7 @@
 
 #include <memory>
 #include <stack>
+#include <unordered_set>
 #include <vector>
 namespace lingodb::ast {
 class CTENode;
@@ -26,7 +26,7 @@ class ASTTransformScope {
    ASTTransformScope() : aggregationNode(std::make_shared<ast::AggregationNode>()), extendNode(std::make_shared<ast::ExtendNode>()) {}
    std::shared_ptr<ast::AggregationNode> aggregationNode;
    std::shared_ptr<ast::ExtendNode> extendNode;
-   std::unordered_map<size_t, std::shared_ptr<ast::ParsedExpression>> groupByExpressions;
+   std::unordered_set<std::shared_ptr<ast::ParsedExpression>,ast::ParsedExprPtrHash, ast::ParsedExprPtrEqual> groupByExpressions;
 };
 class ASTTransformContext {
    public:
@@ -35,15 +35,13 @@ class ASTTransformContext {
    std::shared_ptr<ASTTransformScope> currentScope;
    void pushNewScope() {
       currentScope = std::make_shared<ASTTransformScope>();
-        scopeStack.push(currentScope);
+      scopeStack.push(currentScope);
    }
 
    void popScope() {
       currentScope = scopeStack.top();
       scopeStack.pop();
    }
-
-
 };
 class SQLContext;
 class DefineScope {
@@ -52,9 +50,7 @@ class DefineScope {
    ~DefineScope();
 
    private:
-
    SQLContext& sqlContext;
-
 };
 
 class SQLContext {
@@ -62,8 +58,6 @@ class SQLContext {
    SQLContext() : definedAttributes(), resolver() {
       definedAttributes.push({});
    };
-
-
 
    std::shared_ptr<catalog::Catalog> catalog;
    std::vector<std::shared_ptr<SQLScope>> scopes;
@@ -75,7 +69,6 @@ class SQLContext {
    std::unordered_map<std::string, std::pair<ast::TargetInfo, std::shared_ptr<ast::CTENode>>> ctes;
 
    std::unordered_map<std::string, mlir::Value> translatedCtes;
-
 
    llvm::ScopedHashTable<std::string, std::shared_ptr<ast::NamedResult>, StringInfo> resolver;
    using ResolverScope = llvm::ScopedHashTable<std::string, std::shared_ptr<ast::NamedResult>, StringInfo>::ScopeTy;
@@ -95,13 +88,12 @@ class SQLContext {
    void mapAttribute(ResolverScope& scope, std::string name, std::shared_ptr<ast::NamedResult> columnInfo);
    std::vector<std::shared_ptr<ast::NamedResult>> mapAttribute(ResolverScope& scope, std::string sqlScopeName, std::string uniqueScope, std::shared_ptr<catalog::TableCatalogEntry> tableCatalogEntry);
    void mapAttribute(ResolverScope& scope, std::string name, std::vector<std::shared_ptr<ast::NamedResult>> targetInfos);
-   std::shared_ptr<ast::NamedResult> getNamedResultInfo(location loc,std::string name);
+   std::shared_ptr<ast::NamedResult> getNamedResultInfo(location loc, std::string name);
 
    std::string getUniqueScope(std::string base);
 
    //std::vector<std::pair<size_t, ast::ColumnInfo>> findColumn(const std::string& columnName) const;
    //std::vector<std::pair<size_t, ast::ColumnInfo>> findColumn(const std::string& columnName, const std::string& alias) const;
-
 
    std::string toString() const;
 };
