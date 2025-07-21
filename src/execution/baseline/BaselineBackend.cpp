@@ -1584,6 +1584,34 @@ namespace lingodb::execution::baseline {
             return true;
         }
 
+        bool compile_util_varlen_try_cheap_hash_op(dialect::util::VarLenTryCheapHash op) {
+            auto varlen_vr = this->val_ref(op.getVarlen());
+            ScratchReg res_scratch_complete{derived()};
+            ScratchReg res_scratch_hash{derived()};
+            derived()->encode_util_varlen_try_cheap_hash(varlen_vr.part(0), varlen_vr.part(1), res_scratch_complete,
+                                                         res_scratch_hash);
+            auto res_complete_vr = this->result_ref(op.getComplete());
+            this->set_value(res_complete_vr.part(0), res_scratch_complete);
+
+            auto res_hash_vr = this->result_ref(op.getHash());
+            this->set_value(res_hash_vr.part(0), res_scratch_hash);
+            return true;
+        }
+
+        bool compile_util_hash_varlen_op(dialect::util::HashVarLen op) {
+            auto call_conv_assigner = tpde::x64::CCAssignerSysV(false /* is_vararg */); // TODO: this only works for x64
+            auto builder = typename Derived::CallBuilder(*derived(), call_conv_assigner);
+            builder.add_arg(typename Base::CallArg{op.getVal()});
+            assert(externFuncMap.contains("hashVarLenData"));
+            ValuePart funcPtrRef{
+                std::bit_cast<uint64_t>(externFuncMap["hashVarLenData"]), 8, Config::GP_BANK
+            };
+            builder.call(std::move(funcPtrRef));
+            ValueRef res = this->result_ref(op.getHash());
+            builder.add_ret(res);
+            return true;
+        }
+
         bool compile_util_invalid_ref_op(dialect::util::InvalidRefOp op) {
             auto res_ref = this->result_ref(op.getResult());
             ValuePartRef null_ref{this, 0, 8, Config::GP_BANK};
@@ -1605,7 +1633,6 @@ namespace lingodb::execution::baseline {
         }
 
         bool compile_inst(const IRInstRef inst, InstRange) noexcept {
-            dialect::util::CreateConstVarLen
             return mlir::TypeSwitch<IRInstRef, bool>(inst)
                     .Case<mlir::arith::AddIOp, mlir::arith::SubIOp, mlir::arith::MulIOp, mlir::arith::DivSIOp,
                         mlir::arith::DivUIOp, mlir::arith::RemSIOp, mlir::arith::RemUIOp,
@@ -1677,6 +1704,12 @@ namespace lingodb::execution::baseline {
                     })
                     .template Case<dialect::util::VarLenGetLen>([&](auto op) {
                         return compile_util_varlen_get_len_op(op);
+                    })
+                    .template Case<dialect::util::VarLenTryCheapHash>([&](auto op) {
+                        return compile_util_varlen_try_cheap_hash_op(op);
+                    })
+                    .template Case<dialect::util::HashVarLen>([&](auto op) {
+                        return compile_util_hash_varlen_op(op);
                     })
                     .template Case<dialect::util::VarLenCmp>([&](auto op) { return compile_util_varlen_cmp_op(op); })
                     .Default([&](IRInstRef op) {

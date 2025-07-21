@@ -63,6 +63,10 @@ class TupleHelper {
                elemSize = sizeof(uint64_t);
                elemAlign = alignof(uint64_t);
             })
+            .Case<dialect::util::VarLen32Type, dialect::util::BufferType>([&](auto) {
+               elemSize = sizeof(__uint128_t);
+               elemAlign = alignof(__uint128_t);
+            })
             .Default([](mlir::Type) {
                assert(false && "Cannot calculate size for unsupported type.");
                return 0;
