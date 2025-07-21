@@ -633,6 +633,11 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
             auto val = translateExpression(builder, function->arguments[0], context);
             return builder.create<db::RuntimeCall>(builder.getUnknownLoc(), val.getType(), "ToUpper", val).getRes();
          }
+         if (function->functionName == "ABS") {
+            auto val = translateExpression(builder, function->arguments[0], context);
+            //TODO move type logic to analyzer
+            return builder.create<db::RuntimeCall>(builder.getUnknownLoc(), val.getType(), mlir::isa<db::DecimalType>(getBaseType(val.getType())) ? "AbsDecimal" : "AbsInt", val).getRes();
+         }
          error("Function '" << function->functionName << "' not implemented", expression->loc);
       }
       case ast::ExpressionClass::BOUND_SUBQUERY: {

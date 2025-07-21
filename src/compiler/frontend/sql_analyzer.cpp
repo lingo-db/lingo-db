@@ -1466,6 +1466,19 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
             resultType = arg1->resultType.value();
 
             boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, std::vector{arg1});
+         } else if (function->functionName == "ABS") {
+            if (function->arguments.size() != 1) {
+               error("Function with more than one argument not supported", function->loc);
+            }
+            auto arg1 = analyzeExpression(function->arguments[0], context, resolverScope);
+            //TODO check for string
+            if (!arg1->resultType.has_value() || !arg1->resultType->isNumeric()) {
+               error("Argument of function has not a valid return type", arg1->loc);
+            }
+            resultType = arg1->resultType.value();
+
+            boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, std::vector{arg1});
+
          }
          if (boundFunctionExpression == nullptr) {
             error("Function '" << function->functionName << "' not implemented", function->loc);
