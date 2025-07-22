@@ -21,9 +21,6 @@ void subop::registerSubOpTransformations() {
       return subop::createSpecializeSubOpPass(true);
    });
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
-      return subop::createGlobalOptPass();
-   });
-   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return subop::createParallelizePass();
    });
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
