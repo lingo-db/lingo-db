@@ -639,7 +639,7 @@ std::string SubqueryExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGe
    return dot;
 }
 
-CaseExpression::CaseExpression(std::vector<CaseCheck> caseChecks, std::shared_ptr<ParsedExpression> elseExpr) : ParsedExpression(ExpressionType::CASE_EXPR, TYPE), caseChecks(std::move(caseChecks)), elseExpr(std::move(elseExpr)) {
+CaseExpression::CaseExpression(std::optional<std::shared_ptr<ParsedExpression>> caseExpr, std::vector<CaseCheck> caseChecks, std::shared_ptr<ParsedExpression> elseExpr) : ParsedExpression(ExpressionType::CASE_EXPR, TYPE), caseExpr(caseExpr), caseChecks(std::move(caseChecks)), elseExpr(std::move(elseExpr)) {
 }
 
 std::string CaseExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
