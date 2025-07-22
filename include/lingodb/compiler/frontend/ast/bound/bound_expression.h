@@ -49,7 +49,7 @@ class BoundComparisonExpression : public BoundExpression {
    public:
    static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_COMPARISON;
 
-   BoundComparisonExpression(ExpressionType type, std::string alias, std::shared_ptr<BoundExpression> left, std::vector<std::shared_ptr<BoundExpression>> rightChildren);
+   BoundComparisonExpression(ExpressionType type, std::string alias, bool resultTypeNullable, std::shared_ptr<BoundExpression> left, std::vector<std::shared_ptr<BoundExpression>> rightChildren);
 
    std::shared_ptr<BoundExpression> left;
    std::vector<std::shared_ptr<BoundExpression>> rightChildren;
@@ -187,8 +187,9 @@ class BoundCaseExpression : public BoundExpression {
    };
    static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_CASE;
 
-   BoundCaseExpression(catalog::NullableType resultType, std::string alias, std::vector<BoundCaseCheck> caseChecks, std::shared_ptr<BoundExpression> caseExpr);
+   BoundCaseExpression(catalog::NullableType resultType, std::string alias, std::optional<std::shared_ptr<ast::BoundExpression>> caseExpr, std::vector<BoundCaseCheck> caseChecks, std::shared_ptr<BoundExpression> elseExpr);
 
+   std::optional<std::shared_ptr<ast::BoundExpression>> caseExpr;
    std::vector<BoundCaseCheck> caseChecks;
    std::shared_ptr<BoundExpression> elseExpr;
 

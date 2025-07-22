@@ -1183,8 +1183,8 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
             boundChild->resultType = commonTypes[x];
             x++;
          }
-
-         auto boundComparison = drv.nf.node<ast::BoundComparisonExpression>(comparison->loc, comparison->type, comparison->alias, left, boundRightChildren);
+         bool isNullable = commonTypes[0].castType->isNullable;
+         auto boundComparison = drv.nf.node<ast::BoundComparisonExpression>(comparison->loc, comparison->type, comparison->alias, isNullable, left, boundRightChildren);
          return boundComparison;
       }
       case ast::ExpressionClass::CONJUNCTION: {
@@ -1384,6 +1384,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
             }
 
             resultType = catalog::Type::int64();
+
             if (function->star) {
                return drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName + "*", "", function->alias, function->distinct, std::vector<std::shared_ptr<ast::BoundExpression>>{});
             }
@@ -1603,7 +1604,8 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
 
          auto namedResult = subqueryTargetInfo.targetColumns[0];
          auto resultType = namedResult->resultType;
-
+         //TODO check for correctness: Is every subquery nullable
+         resultType.isNullable = true;
          if (subqueryExpr->subQueryType != ast::SubqueryType::SCALAR) {
             resultType = catalog::Type::boolean();
          }
@@ -1622,8 +1624,10 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
          if (caseExpr->caseChecks.empty()) {
             error("Case expression does not have any case checks", caseExpr->loc);
          }
+         std::optional<std::shared_ptr<ast::BoundExpression>> boundCaseExpr = std::nullopt;
          std::vector<ast::BoundCaseExpression::BoundCaseCheck> boundCaseChecks;
          std::vector<catalog::NullableType> thenTypes{};
+         std::vector<catalog::NullableType> whenTypes{};
          std::ranges::transform(caseExpr->caseChecks, std::back_inserter(boundCaseChecks), [&](ast::CaseExpression::CaseCheck& caseCheck) {
             if (!caseCheck.thenExpr || !caseCheck.whenExpr) {
                error("Should not happen", caseExpr->loc);
@@ -1635,18 +1639,31 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
                error("Then expression has invalid type", boundCheck.thenExpr->loc);
             }
             thenTypes.emplace_back(boundCheck.thenExpr->resultType.value());
+            whenTypes.emplace_back(boundCheck.whenExpr->resultType.value());
             return boundCheck;
          });
          std::shared_ptr<ast::BoundExpression> boundElse = analyzeExpression(caseExpr->elseExpr, context, resolverScope);
          if (!boundElse->resultType.has_value()) {
             error("Else has invalid type", boundElse->loc);
          }
+         if (caseExpr->caseExpr.has_value()) {
+            boundCaseExpr = analyzeExpression(caseExpr->caseExpr.value(), context, resolverScope);
+            whenTypes.emplace_back(boundCaseExpr.value()->resultType.value());
+         }
          thenTypes.emplace_back(boundElse->resultType.value());
          //Find common then type
-         auto commonType = SQLTypeUtils::toCommonTypes(thenTypes);
+         auto commonThenType = SQLTypeUtils::toCommonTypes(thenTypes);
+         auto commonWhenType = SQLTypeUtils::toCommonTypes(whenTypes);
+         if (boundCaseExpr.has_value()) {
+            boundCaseExpr.value()->resultType = commonWhenType.back();
+         }
+         for (size_t i = 0; i < boundCaseChecks.size(); i++) {
+            boundCaseChecks[i].thenExpr->resultType = commonThenType[i];
+            boundCaseChecks[i].whenExpr->resultType = commonWhenType[i];
+         }
          auto resultType = SQLTypeUtils::getCommonBaseType(thenTypes);
 
-         return drv.nf.node<ast::BoundCaseExpression>(caseExpr->loc, resultType, caseExpr->alias, boundCaseChecks, boundElse);
+         return drv.nf.node<ast::BoundCaseExpression>(caseExpr->loc, resultType, caseExpr->alias, boundCaseExpr, boundCaseChecks, boundElse);
       }
       default: error("Expression type not implemented", rootNode->loc);
    }
@@ -1696,7 +1713,13 @@ catalog::NullableType SQLTypeUtils::getCommonType(catalog::NullableType nullable
       commonType = type2;
    } else if (type1.getTypeId() == catalog::LogicalTypeId::DECIMAL && type2.getTypeId() == catalog::LogicalTypeId::INT) {
       commonType = type1;
-   } else if (type1.getTypeId() == catalog::LogicalTypeId::CHAR && type2.getTypeId() == catalog::LogicalTypeId::STRING) {
+   } else if (type1.getTypeId() == catalog::LogicalTypeId::INT && type2.getTypeId() == catalog::LogicalTypeId::CHAR) {
+      commonType = type1;
+   }
+   else if (type2.getTypeId() == catalog::LogicalTypeId::CHAR && type2.getTypeId() == catalog::LogicalTypeId::INT) {
+      commonType = type2;
+   }
+   else if (type1.getTypeId() == catalog::LogicalTypeId::CHAR && type2.getTypeId() == catalog::LogicalTypeId::STRING) {
       commonType = type2;
    } else if (type2.getTypeId() == catalog::LogicalTypeId::CHAR && type1.getTypeId() == catalog::LogicalTypeId::STRING) {
       commonType = type1;

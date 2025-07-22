@@ -540,9 +540,10 @@ class CaseExpression : public ParsedExpression {
 
    static constexpr const ExpressionClass TYPE = ExpressionClass::CASE;
 
-   CaseExpression(std::vector<CaseCheck> caseChecks, std::shared_ptr<ParsedExpression> elseExpr);
+   CaseExpression(std::optional<std::shared_ptr<ParsedExpression>> caseExpr, std::vector<CaseCheck> caseChecks, std::shared_ptr<ParsedExpression> elseExpr);
 
    std::vector<CaseCheck> caseChecks;
+   std::optional<std::shared_ptr<ParsedExpression>> caseExpr;
    std::shared_ptr<ParsedExpression> elseExpr;
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;

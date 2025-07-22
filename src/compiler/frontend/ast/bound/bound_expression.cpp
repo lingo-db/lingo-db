@@ -14,7 +14,7 @@ std::string BoundColumnRefExpression::toDotGraph(uint32_t depth, NodeIdGenerator
  * BoundComparisonExpression
 */
 
-BoundComparisonExpression::BoundComparisonExpression(ExpressionType type, std::string alias, std::shared_ptr<BoundExpression> left, std::vector<std::shared_ptr<BoundExpression>> rightChildren) : BoundExpression(TYPE, type, catalog::Type::boolean(), alias), left(std::move(left)), rightChildren(std::move(rightChildren)) {
+BoundComparisonExpression::BoundComparisonExpression(ExpressionType type, std::string alias, bool resultTypeNullable, std::shared_ptr<BoundExpression> left, std::vector<std::shared_ptr<BoundExpression>> rightChildren) : BoundExpression(TYPE, type, catalog::NullableType(catalog::Type::boolean(), resultTypeNullable), alias), left(std::move(left)), rightChildren(std::move(rightChildren)) {
 }
 std::string BoundComparisonExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    return "";
@@ -114,7 +114,7 @@ std::string BoundSubqueryExpression::toDotGraph(uint32_t depth, NodeIdGenerator&
    return "";
 }
 
-BoundCaseExpression::BoundCaseExpression(catalog::NullableType resultType, std::string alias, std::vector<BoundCaseCheck> caseChecks, std::shared_ptr<BoundExpression> elseExpr) : BoundExpression(TYPE, ExpressionType::CASE_EXPR, resultType, alias), caseChecks(std::move(caseChecks)), elseExpr(std::move(elseExpr)) {
+BoundCaseExpression::BoundCaseExpression(catalog::NullableType resultType, std::string alias, std::optional<std::shared_ptr<ast::BoundExpression>> caseExpr, std::vector<BoundCaseCheck> caseChecks, std::shared_ptr<BoundExpression> elseExpr) : BoundExpression(TYPE, ExpressionType::CASE_EXPR, resultType, alias), caseExpr(caseExpr),  caseChecks(std::move(caseChecks)), elseExpr(std::move(elseExpr)) {
 }
 std::string BoundCaseExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    return "";
