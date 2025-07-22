@@ -143,6 +143,8 @@ class TupleHelper {
          offset += elemSize;
          maxAlign = std::max(maxAlign, elemAlign);
       }
+      if (offset == 0)
+         return {0, 1}; // empty tuple case
       // adjust entire struct size to the maximum alignment (for array usage)
       offset += maxAlign - offset % maxAlign;
       return {offset, maxAlign};

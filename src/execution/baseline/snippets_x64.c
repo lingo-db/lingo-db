@@ -70,6 +70,12 @@ int32_t arith_select_i32(uint8_t cond, int32_t val1, int32_t val2) { return ((co
 int64_t arith_select_i64(uint8_t cond, int64_t val1, int64_t val2) { return ((cond & 1) ? val1 : val2); }
 __uint128_t arith_select_i128(uint8_t cond, __uint128_t val1, __uint128_t val2) { return ((cond & 1) ? val1 : val2); }
 
+__int128_t arith_sext_i8_i128(int8_t in) { return (__int128_t)in; }
+__uint128_t arith_zext_i8_i128(uint8_t in) { return (__uint128_t)in; }
+__int128_t arith_sext_i16_i128(int16_t in) { return (__int128_t)in; }
+__uint128_t arith_zext_i16_i128(uint16_t in) { return (__uint128_t)in; }
+__int128_t arith_sext_i32_i128(int32_t in) { return (__int128_t)in; }
+__uint128_t arith_zext_i32_i128(uint32_t in) { return (__uint128_t)in; }
 __int128_t arith_sext_i64_i128(int64_t in) { return (__int128_t)in; }
 __uint128_t arith_zext_i64_i128(uint64_t in) { return (__uint128_t)in; }
 

@@ -1195,11 +1195,48 @@ namespace lingodb::execution::baseline {
             } else {
                 ScratchReg res_scratch_low{derived()};
                 ScratchReg res_scratch_high{derived()};
-                if (src_width != 64) return false;
                 if (sign) {
-                    derived()->encode_arith_sext_i64_i128(std::move(src_vpr), res_scratch_low, res_scratch_high);
+                    switch (src_width) {
+                        case 1:
+                        case 8:
+                            derived()->encode_arith_sext_i8_i128(std::move(src_vpr), res_scratch_low, res_scratch_high);
+                            break;
+                        case 16:
+                            derived()->encode_arith_sext_i16_i128(std::move(src_vpr), res_scratch_low,
+                                                                  res_scratch_high);
+                            break;
+                        case 32:
+                            derived()->encode_arith_sext_i32_i128(std::move(src_vpr), res_scratch_low,
+                                                                  res_scratch_high);
+                            break;
+                        case 64:
+                            derived()->encode_arith_sext_i64_i128(std::move(src_vpr), res_scratch_low,
+                                                                  res_scratch_high);
+                            break;
+                        default:
+                            return false;
+                    }
                 } else {
-                    derived()->encode_arith_zext_i64_i128(std::move(src_vpr), res_scratch_low, res_scratch_high);
+                    switch (src_width) {
+                        case 1:
+                        case 8:
+                            derived()->encode_arith_zext_i8_i128(std::move(src_vpr), res_scratch_low, res_scratch_high);
+                            break;
+                        case 16:
+                            derived()->encode_arith_zext_i16_i128(std::move(src_vpr), res_scratch_low,
+                                                                  res_scratch_high);
+                            break;
+                        case 32:
+                            derived()->encode_arith_zext_i32_i128(std::move(src_vpr), res_scratch_low,
+                                                                  res_scratch_high);
+                            break;
+                        case 64:
+                            derived()->encode_arith_zext_i64_i128(std::move(src_vpr), res_scratch_low,
+                                                                  res_scratch_high);
+                            break;
+                        default:
+                            return false;
+                    }
                 }
                 this->set_value(res.part(0), res_scratch_low);
                 this->set_value(res.part(1), res_scratch_high);
@@ -1217,36 +1254,62 @@ namespace lingodb::execution::baseline {
             ScratchReg res_scratch{derived()};
             auto res = this->result_ref(op->getResult(0));
 
-            switch (lhs.getType().getIntOrFloatBitWidth()) {
-                case 1:
-                case 8:
-                case 16:
-                case 32: derived()->encode_arith_select_i32(std::move(cond_vpr), lhs_vr.part(0), rhs_vr.part(0),
-                                                            res_scratch);
-                    break;
-                case 64: derived()->encode_arith_select_i64(std::move(cond_vpr), lhs_vr.part(0), rhs_vr.part(0),
-                                                            res_scratch);
-                    break;
-                case 128: {
-                    ScratchReg res_scratch_high{derived()};
-                    auto res_ref_high = res.part(1);
-                    derived()->encode_arith_select_i128(std::move(cond_vpr),
-                                                        lhs_vr.part(0),
-                                                        lhs_vr.part(1),
-                                                        rhs_vr.part(0),
-                                                        rhs_vr.part(1),
-                                                        res_scratch,
-                                                        res_scratch_high);
-                    this->set_value(res_ref_high, res_scratch_high);
-                    break;
-                }
-                default:
-                    assert(0 && "Unsupported integer type width for select operation");
-                    return false;
-            }
+            assert(lhs.getType() == rhs.getType() && "Both operands of select must be of the same type");
+            const auto success = llvm::TypeSwitch<mlir::Type, bool>(lhs.getType())
+                    .Case<mlir::IntegerType>([&](auto) {
+                        switch (lhs.getType().getIntOrFloatBitWidth()) {
+                            case 1:
+                            case 8:
+                            case 16:
+                            case 32: return derived()->encode_arith_select_i32(std::move(cond_vpr), lhs_vr.part(0),
+                                                                               rhs_vr.part(0),
+                                                                               res_scratch);
+                            case 64: return derived()->encode_arith_select_i64(std::move(cond_vpr), lhs_vr.part(0),
+                                                                               rhs_vr.part(0),
+                                                                               res_scratch);
+                            case 128: {
+                                ScratchReg res_scratch_high{derived()};
+                                auto res_ref_high = res.part(1);
+                                const bool success = derived()->encode_arith_select_i128(std::move(cond_vpr),
+                                    lhs_vr.part(0),
+                                    lhs_vr.part(1),
+                                    rhs_vr.part(0),
+                                    rhs_vr.part(1),
+                                    res_scratch,
+                                    res_scratch_high);
+                                this->set_value(res_ref_high, res_scratch_high);
+                                return success;
+                            }
+                            default:
+                                assert(0 && "Unsupported integer type width for select operation");
+                                return false;
+                        }
+                    })
+                    .template Case<dialect::util::RefType>([&](auto) {
+                        return derived()->encode_arith_select_i64(std::move(cond_vpr), lhs_vr.part(0), rhs_vr.part(0),
+                                                                  res_scratch);
+                    })
+                    .template Case<dialect::util::BufferType, dialect::util::VarLen32Type>([&](auto) {
+                        ScratchReg res_scratch_high{derived()};
+                        auto res_ref_high = res.part(1);
+                        const bool success = derived()->encode_arith_select_i128(std::move(cond_vpr),
+                            lhs_vr.part(0),
+                            lhs_vr.part(1),
+                            rhs_vr.part(0),
+                            rhs_vr.part(1),
+                            res_scratch,
+                            res_scratch_high);
+                        this->set_value(res_ref_high, res_scratch_high);
+                        return success;
+                    })
+                    .Default([&](auto) {
+                        assert(0 && "Unsupported type for select operation");
+                        return false;
+                    });
+
             auto res_ref = res.part(0);
             this->set_value(res_ref, res_scratch);
-            return true;
+            return success;
         }
 
         bool compile_arith_index_cast_op(const mlir::arith::IndexCastOp op) {
@@ -2094,7 +2157,7 @@ namespace lingodb::execution::baseline {
             const auto baselineCodeGenStart = std::chrono::high_resolution_clock::now();
             if (!compiler.compile()) {
                 error.emit() << "Could not compile query module:\n"
-                        // << logSpoof.drain_logs() << "\n"
+                        << logSpoof.drain_logs() << "\n"
                         << compiler.adaptor->getError().emit().str() << "\n"
                         << compiler.getError().emit().str() << "\n";
                 return;
