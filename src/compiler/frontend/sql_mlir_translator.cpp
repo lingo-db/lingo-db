@@ -770,6 +770,7 @@ mlir::Value SQLMlirTranslator::translateWhenCheks(mlir::OpBuilder& builder, std:
    //TOOD arg
 
    auto condTranslated = translateExpression(builder, check.whenExpr, context);
+   //TODO fix
    //condTranslated = check.whenExpr->resultType->castValue(builder, condTranslated);
    if (caseExprTranslated.has_value()) {
       caseExprTranslated = boundCase->caseExpr.value()->resultType->castValue(builder, caseExprTranslated.value());
