@@ -52,7 +52,7 @@ class SplitIntoExecutionSteps : public mlir::PassWrapper<SplitIntoExecutionSteps
             WRITE
          };
 
-         std::unordered_map<std::string, std::vector<std::tuple<subop::SubOperator, mlir::Operation*, Kind>>> memberUsage;
+         std::unordered_map<subop::Member, std::vector<std::tuple<subop::SubOperator, mlir::Operation*, Kind>>> memberUsage;
          for (auto& step : steps) {
             for (auto* op : step.second) {
                for (auto result : op->getResults()) {
@@ -62,10 +62,12 @@ class SplitIntoExecutionSteps : public mlir::PassWrapper<SplitIntoExecutionSteps
                }
                op->walk([&](mlir::Operation* nestedOp) {
                   if (subop::SubOperator potentialSubOp = mlir::dyn_cast_or_null<subop::SubOperator>(nestedOp)) {
-                     for (auto member : potentialSubOp.getReadMembers()) {
+                     auto readMembers = potentialSubOp.getReadMembers();
+                     auto writtenMembers = potentialSubOp.getWrittenMembers();
+                     for (auto member : readMembers) {
                         memberUsage[member].push_back({potentialSubOp, op, READ});
                      }
-                     for (auto member : potentialSubOp.getWrittenMembers()) {
+                     for (auto member : writtenMembers) {
                         memberUsage[member].push_back({potentialSubOp, op, WRITE});
                      }
                   }

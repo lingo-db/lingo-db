@@ -24,6 +24,20 @@ class ColumnMapping {
    dialect::tuples::ColumnDefAttr remap(dialect::tuples::ColumnDefAttr defAttr) {
       return defAttr.getContext()->getLoadedDialect<dialect::tuples::TupleStreamDialect>()->getColumnManager().createDef(mapping[&defAttr.getColumn()], defAttr.getFromExisting());
    }
+   subop::ColumnDefMemberMappingAttr remap(subop::ColumnDefMemberMappingAttr attr) {
+      llvm::SmallVector<subop::DefMappingPairT> remapped;
+      for (auto p : attr.getMapping()) {
+         remapped.push_back({p.first, remap(p.second)});
+      }
+      return subop::ColumnDefMemberMappingAttr::get(attr.getContext(), remapped);
+   }
+   subop::ColumnRefMemberMappingAttr remap(subop::ColumnRefMemberMappingAttr attr) {
+      llvm::SmallVector<subop::RefMappingPairT> remapped;
+      for (auto p : attr.getMapping()) {
+         remapped.push_back({p.first, remap(p.second)});
+      }
+      return subop::ColumnRefMemberMappingAttr::get(attr.getContext(), remapped);
+   }
    mlir::Attribute remap(mlir::Attribute attr) {
       if (auto refAttr = mlir::dyn_cast_or_null<dialect::tuples::ColumnRefAttr>(attr)) {
          return remap(refAttr);
@@ -31,8 +45,6 @@ class ColumnMapping {
          return remap(defAttr);
       } else if (auto arrayAttr = mlir::dyn_cast_or_null<mlir::ArrayAttr>(attr)) {
          return remap(arrayAttr);
-      } else if (auto dictionaryAttr = mlir::dyn_cast_or_null<mlir::DictionaryAttr>(attr)) {
-         return remap(dictionaryAttr);
       } else {
          assert(false);
       }
@@ -43,13 +55,6 @@ class ColumnMapping {
          remapped.push_back(remap(x));
       }
       return mlir::ArrayAttr::get(arrayAttr.getContext(), remapped);
-   }
-   mlir::DictionaryAttr remap(mlir::DictionaryAttr dictionaryAttr) {
-      std::vector<mlir::NamedAttribute> remapped;
-      for (auto x : dictionaryAttr) {
-         remapped.push_back(mlir::NamedAttribute(x.getName(), remap(x.getValue())));
-      }
-      return mlir::DictionaryAttr::get(dictionaryAttr.getContext(), remapped);
    }
    dialect::tuples::ColumnDefAttr clone(dialect::tuples::ColumnDefAttr defAttr) {
       auto& colManager = defAttr.getContext()->getLoadedDialect<dialect::tuples::TupleStreamDialect>()->getColumnManager();
@@ -63,12 +68,12 @@ class ColumnMapping {
       mapping[&defAttr.getColumn()] = &newDef.getColumn();
       return newDef;
    }
-   mlir::DictionaryAttr clone(mlir::DictionaryAttr mapping) {
-      std::vector<mlir::NamedAttribute> remapped;
-      for (auto x : mapping) {
-         remapped.push_back(mlir::NamedAttribute(x.getName(), clone(mlir::cast<dialect::tuples::ColumnDefAttr>(x.getValue()))));
+   subop::ColumnDefMemberMappingAttr clone(subop::ColumnDefMemberMappingAttr mapping) {
+      llvm::SmallVector<subop::DefMappingPairT> remapped;
+      for (auto p : mapping.getMapping()) {
+         remapped.push_back({p.first, clone(mlir::cast<dialect::tuples::ColumnDefAttr>(p.second))});
       }
-      return mlir::DictionaryAttr::get(mapping.getContext(), remapped);
+      return subop::ColumnDefMemberMappingAttr::get(mapping.getContext(), remapped);
    }
    mlir::ArrayAttr clone(mlir::ArrayAttr mapping) {
       std::vector<mlir::Attribute> remapped;

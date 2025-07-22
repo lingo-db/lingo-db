@@ -6,7 +6,7 @@ using namespace lingodb::compiler::dialect::subop;
 mlir::Type SubOpStateUsageTransformer::getNewRefType(mlir::Operation* op, mlir::Type oldRefType) {
    return getNewRefTypeFn(op, oldRefType);
 }
-void SubOpStateUsageTransformer::mapMembers(const std::unordered_map<std::string, std::string>& memberMapping) {
+void SubOpStateUsageTransformer::mapMembers(const std::unordered_map<subop::Member, subop::Member>& memberMapping) {
    this->memberMapping.insert(memberMapping.begin(), memberMapping.end());
 }
 void SubOpStateUsageTransformer::updateValue(mlir::Value oldValue, mlir::Type newType) {
@@ -46,40 +46,58 @@ tuples::ColumnDefAttr SubOpStateUsageTransformer::createReplacementColumn(tuples
 mlir::ArrayAttr SubOpStateUsageTransformer::updateMembers(mlir::ArrayAttr currentMembers) {
    bool anyNeedsReplacement = false;
    for (auto m : currentMembers) {
-      anyNeedsReplacement |= memberMapping.contains(mlir::cast<mlir::StringAttr>(m).str());
+      anyNeedsReplacement |= memberMapping.contains(mlir::cast<subop::MemberAttr>(m).getMember());
    }
    if (anyNeedsReplacement) {
-      mlir::OpBuilder b(currentMembers.getContext());
       std::vector<mlir::Attribute> newMembers;
       for (auto m : currentMembers) {
-         auto memberName = mlir::cast<mlir::StringAttr>(m).str();
-         if (memberMapping.contains(memberName)) {
-            newMembers.push_back(b.getStringAttr(memberMapping.at(memberName)));
+         auto member = mlir::cast<subop::MemberAttr>(m).getMember();
+         if (memberMapping.contains(member)) {
+            newMembers.push_back(subop::MemberAttr::get(currentMembers.getContext(), memberMapping.at(member)));
          } else {
             newMembers.push_back(m);
          }
       }
-      return b.getArrayAttr(newMembers);
+      return mlir::ArrayAttr::get(currentMembers.getContext(), newMembers);
    } else {
       return currentMembers;
    }
 }
-mlir::DictionaryAttr SubOpStateUsageTransformer::updateMapping(mlir::DictionaryAttr currentMapping) {
+
+subop::ColumnDefMemberMappingAttr SubOpStateUsageTransformer::updateMapping(subop::ColumnDefMemberMappingAttr currentMapping) {
    bool anyNeedsReplacement = false;
-   for (auto m : currentMapping) {
-      anyNeedsReplacement |= memberMapping.contains(m.getName().str());
+   for (auto m : currentMapping.getMapping()) {
+      anyNeedsReplacement |= memberMapping.contains(m.first);
    }
    if (anyNeedsReplacement) {
-      mlir::OpBuilder b(currentMapping.getContext());
-      std::vector<mlir::NamedAttribute> newMapping;
-      for (auto m : currentMapping) {
-         if (memberMapping.contains(m.getName().str())) {
-            newMapping.push_back(b.getNamedAttr(memberMapping.at(m.getName().str()), m.getValue()));
+      llvm::SmallVector<std::pair<subop::Member, tuples::ColumnDefAttr>> newMapping;
+      for (auto m : currentMapping.getMapping()) {
+         if (memberMapping.contains(m.first)) {
+            newMapping.push_back({memberMapping.at(m.first), m.second});
          } else {
             newMapping.push_back(m);
          }
       }
-      return b.getDictionaryAttr(newMapping);
+      return subop::ColumnDefMemberMappingAttr::get(currentMapping.getContext(), newMapping);
+   } else {
+      return currentMapping;
+   }
+}
+subop::ColumnRefMemberMappingAttr SubOpStateUsageTransformer::updateMapping(subop::ColumnRefMemberMappingAttr currentMapping) {
+   bool anyNeedsReplacement = false;
+   for (auto m : currentMapping.getMapping()) {
+      anyNeedsReplacement |= memberMapping.contains(m.first);
+   }
+   if (anyNeedsReplacement) {
+      llvm::SmallVector<std::pair<subop::Member, tuples::ColumnRefAttr>> newMapping;
+      for (auto m : currentMapping.getMapping()) {
+         if (memberMapping.contains(m.first)) {
+            newMapping.push_back({memberMapping.at(m.first), m.second});
+         } else {
+            newMapping.push_back(m);
+         }
+      }
+      return subop::ColumnRefMemberMappingAttr::get(currentMapping.getContext(), newMapping);
    } else {
       return currentMapping;
    }

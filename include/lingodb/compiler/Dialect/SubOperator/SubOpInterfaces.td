@@ -7,18 +7,18 @@ def SubOperator : OpInterface<"SubOperator"> {
   let methods = [
     InterfaceMethod<
       /*description=*/"",
-      /*retTy=*/"std::vector<std::string>",
+      /*retTy=*/"llvm::SmallVector<lingodb::compiler::dialect::subop::Member>",
       /*methodName=*/"getWrittenMembers",(ins ),"",
        /*defaultImplementation=*/[{
-           return {};
+             return {};
        }]
     >,
         InterfaceMethod<
           /*description=*/"",
-          /*retTy=*/"std::vector<std::string>",
+          /*retTy=*/"llvm::SmallVector<lingodb::compiler::dialect::subop::Member>",
           /*methodName=*/"getReadMembers",(ins ),"",
            /*defaultImplementation=*/[{
-               return {};
+             return {};
            }]
         >,
 		InterfaceMethod<
@@ -56,7 +56,7 @@ def StateCreator : OpInterface<"StateCreator"> {
     let methods = [
       InterfaceMethod<
         /*description=*/"",
-        /*retTy=*/"std::vector<std::string>",
+        /*retTy=*/"llvm::SmallVector<lingodb::compiler::dialect::subop::Member>",
         /*methodName=*/"getCreatedMembers",(ins ),"",
          /*defaultImplementation=*/[{
              return {};

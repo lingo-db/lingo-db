@@ -23,7 +23,7 @@ class PullGatherUpPass : public mlir::PassWrapper<PullGatherUpPass, mlir::Operat
          gatherOps.push_back(gatherOp);
       });
       for (auto gatherOp : gatherOps) {
-         std::vector<mlir::NamedAttribute> remaining = gatherOp.getMapping().getValue();
+         auto remaining = gatherOp.getMapping().getMapping();
          gatherOp.getRes().replaceAllUsesWith(gatherOp.getStream());
          auto* currentChild = gatherOp.getStream().getDefiningOp();
          mlir::Block* safeBlock = gatherOp->getBlock();
@@ -69,10 +69,10 @@ class PullGatherUpPass : public mlir::PassWrapper<PullGatherUpPass, mlir::Operat
             }
             if (otherStreams) break;
             auto usedColumns = columnUsageAnalysis.getUsedColumns(currentParent);
-            std::vector<mlir::NamedAttribute> usedByCurrent;
-            std::vector<mlir::NamedAttribute> notUsedByCurrent;
+            llvm::SmallVector<subop::DefMappingPairT> usedByCurrent;
+            llvm::SmallVector<subop::DefMappingPairT> notUsedByCurrent;
             for (auto x : remaining) {
-               if (usedColumns.contains(&mlir::cast<tuples::ColumnDefAttr>(x.getValue()).getColumn())) {
+               if (usedColumns.contains(&x.second.getColumn())) {
                   usedByCurrent.push_back(x);
                } else {
                   notUsedByCurrent.push_back(x);
@@ -80,7 +80,7 @@ class PullGatherUpPass : public mlir::PassWrapper<PullGatherUpPass, mlir::Operat
             }
             if (!usedByCurrent.empty()) {
                mlir::OpBuilder builder(currentParent);
-               auto newGatherOp = builder.create<subop::GatherOp>(gatherOp->getLoc(), currStream, gatherOp.getRef(), builder.getDictionaryAttr(usedByCurrent));
+               auto newGatherOp = builder.create<subop::GatherOp>(gatherOp->getLoc(), currStream, gatherOp.getRef(), subop::ColumnDefMemberMappingAttr::get(&getContext(), usedByCurrent));
                currStream.replaceAllUsesWith(newGatherOp.getResult());
                newGatherOp->setOperand(0, currStream);
                lastStream = newGatherOp.getResult();

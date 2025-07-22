@@ -14,7 +14,7 @@ class SubOpStateUsageTransformer {
    std::function<mlir::Type(mlir::Operation* op, mlir::Type oldRefType)> getNewRefTypeFn;
    std::function<void(mlir::Operation* op)> callBeforeFn;
    std::function<void(mlir::Operation* op)> callAfterFn;
-   std::unordered_map<std::string, std::string> memberMapping;
+   std::unordered_map<subop::Member, subop::Member> memberMapping;
    std::unordered_map<tuples::Column*, tuples::Column*> columnMapping;
 
    public:
@@ -22,8 +22,9 @@ class SubOpStateUsageTransformer {
    void updateValue(mlir::Value oldValue, mlir::Type newType);
    void replaceColumn(dialect::tuples::Column* oldColumn, dialect::tuples::Column* newColumn);
    mlir::Type getNewRefType(mlir::Operation* op, mlir::Type oldRefType);
-   mlir::DictionaryAttr updateMapping(mlir::DictionaryAttr currentMapping);
-   void mapMembers(const std::unordered_map<std::string, std::string>& memberMapping);
+   subop::ColumnRefMemberMappingAttr updateMapping(subop::ColumnRefMemberMappingAttr currentMapping);
+   subop::ColumnDefMemberMappingAttr updateMapping(subop::ColumnDefMemberMappingAttr currentMapping);
+   void mapMembers(const std::unordered_map<subop::Member, subop::Member>& memberMapping);
    mlir::ArrayAttr updateMembers(mlir::ArrayAttr currentMembers);
    dialect::tuples::ColumnDefAttr createReplacementColumn(dialect::tuples::ColumnDefAttr oldColumn, mlir::Type newType);
    tuples::ColumnManager& getColumnManager() const {

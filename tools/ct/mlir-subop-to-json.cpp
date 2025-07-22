@@ -1,6 +1,7 @@
 #include "lingodb/compiler/Dialect/DB/IR/DBOps.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "lingodb/compiler/Dialect/RelAlg/Passes.h"
+#include "lingodb/compiler/Dialect/SubOperator/SubOperatorDialect.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
 #include "lingodb/compiler/Dialect/util/UtilOps.h"
@@ -112,10 +113,11 @@ class ToJson {
 
    // Convert mlir Type to umbra json type
    std::string convertDataType(mlir::Type type) {
-      auto membersToString = [this](subop::StateMembersAttr attr) {
+      auto& memberManager = type.getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
+      auto membersToString = [this, &memberManager](subop::StateMembersAttr attr) {
          std::string result = "[";
-         for (auto [member, type] : llvm::zip(attr.getNames(), attr.getTypes())) {
-            result += mlir::cast<mlir::StringAttr>(member).str() + ":" + convertDataType(mlir::cast<mlir::TypeAttr>(type).getValue()) + ",";
+         for (auto m : attr.getMembers()) {
+            result += memberManager.getName(m) + ":" + convertDataType(memberManager.getType(m)) + ",";
          }
          result += "]";
          return result;
@@ -406,17 +408,19 @@ class ToJson {
          {"leaf_type", "column"},
          {"displayName", symbolRefToIuString(columnRefAttr.getName())}};
    }
-   nlohmann::json serializeDefMapping(mlir::DictionaryAttr dictAttr) {
+   nlohmann::json serializeDefMapping(subop::ColumnDefMemberMappingAttr dictAttr) {
+      auto& memberManager = dictAttr.getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
       auto result = nlohmann::json::array();
-      for (auto x : dictAttr) {
-         result.push_back(nlohmann::json{{"member", x.getName().str()}, {"column", columnToJSON(mlir::cast<tuples::ColumnDefAttr>(x.getValue()))}});
+      for (auto x : dictAttr.getMapping()) {
+         result.push_back(nlohmann::json{{"member", memberManager.getName(x.first)}, {"column", columnToJSON(x.second)}});
       }
       return result;
    }
-   nlohmann::json serializeRefMapping(mlir::DictionaryAttr dictAttr) {
+   nlohmann::json serializeRefMapping(subop::ColumnRefMemberMappingAttr dictAttr) {
+      auto& memberManager = dictAttr.getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
       auto result = nlohmann::json::array();
-      for (auto x : dictAttr) {
-         result.push_back(nlohmann::json{{"member", x.getName().str()}, {"column", columnToJSON(mlir::cast<tuples::ColumnRefAttr>(x.getValue()))}});
+      for (auto x : dictAttr.getMapping()) {
+         result.push_back(nlohmann::json{{"member", memberManager.getName(x.first)}, {"column", columnToJSON(x.second)}});
       }
       return result;
    }
