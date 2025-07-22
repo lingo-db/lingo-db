@@ -286,7 +286,7 @@
 %type<std::optional<lingodb::ast::LogicalType>> opt_interval
 %type<bool> opt_asymmetric set_quantifier
 
-
+%type<std::optional<std::shared_ptr<lingodb::ast::ParsedExpression>>> case_arg
 
 %type<std::shared_ptr<lingodb::ast::CreateNode>> CreateStmt
 %type<bool> OptTemp opt_varying
@@ -1209,6 +1209,12 @@ a_expr:
         node->asymmetric = $opt_asymmetric;
         $$ = node;
     }
+    | a_expr[input] NOT BETWEEN opt_asymmetric b_expr[lower] AND a_expr[upper] //%prec BETWEEN
+    {
+        auto node = mkNode<lingodb::ast::BetweenExpression>(@$, lingodb::ast::ExpressionType::COMPARE_NOT_BETWEEN, $input, $lower, $upper);
+        node->asymmetric = $opt_asymmetric;
+        $$ = node;
+    }
     | a_expr IS NULL_P 
     {
         $$ = mkNode<lingodb::ast::OperatorExpression>(@$, lingodb::ast::ExpressionType::OPERATOR_IS_NULL, $1);
@@ -1292,7 +1298,7 @@ in_expr:
 case_expr: 
     CASE case_arg when_clause_list case_default END_P
     {
-        auto caseExpr = mkNode<lingodb::ast::CaseExpression>(@$, $when_clause_list, $case_default);
+        auto caseExpr = mkNode<lingodb::ast::CaseExpression>(@$, $case_arg, $when_clause_list, $case_default);
         $$ = caseExpr;
     }
     ;
@@ -1328,8 +1334,11 @@ case_default:
     ;
 
 case_arg:
-    //TODO a_expr
-    | %empty
+    a_expr 
+    {
+        $$ = $1;
+    }
+    | %empty {$$=std::nullopt;}
     ;
 
 
