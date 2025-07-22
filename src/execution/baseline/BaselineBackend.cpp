@@ -827,7 +827,6 @@ namespace lingodb::execution::baseline {
                         {"arith.subf", {&Derived::encode_arith_sub_f32, &Derived::encode_arith_sub_f64}},
                         {"arith.mulf", {&Derived::encode_arith_mul_f32, &Derived::encode_arith_mul_f64}},
                         {"arith.divf", {&Derived::encode_arith_div_f32, &Derived::encode_arith_div_f64}},
-                        // {"arith.remf", {&Derived::encode_arith_rem_f32, &Derived::encode_arith_rem_f64}},
                     };
                 } else {
                     encoder_lookup = {
@@ -841,7 +840,8 @@ namespace lingodb::execution::baseline {
                         {"arith.ori", {&Derived::encode_arith_lor_i32, &Derived::encode_arith_lor_i64}},
                         {"arith.xori", {&Derived::encode_arith_lxor_i32, &Derived::encode_arith_lxor_i64}},
                         {"arith.andi", {&Derived::encode_arith_land_i32, &Derived::encode_arith_land_i64}},
-                        {"arith.shrui", {&Derived::encode_arith_shr_u32, &Derived::encode_arith_shr_u64}}
+                        {"arith.shrui", {&Derived::encode_arith_shr_u32, &Derived::encode_arith_shr_u64}},
+                        {"arith.shli", {&Derived::encode_arith_shl_i32, &Derived::encode_arith_shl_i64}}
                     };
                 }
 #ifndef NDEBUG
@@ -1285,7 +1285,7 @@ namespace lingodb::execution::baseline {
                                 return false;
                         }
                     })
-                    .template Case<dialect::util::RefType>([&](auto) {
+                    .template Case<dialect::util::RefType, mlir::IndexType>([&](auto) {
                         return derived()->encode_arith_select_i64(std::move(cond_vpr), lhs_vr.part(0), rhs_vr.part(0),
                                                                   res_scratch);
                     })
@@ -1302,7 +1302,8 @@ namespace lingodb::execution::baseline {
                         this->set_value(res_ref_high, res_scratch_high);
                         return success;
                     })
-                    .Default([&](auto) {
+                    .Default([&](auto t) {
+                        t.dump();
                         assert(0 && "Unsupported type for select operation");
                         return false;
                     });
