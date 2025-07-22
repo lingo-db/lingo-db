@@ -27,7 +27,7 @@
 namespace {
 namespace utility = lingodb::utility;
 utility::GlobalSetting<std::string> executionModeSetting("system.execution_mode", "DEFAULT");
-utility::GlobalSetting<std::string> subopOptPassesSetting("system.subop.opt", "GlobalOpt,ReuseLocal,Specialize,PullGatherUp,Compression");
+utility::GlobalSetting<std::string> subopOptPassesSetting("system.subop.opt", "ReuseLocal,Specialize,PullGatherUp,Compression");
 utility::Tracer::Event queryOptimizationEvent("Compilation", "Query Opt.");
 utility::Tracer::Event lowerRelalgEvent("Compilation", "Lower RelAlg");
 utility::Tracer::Event lowerSubOpEvent("Compilation", "Lower SubOp");
@@ -112,8 +112,6 @@ class SubOpLoweringStep : public LoweringStep {
       while (std::getline(configList, optPass, ',')) {
          enabledPasses.insert(optPass);
       }
-      if (enabledPasses.contains("GlobalOpt"))
-         optSubOpPm.addPass(subop::createGlobalOptPass());
       optSubOpPm.addPass(subop::createFoldColumnsPass());
       if (enabledPasses.contains("ReuseLocal"))
          optSubOpPm.addPass(subop::createReuseLocalPass());
