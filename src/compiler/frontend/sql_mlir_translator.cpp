@@ -608,6 +608,9 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
          auto ctUpper = boundBetween->upper->resultType->castValue(builder, upper);
 
          mlir::Value between = builder.create<db::BetweenOp>(builder.getUnknownLoc(), ctInput, ctLower, ctUpper, true, true);
+         if (boundBetween->type == ast::ExpressionType::COMPARE_NOT_BETWEEN) {
+            between = builder.create<db::NotOp>(builder.getUnknownLoc(), between);
+         }
          return between;
       }
       case ast::ExpressionClass::BOUND_FUNCTION: {
@@ -705,8 +708,11 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
       case ast::ExpressionClass::BOUND_CASE: {
          auto boundCase = std::static_pointer_cast<ast::BoundCaseExpression>(expression);
          //TODO translate arg
-
-         return translateWhenCheks(builder, boundCase, boundCase->caseChecks, boundCase->elseExpr, context);
+         std::optional<mlir::Value> caseExprTranslated = std::nullopt;
+         if (boundCase->caseExpr.has_value()) {
+            caseExprTranslated = translateExpression(builder, boundCase->caseExpr.value(), context);
+         }
+         return translateWhenCheks(builder, boundCase,caseExprTranslated, boundCase->caseChecks, boundCase->elseExpr, context);
       }
 
       default: error("Not implemented", expression->loc);
@@ -749,13 +755,14 @@ mlir::Value SQLMlirTranslator::translateBinaryOperatorExpression(mlir::OpBuilder
    }
 }
 
-mlir::Value SQLMlirTranslator::translateWhenCheks(mlir::OpBuilder& builder, std::shared_ptr<ast::BoundCaseExpression> boundCase, std::vector<ast::BoundCaseExpression::BoundCaseCheck> caseChecks, std::shared_ptr<ast::BoundExpression> elseExpr, std::shared_ptr<analyzer::SQLContext> context) {
+mlir::Value SQLMlirTranslator::translateWhenCheks(mlir::OpBuilder& builder, std::shared_ptr<ast::BoundCaseExpression> boundCase, std::optional<mlir::Value> caseExprTranslated, std::vector<ast::BoundCaseExpression::BoundCaseCheck> caseChecks, std::shared_ptr<ast::BoundExpression> elseExpr, std::shared_ptr<analyzer::SQLContext> context) {
    if (caseChecks.empty()) {
       if (!elseExpr) {
          return builder.create<db::NullOp>(builder.getUnknownLoc(), db::NullableType::get(builder.getContext(), builder.getNoneType()));
       }
       return translateExpression(builder, elseExpr, context);
    }
+   auto commonType = boundCase->resultType->toMlirType(builder.getContext());
 
    auto check = caseChecks[0];
    auto hasNextCheck = caseChecks.size() > 1;
@@ -763,6 +770,11 @@ mlir::Value SQLMlirTranslator::translateWhenCheks(mlir::OpBuilder& builder, std:
    //TOOD arg
 
    auto condTranslated = translateExpression(builder, check.whenExpr, context);
+   //condTranslated = check.whenExpr->resultType->castValue(builder, condTranslated);
+   if (caseExprTranslated.has_value()) {
+      caseExprTranslated = boundCase->caseExpr.value()->resultType->castValue(builder, caseExprTranslated.value());
+      condTranslated = builder.create<db::CmpOp>(builder.getUnknownLoc(), db::DBCmpPredicate::eq, condTranslated, caseExprTranslated.value());
+   }
 
    auto* whenBlock = new mlir::Block;
    auto* elseBlock = new mlir::Block;
@@ -774,12 +786,12 @@ mlir::Value SQLMlirTranslator::translateWhenCheks(mlir::OpBuilder& builder, std:
    mlir::Value elseTranslated;
    if (hasNextCheck) {
       std::vector<ast::BoundCaseExpression::BoundCaseCheck> nextChecks{caseChecks.begin() + 1, caseChecks.end()};
-      elseTranslated = translateWhenCheks(elseBuilder, boundCase, nextChecks, elseExpr, context);
+      elseTranslated = translateWhenCheks(elseBuilder, boundCase, caseExprTranslated, nextChecks, elseExpr, context);
    } else {
       elseTranslated = translateExpression(elseBuilder, elseExpr, context);
    }
 
-   auto commonType = boundCase->resultType->toMlirType(builder.getContext());
+
    thenTranslated = boundCase->resultType->castValueToThisType(whenBuilder, thenTranslated, check.thenExpr->resultType->isNullable);
    elseTranslated = boundCase->resultType->castValueToThisType(elseBuilder, elseTranslated, elseExpr->resultType->isNullable);
 
