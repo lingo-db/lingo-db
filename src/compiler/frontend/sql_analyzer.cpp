@@ -42,6 +42,8 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                   transformed = transFormededWhereClause;
                }
 
+
+
                auto extendPipeOp = drv.nf.node<ast::PipeOperator>(selectNode->select_list->loc, ast::PipeOperatorType::EXTEND, context->currentScope->extendNode);
                extendPipeOp->input = transformed;
                transformed = extendPipeOp;
@@ -50,10 +52,12 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                if (selectNode->groups) {
                   context->currentScope->aggregationNode->groupByNode = std::move(selectNode->groups);
                }
+
                auto aggPipeNode = drv.nf.node<ast::PipeOperator>(selectNode->loc, ast::PipeOperatorType::AGGREGATE, context->currentScope->aggregationNode);
                auto transFormedAggregation = canonicalizeCast<ast::PipeOperator>(aggPipeNode, context);
                transFormedAggregation->input = transformed;
                transformed = transFormedAggregation;
+
 
                //Transform target selection
                std::shared_ptr<ast::PipeOperator> transformedSelect = nullptr;
@@ -130,7 +134,7 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                int i = 0;
                //Canonicalize target expressions
                std::ranges::transform(selectNode->targets, selectNode->targets.begin(), [&](std::shared_ptr<ast::ParsedExpression>& target) {
-                  auto it = context->currentScope->groupByExpressions.find(target);
+                  auto it = context->currentScope->extendedExpressions.find(target);
 
                   return canonicalizeParsedExpression(target, context, true);
                });
@@ -155,7 +159,7 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                   for (auto e : aggNode->groupByNode->group_expressions) {
                      auto canonicalized = canonicalizeParsedExpression(e, context, true);
                      newGroupByExpressions.emplace_back(canonicalized);
-                     context->currentScope->groupByExpressions.emplace(e);
+                     context->currentScope->extendedExpressions.emplace(e);
                   }
                   aggNode->groupByNode->group_expressions = std::move(newGroupByExpressions);
                }
@@ -223,7 +227,7 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                auto orderBy = std::static_pointer_cast<ast::OrderByModifier>(resultModifier);
                for (auto expr : orderBy->orderByElements) {
                   auto canonicalized = canonicalizeParsedExpression(expr->expression, context, true);
-                  context->currentScope->groupByExpressions.emplace(expr->expression);
+                  context->currentScope->extendedExpressions.emplace(expr->expression);
                   expr->expression = canonicalized;
                }
 
@@ -240,6 +244,7 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
 }
 
 std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpression(std::shared_ptr<ast::ParsedExpression> rootNode, std::shared_ptr<ASTTransformContext> context, bool extend) {
+   static int i = 0;
    switch (rootNode->exprClass) {
       case ast::ExpressionClass::SUBQUERY: {
          auto subqueryExpr = std::static_pointer_cast<ast::SubqueryExpression>(rootNode);
@@ -248,10 +253,14 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
       }
       case ast::ExpressionClass::OPERATOR: {
          auto operatorExpr = std::static_pointer_cast<ast::OperatorExpression>(rootNode);
+
          std::ranges::transform(operatorExpr->children, operatorExpr->children.begin(), [&](auto& child) {
             return canonicalizeParsedExpression(child, context, false);
          });
+         std::string alias = operatorExpr->alias.empty() ? "" : operatorExpr->alias;
+         //TODO move to extend
          return operatorExpr;
+
       }
       case ast::ExpressionClass::CONJUNCTION: {
          auto conjunctionExpr = std::static_pointer_cast<ast::ConjunctionExpression>(rootNode);
@@ -259,6 +268,7 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
          std::ranges::transform(conjunctionExpr->children, conjunctionExpr->children.begin(), [&](auto& child) {
             return canonicalizeParsedExpression(child, context, false);
          });
+         //TODO move to extend
          return conjunctionExpr;
       }
       case ast::ExpressionClass::COMPARISON: {
@@ -269,13 +279,13 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
          std::ranges::transform(comparisonExpr->rightChildren, comparisonExpr->rightChildren.begin(), [&](auto& child) {
             return canonicalizeParsedExpression(child, context, false);
          });
-
+         //TODO move to extend
          return comparisonExpr;
       }
       case ast::ExpressionClass::FUNCTION: {
          auto functionExpr = std::static_pointer_cast<ast::FunctionExpression>(rootNode);
+
          std::string alias = functionExpr->alias.empty() ? functionExpr->functionName : functionExpr->alias;
-         static int i = 0;
          if (functionExpr->type == ast::ExpressionType::AGGREGATE) {
             functionExpr->alias = functionExpr->functionName + "_" + std::to_string(i);
             i++;
@@ -289,8 +299,8 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
             i++;
             if (!extend)
                return rootNode;
-            auto find = context->currentScope->groupByExpressions.find(functionExpr);
-            if (find == context->currentScope->groupByExpressions.end()) {
+            auto find = context->currentScope->extendedExpressions.find(functionExpr);
+            if (find == context->currentScope->extendedExpressions.end()) {
                if (functionExpr->alias.empty()) {
                   functionExpr->alias = functionExpr->functionName + "_" + std::to_string(i);
                }
@@ -308,12 +318,16 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
       }
       case ast::ExpressionClass::CASE: {
          auto caseExpr = std::static_pointer_cast<ast::CaseExpression>(rootNode);
+
          for (auto& caseCheck : caseExpr->caseChecks) {
             caseCheck.thenExpr = canonicalizeParsedExpression(caseCheck.thenExpr, context, false);
             caseCheck.whenExpr = canonicalizeParsedExpression(caseCheck.whenExpr, context, false);
          }
          caseExpr->elseExpr = canonicalizeParsedExpression(caseExpr->elseExpr, context, false);
+         std::string alias = caseExpr->alias.empty() ? "" : caseExpr->alias;
+         //TODO move to extend
          return caseExpr;
+
       }
       default: return rootNode;
    }
@@ -613,7 +627,9 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                return analyzeExpression(expr, context, resolverScope);
             });
          }
+         context->currentScope->targetInfo.targetColumns.clear();
 
+         //TODO move this logic completly to extend node: See todos in canonicalizeParsedExpression
          for (auto& target : targetSelection->targets) {
             auto parsedExpression = analyzeExpression(target, context, resolverScope);
 
@@ -750,6 +766,41 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
 
             return boundExpression;
          });
+
+         for (auto& parsedExpression: boundExtensions) {
+            //TODO very similar to the logic in Select. Maybe combine both
+            switch (parsedExpression->exprClass) {
+               case ast::ExpressionClass::BOUND_STAR:
+               case ast::ExpressionClass::BOUND_COLUMN_REF: {
+                  error("ColumnRef in extend node not allowed" , parsedExpression->loc);
+               }
+               case ast::ExpressionClass::BOUND_FUNCTION: {
+                  assert(parsedExpression->resultType.has_value() && parsedExpression->namedResult.has_value());
+                  auto function = std::static_pointer_cast<ast::BoundFunctionExpression>(parsedExpression);
+                  context->currentScope->targetInfo.add(parsedExpression->namedResult.value());
+                  auto fName = function->alias.empty() ? function->functionName : function->alias;
+                  context->mapAttribute(resolverScope, fName, function->namedResult.value());
+
+                  break;
+               }
+               case ast::ExpressionClass::BOUND_CONSTANT:
+               case ast::ExpressionClass::BOUND_OPERATOR:
+               case ast::ExpressionClass::BOUND_CAST:
+               case ast::ExpressionClass::BOUND_CASE: {
+                  assert(parsedExpression->resultType.has_value());
+                  auto scope = parsedExpression->alias.empty() ? parsedExpression->alias : createTmpScope();
+                  auto n = std::make_shared<ast::NamedResult>(ast::NamedResultType::EXPRESSION, scope, parsedExpression->resultType.value(), createTmpScope());
+                  n->displayName = parsedExpression->alias.empty() ? "" : parsedExpression->alias;
+                  context->mapAttribute(resolverScope, parsedExpression->alias.empty() ? n->name : parsedExpression->alias, n);
+                  context->currentScope->targetInfo.add(n);
+                  context->currentScope->evalBefore.emplace_back(parsedExpression);
+                  parsedExpression->namedResult = n;
+                  break;
+               }
+               default: error("Extend: Not implemented", parsedExpression->loc);
+            }
+         }
+
          boundAstNode = drv.nf.node<ast::BoundExtendNode>(extendNode->loc, createMapName(), std::move(boundExtensions));
          break;
       }
@@ -1486,7 +1537,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
          }
          auto fInfo = std::make_shared<ast::FunctionInfo>(scope, fName, resultType);
          fInfo->displayName = function->alias;
-         context->mapAttribute(resolverScope, fName, fInfo);
+
          boundFunctionExpression->namedResult = fInfo;
 
          return boundFunctionExpression;
@@ -1695,43 +1746,59 @@ std::shared_ptr<ast::BoundColumnRefExpression> SQLQueryAnalyzer::analyzeColumnRe
     * SQLTypeUtils
     */
 catalog::NullableType SQLTypeUtils::getCommonType(catalog::NullableType nullableType1, catalog::NullableType nullableType2) {
-   auto type1 = nullableType1.type;
-   auto type2 = nullableType2.type;
-   catalog::Type commonType = type1;
-   if (type1.getTypeId() == type2.getTypeId()) {
-      if (type1.getTypeId() == catalog::LogicalTypeId::DECIMAL) {
-         //Get higher decimal
-         return getHigherDecimalType(nullableType1, nullableType2);
-      }
-   } else if (type1.getTypeId() == catalog::LogicalTypeId::DATE && type2.getTypeId() == catalog::LogicalTypeId::STRING) {
-      commonType = type1;
-   } else if (type1.getTypeId() == catalog::LogicalTypeId::STRING && type2.getTypeId() == catalog::LogicalTypeId::DATE) {
-      commonType = type2;
-   } else if (type1.getTypeId() == catalog::LogicalTypeId::DATE && type2.getTypeId() == catalog::LogicalTypeId::INTERVAL || type1.getTypeId() == catalog::LogicalTypeId::INTERVAL && type2.getTypeId() == catalog::LogicalTypeId::DATE) {
-      return catalog::Type(catalog::LogicalTypeId::DATE, std::make_shared<catalog::DateTypeInfo>(catalog::DateTypeInfo::DateUnit::DAY));
-   } else if (type1.getTypeId() == catalog::LogicalTypeId::INT && type2.getTypeId() == catalog::LogicalTypeId::DECIMAL) {
-      commonType = type2;
-   } else if (type1.getTypeId() == catalog::LogicalTypeId::DECIMAL && type2.getTypeId() == catalog::LogicalTypeId::INT) {
-      commonType = type1;
-   } else if (type1.getTypeId() == catalog::LogicalTypeId::INT && type2.getTypeId() == catalog::LogicalTypeId::CHAR) {
-      commonType = type1;
-   }
-   else if (type2.getTypeId() == catalog::LogicalTypeId::CHAR && type2.getTypeId() == catalog::LogicalTypeId::INT) {
-      commonType = type2;
-   }
-   else if (type1.getTypeId() == catalog::LogicalTypeId::CHAR && type2.getTypeId() == catalog::LogicalTypeId::STRING) {
-      commonType = type2;
-   } else if (type2.getTypeId() == catalog::LogicalTypeId::CHAR && type1.getTypeId() == catalog::LogicalTypeId::STRING) {
-      commonType = type1;
-   } else if (type2.getTypeId() == catalog::LogicalTypeId::NONE) {
-      commonType = type1;
-   } else if (type1.getTypeId() == catalog::LogicalTypeId::NONE) {
-      commonType = type2;
-   } else {
-      throw std::runtime_error("No common type found for " + type1.toString() + " and " + type2.toString());
-   }
-   //TODO is this correct
-   return catalog::NullableType(commonType, nullableType1.isNullable || nullableType2.isNullable);
+    const bool isNullable = nullableType1.isNullable || nullableType2.isNullable;
+
+    // If types are identical, handle special case for DECIMAL or return the type
+    if (nullableType1.type.getTypeId() == nullableType2.type.getTypeId()) {
+        if (nullableType1.type.getTypeId() == catalog::LogicalTypeId::DECIMAL) {
+            return getHigherDecimalType(nullableType1, nullableType2);
+        }
+        return catalog::NullableType(nullableType1.type, isNullable);
+    }
+
+    for (size_t i = 0; i<2; i++) {
+       const auto& type1 = nullableType1.type;
+       const auto& type2 = nullableType2.type;
+
+       // Check combinations in one direction
+       if (type1.getTypeId() == catalog::LogicalTypeId::DECIMAL &&
+           type2.getTypeId() == catalog::LogicalTypeId::INT) {
+          return catalog::NullableType(type1, isNullable);
+           }
+
+       if (type1.getTypeId() == catalog::LogicalTypeId::STRING &&
+           type2.getTypeId() == catalog::LogicalTypeId::CHAR) {
+          return catalog::NullableType(type1, isNullable);
+           }
+
+       if (type1.getTypeId() == catalog::LogicalTypeId::DATE) {
+          if (type2.getTypeId() == catalog::LogicalTypeId::STRING) {
+             return catalog::NullableType(type1, isNullable);
+          }
+          if (type2.getTypeId() == catalog::LogicalTypeId::INTERVAL) {
+             return catalog::NullableType(
+                 catalog::Type(catalog::LogicalTypeId::DATE,
+                             std::make_shared<catalog::DateTypeInfo>(catalog::DateTypeInfo::DateUnit::DAY)),
+                 isNullable);
+          }
+       }
+
+       if (type1.getTypeId() == catalog::LogicalTypeId::INT &&
+           type2.getTypeId() == catalog::LogicalTypeId::CHAR) {
+          return catalog::NullableType(type1, isNullable);
+           }
+
+       // Handle NONE type
+       if (type2.getTypeId() == catalog::LogicalTypeId::NONE) {
+          return catalog::NullableType(type1, isNullable);
+       }
+       if (type1.getTypeId() == catalog::LogicalTypeId::NONE) {
+          return catalog::NullableType(type2, isNullable);
+       }
+       std::swap(nullableType1, nullableType2);
+    }
+
+    throw std::runtime_error("No common type found for " + nullableType1.type.toString() + " and " + nullableType2.type.toString());
 }
 
 catalog::NullableType SQLTypeUtils::getHigherDecimalType(catalog::NullableType left, catalog::NullableType right) {
