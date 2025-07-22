@@ -8,35 +8,33 @@
 namespace {
 using namespace lingodb::compiler::dialect;
 static mlir::LogicalResult parseStateMembers(mlir::AsmParser& parser, subop::StateMembersAttr& stateMembersAttr) {
+   auto& memberManager = parser.getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
    if (parser.parseLSquare()) return mlir::failure();
-   std::vector<mlir::Attribute> names;
-   std::vector<mlir::Attribute> types;
+   llvm::SmallVector<subop::Member> members;
    while (true) {
       if (!parser.parseOptionalRSquare()) { break; }
       llvm::StringRef colName;
       mlir::Type t;
       if (parser.parseKeyword(&colName) || parser.parseColon() || parser.parseType(t)) { return mlir::failure(); }
-      names.push_back(parser.getBuilder().getStringAttr(colName));
-      types.push_back(mlir::TypeAttr::get(t));
+      members.push_back(memberManager.createMemberDirect(colName.str(), t));
       if (!parser.parseOptionalComma()) { continue; }
       if (parser.parseRSquare()) { return mlir::failure(); }
       break;
    }
-   stateMembersAttr = subop::StateMembersAttr::get(parser.getContext(), parser.getBuilder().getArrayAttr(names), parser.getBuilder().getArrayAttr(types));
+   stateMembersAttr = subop::StateMembersAttr::get(parser.getContext(), members);
    return mlir::success();
 }
 static void printStateMembers(mlir::AsmPrinter& p, subop::StateMembersAttr stateMembersAttr) {
+   auto& memberManager = stateMembersAttr.getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
    p << "[";
    auto first = true;
-   for (size_t i = 0; i < stateMembersAttr.getNames().size(); i++) {
-      auto name = mlir::cast<mlir::StringAttr>(stateMembersAttr.getNames()[i]).str();
-      auto type = mlir::cast<mlir::TypeAttr>(stateMembersAttr.getTypes()[i]).getValue();
+   for (subop::Member m : stateMembersAttr.getMembers()) {
       if (first) {
          first = false;
       } else {
          p << ", ";
       }
-      p << name << " : " << type;
+      p << memberManager.getName(m) << " : " << memberManager.getType(m);
    }
    p << "]";
 }
@@ -55,87 +53,46 @@ static void printWithLock(mlir::AsmPrinter& p, bool withLock) {
       p << ", lockable";
    }
 }
+llvm::SmallVector<subop::Member> combineMembers(
+   const subop::StateMembersAttr& keyMembers,
+   const subop::StateMembersAttr& valueMembers) {
+   llvm::SmallVector<subop::Member> combined;
+   combined.reserve(keyMembers.getMembers().size() + valueMembers.getMembers().size());
+   for (const auto& member : keyMembers.getMembers()) {
+      combined.push_back(member);
+   }
+   for (const auto& member : valueMembers.getMembers()) {
+      combined.push_back(member);
+   }
+   return combined;
+}
 } // namespace
 subop::StateMembersAttr subop::HashMapType::getMembers() {
-   std::vector<mlir::Attribute> names;
-   std::vector<mlir::Attribute> types;
-   names.insert(names.end(), getKeyMembers().getNames().begin(), getKeyMembers().getNames().end());
-   names.insert(names.end(), getValueMembers().getNames().begin(), getValueMembers().getNames().end());
-   types.insert(types.end(), getKeyMembers().getTypes().begin(), getKeyMembers().getTypes().end());
-   types.insert(types.end(), getValueMembers().getTypes().begin(), getValueMembers().getTypes().end());
-   return subop::StateMembersAttr::get(this->getContext(), mlir::ArrayAttr::get(this->getContext(), names), mlir::ArrayAttr::get(this->getContext(), types));
+   return subop::StateMembersAttr::get(this->getContext(), combineMembers(getKeyMembers(), getValueMembers()));
 }
 subop::StateMembersAttr subop::PreAggrHtFragmentType::getMembers() {
-   std::vector<mlir::Attribute> names;
-   std::vector<mlir::Attribute> types;
-   names.insert(names.end(), getKeyMembers().getNames().begin(), getKeyMembers().getNames().end());
-   names.insert(names.end(), getValueMembers().getNames().begin(), getValueMembers().getNames().end());
-   types.insert(types.end(), getKeyMembers().getTypes().begin(), getKeyMembers().getTypes().end());
-   types.insert(types.end(), getValueMembers().getTypes().begin(), getValueMembers().getTypes().end());
-   return subop::StateMembersAttr::get(this->getContext(), mlir::ArrayAttr::get(this->getContext(), names), mlir::ArrayAttr::get(this->getContext(), types));
+   return subop::StateMembersAttr::get(this->getContext(), combineMembers(getKeyMembers(), getValueMembers()));
 }
 subop::StateMembersAttr subop::PreAggrHtType::getMembers() {
-   std::vector<mlir::Attribute> names;
-   std::vector<mlir::Attribute> types;
-   names.insert(names.end(), getKeyMembers().getNames().begin(), getKeyMembers().getNames().end());
-   names.insert(names.end(), getValueMembers().getNames().begin(), getValueMembers().getNames().end());
-   types.insert(types.end(), getKeyMembers().getTypes().begin(), getKeyMembers().getTypes().end());
-   types.insert(types.end(), getValueMembers().getTypes().begin(), getValueMembers().getTypes().end());
-   return subop::StateMembersAttr::get(this->getContext(), mlir::ArrayAttr::get(this->getContext(), names), mlir::ArrayAttr::get(this->getContext(), types));
+   return subop::StateMembersAttr::get(this->getContext(), combineMembers(getKeyMembers(), getValueMembers()));
 }
 subop::StateMembersAttr subop::HashMultiMapType::getMembers() {
-   std::vector<mlir::Attribute> names;
-   std::vector<mlir::Attribute> types;
-   names.insert(names.end(), getKeyMembers().getNames().begin(), getKeyMembers().getNames().end());
-   names.insert(names.end(), getValueMembers().getNames().begin(), getValueMembers().getNames().end());
-   types.insert(types.end(), getKeyMembers().getTypes().begin(), getKeyMembers().getTypes().end());
-   types.insert(types.end(), getValueMembers().getTypes().begin(), getValueMembers().getTypes().end());
-   return subop::StateMembersAttr::get(this->getContext(), mlir::ArrayAttr::get(this->getContext(), names), mlir::ArrayAttr::get(this->getContext(), types));
+   return subop::StateMembersAttr::get(this->getContext(), combineMembers(getKeyMembers(), getValueMembers()));
 }
 subop::StateMembersAttr subop::MultiMapType::getMembers() {
-   std::vector<mlir::Attribute> names;
-   std::vector<mlir::Attribute> types;
-   names.insert(names.end(), getKeyMembers().getNames().begin(), getKeyMembers().getNames().end());
-   names.insert(names.end(), getValueMembers().getNames().begin(), getValueMembers().getNames().end());
-   types.insert(types.end(), getKeyMembers().getTypes().begin(), getKeyMembers().getTypes().end());
-   types.insert(types.end(), getValueMembers().getTypes().begin(), getValueMembers().getTypes().end());
-   return subop::StateMembersAttr::get(this->getContext(), mlir::ArrayAttr::get(this->getContext(), names), mlir::ArrayAttr::get(this->getContext(), types));
+   return subop::StateMembersAttr::get(this->getContext(), combineMembers(getKeyMembers(), getValueMembers()));
 }
 subop::StateMembersAttr subop::ExternalHashIndexType::getMembers() {
-   std::vector<mlir::Attribute> names;
-   std::vector<mlir::Attribute> types;
-   names.insert(names.end(), getKeyMembers().getNames().begin(), getKeyMembers().getNames().end());
-   names.insert(names.end(), getValueMembers().getNames().begin(), getValueMembers().getNames().end());
-   types.insert(types.end(), getKeyMembers().getTypes().begin(), getKeyMembers().getTypes().end());
-   types.insert(types.end(), getValueMembers().getTypes().begin(), getValueMembers().getTypes().end());
-   return subop::StateMembersAttr::get(this->getContext(), mlir::ArrayAttr::get(this->getContext(), names), mlir::ArrayAttr::get(this->getContext(), types));
+   return subop::StateMembersAttr::get(this->getContext(), combineMembers(getKeyMembers(), getValueMembers()));
 }
 subop::StateMembersAttr subop::MapType::getMembers() {
-   std::vector<mlir::Attribute> names;
-   std::vector<mlir::Attribute> types;
-   names.insert(names.end(), getKeyMembers().getNames().begin(), getKeyMembers().getNames().end());
-   names.insert(names.end(), getValueMembers().getNames().begin(), getValueMembers().getNames().end());
-   types.insert(types.end(), getKeyMembers().getTypes().begin(), getKeyMembers().getTypes().end());
-   types.insert(types.end(), getValueMembers().getTypes().begin(), getValueMembers().getTypes().end());
-   return subop::StateMembersAttr::get(this->getContext(), mlir::ArrayAttr::get(this->getContext(), names), mlir::ArrayAttr::get(this->getContext(), types));
+   return subop::StateMembersAttr::get(this->getContext(), combineMembers(getKeyMembers(), getValueMembers()));
 }
 subop::StateMembersAttr subop::HashIndexedViewType::getMembers() {
-   std::vector<mlir::Attribute> names;
-   std::vector<mlir::Attribute> types;
-   names.insert(names.end(), getKeyMembers().getNames().begin(), getKeyMembers().getNames().end());
-   names.insert(names.end(), getValueMembers().getNames().begin(), getValueMembers().getNames().end());
-   types.insert(types.end(), getKeyMembers().getTypes().begin(), getKeyMembers().getTypes().end());
-   types.insert(types.end(), getValueMembers().getTypes().begin(), getValueMembers().getTypes().end());
-   return subop::StateMembersAttr::get(this->getContext(), mlir::ArrayAttr::get(this->getContext(), names), mlir::ArrayAttr::get(this->getContext(), types));
+   return subop::StateMembersAttr::get(this->getContext(), combineMembers(getKeyMembers(), getValueMembers()));
 }
 subop::StateMembersAttr subop::SegmentTreeViewType::getMembers() {
-   std::vector<mlir::Attribute> names;
-   std::vector<mlir::Attribute> types;
-   names.insert(names.end(), getKeyMembers().getNames().begin(), getKeyMembers().getNames().end());
-   names.insert(names.end(), getValueMembers().getNames().begin(), getValueMembers().getNames().end());
-   types.insert(types.end(), getKeyMembers().getTypes().begin(), getKeyMembers().getTypes().end());
-   types.insert(types.end(), getValueMembers().getTypes().begin(), getValueMembers().getTypes().end());
-   return subop::StateMembersAttr::get(this->getContext(), mlir::ArrayAttr::get(this->getContext(), names), mlir::ArrayAttr::get(this->getContext(), types));
+   return subop::StateMembersAttr::get(this->getContext(), combineMembers(getKeyMembers(), getValueMembers()));
 }
 subop::StateMembersAttr subop::SimpleStateType::getValueMembers() {
    return getMembers();

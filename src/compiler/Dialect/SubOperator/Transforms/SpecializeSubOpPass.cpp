@@ -53,6 +53,9 @@ class MultiMapAsHashIndexedView : public mlir::RewritePattern {
       if (!multiMapType) {
          return mlir::failure();
       }
+      auto keyMembers = multiMapType.getKeyMembers().getMembers();
+      auto valueMembers = multiMapType.getValueMembers().getMembers();
+
       std::vector<subop::LookupOp> lookupOps;
       std::vector<mlir::Operation*> otherUses;
       subop::InsertOp insertOp;
@@ -69,22 +72,25 @@ class MultiMapAsHashIndexedView : public mlir::RewritePattern {
             otherUses.push_back(u);
          }
       }
-
-      auto hashMember = memberManager.getUniqueMember("hash");
-      auto linkMember = memberManager.getUniqueMember("link");
-      auto [hashDef, hashRef] = createColumn(rewriter.getIndexType(), "hj", "hash");
       auto linkType = util::RefType::get(rewriter.getContext(), rewriter.getI8Type());
+      auto hashType = rewriter.getIndexType();
+
+      auto hashMember = memberManager.createMember("hash", hashType);
+      auto linkMember = memberManager.createMember("link", linkType);
+      auto [hashDef, hashRef] = createColumn(rewriter.getIndexType(), "hj", "hash");
       auto [linkDef, linkRef] = createColumn(linkType, "hj", "link");
       auto loc = op->getLoc();
 
-      std::vector<mlir::Attribute> bufferMemberTypes{mlir::TypeAttr::get(linkType), mlir::TypeAttr::get(rewriter.getIndexType())};
-      std::vector<mlir::Attribute> bufferMemberNames{rewriter.getStringAttr(linkMember), rewriter.getStringAttr(hashMember)};
-      bufferMemberNames.insert(bufferMemberNames.end(), multiMapType.getMembers().getNames().begin(), multiMapType.getMembers().getNames().end());
-      bufferMemberTypes.insert(bufferMemberTypes.end(), multiMapType.getMembers().getTypes().begin(), multiMapType.getMembers().getTypes().end());
-      std::vector<mlir::Attribute> hashIndexedViewTypes{multiMapType.getMembers().getTypes().begin(), multiMapType.getMembers().getTypes().end()};
-      std::vector<mlir::Attribute> hashIndexedViewNames{multiMapType.getMembers().getNames().begin(), multiMapType.getMembers().getNames().end()};
+      llvm::SmallVector<subop::Member> bufferMembers{
+         linkMember,
+         hashMember};
+      bufferMembers.insert(bufferMembers.end(), keyMembers.begin(), keyMembers.end());
+      bufferMembers.insert(bufferMembers.end(), valueMembers.begin(), valueMembers.end());
+      llvm::SmallVector<subop::Member> hashIndexedViewMembers;
+      hashIndexedViewMembers.insert(hashIndexedViewMembers.end(), keyMembers.begin(), keyMembers.end());
+      hashIndexedViewMembers.insert(hashIndexedViewMembers.end(), valueMembers.begin(), valueMembers.end());
 
-      auto bufferType = subop::BufferType::get(rewriter.getContext(), subop::StateMembersAttr::get(getContext(), rewriter.getArrayAttr(bufferMemberNames), rewriter.getArrayAttr(bufferMemberTypes)));
+      auto bufferType = subop::BufferType::get(rewriter.getContext(), subop::StateMembersAttr::get(getContext(), bufferMembers));
       mlir::Value buffer;
       {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
@@ -97,8 +103,8 @@ class MultiMapAsHashIndexedView : public mlir::RewritePattern {
       subop::MapCreationHelper buildHashHelper(rewriter.getContext());
       buildHashHelper.buildBlock(rewriter, [&](mlir::PatternRewriter& rewriter) {
          std::vector<mlir::Value> values;
-         for (auto keyMemberName : multiMapType.getKeyMembers().getNames()) {
-            auto keyColumnAttr = mlir::cast<tuples::ColumnRefAttr>(insertOp.getMapping().get(mlir::cast<mlir::StringAttr>(keyMemberName).strref()));
+         for (auto keyMember : keyMembers) {
+            auto keyColumnAttr = insertOp.getMapping().getColumnRef(keyMember);
             values.push_back(buildHashHelper.access(keyColumnAttr, loc));
          }
          mlir::Value hashed = hashKeys(values, rewriter, loc);
@@ -107,8 +113,9 @@ class MultiMapAsHashIndexedView : public mlir::RewritePattern {
       });
 
       bool compareHashForLookup = true;
-      if (multiMapType.getKeyMembers().getTypes().size() == 1) {
-         auto keyType = mlir::cast<mlir::TypeAttr>(multiMapType.getKeyMembers().getTypes()[0]).getValue();
+      if (keyMembers.size() == 1) {
+         auto onlyMember = keyMembers[0];
+         auto keyType = memberManager.getType(onlyMember);
          if (getBaseType(keyType).isInteger()) {
             //if the key is an integer, we do not need to compare hashes for lookups (comparisons are cheap anyway)
             compareHashForLookup = false;
@@ -119,12 +126,14 @@ class MultiMapAsHashIndexedView : public mlir::RewritePattern {
          rewriter.setInsertionPoint(insertOp);
          auto mapOp = rewriter.create<subop::MapOp>(loc, insertOp.getStream(), rewriter.getArrayAttr({hashDef, linkDef}), buildHashHelper.getColRefs());
          mapOp.getFn().push_back(buildHashHelper.getMapBlock());
-         std::vector<mlir::NamedAttribute> newMapping(insertOp.getMapping().begin(), insertOp.getMapping().end());
-         newMapping.push_back(rewriter.getNamedAttr(hashMember, hashRef));
-         newMapping.push_back(rewriter.getNamedAttr(linkMember, linkRef));
-         rewriter.create<subop::MaterializeOp>(loc, mapOp.getResult(), buffer, rewriter.getDictionaryAttr(newMapping));
-         hashIndexedViewType = subop::HashIndexedViewType::get(rewriter.getContext(), subop::StateMembersAttr::get(rewriter.getContext(), rewriter.getArrayAttr({rewriter.getStringAttr(hashMember)}), rewriter.getArrayAttr({mlir::TypeAttr::get(rewriter.getIndexType())})), subop::StateMembersAttr::get(getContext(), rewriter.getArrayAttr(hashIndexedViewNames), rewriter.getArrayAttr(hashIndexedViewTypes)), compareHashForLookup);
-         hashIndexedView = rewriter.create<subop::CreateHashIndexedView>(loc, hashIndexedViewType, buffer, hashMember, linkMember);
+         llvm::SmallVector<subop::RefMappingPairT> newMapping;
+         auto insertMapping = insertOp.getMapping().getMapping();
+         newMapping.insert(newMapping.end(), insertMapping.begin(), insertMapping.end());
+         newMapping.push_back({hashMember, hashRef});
+         newMapping.push_back({linkMember, linkRef});
+         rewriter.create<subop::MaterializeOp>(loc, mapOp.getResult(), buffer, subop::ColumnRefMemberMappingAttr::get(rewriter.getContext(), newMapping));
+         hashIndexedViewType = subop::HashIndexedViewType::get(rewriter.getContext(), subop::StateMembersAttr::get(rewriter.getContext(), llvm::SmallVector<subop::Member>{hashMember}), subop::StateMembersAttr::get(rewriter.getContext(), hashIndexedViewMembers), compareHashForLookup);
+         hashIndexedView = rewriter.create<subop::CreateHashIndexedView>(loc, hashIndexedViewType, buffer, subop::MemberAttr::get(rewriter.getContext(), hashMember), subop::MemberAttr::get(rewriter.getContext(), linkMember));
       }
       auto entryRefType = subop::LookupEntryRefType::get(rewriter.getContext(), mlir::cast<subop::LookupAbleState>(hashIndexedViewType));
       auto entryRefListType = subop::ListType::get(rewriter.getContext(), entryRefType);
@@ -158,13 +167,13 @@ class MultiMapAsHashIndexedView : public mlir::RewritePattern {
          });
          auto [listDef, listRef] = createColumn(entryRefListType, "lookup", "list");
          auto lookupRef = lookupOp.getRef();
-         std::vector<mlir::NamedAttribute> gatheredForEqFn;
+         llvm::SmallVector<subop::DefMappingPairT> gatheredForEqFn;
          std::vector<tuples::ColumnRefAttr> keyRefsForEqFn;
-         for (auto keyMember : llvm::zip(multiMapType.getKeyMembers().getNames(), multiMapType.getKeyMembers().getTypes())) {
-            auto name = mlir::cast<mlir::StringAttr>(std::get<0>(keyMember)).str();
-            auto type = mlir::cast<mlir::TypeAttr>(std::get<1>(keyMember)).getValue();
+         for (auto keyMember : keyMembers) {
+            auto name = memberManager.getName(keyMember);
+            auto type = memberManager.getType(keyMember);
             auto [lookupKeyMemberDef, lookupKeyMemberRef] = createColumn(type, "lookup", name);
-            gatheredForEqFn.push_back(rewriter.getNamedAttr(name, lookupKeyMemberDef));
+            gatheredForEqFn.push_back({keyMember, lookupKeyMemberDef});
             keyRefsForEqFn.push_back(lookupKeyMemberRef);
          }
          auto mapOp = rewriter.create<subop::MapOp>(loc, lookupOp.getStream(), rewriter.getArrayAttr({hashDefLookup}), lookupHashHelper.getColRefs());
@@ -197,7 +206,8 @@ class MultiMapAsHashIndexedView : public mlir::RewritePattern {
                assert(!!currentTuple);
                rewriter.setInsertionPointAfter(scanListOp);
                auto combined = rewriter.create<subop::CombineTupleOp>(loc, scanListOp.getRes(), currentTuple);
-               auto gatherOp = rewriter.create<subop::GatherOp>(loc, combined.getRes(), columnManager.createRef(&scanListOp.getElem().getColumn()), rewriter.getDictionaryAttr(gatheredForEqFn));
+               auto gatherOp = rewriter.create<subop::GatherOp>(loc, combined.getRes(), columnManager.createRef(&scanListOp.getElem().getColumn()),
+                                                                subop::ColumnDefMemberMappingAttr::get(rewriter.getContext(), gatheredForEqFn));
                auto mapOp = rewriter.create<subop::MapOp>(loc, gatherOp.getRes(), rewriter.getArrayAttr({lookupPredDef}), predFnHelper.getColRefs());
                mapOp.getFn().push_back(predFnHelper.getMapBlock());
                auto filter = rewriter.create<subop::FilterOp>(loc, mapOp.getResult(), subop::FilterSemantic::all_true, rewriter.getArrayAttr({lookupPredRef}));

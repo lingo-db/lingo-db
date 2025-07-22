@@ -52,12 +52,12 @@ subop.reduce %stream @state::@ref [@t::@col] ["sum"] ([%curr],[%val]){
 }
 
 // -----
-//CHECK: %{{.*}} = subop.create_heap["ih"] -> !subop.heap<4, [ih : index]> ([%arg0],[%arg1]){
+//CHECK: %{{.*}} = subop.create_heap !subop.heap<4, [ih : index]> ["ih"] ([%arg0],[%arg1]){
 //CHECK:   %{{.*}} = arith.cmpi ult, %arg0, %arg1 : index
 //CHECK:   tuples.return %{{.*}} : i1
 //CHECK: }
 
-%heap = subop.create_heap ["ih"] -> !subop.heap<4,[ih : index]> ([%left],[%right]){
+%heap = subop.create_heap !subop.heap<4,[ih : index]> ["ih"] ([%left],[%right]){
 	%lt = arith.cmpi ult, %left, %right : index
 	tuples.return %lt : i1
 }

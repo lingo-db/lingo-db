@@ -6,6 +6,7 @@
 #include "custom_dialects.h"
 #include "lingodb/compiler/Dialect/DB/IR/DBOps.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOps.h"
+#include "lingodb/compiler/Dialect/SubOperator/SubOperatorDialect.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamDialect.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
@@ -179,12 +180,61 @@ bool mlirAttributeIsARelalgTableMetaDataAttr(MlirAttribute attribute) {
 // SubOp Dialect
 //----------------------------------------------------------------------------------------------------------------------
 
-MlirAttribute mlirSubOpStateMembersAttributeGet(MlirAttribute names, MlirAttribute types) {
-   return wrap(subop::StateMembersAttr::get(unwrap(names).getContext(), mlir::cast<mlir::ArrayAttr>(unwrap(names)), mlir::cast<mlir::ArrayAttr>(unwrap(types))));
+SubOpMember mlirSubOpCreateMember(MlirStringRef name, MlirType type) {
+   auto t = unwrap(type);
+   auto m = t.getContext()->getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager().createMember(unwrap(name).str(), t);
+   return SubOpMember{m.internal};
+}
+
+MlirAttribute mlirSubOpStateMembersAttributeGet(MlirContext context, SubOpMember* members, size_t nMembers) {
+   llvm::SmallVector<subop::Member> unwrappedMembers;
+   for (size_t i = 0; i < nMembers; ++i) {
+      auto member = subop::Member((subop::internal::MemberInternal*) members[i].storage);
+      unwrappedMembers.push_back(member);
+   }
+
+   return wrap(subop::StateMembersAttr::get(unwrap(context), unwrappedMembers));
 }
 bool mlirAttributeIsASubOpStateMembersAttribute(MlirAttribute attribute) {
    return llvm::isa<subop::StateMembersAttr>(unwrap(attribute));
 }
+MlirAttribute mlirSubOpColumnRefMemberMappingAttributeGet(MlirContext context, SubOpMember* members, size_t nMembers, MlirAttribute* columnRefs, size_t nColumnRefs) {
+   llvm::SmallVector<subop::RefMappingPairT> mapping;
+   for (size_t i = 0; i < nMembers; ++i) {
+      auto member = subop::Member((subop::internal::MemberInternal*) members[i].storage);
+      auto columnRef = mlir::cast<tuples::ColumnRefAttr>(unwrap(columnRefs[i]));
+      mapping.push_back({member, columnRef});
+   }
+   return wrap(subop::ColumnRefMemberMappingAttr::get(unwrap(context), mapping));
+}
+
+bool mlirAttributeIsAColumnRefMemberMappingAttribute(MlirAttribute attribute) {
+   return llvm::isa<subop::ColumnRefMemberMappingAttr>(unwrap(attribute));
+}
+
+MlirAttribute mlirSubOpColumnDefMemberMappingAttributeGet(MlirContext context, SubOpMember* members, size_t nMembers, MlirAttribute* columnDefs, size_t nColumnDefs) {
+   llvm::SmallVector<subop::DefMappingPairT> mapping;
+   for (size_t i = 0; i < nMembers; ++i) {
+      auto member = subop::Member((subop::internal::MemberInternal*) members[i].storage);
+      auto columnDef = mlir::cast<tuples::ColumnDefAttr>(unwrap(columnDefs[i]));
+      mapping.push_back({member, columnDef});
+   }
+   return wrap(subop::ColumnDefMemberMappingAttr::get(unwrap(context), mapping));
+}
+
+bool mlirAttributeIsAColumnDefMemberMappingAttribute(MlirAttribute attribute) {
+   return llvm::isa<subop::ColumnDefMemberMappingAttr>(unwrap(attribute));
+}
+
+MlirAttribute mlirSubOpMemberAttributeGet(MlirContext context, SubOpMember member) {
+   auto m = subop::Member((subop::internal::MemberInternal*) member.storage);
+   return wrap(subop::MemberAttr::get(unwrap(context), m));
+}
+
+bool mlirAttributeIsASubOpMemberAttribute(MlirAttribute attribute) {
+   return llvm::isa<subop::MemberAttr>(unwrap(attribute));
+}
+
 MlirType mlirSubOpTableTypeGet(MlirAttribute members) {
    return wrap(subop::TableType::get(unwrap(members).getContext(), mlir::cast<subop::StateMembersAttr>(unwrap(members))));
 }

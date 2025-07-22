@@ -61,21 +61,20 @@ ExecutionStepAnalyzed analyze(subop::ExecutionStepOp executionStepOp, subop::Col
          equivalenceClasses.unionSets(op.getOperation(), stateAccessing.getOperation());
       }
    };
-   std::unordered_set<std::string> extMembers;
+   llvm::SmallDenseSet<subop::Member> extMembers;
    for (auto [i, a] : llvm::zip(executionStepOp.getInputs(), executionStepOp.getSubOps().getArguments())) {
       auto argType = a.getType();
       extStates.insert({a, i});
       if (auto stateType = mlir::dyn_cast_or_null<subop::State>(argType)) {
-         for (auto m : stateType.getMembers().getNames()) {
-            extMembers.insert(mlir::cast<mlir::StringAttr>(m).str());
-         }
+         auto stateMembers = stateType.getMembers().getMembers();
+         extMembers.insert(stateMembers.begin(), stateMembers.end());
       }
    }
    auto* firstOp = &*executionStepOp.getOps().begin();
    result.pipelineStart = mlir::cast<subop::SubOperator>(firstOp);
 
-   std::unordered_map<std::string, std::vector<mlir::Operation*>> readMembers;
-   std::unordered_map<std::string, std::vector<mlir::Operation*>> writtenMembers;
+   llvm::DenseMap<subop::Member, std::vector<mlir::Operation*>> readMembers;
+   llvm::DenseMap<subop::Member, std::vector<mlir::Operation*>> writtenMembers;
 
    std::vector<subop::SubOperator> pipelineOps;
    executionStepOp.getSubOps().walk([&](subop::SubOperator subOp) {
@@ -248,7 +247,7 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                               auto stateAccessing = problematicOp.stateAccessing;
                               if (auto lookupOp = mlir::dyn_cast_or_null<subop::LookupOp>(stateAccessing.getOperation())) {
                                  auto ext = extStates[lookupOp.getState()];
-                                 if (ext.getDefiningOp() && mlir::isa<subop::SimpleStateType>(ext.getType()) && mlir::dyn_cast_or_null<subop::SimpleStateType>(ext.getType()).getMembers().getTypes().size() == reduceOp.getMembers().size() && !reduceOp.getCombine().empty()) {
+                                 if (ext.getDefiningOp() && mlir::isa<subop::SimpleStateType>(ext.getType()) && mlir::dyn_cast_or_null<subop::SimpleStateType>(ext.getType()).getMembers().getMembers().size() == reduceOp.getMembers().size() && !reduceOp.getCombine().empty()) {
                                     toThreadLocals[ext].requiresCombine = true;
                                     toThreadLocals[ext].combineRegion = &reduceOp.getCombine();
                                  } else if (ext.getDefiningOp() && mlir::isa<subop::HashMapType>(ext.getType())) {

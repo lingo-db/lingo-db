@@ -1,4 +1,5 @@
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/ColumnUsageAnalysis.h"
+#include "lingodb/compiler/Dialect/SubOperator/SubOperatorOpsAttributes.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
 using namespace lingodb::compiler::dialect;
 
@@ -8,9 +9,13 @@ void subop::ColumnUsageAnalysis::analyze(mlir::Operation* op, mlir::Attribute at
       for (auto x : arrayAttr) {
          analyze(op, x);
       }
-   } else if (auto dictionaryAttr = mlir::dyn_cast_or_null<mlir::DictionaryAttr>(attr)) {
-      for (auto x : dictionaryAttr) {
-         analyze(op, x.getValue());
+   } else if (auto mappingDefAttr = mlir::dyn_cast_or_null<subop::ColumnDefMemberMappingAttr>(attr)) {
+      for (auto x : mappingDefAttr.getMapping()) {
+         analyze(op, x.second);
+      }
+   } else if (auto mappingRefAttr = mlir::dyn_cast_or_null<subop::ColumnRefMemberMappingAttr>(attr)) {
+      for (auto x : mappingRefAttr.getMapping()) {
+         analyze(op, x.second);
       }
    } else if (auto columnRefAttr = mlir::dyn_cast_or_null<tuples::ColumnRefAttr>(attr)) {
       usedColumns[op].insert(&columnRefAttr.getColumn());

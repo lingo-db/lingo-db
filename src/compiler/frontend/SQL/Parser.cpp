@@ -1314,19 +1314,16 @@ std::optional<mlir::Value> frontend::sql::Parser::translate(mlir::OpBuilder& bui
                //::mlir::Type result, ::mlir::Value rel, ::mlir::ArrayAttr attrs, ::mlir::ArrayAttr columns
                std::vector<mlir::Attribute> attrs;
                std::vector<mlir::Attribute> names;
-               std::vector<mlir::Attribute> colMemberNames;
-               std::vector<mlir::Attribute> colTypes;
+               llvm::SmallVector<subop::Member> members;
                auto& memberManager = builder.getContext()->getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager();
                for (auto x : targetInfo.namedResults) {
-                  if (x.first == "primaryKeyHashValue") continue;
                   names.push_back(builder.getStringAttr(x.first));
-                  auto colMemberName = memberManager.getUniqueMember(x.first.empty() ? "unnamed" : x.first);
                   auto columnType = x.second->type;
+                  auto colMemberName = memberManager.createMember(x.first.empty() ? "unnamed" : x.first, columnType);
+                  members.push_back(colMemberName);
                   attrs.push_back(attrManager.createRef(x.second));
-                  colTypes.push_back(mlir::TypeAttr::get(columnType));
-                  colMemberNames.push_back(builder.getStringAttr(colMemberName));
                }
-               localTableType = subop::LocalTableType::get(builder.getContext(), subop::StateMembersAttr::get(builder.getContext(), builder.getArrayAttr(colMemberNames), builder.getArrayAttr(colTypes)), builder.getArrayAttr(names));
+               localTableType = subop::LocalTableType::get(builder.getContext(), subop::StateMembersAttr::get(builder.getContext(), members), builder.getArrayAttr(names));
                mlir::Value result = builder.create<relalg::MaterializeOp>(builder.getUnknownLoc(), localTableType, tree, builder.getArrayAttr(attrs), builder.getArrayAttr(names));
                builder.create<relalg::QueryReturnOp>(builder.getUnknownLoc(), result);
             }
@@ -1567,18 +1564,18 @@ void frontend::sql::Parser::translateInsertStmt(mlir::OpBuilder& builder, Insert
       auto mapOp = builder.create<relalg::MapOp>(builder.getUnknownLoc(), tuples::TupleStreamType::get(builder.getContext()), tree, builder.getArrayAttr(createdCols));
       mapOp.getPredicate().push_back(block);
       mapBuilder.create<tuples::ReturnOp>(builder.getUnknownLoc(), createdValues);
-      std::vector<mlir::Attribute> colMemberNames;
+      llvm::SmallVector<subop::Member> members;
       std::vector<mlir::Attribute> orderedColNamesAttrs;
       std::vector<mlir::Attribute> orderedColAttrs;
-      std::vector<mlir::Attribute> colTypes;
       auto& memberManager = builder.getContext()->getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager();
       for (auto x : rel->getColumnNames()) {
-         colMemberNames.push_back(builder.getStringAttr(memberManager.getUniqueMember(x)));
+         auto columnType = mlir::cast<tuples::ColumnRefAttr>(insertedCols.at(x)).getColumn().type;
+         auto colMemberName = memberManager.createMember(x, columnType);
+         members.push_back(colMemberName);
          orderedColNamesAttrs.push_back(builder.getStringAttr(x));
          orderedColAttrs.push_back(insertedCols.at(x));
-         colTypes.push_back(mlir::TypeAttr::get(mlir::cast<tuples::ColumnRefAttr>(insertedCols.at(x)).getColumn().type));
       }
-      localTableType = subop::LocalTableType::get(builder.getContext(), subop::StateMembersAttr::get(builder.getContext(), builder.getArrayAttr(colMemberNames), builder.getArrayAttr(colTypes)), builder.getArrayAttr(orderedColNamesAttrs));
+      localTableType = subop::LocalTableType::get(builder.getContext(), subop::StateMembersAttr::get(builder.getContext(), members), builder.getArrayAttr(orderedColNamesAttrs));
       mlir::Value newRows = builder.create<relalg::MaterializeOp>(builder.getUnknownLoc(), localTableType, mapOp.getResult(), builder.getArrayAttr(orderedColAttrs), builder.getArrayAttr(orderedColNamesAttrs));
       builder.create<relalg::QueryReturnOp>(builder.getUnknownLoc(), newRows);
    }
