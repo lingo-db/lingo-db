@@ -490,6 +490,8 @@ std::string OperatorExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGe
          dot.append("Unknown Operator");
          break;
    }
+   dot.append("\\n alias: ");
+   dot.append(alias);
    dot.append("\"];\n");
 
    // Add all child expressions
