@@ -31,6 +31,7 @@ uint64_t arith_shr_u64(uint64_t a, uint64_t b) { return (a >> b); }
 __uint128_t arith_add_i128(__uint128_t a, __uint128_t b) { return (a + b); }
 __uint128_t arith_sub_i128(__uint128_t a, __uint128_t b) { return (a - b); }
 __uint128_t arith_mul_i128(__uint128_t a, __uint128_t b) { return (a * b); }
+__uint128_t arith_shr_u128(__uint128_t a, __uint128_t b) { return (a >> b); }
 // Division and remainder operations are not supported by tpde_encoder. We need to call builtins for these.
 //__int128_t arith_sdiv_i128(__int128_t a, __int128_t b) { return (a / b); }
 //__uint128_t arith_udiv_i128(__uint128_t a, __uint128_t b) { return (a / b); }

@@ -763,6 +763,22 @@ namespace lingodb::execution::baseline {
                     return true;
                 }
 
+                // the shifts (even when written as a snippet) do not take a 2-part 128-bit int as the shift amount
+                if (op->getName().getStringRef().str() == "arith.shrui") {
+                    auto lhs_vr = this->val_ref(op->getOperand(0));
+                    auto rhs_vr = this->val_ref(op->getOperand(1));
+                    ScratchReg res_scratch_high{derived()};
+                    ScratchReg res_scratch_low{derived()};
+                    auto res_low = res.part(0);
+                    auto res_high = res.part(1);
+                    // special case: only take rhs_vr.part(0) as the shift amount, ignore part(1)
+                    derived()->encode_arith_shr_u128(std::move(lhs_vr.part(0)), std::move(lhs_vr.part(1)),
+                                                     std::move(rhs_vr.part(0)), res_scratch_low, res_scratch_high);
+                    this->set_value(res_low, res_scratch_low);
+                    this->set_value(res_high, res_scratch_high);
+                    return true;
+                }
+
                 std::unordered_map<std::string, bool (Derived::*)(GenericValuePart &&, GenericValuePart &&,
                                                                   GenericValuePart &&, GenericValuePart &&,
                                                                   ScratchReg &, ScratchReg &)> encoder_lookup = {
@@ -1317,11 +1333,15 @@ namespace lingodb::execution::baseline {
             mlir::Value src = op->getOperand(0);
             mlir::Value res = op->getResult(0);
             if (mlir::isa<mlir::IntegerType>(src.getType()) && mlir::isa<mlir::IndexType>(res.getType())) {
-                assert(src.getType().getIntOrFloatBitWidth() <= 64);
                 auto [_, src_vpr] = this->val_ref_single(src);
+                auto res_ref = this->result_ref(res);
+                if (src.getType().getIntOrFloatBitWidth() == 128) {
+                    res_ref.part(0).set_value(std::move(src_vpr));
+                    return true;
+                }
+                assert(src.getType().getIntOrFloatBitWidth() <= 64);
                 if (src.getType().getIntOrFloatBitWidth() != 64)
                     src_vpr = std::move(src_vpr).into_extended(false, src.getType().getIntOrFloatBitWidth(), 64);
-                auto res_ref = this->result_ref(res);
                 res_ref.part(0).set_value(std::move(src_vpr));
                 return true;
             }
