@@ -368,6 +368,10 @@ mlir::Value SQLMlirTranslator::translatePipeOperator(mlir::OpBuilder& builder, s
          tree = translateAggregation(builder, aggregationNode, context, tree);
          tree = createMap(builder, attrManager.getUniqueScope("map2"), context->currentScope->evalBefore, context, tree);
          context->currentScope->evalBefore.clear();
+         for (auto window: aggregationNode->windowFunctions) {
+            tree = translateWindowExpression(builder, tree, window, context);
+         }
+
          return tree;
       }
       case ast::PipeOperatorType::EXTEND: {
@@ -641,6 +645,10 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
             //TODO move type logic to analyzer
             return builder.create<db::RuntimeCall>(builder.getUnknownLoc(), val.getType(), mlir::isa<db::DecimalType>(getBaseType(val.getType())) ? "AbsDecimal" : "AbsInt", val).getRes();
          }
+         if (function->functionName == "COALESCE") {
+            return translateCoalesceExpression(builder,function->resultType.value(), function->arguments, context);
+
+         }
          error("Function '" << function->functionName << "' not implemented", expression->loc);
       }
       case ast::ExpressionClass::BOUND_SUBQUERY: {
@@ -714,6 +722,11 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
          }
          return translateWhenCheks(builder, boundCase,caseExprTranslated, boundCase->caseChecks, boundCase->elseExpr, context);
       }
+      case ast::ExpressionClass::BOUND_WINDOW: {
+         auto window = std::static_pointer_cast<ast::BoundWindowExpression>(expression);
+         return translateWindowExpression(builder, nullptr, window, context);
+
+      }
 
       default: error("Not implemented", expression->loc);
    }
@@ -755,6 +768,97 @@ mlir::Value SQLMlirTranslator::translateBinaryOperatorExpression(mlir::OpBuilder
    }
 }
 
+mlir::Value SQLMlirTranslator::translateWindowExpression(mlir::OpBuilder& builder, mlir::Value tree, std::shared_ptr<ast::BoundWindowExpression> expression, std::shared_ptr<analyzer::SQLContext> context) {
+   //TODO non columnRef arguments
+   mlir::Value expr;
+   tuples::ColumnDefAttr attrDef;
+   auto tupleStreamType = tuples::TupleStreamType::get(builder.getContext());
+   auto tupleType = tuples::TupleType::get(builder.getContext());
+
+   static int windowId = 0;
+   std::string groupByName = "window" + std::to_string(windowId++);
+   auto tupleScope = translationContext->createTupleScope();
+   translationContext->getCurrentTuple();
+   auto* block = new mlir::Block;
+   block->addArgument(tupleStreamType, builder.getUnknownLoc());
+   block->addArgument(tupleType, builder.getUnknownLoc());
+   mlir::Value relation = block->getArgument(0);
+   mlir::OpBuilder windowBuilder(builder.getContext());
+   windowBuilder.setInsertionPointToStart(block);
+   std::vector<mlir::Value> createdValues;
+   std::vector<mlir::Attribute> createdCols;
+
+   expr = translateAggregationFunction(builder, "windowMap", std::vector<mlir::Attribute>{}, relation, windowBuilder, expression->function, expr, attrDef) ;
+
+   attrDef.getColumn().type = expr.getType();
+
+   createdCols.push_back(attrDef);
+   createdValues.push_back(expr);
+
+   windowBuilder.create<tuples::ReturnOp>(builder.getUnknownLoc(), createdValues);
+
+   std::vector<mlir::Attribute> partitionByAttrs;
+   std::vector<mlir::Attribute> orderBySpecs;
+   if (expression->order.has_value()) {
+      for (auto orderByElement : expression->order.value()->orderByElements) {
+         tuples::ColumnRefAttr attr;
+         assert(orderByElement->namedResult);
+         attr = orderByElement->namedResult->createRef(builder, attrManager);
+
+         orderBySpecs.push_back(relalg::SortSpecificationAttr::get(builder.getContext(), attr, orderByElement->type == ast::OrderType::DESCENDING ? relalg::SortSpec::desc : relalg::SortSpec::asc));
+
+      }
+   }
+
+   for (auto& partition: expression->partitions) {
+      assert(partition->type == ast::ExpressionType::BOUND_COLUMN_REF);
+      partitionByAttrs.push_back(partition->namedResult.value()->createRef(builder, attrManager));
+   }
+   auto windowOp = builder.create<relalg::WindowOp>(builder.getUnknownLoc(), tupleStreamType, tree, builder.getArrayAttr(partitionByAttrs), builder.getArrayAttr(orderBySpecs), builder.getArrayAttr(createdCols), expression->windowBoundary->start, expression->windowBoundary->end);
+   windowOp.getAggrFunc().push_back(block);
+
+
+   return windowOp.getResult() ;
+
+
+   //TODO order clause
+
+
+   size_t startOffset = 0;
+   size_t endOffset = 0;
+
+
+   std::string funcName = expression->function->functionName;
+   if (funcName == "rank" || funcName == "row_number") { //todo: fix rank
+
+      error("Window function 'rank' not implemented", expression->loc);
+   } else if (funcName == "count*") {
+      error("Window function 'count*' not implemented", expression->loc);
+   } else {
+      auto aggrFunc = llvm::StringSwitch<relalg::AggrFunc>(funcName)
+                               .Case("sum", relalg::AggrFunc::sum)
+                               .Case("avg", relalg::AggrFunc::avg)
+                               .Case("min", relalg::AggrFunc::min)
+                               .Case("max", relalg::AggrFunc::max)
+                               .Case("count", relalg::AggrFunc::count)
+                               .Default(relalg::AggrFunc::count);
+
+      if (aggrFunc == relalg::AggrFunc::count) {
+        /* if (groupByAttrs.empty()) {
+            //TODO use zeros instead of Null
+         }*/
+      }
+
+
+      //expr = windowBuilder.create<relalg::AggrFuncOp>(builder.getUnknownLoc(), aggrResultType, aggrFunc, currRel, refAttr);
+
+   }
+
+
+
+
+}
+
 mlir::Value SQLMlirTranslator::translateWhenCheks(mlir::OpBuilder& builder, std::shared_ptr<ast::BoundCaseExpression> boundCase, std::optional<mlir::Value> caseExprTranslated, std::vector<ast::BoundCaseExpression::BoundCaseCheck> caseChecks, std::shared_ptr<ast::BoundExpression> elseExpr, std::shared_ptr<analyzer::SQLContext> context) {
    if (caseChecks.empty()) {
       if (!elseExpr) {
@@ -792,7 +896,6 @@ mlir::Value SQLMlirTranslator::translateWhenCheks(mlir::OpBuilder& builder, std:
       elseTranslated = translateExpression(elseBuilder, elseExpr, context);
    }
 
-
    thenTranslated = boundCase->resultType->castValueToThisType(whenBuilder, thenTranslated, check.thenExpr->resultType->isNullable);
    elseTranslated = boundCase->resultType->castValueToThisType(elseBuilder, elseTranslated, elseExpr->resultType->isNullable);
 
@@ -809,7 +912,41 @@ mlir::Value SQLMlirTranslator::translateWhenCheks(mlir::OpBuilder& builder, std:
    throw std::runtime_error("Should never reach here");
 }
 
-mlir::Value SQLMlirTranslator::translateWhenCheck(mlir::OpBuilder& builder, ast::BoundCaseExpression::BoundCaseCheck whenCheck, std::shared_ptr<ast::BoundExpression> elseExpr, std::shared_ptr<analyzer::SQLContext> context) {
+mlir::Value SQLMlirTranslator::translateCoalesceExpression(mlir::OpBuilder& builder, catalog::NullableType resultType, std::vector<std::shared_ptr<ast::BoundExpression>> expressions, std::shared_ptr<analyzer::SQLContext> context) {
+   auto loc = builder.getUnknownLoc();
+   if (expressions.empty()) {
+      auto value = builder.create<db::NullOp>(loc, db::NullableType::get(builder.getContext(), builder.getNoneType()));
+      return resultType.castValueToThisType(builder, value, true);
+
+   }
+   auto currentExpression = expressions[0];
+   mlir::Value value = translateExpression(builder, currentExpression, context);
+   //TODO cast
+   mlir::Value isNull = currentExpression->resultType->isNullable ? (mlir::Value) builder.create<db::IsNullOp>(builder.getUnknownLoc(), value) : (mlir::Value) builder.create<mlir::arith::ConstantIntOp>(builder.getUnknownLoc(), 0, builder.getI1Type());
+   mlir::Value isNotNull = builder.create<db::NotOp>(loc, isNull);
+
+   value = resultType.castValueToThisType(builder, value, currentExpression->resultType->isNullable);
+
+   auto* whenBlock = new mlir::Block;
+   auto* elseBlock = new mlir::Block;
+   mlir::OpBuilder whenBuilder(builder.getContext());
+   whenBuilder.setInsertionPointToStart(whenBlock);
+   mlir::OpBuilder elseBuilder(builder.getContext());
+   elseBuilder.setInsertionPointToStart(elseBlock);
+   auto elseResl = translateCoalesceExpression(elseBuilder, resultType, std::vector<std::shared_ptr<ast::BoundExpression>>{expressions.begin() + 1, expressions.end()}, context);
+   // elseResl was already correctly casted in translateCoalesceExpression -> no new cast necessary
+
+
+
+   whenBuilder.create<mlir::scf::YieldOp>(loc, value);
+   elseBuilder.create<mlir::scf::YieldOp>(loc, elseResl);
+   auto ifOp = builder.create<mlir::scf::IfOp>(loc, resultType.toMlirType(builder.getContext()), isNotNull, true);
+   ifOp.getThenRegion().getBlocks().clear();
+   ifOp.getElseRegion().getBlocks().clear();
+   ifOp.getThenRegion().push_back(whenBlock);
+   ifOp.getElseRegion().push_back(elseBlock);
+   return ifOp.getResult(0);
+
 }
 
 mlir::Value SQLMlirTranslator::translateTableRef(mlir::OpBuilder& builder, std::shared_ptr<ast::BoundTableRef> tableRef, std::shared_ptr<analyzer::SQLContext> context) {
@@ -1079,6 +1216,112 @@ mlir::Value SQLMlirTranslator::translateSetOperation(mlir::OpBuilder& builder, s
    return tree;
 }
 
+mlir::Value SQLMlirTranslator::translateAggregationFunction(mlir::OpBuilder& builder, std::string mapName, std::vector<mlir::Attribute> groupByAttrs, mlir::Value relation, mlir::OpBuilder functionBuilder, std::shared_ptr<ast::BoundFunctionExpression> aggrFunction, mlir::Value& expr, tuples::ColumnDefAttr& attrDef) {
+   auto aggrFuncName = aggrFunction->functionName;
+
+   attrDef = attrManager.createDef(aggrFunction->scope, aggrFunction->aliasOrUniqueIdentifier);
+   if (aggrFuncName == "count*") {
+      expr = functionBuilder.create<relalg::CountRowsOp>(builder.getUnknownLoc(), builder.getI64Type(), relation);
+      //TODO not star
+      //TODO use zero instead of null
+      /*if (groupByAttrs.empty()) {
+               context.useZeroInsteadNull.insert(&attrDef.getColumn());
+            }*/
+   } else if (aggrFuncName == "rank" || aggrFuncName == "row_number") {
+      expr = functionBuilder.create<relalg::RankOp>(builder.getUnknownLoc(), builder.getI64Type(), relation);
+   }
+   else {
+      //TODO move logic to analyzer
+      auto relalgAggrFunc = llvm::StringSwitch<relalg::AggrFunc>(aggrFuncName)
+                               .Case("sum", relalg::AggrFunc::sum)
+                               .Case("avg", relalg::AggrFunc::avg)
+                               .Case("min", relalg::AggrFunc::min)
+                               .Case("max", relalg::AggrFunc::max)
+                               .Case("count", relalg::AggrFunc::count)
+                               .Case("stddev_samp", relalg::AggrFunc::stddev_samp)
+                               .Default(relalg::AggrFunc::count);
+      //TODO use zero instead of null
+      /*if (relalgAggrFunc == relalg::AggrFunc::count) {
+               error("Use zero instead of null", aggrFunction->loc);
+               /*if (groupByAttrs.empty()) {
+                  context.useZeroInsteadNull.insert(&attrDef.getColumn());
+               }*/
+      //}
+      assert(aggrFunction->arguments.size() == 1);
+      tuples::ColumnRefAttr refAttr;
+      switch (aggrFunction->arguments[0]->type) {
+         case ast::ExpressionType::BOUND_COLUMN_REF: {
+            auto columnRef = std::static_pointer_cast<ast::BoundColumnRefExpression>(aggrFunction->arguments[0]);
+            assert(columnRef->namedResult.has_value());
+            auto namedResult = columnRef->namedResult.value();
+            refAttr = namedResult->createRef(builder, attrManager);
+            break;
+         }
+         default: {
+            //Is in map
+            refAttr = attrManager.createRef(mapName, aggrFunction->arguments[0]->alias);
+
+            break;
+         };
+      }
+
+      mlir::Value currRel = relation;
+      //TODO distinct
+      if (aggrFunction->distinct) {
+         currRel = functionBuilder.create<relalg::ProjectionOp>(builder.getUnknownLoc(), relalg::SetSemantic::distinct, currRel, builder.getArrayAttr({refAttr}));
+      }
+      mlir::Type aggrResultType;
+      assert(aggrFunction->resultType.has_value());
+      aggrResultType = aggrFunction->resultType->toMlirType(builder.getContext());
+
+      if (aggrFunction->arguments[0]->type != ast::ExpressionType::BOUND_COLUMN_REF) {
+         //TODO better, over context!!
+         assert(aggrFunction->arguments[0]->namedResult.has_value());
+
+         //aggrResultType = aggrFunction->arguments[0]->namedResult.value()->resultType.toMlirType(builder.getContext());
+      }
+      //TODO define type
+      if (relalgAggrFunc == relalg::AggrFunc::avg) {
+         /*auto baseType = getBaseType(aggrResultType);
+               if (baseType.isIntOrFloat() && !baseType.isIntOrIndex()) {
+                  //keep aggrResultType
+               } else if (mlir::isa<db::DecimalType>(baseType)) {
+                  mlir::OpBuilder b(builder.getContext());
+                  mlir::Value x = b.create<db::ConstantOp>(b.getUnknownLoc(), baseType, b.getUnitAttr());
+                  mlir::Value x2 = b.create<db::ConstantOp>(b.getUnknownLoc(), db::DecimalType::get(b.getContext(), 19, 0), b.getUnitAttr());
+                  mlir::Value div = b.create<db::DivOp>(b.getUnknownLoc(), x, x2);
+                  aggrResultType = div.getType();
+                  div.getDefiningOp()->erase();
+                  x2.getDefiningOp()->erase();
+                  x.getDefiningOp()->erase();
+               } else {
+                  mlir::OpBuilder b(builder.getContext());
+                  mlir::Value x = b.create<db::ConstantOp>(b.getUnknownLoc(), db::DecimalType::get(b.getContext(), 19, 0), b.getUnitAttr());
+                  mlir::Value div = b.create<db::DivOp>(b.getUnknownLoc(), x, x);
+                  aggrResultType = div.getType();
+                  div.getDefiningOp()->erase();
+                  x.getDefiningOp()->erase();
+               }
+               if (mlir::isa<db::NullableType>(refAttr.getColumn().type)) {
+                  aggrResultType = db::NullableType::get(builder.getContext(), aggrResultType);
+               }*/
+         assert(aggrFunction->namedResult.has_value());
+         aggrFunction->namedResult.value()->resultType.isNullable = true;
+      }
+      //TODO move to analyzer
+      if (!mlir::isa<db::NullableType>(aggrResultType) && (groupByAttrs.empty()) && aggrFunction->functionName != "count") {
+         aggrResultType = db::NullableType::get(builder.getContext(), aggrResultType);
+      }
+      if (mlir::isa<db::NullableType>(aggrResultType)) {
+         assert(aggrFunction->namedResult.has_value());
+         aggrFunction->namedResult.value()->resultType.isNullable = true;
+      }
+
+      expr = functionBuilder.create<relalg::AggrFuncOp>(builder.getUnknownLoc(), aggrResultType, relalgAggrFunc, currRel, refAttr);
+   }
+   attrDef.getColumn().type = expr.getType();
+   return expr;
+}
 mlir::Value SQLMlirTranslator::translateAggregation(mlir::OpBuilder& builder, std::shared_ptr<ast::BoundAggregationNode> aggregation, std::shared_ptr<analyzer::SQLContext> context, mlir::Value tree) {
    //Ignore empty aggregations
    if ((!aggregation->groupByNode || aggregation->groupByNode->groupNamedResults.empty()) && aggregation->aggregations.empty()) {
@@ -1128,107 +1371,9 @@ mlir::Value SQLMlirTranslator::translateAggregation(mlir::OpBuilder& builder, st
 
       //AggrFunctions
       for (auto aggrFunction : aggregation->aggregations) {
-         mlir::Value expr; //TODO??
-         auto aggrFuncName = aggrFunction->functionName;
-
-         auto attrDef = attrManager.createDef(aggrFunction->scope, aggrFunction->aliasOrUniqueIdentifier);
-         if (aggrFuncName == "count*") {
-            expr = aggrBuilder.create<relalg::CountRowsOp>(builder.getUnknownLoc(), builder.getI64Type(), relation);
-            //TODO not star
-            //TODO use zero instead of null
-            /*if (groupByAttrs.empty()) {
-               context.useZeroInsteadNull.insert(&attrDef.getColumn());
-            }*/
-         } else {
-            //TODO move logic to analyzer
-            auto relalgAggrFunc = llvm::StringSwitch<relalg::AggrFunc>(aggrFuncName)
-                                     .Case("sum", relalg::AggrFunc::sum)
-                                     .Case("avg", relalg::AggrFunc::avg)
-                                     .Case("min", relalg::AggrFunc::min)
-                                     .Case("max", relalg::AggrFunc::max)
-                                     .Case("count", relalg::AggrFunc::count)
-                                     .Case("stddev_samp", relalg::AggrFunc::stddev_samp)
-                                     .Default(relalg::AggrFunc::count);
-            //TODO use zero instead of null
-            /*if (relalgAggrFunc == relalg::AggrFunc::count) {
-               error("Use zero instead of null", aggrFunction->loc);
-               /*if (groupByAttrs.empty()) {
-                  context.useZeroInsteadNull.insert(&attrDef.getColumn());
-               }*/
-            //}
-            assert(aggrFunction->arguments.size() == 1);
-            tuples::ColumnRefAttr refAttr;
-            switch (aggrFunction->arguments[0]->type) {
-               case ast::ExpressionType::BOUND_COLUMN_REF: {
-                  auto columnRef = std::static_pointer_cast<ast::BoundColumnRefExpression>(aggrFunction->arguments[0]);
-                  assert(columnRef->namedResult.has_value());
-                  auto namedResult = columnRef->namedResult.value();
-                  refAttr = namedResult->createRef(builder, attrManager);
-                  break;
-               }
-               default: {
-                  //Is in map
-                  refAttr = attrManager.createRef(aggregation->mapName, aggrFunction->arguments[0]->alias);
-
-                  break;
-               };
-            }
-
-            mlir::Value currRel = relation;
-            //TODO distinct
-            if (aggrFunction->distinct) {
-               currRel = aggrBuilder.create<relalg::ProjectionOp>(builder.getUnknownLoc(), relalg::SetSemantic::distinct, currRel, builder.getArrayAttr({refAttr}));
-            }
-            mlir::Type aggrResultType;
-            assert(aggrFunction->resultType.has_value());
-            aggrResultType = aggrFunction->resultType->toMlirType(builder.getContext());
-
-            if (aggrFunction->arguments[0]->type != ast::ExpressionType::BOUND_COLUMN_REF) {
-               //TODO better, over context!!
-               assert(aggrFunction->arguments[0]->namedResult.has_value());
-
-               //aggrResultType = aggrFunction->arguments[0]->namedResult.value()->resultType.toMlirType(builder.getContext());
-            }
-            //TODO define type
-            if (relalgAggrFunc == relalg::AggrFunc::avg) {
-               /*auto baseType = getBaseType(aggrResultType);
-               if (baseType.isIntOrFloat() && !baseType.isIntOrIndex()) {
-                  //keep aggrResultType
-               } else if (mlir::isa<db::DecimalType>(baseType)) {
-                  mlir::OpBuilder b(builder.getContext());
-                  mlir::Value x = b.create<db::ConstantOp>(b.getUnknownLoc(), baseType, b.getUnitAttr());
-                  mlir::Value x2 = b.create<db::ConstantOp>(b.getUnknownLoc(), db::DecimalType::get(b.getContext(), 19, 0), b.getUnitAttr());
-                  mlir::Value div = b.create<db::DivOp>(b.getUnknownLoc(), x, x2);
-                  aggrResultType = div.getType();
-                  div.getDefiningOp()->erase();
-                  x2.getDefiningOp()->erase();
-                  x.getDefiningOp()->erase();
-               } else {
-                  mlir::OpBuilder b(builder.getContext());
-                  mlir::Value x = b.create<db::ConstantOp>(b.getUnknownLoc(), db::DecimalType::get(b.getContext(), 19, 0), b.getUnitAttr());
-                  mlir::Value div = b.create<db::DivOp>(b.getUnknownLoc(), x, x);
-                  aggrResultType = div.getType();
-                  div.getDefiningOp()->erase();
-                  x.getDefiningOp()->erase();
-               }
-               if (mlir::isa<db::NullableType>(refAttr.getColumn().type)) {
-                  aggrResultType = db::NullableType::get(builder.getContext(), aggrResultType);
-               }*/
-               assert(aggrFunction->namedResult.has_value());
-               aggrFunction->namedResult.value()->resultType.isNullable = true;
-            }
-            //TODO move to analyzer
-            if (!mlir::isa<db::NullableType>(aggrResultType) && (groupByAttrs.empty()) && aggrFunction->functionName != "count") {
-               aggrResultType = db::NullableType::get(builder.getContext(), aggrResultType);
-            }
-            if (mlir::isa<db::NullableType>(aggrResultType)) {
-               assert(aggrFunction->namedResult.has_value());
-               aggrFunction->namedResult.value()->resultType.isNullable = true;
-            }
-
-            expr = aggrBuilder.create<relalg::AggrFuncOp>(builder.getUnknownLoc(), aggrResultType, relalgAggrFunc, currRel, refAttr);
-         }
-         attrDef.getColumn().type = expr.getType();
+         mlir::Value expr;
+         tuples::ColumnDefAttr attrDef;
+         expr = translateAggregationFunction(builder, aggregation->mapName, groupByAttrs, relation, aggrBuilder, aggrFunction, expr, attrDef) ;
 
          //TODO mapping.insert({12, "&attrDef.getColumn()"});
          createdCols.push_back(attrDef);

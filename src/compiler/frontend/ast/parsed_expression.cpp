@@ -1,5 +1,7 @@
 #include "lingodb/compiler/frontend/ast/parsed_expression.h"
 
+#include "lingodb/compiler/frontend/ast/result_modifier.h"
+
 #include <cassert>
 #include <clang/AST/Type.h>
 namespace lingodb::ast {
@@ -555,6 +557,96 @@ std::string CastExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
 
    return dot;
 }
+WindowBoundary::WindowBoundary(WindowBoundaryType start) : start(start) {
+}
+WindowBoundary::WindowBoundary(WindowBoundaryType start, std::shared_ptr<ParsedExpression> startExpr) : start(start), startExpr(startExpr) {
+}
+WindowExpression::WindowExpression() : ParsedExpression(ExpressionType::WINDOW_INVALID, TYPE) {
+}
+std::string WindowExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
+    std::string dot{};
+
+    // Create node identifier for the window expression
+    std::string nodeId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(this)));
+
+    // Create the window node with its basic information
+    dot += nodeId + " [label=\"Window";
+    if (!alias.empty()) {
+        dot += "\\nalias: " + alias;
+    }
+
+    // Add window function details if present
+    if (functionExpression) {
+        dot += "\\nFunction: " + functionExpression->functionName;
+        if (distinct) {
+            dot += "\\nDISTINCT";
+        }
+        if (ignoreNulls) {
+            dot += "\\nIGNORE NULLS";
+        }
+    }
+    dot += "\"];\n";
+
+    // Add function expression if present
+    if (functionExpression) {
+        std::string funcId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(functionExpression.get())));
+        dot += nodeId + " -> " + funcId + " [label=\"function\"];\n";
+        dot += functionExpression->toDotGraph(depth + 1, idGen);
+    }
+
+    // Add partition expressions
+    for (size_t i = 0; i < partitions.size(); i++) {
+        if (partitions[i]) {
+            std::string partId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(partitions[i].get())));
+            dot += nodeId + " -> " + partId + " [label=\"partition " + std::to_string(i + 1) + "\"];\n";
+            dot += partitions[i]->toDotGraph(depth + 1, idGen);
+        }
+    }
+
+    // Add order by expressions
+    if (order.has_value()) {
+        std::string orderId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(order.value().get())));
+        dot += nodeId + " -> " + orderId + " [label=\"order by\"];\n";
+        dot += order.value()->toDotGraph(depth + 1, idGen);
+    }
+
+    // Add filter expression if present
+    if (filter) {
+        std::string filterId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(filter.get())));
+        dot += nodeId + " -> " + filterId + " [label=\"filter\"];\n";
+        dot += filter->toDotGraph(depth + 1, idGen);
+    }
+
+    // Add window boundary expressions if present
+    if (startExpr) {
+        std::string startId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(startExpr.get())));
+        dot += nodeId + " -> " + startId + " [label=\"start\"];\n";
+        dot += startExpr->toDotGraph(depth + 1, idGen);
+    }
+
+    if (endExpr) {
+        std::string endId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(endExpr.get())));
+        dot += nodeId + " -> " + endId + " [label=\"end\"];\n";
+        dot += endExpr->toDotGraph(depth + 1, idGen);
+    }
+
+    // Add offset expression if present
+    if (offsetExpr) {
+        std::string offsetId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(offsetExpr.get())));
+        dot += nodeId + " -> " + offsetId + " [label=\"offset\"];\n";
+        dot += offsetExpr->toDotGraph(depth + 1, idGen);
+    }
+
+    // Add default expression if present
+    if (defaultExpr) {
+        std::string defaultId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(defaultExpr.get())));
+        dot += nodeId + " -> " + defaultId + " [label=\"default\"];\n";
+        dot += defaultExpr->toDotGraph(depth + 1, idGen);
+    }
+
+    return dot;
+}
+
 
 BetweenExpression::BetweenExpression(ExpressionType type, std::shared_ptr<ParsedExpression> input, std::shared_ptr<ParsedExpression> lower, std::shared_ptr<ParsedExpression> upper) : ParsedExpression(type, TYPE), input(input), lower(lower), upper(upper) {
    assert(lower != nullptr && upper != nullptr && input != nullptr);
