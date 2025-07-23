@@ -60,9 +60,18 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
 
                context->currentScope->extendNode = std::make_shared<ast::ExtendNode>();
 
+
+               auto aggPipeNodeForWindow = drv.nf.node<ast::PipeOperator>(selectNode->loc, ast::PipeOperatorType::AGGREGATE, context->currentScope->aggregationNodeForWindowFunctions);
+               auto transFormedAggregationForWindow = canonicalizeCast<ast::PipeOperator>(aggPipeNodeForWindow, context);
+               transFormedAggregationForWindow->input = transformed;
+               transformed = transFormedAggregationForWindow;
+
                auto extendPipeOp2 = drv.nf.node<ast::PipeOperator>(selectNode->select_list->loc, ast::PipeOperatorType::EXTEND, context->currentScope->extendNode);
                extendPipeOp2->input = transformed;
                transformed = extendPipeOp2;
+
+
+
 
 
                //Transform target selection
@@ -342,6 +351,47 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
             return columnRef;
          }
          return functionExpr;
+      }
+      case ast::ExpressionClass::WINDOW: {
+         auto windowExpr = std::static_pointer_cast<ast::WindowExpression>(rootNode);
+         assert(windowExpr->functionExpression);
+
+         if (windowExpr->filter) {
+            windowExpr->filter = canonicalizeParsedExpression(windowExpr->filter, context, false);
+         }
+         std::ranges::transform(windowExpr->functionExpression->arguments, windowExpr->functionExpression->arguments.begin(), [&](auto& arg) {
+            return canonicalizeParsedExpression(arg, context, true);
+         });
+
+         std::ranges::transform(windowExpr->partitions, windowExpr->partitions.begin(), [&](auto& partition) {
+            return canonicalizeParsedExpression(partition, context, true);
+         });
+         if (windowExpr->startExpr) {
+            windowExpr->startExpr = canonicalizeParsedExpression(windowExpr->startExpr, context, false);
+         }
+         if (windowExpr->endExpr) {
+            windowExpr->endExpr = canonicalizeParsedExpression(windowExpr->endExpr, context, false);
+         }
+         if (windowExpr->offsetExpr) {
+            windowExpr->offsetExpr = canonicalizeParsedExpression(windowExpr->offsetExpr, context, false);
+         }
+         if (windowExpr->defaultExpr) {
+            windowExpr->defaultExpr = canonicalizeParsedExpression(windowExpr->defaultExpr, context, false);
+         }
+
+         std::string alias = windowExpr->alias.empty() ? windowExpr->functionExpression->functionName : windowExpr->alias;
+
+         windowExpr->alias = windowExpr->functionExpression->functionName + "_" + std::to_string(i);
+         i++;
+
+         auto columnRef = drv.nf.node<ast::ColumnRefExpression>(windowExpr->loc, windowExpr->alias);
+         columnRef->alias = alias;
+         context->currentScope->aggregationNodeForWindowFunctions->windowFunctions.push_back(windowExpr);
+         return columnRef;
+
+         return windowExpr;
+
+
       }
       case ast::ExpressionClass::CASE: {
          auto caseExpr = std::static_pointer_cast<ast::CaseExpression>(rootNode);
@@ -821,8 +871,17 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                boundAggr->resultType->isNullable = boundAggr->functionName != "count";
             }
          }
+         std::vector<std::shared_ptr<ast::BoundWindowExpression>> boundWindowFunctions;
+         std::ranges::transform(aggregationNode->windowFunctions, std::back_inserter(boundWindowFunctions), [&](std::shared_ptr<ast::WindowExpression> expr) {
+            auto tmp = analyzeExpression(expr, context, resolverScope);
+            assert(tmp->exprClass == ast::ExpressionClass::BOUND_WINDOW);
+            return std::static_pointer_cast<ast::BoundWindowExpression>(tmp);
+         });
 
-         boundAstNode = drv.nf.node<ast::BoundAggregationNode>(pipeOperator->loc, boundGroupByNode, boundAggregationExpressions, toMap, mapName, evalBeforeAggr);
+
+         auto boundAggrNode = drv.nf.node<ast::BoundAggregationNode>(pipeOperator->loc, boundGroupByNode, boundAggregationExpressions, toMap, mapName, evalBeforeAggr);
+         boundAggrNode->windowFunctions = boundWindowFunctions;
+         boundAstNode = boundAggrNode;
 
          break;
       }
@@ -848,8 +907,11 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                   assert(parsedExpression->resultType.has_value() && parsedExpression->namedResult.has_value());
                   auto function = std::static_pointer_cast<ast::BoundFunctionExpression>(parsedExpression);
                   context->currentScope->targetInfo.add(parsedExpression->namedResult.value());
+
+
                   auto fName = function->alias.empty() ? function->functionName : function->alias;
                   context->mapAttribute(resolverScope, fName, function->namedResult.value());
+                  //TODO context->definedAttributes.top().pop_back();
 
                   break;
                }
@@ -862,7 +924,10 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                   auto n = std::make_shared<ast::NamedResult>(ast::NamedResultType::EXPRESSION, scope, parsedExpression->resultType.value(), createTmpScope());
                   n->displayName = parsedExpression->alias.empty() ? "" : parsedExpression->alias;
                   context->mapAttribute(resolverScope, parsedExpression->alias.empty() ? n->name : parsedExpression->alias, n);
+                  //TODO context->definedAttributes.top().pop_back();
                   context->currentScope->targetInfo.add(n);
+
+
                   context->currentScope->evalBefore.emplace_back(parsedExpression);
                   parsedExpression->namedResult = n;
                   break;
@@ -1430,6 +1495,16 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
 
                boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, boundArguments);
             }
+            if (function->functionName == "rank" || function->functionName == "row_number") {
+               //TODO check if is inside window function
+               if (!function->arguments.empty()) {
+                  error("RANK and ROW_NUMBER do not support any arguments", function->loc);
+               }
+               resultType = catalog::Type::int64();
+
+               boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, boundArguments);
+
+            }
 
             /*
                 * COUNT
@@ -1601,7 +1676,27 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
 
             boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, std::vector{arg1});
 
+         } else if (function->functionName == "COALESCE") {
+            if (function->arguments.size() < 2) {
+               error("Function with less than two argument not supported", function->loc);
+            }
+
+            std::vector<std::shared_ptr<ast::BoundExpression>> boundArgs{};
+            std::vector<catalog::NullableType> types{};
+            std::ranges::transform(function->arguments, std::back_inserter(boundArgs), [&](auto c) {
+               auto e = analyzeExpression(c, context, resolverScope);
+               types.push_back(e->resultType.value());
+               return e;
+            });
+
+            resultType = SQLTypeUtils::getCommonBaseType(types);
+            resultType.isNullable = true;
+
+
+            boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, boundArgs);
+
          }
+
          if (boundFunctionExpression == nullptr) {
             error("Function '" << function->functionName << "' not implemented", function->loc);
          }
@@ -1785,6 +1880,110 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
          auto resultType = SQLTypeUtils::getCommonBaseType(thenTypes);
 
          return drv.nf.node<ast::BoundCaseExpression>(caseExpr->loc, resultType, caseExpr->alias, boundCaseExpr, boundCaseChecks, boundElse);
+      }
+      case ast::ExpressionClass::WINDOW: {
+         auto windowExpr = std::static_pointer_cast<ast::WindowExpression>(rootNode);
+         std::vector<std::shared_ptr<ast::BoundExpression>> boundPartitions;
+         std::optional<std::shared_ptr<ast::BoundOrderByModifier>> boundOrderByModifier;
+         std::shared_ptr<ast::BoundFunctionExpression> boundFunction;
+         auto tmp = analyzeExpression(windowExpr->functionExpression, context, resolverScope);
+         assert(tmp->exprClass == ast::ExpressionClass::BOUND_FUNCTION);
+         if (tmp->type != ast::ExpressionType::AGGREGATE) {
+            error("Window function must be aggregate", windowExpr->loc);
+         }
+         boundFunction = std::static_pointer_cast<ast::BoundFunctionExpression>(tmp);
+         std::ranges::transform(windowExpr->partitions, std::back_inserter(boundPartitions), [&](auto& partition) {
+            return analyzeExpression(partition, context, resolverScope);
+         });
+
+
+         if (windowExpr->order.has_value()) {
+            auto boundRModifier = analyzeResultModifier(windowExpr->order.value(), context);
+            assert(boundRModifier->modifierType == ast::ResultModifierType::BOUND_ORDER_BY);
+            boundOrderByModifier = std::static_pointer_cast<ast::BoundOrderByModifier>(boundRModifier);
+         }
+         auto boundWindowBoundary = std::make_shared<ast::BoundWindowBoundary>();
+
+         //TODO add missing analysis
+
+         if (windowExpr->windowBoundary) {
+            //TODO check for different WindowModes
+            boundWindowBoundary->loc = windowExpr->windowBoundary->loc;
+            boundWindowBoundary->windowMode = windowExpr->windowBoundary->windowMode;
+            //Start
+            switch (windowExpr->windowBoundary->start) {
+               case ast::WindowBoundaryType::CURRENT_ROW: {
+                  boundWindowBoundary->start = 0;
+                  break;
+               }
+               case ast::WindowBoundaryType::EXPR_PRECEDING:
+               case ast::WindowBoundaryType::EXPR_FOLLOWING: {
+                  assert(windowExpr->windowBoundary->startExpr);
+                  assert(windowExpr->windowBoundary->startExpr->exprClass == ast::ExpressionClass::CONSTANT);
+
+                  auto constantExpr = std::static_pointer_cast<ast::BoundConstantExpression>(analyzeExpression(windowExpr->windowBoundary->startExpr, context, resolverScope));
+                  if (constantExpr->value->type != ast::ConstantType::INT) {
+                     error("unsupported window start specification", boundWindowBoundary->loc);
+                  }
+                  boundWindowBoundary->start = std::static_pointer_cast<ast::IntValue>(constantExpr->value)->iVal;
+                  if (windowExpr->windowBoundary->start == ast::WindowBoundaryType::EXPR_PRECEDING) {
+                     boundWindowBoundary->start = -boundWindowBoundary->start;
+                  }
+               }
+
+               case ast::WindowBoundaryType::INVALID: {
+                  error("Invalid boundary type", boundWindowBoundary->loc)
+                  break;
+               }
+                  default: ;
+
+            }
+            //End
+            switch (windowExpr->windowBoundary->end) {
+               case ast::WindowBoundaryType::CURRENT_ROW: {
+                  boundWindowBoundary->end = 0;
+                  break;
+               }
+               case ast::WindowBoundaryType::EXPR_PRECEDING:
+               case ast::WindowBoundaryType::EXPR_FOLLOWING: {
+                  assert(windowExpr->windowBoundary->endExpr);
+                  assert(windowExpr->windowBoundary->endExpr->exprClass == ast::ExpressionClass::CONSTANT);
+
+                  auto constantExpr = std::static_pointer_cast<ast::BoundConstantExpression>(analyzeExpression(windowExpr->windowBoundary->endExpr, context, resolverScope));
+                  if (constantExpr->value->type != ast::ConstantType::INT) {
+                     error("unsupported window start specification", boundWindowBoundary->loc);
+                  }
+                  boundWindowBoundary->end = std::static_pointer_cast<ast::IntValue>(constantExpr->value)->iVal;
+                  if (windowExpr->windowBoundary->end == ast::WindowBoundaryType::EXPR_PRECEDING) {
+                     boundWindowBoundary->end = -boundWindowBoundary->end;
+                  }
+               }
+
+               case ast::WindowBoundaryType::INVALID: {
+                  error("Invalid boundary type", boundWindowBoundary->loc)
+                  break;
+               }
+               default: ;
+
+            }
+         } else {
+            boundWindowBoundary->loc = windowExpr->loc;
+         }
+
+         ast::ExpressionType windowType = ast::ExpressionType::WINDOW_AGGREGATE;
+         catalog::Type resultType = catalog::Type::int64();
+
+
+         boundFunction->namedResult.value()->displayName = windowExpr->alias;
+         context->mapAttribute(resolverScope, windowExpr->alias, boundFunction->namedResult.value());
+
+
+
+         auto boundWindowExpression =  drv.nf.node<ast::BoundWindowExpression>(windowExpr->loc, windowExpr->type, windowExpr->alias, resultType, boundFunction, boundPartitions, boundOrderByModifier, boundWindowBoundary);
+         boundWindowExpression->namedResult = boundFunction->namedResult;
+         return boundWindowExpression;
+
+
       }
       default: error("Expression type not implemented", rootNode->loc);
    }
