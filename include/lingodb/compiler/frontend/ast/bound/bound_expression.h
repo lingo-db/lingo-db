@@ -7,6 +7,7 @@
 #include <mlir/Dialect/MLProgram/Transforms/Passes.h.inc>
 #include <mlir/IR/Types.h>
 namespace lingodb::ast {
+class BoundOrderByModifier;
 enum class BindingType : uint8_t {
    TABLE = 1,
    FUNCTION = 2,
@@ -146,6 +147,30 @@ class BoundCastExpression : public BoundExpression {
    std::string stringRepr;
    std::shared_ptr<BoundExpression> child;
    //LogicalType logicalType;
+   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
+};
+class BoundWindowBoundary {
+   public:
+
+   WindowMode windowMode = WindowMode::INVALID;
+
+   size_t start = std::numeric_limits<int64_t>::min();
+   size_t end = std::numeric_limits<int64_t>::max();
+
+
+
+   location loc;
+};
+class BoundWindowExpression : public BoundExpression {
+   public:
+   static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_WINDOW;
+   BoundWindowExpression(ExpressionType type, std::string alias, catalog::NullableType resultType, std::shared_ptr<BoundFunctionExpression> function, std::vector<std::shared_ptr<BoundExpression>> partitions, std::optional<std::shared_ptr<BoundOrderByModifier>> order, std::shared_ptr<BoundWindowBoundary> windowBoundary );
+
+   std::shared_ptr<BoundFunctionExpression> function;
+   std::vector<std::shared_ptr<BoundExpression>> partitions;
+   std::optional<std::shared_ptr<BoundOrderByModifier>> order;
+   std::shared_ptr<BoundWindowBoundary> windowBoundary;
+
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 
