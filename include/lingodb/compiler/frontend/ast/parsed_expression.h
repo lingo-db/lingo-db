@@ -150,6 +150,7 @@ enum class ExpressionType : uint8_t {
    WINDOW_LEAD = 132,
    WINDOW_LAG = 133,
    WINDOW_NTH_VALUE = 134,
+   WINDOW_INVALID = 135,
 
    // -----------------------------
    // Functions
@@ -389,7 +390,7 @@ static std::vector<std::string> aggregationFunctions{
    "min",
    "max",
    "avg",
-   "sum", "count", "stddev_samp"};
+   "sum", "count", "stddev_samp", "rank", "row_number"};
 
 class StarExpression : public ParsedExpression {
    public:
@@ -458,38 +459,75 @@ class CastExpression : public ParsedExpression {
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 
-enum class WindowBoundary : uint8_t {
+enum class WindowMode : uint8_t {
+   INVALID = 0,
+   ROWS = 1,
+   RANGE = 2,
+   GROUPS = 3
+};
+
+enum class WindowBoundaryType : uint8_t {
    INVALID = 0,
    UNBOUNDED_PRECEDING = 1,
    UNBOUNDED_FOLLOWING = 2,
-   CURRENT_ROW_RANGE = 3,
-   CURRENT_ROW_ROWS = 4,
-   EXPR_PRECEDING_ROWS = 5,
-   EXPR_FOLLOWING_ROWS = 6,
-   EXPR_PRECEDING_RANGE = 7,
-   EXPR_FOLLOWING_RANGE = 8,
-   CURRENT_ROW_GROUPS = 9,
-   EXPR_PRECEDING_GROUPS = 10,
-   EXPR_FOLLOWING_GROUPS = 11
+   CURRENT_ROW = 3,
+   EXPR_PRECEDING = 4,
+   EXPR_FOLLOWING = 5
+};
+
+class WindowBoundary {
+   public:
+   explicit WindowBoundary(WindowBoundaryType start);
+   WindowBoundary(WindowBoundaryType start, std::shared_ptr<ParsedExpression> startExpr);
+   WindowMode windowMode = WindowMode::INVALID;
+   WindowBoundaryType start = WindowBoundaryType::INVALID;
+   WindowBoundaryType end = WindowBoundaryType::INVALID;
+
+   std::shared_ptr<ParsedExpression> startExpr;
+   std::shared_ptr<ParsedExpression> endExpr;
+
+   location loc;
 };
 class WindowExpression : public ParsedExpression {
    public:
    static constexpr const ExpressionClass TYPE = ExpressionClass::WINDOW;
-   WindowExpression(ExpressionType type, std::string catalogName, std::string schemaName, std::string functionName);
+   WindowExpression();
 
-   //TODO
+   //TODO add missing
 
-   std::string functionName;
+   std::shared_ptr<FunctionExpression> functionExpression;
 
-   std::vector<std::shared_ptr<ParsedExpression>> children;
 
+   /// Set of expressions to partition by
    std::vector<std::shared_ptr<ParsedExpression>> partitions;
+   /// Ordering clause
+    std::optional<std::shared_ptr<OrderByModifier>> order;
 
-   std::vector<std::shared_ptr<OrderByModifier>> orders;
+   /// Expression representing a filter, only used for aggregates
+   std::shared_ptr<ast::ParsedExpression> filter;
+
+   bool ignoreNulls = false;
+   bool distinct = false;
 
    /// The window boundaries
-   WindowBoundary start = WindowBoundary::INVALID;
-   WindowBoundary end = WindowBoundary::INVALID;
+   std::shared_ptr<WindowBoundary> windowBoundary;
+
+   //TODO window exclude clause
+
+   std::shared_ptr<ParsedExpression> startExpr;
+   std::shared_ptr<ParsedExpression> endExpr;
+
+   ///Offset expression for WINDOW_LAG and WINDOW_LEAD functions
+   std::shared_ptr<ParsedExpression> offsetExpr;
+   ///Default expression for WINDOW_LAG and WINDOW_LEAD functions
+   std::shared_ptr<ParsedExpression> defaultExpr;
+
+   /// The set of argument ordering clauses
+   /// These are distinct from the frame ordering clauses e.g., the "x" in
+   /// FIRST_VALUE(a ORDER BY x) OVER (PARTITION BY p ORDER BY s)
+   std::shared_ptr<OrderByModifier> argOrders;
+
+   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 
 class BetweenExpression : public ParsedExpression {

@@ -167,6 +167,7 @@ boolean [fF][aA][lL][sS][eE]
 [cC][hH][aA][rR]                      { MAKE_KEYWORD(CHAR_P); }
 [cC][hH][aA][rR][aA][cC][tT][eE][rR]  { MAKE_KEYWORD(CHARACTER); }
 [cC][rR][eE][aA][tT][eE]              { MAKE_KEYWORD(CREATE); }
+[cC][uU][rR][rR][eE][nN][tT]          { MAKE_KEYWORD(CURRENT_P); }
 
 [dD][aA][tT][eE]                      { MAKE_KEYWORD(DATE_P); }
 [dD][aA][yY]                          { MAKE_KEYWORD(DAY_P); }
@@ -197,7 +198,6 @@ boolean [fF][aA][lL][sS][eE]
 [iI][nN][tT][eE][rR][vV][aA][lL]      { MAKE_KEYWORD(INTERVAL); }
 [iI][nN][tT][oO]                      { MAKE_KEYWORD(INTO); }
 [iI][sS]                              { MAKE_KEYWORD(IS); }
-[nN][uU][mM][eE][rR][iI][cC]          { MAKE_KEYWORD(NUMERIC); }
 
 [jJ][oO][iI][nN]                      { MAKE_KEYWORD(JOIN); }
 
@@ -210,6 +210,7 @@ boolean [fF][aA][lL][sS][eE]
 [nN][aA][tT][uU][rR][aA][lL]          { MAKE_KEYWORD(NATURAL); }
 [nN][oO][tT]                          { MAKE_KEYWORD(NOT); }
 [nN][uU][lL][lL]                      { MAKE_KEYWORD(NULL_P); }
+[nN][uU][mM][eE][rR][iI][cC]          { MAKE_KEYWORD(NUMERIC); }
 
 [oO][nN]                              { MAKE_KEYWORD(ON); }
 [oO][rR]                              { MAKE_KEYWORD(OR); }
@@ -217,9 +218,13 @@ boolean [fF][aA][lL][sS][eE]
 [oO][uU][tT][eE][rR]                  { MAKE_KEYWORD(OUTER_P); }
 [oO][vV][eE][rR]                      { MAKE_KEYWORD(OVER); }
 
+[pP][aA][rR][tT][iI][tT][iI][oO][nN]  { MAKE_KEYWORD(PARTITION); }
+[pP][rR][eE][cC][eE][dD][iI][nN][gG]  { MAKE_KEYWORD(PRECEDING); }
 [pP][rR][iI][mM][aA][rR][yY]          { MAKE_KEYWORD(PRIMARY); }
 
 [rR][iI][gG][hH][tT]                  { MAKE_KEYWORD(RIGHT); }
+[rR][oO][wW]                          { MAKE_KEYWORD(ROW); }
+[rR][oO][wW][sS]                      { MAKE_KEYWORD(ROWS); }
 
 [sS][eE][lL][eE][cC][tT]              { MAKE_KEYWORD(SELECT); }
 [sS][uU][bB][sS][tT][rR][iI][nN][gG]  { MAKE_KEYWORD(SUBSTRING); }
@@ -230,6 +235,7 @@ boolean [fF][aA][lL][sS][eE]
 [tT][iI][mM][eE][sS][tT][aA][mM][pP]  { MAKE_KEYWORD(TIMESTAMP); }
 
 [uU][nN][iI][oO][nN]                  { MAKE_KEYWORD(UNION); }
+[uU][nN][bB][oO][uU][nN][dD][eE][dD]  { MAKE_KEYWORD(UNBOUNDED); }
 
 [vV][aA][lL][uU][eE][sS]              { MAKE_KEYWORD(VALUES); }
 [vV][aA][rR][cC][hH][aA][rR]          { MAKE_KEYWORD(VARCHAR); }
