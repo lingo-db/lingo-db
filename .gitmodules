@@ -1,0 +1,3 @@
+[submodule "vendored/tpde"]
+	path = vendored/tpde
+	url = https://github.com/tpde2/tpde.git
