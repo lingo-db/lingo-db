@@ -96,6 +96,15 @@ std::string BoundCastExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idG
 }
 
 /*
+ * BoundWindoExpression
+*/
+BoundWindowExpression::BoundWindowExpression(ExpressionType type, std::string alias, catalog::NullableType resultType, std::shared_ptr<BoundFunctionExpression> function, std::vector<std::shared_ptr<BoundExpression>> partitions, std::optional<std::shared_ptr<BoundOrderByModifier>> order, std::shared_ptr<BoundWindowBoundary> windowBoundary) : BoundExpression(TYPE, type, resultType, alias), function(function), partitions(partitions), order(order), windowBoundary(windowBoundary){
+}
+std::string BoundWindowExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
+   return "";
+}
+
+/*
  * BoundBetweenExpression
  */
 BoundBetweenExpression::BoundBetweenExpression(ExpressionType type, catalog::Type resultType, std::string alias, std::shared_ptr<BoundExpression> input, std::shared_ptr<BoundExpression> lower, std::shared_ptr<BoundExpression> upper) : BoundExpression(TYPE, type, resultType, alias), input(std::move(input)), lower(std::move(lower)), upper(std::move(upper)) {

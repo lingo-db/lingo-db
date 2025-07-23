@@ -37,6 +37,25 @@ std::string AggregationNode::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) 
       }
    }
 
+   for (size_t i = 0; i < windowFunctions.size(); ++i) {
+      if (windowFunctions[i]) {
+         std::string aggId;
+         aggId.append("node");
+         aggId.append(std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(windowFunctions[i].get()))));
+
+         // Create edge from aggregation node to function
+         dot.append(nodeId);
+         dot.append(" -> ");
+         dot.append(aggId);
+         dot.append(" [label=\"win_");
+         dot.append(std::to_string(i));
+         dot.append("\"];\n");
+
+         // Add the function's graph representation
+         dot.append(windowFunctions[i]->toDotGraph(depth + 1, idGen));
+      }
+   }
+
    // Add GROUP BY node if present
    if (groupByNode) {
       std::string groupId;
