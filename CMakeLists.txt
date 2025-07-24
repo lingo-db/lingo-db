@@ -146,6 +146,7 @@ add_subdirectory(src/compiler/Dialect/SubOperator)
 add_subdirectory(src/compiler/Dialect/DB)
 add_subdirectory(src/compiler/Dialect/Arrow)
 add_subdirectory(src/compiler/Dialect/util)
+add_subdirectory(src/compiler/Dialect/PyInterp)
 
 add_subdirectory(src/compiler/Conversion/DBToStd)
 add_subdirectory(src/compiler/Conversion/ArrowToStd)

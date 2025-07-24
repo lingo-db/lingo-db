@@ -1,0 +1,8 @@
+#ifndef LINGODB_COMPILER_DIALECT_PYINTERP_PYINTERPDIALECT_H
+#define LINGODB_COMPILER_DIALECT_PYINTERP_PYINTERPDIALECT_H
+
+#include "mlir/IR/Dialect.h"
+
+#include "lingodb/compiler/Dialect/PyInterp/PyInterpDialect.h.inc"
+
+#endif //LINGODB_COMPILER_DIALECT_PYINTERP_PYINTERPDIALECT_H
