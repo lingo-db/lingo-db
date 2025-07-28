@@ -1365,7 +1365,7 @@ namespace lingodb::execution::baseline {
         bool compile_util_varlen_get_len_op(dialect::util::VarLenGetLen op) {
             auto varlen_vr = this->val_ref(op.getVarlen());
             auto res_vr = this->result_ref(op.getResult());
-            res_vr.part(0).set_value(varlen_vr.part(0));
+            res_vr.part(0).set_value(varlen_vr.part(0).into_extended(false, 32, 64));
             return true;
         }
 
@@ -1822,13 +1822,13 @@ namespace lingodb::execution::baseline {
                     break;
                 case mlir::arith::CmpIPredicate::ne: jump = Jump::jne;
                     break;
-                case mlir::arith::CmpIPredicate::ugt: jump = Jump::jg;
+                case mlir::arith::CmpIPredicate::ugt: jump = Jump::ja;
                     break;
-                case mlir::arith::CmpIPredicate::uge: jump = Jump::jge;
+                case mlir::arith::CmpIPredicate::uge: jump = Jump::jae;
                     break;
-                case mlir::arith::CmpIPredicate::ult: jump = Jump::jl;
+                case mlir::arith::CmpIPredicate::ult: jump = Jump::jb;
                     break;
-                case mlir::arith::CmpIPredicate::ule: jump = Jump::jle;
+                case mlir::arith::CmpIPredicate::ule: jump = Jump::jbe;
                     break;
                 case mlir::arith::CmpIPredicate::sgt: jump = Jump::jg;
                     break;
