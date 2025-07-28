@@ -700,6 +700,24 @@ namespace lingodb::execution::baseline {
             localFuncMap[func.getSymName()] = idx;
         }
 
+        // [ptr + idx * elem_size]
+        GenericValuePart create_idx_offset_expr(ValuePartRef base, IRValueRef idx, size_t elem_size) {
+            if (idx) {
+                if (auto idx_op = mlir::dyn_cast_or_null<mlir::arith::ConstantIndexOp>(idx.getDefiningOp())) {
+                    AsmReg ptr_reg = base.load_to_reg();
+                    return GenericValuePart{
+                        Expr{std::move(ptr_reg), static_cast<int64_t>(static_cast<size_t>(idx_op.value()) * elem_size)}
+                    };
+                }
+                auto [_, idx_ref] = this->val_ref_single(idx);
+                auto generic_ptr_expr = Expr{base.load_to_reg()};
+                generic_ptr_expr.index = idx_ref.load_to_reg();
+                generic_ptr_expr.scale = elem_size;
+                return GenericValuePart{std::move(generic_ptr_expr)};
+            }
+            return GenericValuePart{std::move(base)};
+        }
+
         bool compile_arith_binary_op(IRInstRef op) {
             auto res_type = op->getResult(0).getType();
             unsigned res_width;
@@ -995,30 +1013,13 @@ namespace lingodb::execution::baseline {
             const mlir::Type stored_type = in.getType();
 
             auto [_, ptr_ref] = this->val_ref_single(ptr);
-            GenericValuePart ptr_part;
-            if (idx) {
-                // store to [ptr + idx * elem_size]
-                auto elem_size = get_size(stored_type);
-                if (!elem_size) {
-                    assert(0 && "Unsupported type for store operation");
-                    error.emit() << "Unsupported type for store operation.";
-                    return false;
-                }
-                if (auto idx_op = mlir::dyn_cast_or_null<mlir::arith::ConstantIndexOp>(idx.getDefiningOp())) {
-                    AsmReg ptr_reg = ptr_ref.load_to_reg();
-                    ptr_part = GenericValuePart{
-                        Expr{std::move(ptr_reg), static_cast<int64_t>(static_cast<size_t>(idx_op.value()) * *elem_size)}
-                    };
-                } else {
-                    auto [_, idx_ref] = this->val_ref_single(idx);
-                    auto generic_ptr_expr = Expr{ptr_ref.load_to_reg()};
-                    generic_ptr_expr.index = idx_ref.load_to_reg();
-                    generic_ptr_expr.scale = *elem_size;
-                    ptr_part = GenericValuePart{std::move(generic_ptr_expr)};
-                }
-            } else {
-                ptr_part = GenericValuePart{std::move(ptr_ref)};
+            auto elem_size = get_size(stored_type);
+            if (!elem_size) {
+                assert(0 && "Unsupported type for store operation");
+                error.emit() << "Unsupported type for store operation.";
+                return false;
             }
+            GenericValuePart ptr_part = create_idx_offset_expr(std::move(ptr_ref), idx, *elem_size);
 
             auto in_vr = this->val_ref(in);
             return mlir::TypeSwitch<mlir::Type, bool>(stored_type)
@@ -1055,30 +1056,13 @@ namespace lingodb::execution::baseline {
             const mlir::Type loaded_type = op.getVal().getType();
 
             auto [_, ptr_ref] = this->val_ref_single(ptr);
-            GenericValuePart ptr_part;
-            if (idx) {
-                // store to [ptr + idx * elem_size]
-                auto elem_size = get_size(loaded_type);
-                if (!elem_size) {
-                    assert(0 && "Unsupported type for store operation");
-                    error.emit() << "Unsupported type for store operation.";
-                    return false;
-                }
-                if (auto idx_op = mlir::dyn_cast_or_null<mlir::arith::ConstantIndexOp>(idx.getDefiningOp())) {
-                    AsmReg ptr_reg = ptr_ref.load_to_reg();
-                    ptr_part = GenericValuePart{
-                        Expr{std::move(ptr_reg), static_cast<int64_t>(static_cast<size_t>(idx_op.value()) * *elem_size)}
-                    };
-                } else {
-                    auto [_, idx_ref] = this->val_ref_single(idx);
-                    auto generic_ptr_expr = Expr{ptr_ref.load_to_reg()};
-                    generic_ptr_expr.index = idx_ref.load_to_reg();
-                    generic_ptr_expr.scale = *elem_size;
-                    ptr_part = GenericValuePart{std::move(generic_ptr_expr)};
-                }
-            } else {
-                ptr_part = GenericValuePart{std::move(ptr_ref)};
+            auto elem_size = get_size(loaded_type);
+            if (!elem_size) {
+                assert(0 && "Unsupported type for load operation");
+                error.emit() << "Unsupported type for load operation.";
+                return false;
             }
+            GenericValuePart ptr_part = create_idx_offset_expr(std::move(ptr_ref), idx, *elem_size);
 
             auto res = this->result_ref(op.getVal());
             ScratchReg res_scratch{this};
@@ -1457,28 +1441,13 @@ namespace lingodb::execution::baseline {
             assert(val_parts(array_ptr).count() == 1);
             auto [array_ptr_vr, array_ptr_pr] = this->val_ref_single(array_ptr);
 
-            GenericValuePart ptr;
-            // store to [ptr + idx * elem_size]
             auto elem_size = get_size(elem_type);
             if (!elem_size) {
                 assert(0 && "Unsupported type for store operation");
                 error.emit() << "Unsupported type for store operation.";
                 return false;
             }
-            AsmReg array_ptr_reg = array_ptr_pr.load_to_reg();
-            if (auto idx_op = mlir::dyn_cast_or_null<mlir::arith::ConstantIndexOp>(idx.getDefiningOp())) {
-                ptr = GenericValuePart{
-                    Expr{
-                        std::move(array_ptr_reg), static_cast<int64_t>(static_cast<size_t>(idx_op.value()) * *elem_size)
-                    }
-                };
-            } else {
-                auto [_, idx_ref] = this->val_ref_single(idx);
-                auto generic_ptr_expr = Expr{std::move(array_ptr_reg)};
-                generic_ptr_expr.index = idx_ref.alloc_reg();
-                generic_ptr_expr.scale = *elem_size;
-                ptr = GenericValuePart{std::move(generic_ptr_expr)};
-            }
+            GenericValuePart ptr = create_idx_offset_expr(std::move(array_ptr_pr), idx, *elem_size);
 
             // load value to register (e.g. mov + add / lea for x86_64)
             AsmReg res_reg = derived()->gval_expr_as_reg(ptr);

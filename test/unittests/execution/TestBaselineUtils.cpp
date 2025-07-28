@@ -1,46 +1,85 @@
 #include "catch2/catch_all.hpp"
 #include "lingodb/execution/Execution.h"
 #include "lingodb/execution/baseline/utils.hpp"
+#include "lingodb/compiler/Dialect/util/UtilDialect.h"
 #include <mlir/IR/MLIRContext.h>
 #include <mlir/IR/BuiltinTypes.h>
 #include <mlir/IR/Types.h>
+#include <mlir/IR/DialectRegistry.h>
 
 using namespace lingodb::execution::baseline;
 
 TEST_CASE("TupleHelper::getElementOffset and sizeAndPadding with real MLIR types") {
-   mlir::MLIRContext ctx;
+    mlir::MLIRContext ctx;
+    mlir::DialectRegistry registry;
+    registry.insert<dialect::util::UtilDialect>();
+    ctx.appendDialectRegistry(registry);
+    ctx.loadDialect<dialect::util::UtilDialect>();
 
-   auto i8  = mlir::IntegerType::get(&ctx, 8);
-   auto i32 = mlir::IntegerType::get(&ctx, 32);
-   auto f64 = mlir::Float64Type::get(&ctx);
-   auto idx = mlir::IndexType::get(&ctx);
+    auto i8 = mlir::IntegerType::get(&ctx, 8);
+    auto i32 = mlir::IntegerType::get(&ctx, 32);
+    auto f64 = mlir::Float64Type::get(&ctx);
+    auto idx = mlir::IndexType::get(&ctx);
+    auto ref = dialect::util::RefType::get(&ctx);
 
-   // If you have a custom RefType, create it here, otherwise use a placeholder
-   // For demonstration, use i32 as a stand-in for RefType
-   auto ref = i32;
+    auto t1 = mlir::TupleType::get(&ctx, {i8, i32, f64, ref, idx});
+    auto t2 = mlir::TupleType::get(&ctx, {i8, ref, i8});
+    auto t3 = mlir::TupleType::get(&ctx, {ref, idx});
+    auto t4 = mlir::TupleType::get(&ctx, {t1, t2, i8});
+    auto t5_h = mlir::TupleType::get(&ctx, {i8});
+    auto t5 = mlir::TupleType::get(&ctx, {t5_h, i8});
 
-   auto tuple = mlir::TupleType::get(&ctx, {i8, i32, f64, ref, idx});
-   TupleHelper helper(tuple);
+    SECTION("getElementOffset returns correct offsets") {
+        TupleHelper helper(t1);
+        REQUIRE(helper.getElementOffset(0) == 0);
+        REQUIRE(helper.getElementOffset(1) == 4);
+        REQUIRE(helper.getElementOffset(2) == 8);
+        REQUIRE(helper.getElementOffset(3) == 16);
+        REQUIRE(helper.getElementOffset(4) == 24);
 
-   SECTION("getElementOffset returns correct offsets") {
-      auto offset0 = helper.getElementOffset(0);
-      auto offset1 = helper.getElementOffset(1);
-      auto offset2 = helper.getElementOffset(2);
-      auto offset3 = helper.getElementOffset(3);
-      auto offset4 = helper.getElementOffset(4);
+        helper = TupleHelper(t2);
+        REQUIRE(helper.getElementOffset(0) == 0);
+        REQUIRE(helper.getElementOffset(1) == 8);
+        REQUIRE(helper.getElementOffset(2) == 16);
 
-      REQUIRE(offset0 == 0);
-      REQUIRE(offset1 > offset0);
-      REQUIRE(offset2 > offset1);
-      REQUIRE(offset3 > offset2);
-      REQUIRE(offset4 > offset3);
-   }
+        helper = TupleHelper(t3);
+        REQUIRE(helper.getElementOffset(0) == 0);
+        REQUIRE(helper.getElementOffset(1) == 8);
 
-   SECTION("sizeAndPadding returns correct size and alignment") {
-      auto [size, align] = helper.sizeAndPadding();
-      REQUIRE(size > 0);
-      REQUIRE(align > 0);
-      auto lastOffset = helper.getElementOffset(4);
-      REQUIRE(size >= lastOffset + sizeof(uint64_t));
-   }
+        helper = TupleHelper(t4);
+        REQUIRE(helper.getElementOffset(0) == 0);
+        REQUIRE(helper.getElementOffset(1) == 32);
+        REQUIRE(helper.getElementOffset(2) == 56);
+
+        helper = TupleHelper(t5);
+        REQUIRE(helper.getElementOffset(0) == 0);
+        REQUIRE(helper.getElementOffset(1) == 1);
+    }
+
+    SECTION("sizeAndPadding returns correct size and alignment") {
+        TupleHelper helper(t1);
+        auto [size, align] = helper.sizeAndPadding();
+        REQUIRE(size == 32);
+        REQUIRE(align == 8);
+
+        helper = TupleHelper(t2);
+        std::tie(size, align) = helper.sizeAndPadding();
+        REQUIRE(size == 24);
+        REQUIRE(align == 8);
+
+        helper = TupleHelper(t3);
+        std::tie(size, align) = helper.sizeAndPadding();
+        REQUIRE(size == 16);
+        REQUIRE(align == 8);
+
+        helper = TupleHelper(t4);
+        std::tie(size, align) = helper.sizeAndPadding();
+        REQUIRE(size == 64);
+        REQUIRE(align == 8);
+
+        helper = TupleHelper(t5);
+        std::tie(size, align) = helper.sizeAndPadding();
+        REQUIRE(size == 2);
+        REQUIRE(align == 1);
+    }
 }

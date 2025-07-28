@@ -12,12 +12,14 @@ class TupleHelper {
    mlir::TupleType tupleType;
 
    public:
-   explicit TupleHelper(mlir::TupleType tupleType) : tupleType(tupleType) {}
+   explicit TupleHelper(const mlir::TupleType tupleType) : tupleType(tupleType) {
+   }
 
-   [[nodiscard]] unsigned getElementOffset(uint32_t index) const noexcept {
+   [[nodiscard]] unsigned getElementOffset(const uint32_t index) const noexcept {
       size_t offset = 0;
       assert(index < tupleType.getTypes().size() && "Index out of bounds for tuple type");
-      for (const mlir::Type elem : tupleType.getTypes() | std::views::take(index)) {
+      for (size_t i = 0; i <= index; ++i) {
+         const mlir::Type elem = tupleType.getTypes()[i];
          unsigned elemAlign = 0;
          size_t elemSize = 0;
          llvm::TypeSwitch<mlir::Type>(elem)
@@ -72,9 +74,12 @@ class TupleHelper {
                return 0;
             });
          // enforce alignment requirement
-         offset += offset % elemAlign;
-         // add offset of element
-         offset += elemSize;
+         if (offset % elemAlign != 0)
+            offset += elemAlign - offset % elemAlign;
+         if (i != index) {
+            // add offset of element
+            offset += elemSize;
+         }
       }
       return offset;
    }
@@ -138,7 +143,8 @@ class TupleHelper {
                return 0;
             });
          // enforce alignment requirement
-         offset += offset % elemAlign;
+         if (offset % elemAlign != 0)
+            offset += elemAlign - offset % elemAlign;
          // add offset of element
          offset += elemSize;
          maxAlign = std::max(maxAlign, elemAlign);
@@ -146,7 +152,8 @@ class TupleHelper {
       if (offset == 0)
          return {0, 1}; // empty tuple case
       // adjust entire struct size to the maximum alignment (for array usage)
-      offset += maxAlign - offset % maxAlign;
+      if (offset % maxAlign != 0)
+         offset += maxAlign - offset % maxAlign;
       return {offset, maxAlign};
    }
 };
