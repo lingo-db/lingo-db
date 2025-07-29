@@ -83,23 +83,11 @@
 %token 			GREATER		">"
 %token          HAT         "^"
 %token 			QUOTE		"'"
-%token 			CONCAT		"||"
 %token          PIPE        "|>"
 
 
 
-/*
- * Non-keyword token types.  These are hard-wired into the "flex" lexer.
- * They must be listed first so that their numeric codes do not depend on
- * the set of keywords.  PL/pgSQL depends on this so that it can share the
- * same lexer.  If you add/change tokens here, fix PL/pgSQL to match!
- *
- * UIDENT and USCONST are reduced to IDENT and SCONST in parser.c, so that
- * they need no productions here; but we must assign token codes to them.
- *
- * DOT_DOT is unused in the core SQL grammar, and so will always provoke
- * parse errors.  It is needed by PL/pgSQL.
- */
+
 %token <std::string>	        UIDENT SCONST USCONST BCONST XCONST Op
 %token 	        PARAM
 %token			TYPECAST DOT_DOT COLON_EQUALS
@@ -262,7 +250,7 @@
 
 %type<std::string>  ColId ColLabel BareColLabel attr_name 
                     qualified_name relation_expr alias_clause opt_alias_clause 
-                    name type_function_name func_name col_name_keyword unreserved_keyword reserved_keyword
+                    name type_function_name func_name col_name_keyword unreserved_keyword reserved_keyword all_Op qual_Op MathOp
 
 %type<std::vector<std::string>> name_list opt_name_list
 
@@ -1231,6 +1219,9 @@ a_expr:
     {
         $$ = mkNode<lingodb::ast::OperatorExpression>(@$, lingodb::ast::ExpressionType::OPERATOR_IS_NOT_NULL, $1);
     }
+    | a_expr[left] qual_Op a_expr[right] {
+        $$ = mkNode<lingodb::ast::OperatorExpression>(@$, $2, $left, $right);
+    }
     ;
 b_expr:
     c_expr { $$ = $c_expr;}
@@ -1738,14 +1729,19 @@ any_operator:
     | ColId DOT any_operator
     ;
 
+qual_Op:
+    all_Op {$$=$1;}
+    //TODO | OPERATOR LP any_operator RP
+    ;
+
 qual_all_Op:
     all_Op
     | OPERATOR LP any_operator RP
     ;
 
 all_Op: 
-    Op
-    | MathOp
+    Op {$$=$1;}
+    | MathOp {$$=$1;}
     ;
 MathOp:
     PLUS

@@ -116,7 +116,11 @@ identifier      {ident_start}{ident_cont}*
 quoted_identifier   \"([^\"]|\"\")*\"
 squote			\'
 dquote			\"
-str       {squote}({ident_cont}|{op_chars}|[ ])*{squote}
+strChars ({ident_cont}|,)
+str       {squote}({strChars}|{op_chars}|[ ])*{squote}
+
+operator		{op_chars}+
+
 
 boolean [fF][aA][lL][sS][eE]
 
@@ -148,7 +152,6 @@ boolean [fF][aA][lL][sS][eE]
 "<"             { return lingodb::parser::make_LESS(loc); }
 ">="            { return lingodb::parser::make_GREATER_EQUAL(loc); }
 ">"             { return lingodb::parser::make_GREATER(loc); }
-"||"            { return lingodb::parser::make_CONCAT(loc); }
 "#"             { return lingodb::parser::make_YYEOF(loc);}
 "|>"            { return lingodb::parser::make_PIPE(loc); }
 {newline}              { loc.lines();}
@@ -276,6 +279,10 @@ boolean [fF][aA][lL][sS][eE]
   ident.erase(0,1);
   ident.erase(ident.size()-1,1);
   return lingodb::parser::make_STRING_VALUE(std::move(ident), loc);
+}
+{operator} {
+  std::string ident(yytext);
+  return lingodb::parser::make_Op(std::move(ident), loc);
 }
 %%
 

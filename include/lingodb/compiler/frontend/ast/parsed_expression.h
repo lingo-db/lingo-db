@@ -72,6 +72,9 @@ enum class ExpressionType : uint8_t {
    OPERATOR_TIMES = 19,
    OPERATOR_DIVIDE = 20,
    OPERATOR_MOD = 21,
+   OPERATOR_CONCAT = 22,
+   // For operators that are unknown or where the type is determined after parsing
+   OPERATOR_UNKNOWN = 23,
 
    // -----------------------------
    // Comparison Operators
@@ -201,6 +204,7 @@ enum class ExpressionType : uint8_t {
    BOUND_EXPANDED = 234,
    TARGETS = 240,
    BOUND_TARGETS = 241,
+
 };
 
 enum class ExpressionClass : uint8_t {
@@ -444,8 +448,11 @@ class OperatorExpression : public ParsedExpression {
    static constexpr const ExpressionClass TYPE = ExpressionClass::OPERATOR;
    OperatorExpression(ExpressionType type, std::shared_ptr<ParsedExpression> left);
    OperatorExpression(ExpressionType type, std::shared_ptr<ParsedExpression> left, std::shared_ptr<ParsedExpression> right);
+   OperatorExpression(std::string opString, std::shared_ptr<ParsedExpression> left, std::shared_ptr<ParsedExpression> right);
    std::vector<std::shared_ptr<ParsedExpression>> children;
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
+
+   std::string opString = "";
 };
 
 class CastExpression : public ParsedExpression {
