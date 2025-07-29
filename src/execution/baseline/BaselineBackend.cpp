@@ -24,7 +24,6 @@
 #include <llvm/Target/TargetMachine.h>
 #include <llvm/ExecutionEngine/JITLink/EHFrameSupport.h>
 #include <llvm/ExecutionEngine/Orc/Core.h>
-#include <llvm/ExecutionEngine/Orc/EHFrameRegistrationPlugin.h>
 #include <llvm/ExecutionEngine/Orc/ExecutionUtils.h>
 #include <llvm/ExecutionEngine/Orc/MapperJITLinkMemoryManager.h>
 #include <llvm/ExecutionEngine/Orc/ObjectLinkingLayer.h>
@@ -46,15 +45,11 @@
 
 #include "snippet_encoders_x64.hpp"
 
+
 namespace lingodb::execution::baseline {
-    namespace utility = lingodb::utility;
-    utility::Tracer::Event execution("Execution", "run");
-    utility::Tracer::Event llvmCodeGen("Compilation", "BaselineCodeGen");
-
-    utility::GlobalSetting<std::string> baselineDebugFileOut("system.compilation.baseline_object_out", "");
-
     using namespace compiler;
 
+    static utility::GlobalSetting<std::string> baselineDebugFileOut("system.compilation.baseline_object_out", "");
 
     class SpdLogSpoof {
         // storage for the log messages
@@ -125,7 +120,7 @@ namespace lingodb::execution::baseline {
         IRAdaptor(mlir::ModuleOp *module, Error &error) : module(module), error(error) {
         }
 
-        Error &getError() { return error; }
+        Error &getError() const noexcept { return error; }
 
         [[maybe_unused]] auto funcs() const noexcept {
             return llvm::map_range(module->getOps<mlir::func::FuncOp>(), [](mlir::func::FuncOp func) {
@@ -313,7 +308,7 @@ namespace lingodb::execution::baseline {
             return PHIRef{cast<mlir::BlockArgument>(val)};
         }
 
-        [[maybe_unused]] uint32_t val_alloca_size(IRValueRef val) const noexcept {
+        [[maybe_unused]] uint32_t val_alloca_size(IRValueRef val) {
             assert(mlir::isa<dialect::util::AllocaOp>(val.getDefiningOp()) && "Value is not an alloca operation");
             auto allocaOp = cast<dialect::util::AllocaOp>(val.getDefiningOp());
             unsigned count = 1; // default size for an alloca without a size is 1
@@ -324,17 +319,16 @@ namespace lingodb::execution::baseline {
                 if (auto const_index = mlir::dyn_cast<mlir::arith::ConstantIndexOp>(size.getDefiningOp())) {
                     count = const_index.value();
                 }
-                error.emit() << "Value is not an arith int constant";
-                abort();
+                getError().emit() << "Value is not an arith int constant";
             }
 
             const mlir::TypedValue<dialect::util::RefType> res_ptr = allocaOp.getRef();
             const mlir::Type element_type = res_ptr.getType().getElementType();
             const auto size = get_size(element_type);
             if (!size) {
-                error.emit() << "Value is not a supported type for alloca size calculation: ";
-                element_type.dump();
-                abort();
+                getError().emit() << std::format("Value is not a supported type for alloca size calculation: {}\n",
+                                                 element_type.getAbstractType().getName().str());
+                return 1;
             }
             return *size * count;
         }
@@ -344,7 +338,7 @@ namespace lingodb::execution::baseline {
         }
 
         [[maybe_unused]] std::string value_fmt_ref(IRValueRef val) const noexcept {
-            if (const auto op = val.getDefiningOp()) {
+            if (auto *const op = val.getDefiningOp()) {
                 return op->getName().getStringRef().str();
             }
             if (const mlir::BlockArgument arg = mlir::dyn_cast<mlir::BlockArgument>(val)) {
@@ -397,12 +391,12 @@ namespace lingodb::execution::baseline {
             for (auto &block: func.getFunctionBody()) {
                 for (auto arg: block.getArguments())
                     values[arg] = ValInfo{
-                        .local_idx = tpde::ValLocalIdx(values.size())
+                        .local_idx = static_cast<tpde::ValLocalIdx>(values.size())
                     };
                 for (auto &op: block) {
                     for (auto result: op.getResults())
                         values[result] = ValInfo{
-                            .local_idx = tpde::ValLocalIdx(values.size())
+                            .local_idx = static_cast<tpde::ValLocalIdx>(values.size())
                         };
                 }
             }
@@ -701,18 +695,28 @@ namespace lingodb::execution::baseline {
         }
 
         // [ptr + idx * elem_size]
-        GenericValuePart create_idx_offset_expr(ValuePartRef base, IRValueRef idx, size_t elem_size) {
+        std::optional<GenericValuePart> create_idx_offset_expr(ValuePartRef base, IRValueRef idx,
+                                                               const mlir::Type elem_t) {
+            const auto elem_size = get_size(elem_t);
+            if (!elem_size) {
+                assert(0 && "Unsupported type for store operation");
+                error.emit() << "Unsupported type for store operation.";
+                return std::nullopt;
+            }
+
             if (idx) {
                 if (auto idx_op = mlir::dyn_cast_or_null<mlir::arith::ConstantIndexOp>(idx.getDefiningOp())) {
                     AsmReg ptr_reg = base.load_to_reg();
                     return GenericValuePart{
-                        Expr{std::move(ptr_reg), static_cast<int64_t>(static_cast<size_t>(idx_op.value()) * elem_size)}
+                        Expr{
+                            std::move(ptr_reg), static_cast<int64_t>(static_cast<size_t>(idx_op.value()) * (*elem_size))
+                        }
                     };
                 }
                 auto [_, idx_ref] = this->val_ref_single(idx);
                 auto generic_ptr_expr = Expr{base.load_to_reg()};
                 generic_ptr_expr.index = idx_ref.load_to_reg();
-                generic_ptr_expr.scale = elem_size;
+                generic_ptr_expr.scale = *elem_size;
                 return GenericValuePart{std::move(generic_ptr_expr)};
             }
             return GenericValuePart{std::move(base)};
@@ -975,29 +979,13 @@ namespace lingodb::execution::baseline {
             assert(val_parts(dst).count() == 1);
             auto buf_vr = this->val_ref(buf);
 
-            GenericValuePart ptr;
-            // store to [ptr + idx * elem_size]
-            auto elem_size = get_size(elem_type);
-            if (!elem_size) {
-                assert(0 && "Unsupported type for store operation");
-                error.emit() << "Unsupported type for store operation.";
+            auto offset_expr = create_idx_offset_expr(std::move(buf_vr.part(1)), idx, elem_type);
+            if (!offset_expr) {
                 return false;
-            }
-            AsmReg buf_ptr_reg = buf_vr.part(1).load_to_reg();
-            if (auto idx_op = mlir::dyn_cast_or_null<mlir::arith::ConstantIndexOp>(idx.getDefiningOp())) {
-                ptr = GenericValuePart{
-                    Expr{std::move(buf_ptr_reg), static_cast<int64_t>(static_cast<size_t>(idx_op.value()) * *elem_size)}
-                };
-            } else {
-                auto [_, idx_ref] = this->val_ref_single(idx);
-                auto generic_ptr_expr = Expr{std::move(buf_ptr_reg)};
-                generic_ptr_expr.index = idx_ref.alloc_reg();
-                generic_ptr_expr.scale = *elem_size;
-                ptr = GenericValuePart{std::move(generic_ptr_expr)};
             }
 
             // load value to register (e.g. mov + add / lea for x86_64)
-            AsmReg res_reg = derived()->gval_expr_as_reg(ptr);
+            AsmReg res_reg = derived()->gval_expr_as_reg(*offset_expr);
             ScratchReg res_scratch{derived()};
             derived()->mov(res_scratch.alloc_gp(), res_reg, 8);
 
@@ -1013,35 +1001,32 @@ namespace lingodb::execution::baseline {
             const mlir::Type stored_type = in.getType();
 
             auto [_, ptr_ref] = this->val_ref_single(ptr);
-            auto elem_size = get_size(stored_type);
-            if (!elem_size) {
-                assert(0 && "Unsupported type for store operation");
-                error.emit() << "Unsupported type for store operation.";
+            auto offset_expr = create_idx_offset_expr(std::move(ptr_ref), idx, stored_type);
+            if (!offset_expr) {
                 return false;
             }
-            GenericValuePart ptr_part = create_idx_offset_expr(std::move(ptr_ref), idx, *elem_size);
 
             auto in_vr = this->val_ref(in);
             return mlir::TypeSwitch<mlir::Type, bool>(stored_type)
                     .Case([&](const mlir::IntegerType t) {
                         switch (t.getIntOrFloatBitWidth()) {
-                            case 1: return derived()->encode_util_store_i1(std::move(ptr_part), in_vr.part(0));
-                            case 8: return derived()->encode_util_store_i8(std::move(ptr_part), in_vr.part(0));
-                            case 16: return derived()->encode_util_store_i16(std::move(ptr_part), in_vr.part(0));
-                            case 32: return derived()->encode_util_store_i32(std::move(ptr_part), in_vr.part(0));
-                            case 64: return derived()->encode_util_store_i64(std::move(ptr_part), in_vr.part(0));
+                            case 1: return derived()->encode_util_store_i1(std::move(*offset_expr), in_vr.part(0));
+                            case 8: return derived()->encode_util_store_i8(std::move(*offset_expr), in_vr.part(0));
+                            case 16: return derived()->encode_util_store_i16(std::move(*offset_expr), in_vr.part(0));
+                            case 32: return derived()->encode_util_store_i32(std::move(*offset_expr), in_vr.part(0));
+                            case 64: return derived()->encode_util_store_i64(std::move(*offset_expr), in_vr.part(0));
                             case 128: return derived()->encode_store_i128(
-                                    std::move(ptr_part), in_vr.part(0), in_vr.part(1));
+                                    std::move(*offset_expr), in_vr.part(0), in_vr.part(1));
                             default:
                                 assert(0 && "Unsupported integer type width for store operation");
                                 return false;
                         }
                     })
                     .template Case<dialect::util::RefType, mlir::IndexType>([&](auto) {
-                        return derived()->encode_util_store_i64(std::move(ptr_part), in_vr.part(0));
+                        return derived()->encode_util_store_i64(std::move(*offset_expr), in_vr.part(0));
                     })
                     .template Case<dialect::util::VarLen32Type, dialect::util::BufferType>([&](auto) {
-                        return derived()->encode_store_i128(std::move(ptr_part), in_vr.part(0), in_vr.part(1));
+                        return derived()->encode_store_i128(std::move(*offset_expr), in_vr.part(0), in_vr.part(1));
                     })
                     .Default([](mlir::Type t) {
                         t.dump();
@@ -1056,34 +1041,31 @@ namespace lingodb::execution::baseline {
             const mlir::Type loaded_type = op.getVal().getType();
 
             auto [_, ptr_ref] = this->val_ref_single(ptr);
-            auto elem_size = get_size(loaded_type);
-            if (!elem_size) {
-                assert(0 && "Unsupported type for load operation");
-                error.emit() << "Unsupported type for load operation.";
+            auto offset_expr = create_idx_offset_expr(std::move(ptr_ref), idx, loaded_type);
+            if (!offset_expr) {
                 return false;
             }
-            GenericValuePart ptr_part = create_idx_offset_expr(std::move(ptr_ref), idx, *elem_size);
 
             auto res = this->result_ref(op.getVal());
             ScratchReg res_scratch{this};
             return mlir::TypeSwitch<mlir::Type, bool>(loaded_type)
                     .Case([&](const mlir::IntegerType t) {
                         switch (t.getIntOrFloatBitWidth()) {
-                            case 1: derived()->encode_util_load_i1(std::move(ptr_part), res_scratch);
+                            case 1: derived()->encode_util_load_i1(std::move(*offset_expr), res_scratch);
                                 break;
-                            case 8: derived()->encode_util_load_i8(std::move(ptr_part), res_scratch);
+                            case 8: derived()->encode_util_load_i8(std::move(*offset_expr), res_scratch);
                                 break;
-                            case 16: derived()->encode_util_load_i16(std::move(ptr_part), res_scratch);
+                            case 16: derived()->encode_util_load_i16(std::move(*offset_expr), res_scratch);
                                 break;
-                            case 32: derived()->encode_util_load_i32(std::move(ptr_part), res_scratch);
+                            case 32: derived()->encode_util_load_i32(std::move(*offset_expr), res_scratch);
                                 break;
-                            case 64: derived()->encode_util_load_i64(std::move(ptr_part), res_scratch);
+                            case 64: derived()->encode_util_load_i64(std::move(*offset_expr), res_scratch);
                                 break;
                             case 128: {
                                 ScratchReg res_scratch_high{derived()};
                                 auto res_low = res.part(0);
                                 auto res_high = res.part(1);
-                                derived()->encode_load_i128(std::move(ptr_part), res_scratch, res_scratch_high);
+                                derived()->encode_load_i128(std::move(*offset_expr), res_scratch, res_scratch_high);
                                 this->set_value(res_low, res_scratch);
                                 this->set_value(res_high, res_scratch_high);
                                 return true;
@@ -1097,7 +1079,7 @@ namespace lingodb::execution::baseline {
                         return true;
                     })
                     .template Case<dialect::util::RefType, mlir::IndexType>([&](auto) {
-                        derived()->encode_util_load_i64(std::move(ptr_part), res_scratch);
+                        derived()->encode_util_load_i64(std::move(*offset_expr), res_scratch);
                         ValuePartRef res_ref = res.part(0);
                         this->set_value(res_ref, res_scratch);
                         return true;
@@ -1106,7 +1088,7 @@ namespace lingodb::execution::baseline {
                         ScratchReg res_scratch_high{derived()};
                         auto res_low = res.part(0);
                         auto res_high = res.part(1);
-                        derived()->encode_load_i128(std::move(ptr_part), res_scratch, res_scratch_high);
+                        derived()->encode_load_i128(std::move(*offset_expr), res_scratch, res_scratch_high);
                         this->set_value(res_low, res_scratch);
                         this->set_value(res_high, res_scratch_high);
                         return true;
@@ -1332,8 +1314,6 @@ namespace lingodb::execution::baseline {
             if (mlir::isa<mlir::IndexType>(src.getType()) && mlir::isa<mlir::IntegerType>(res.getType())) {
                 assert(res.getType().getIntOrFloatBitWidth() <= 64);
                 auto [_, src_vpr] = this->val_ref_single(src);
-                if (res.getType().getIntOrFloatBitWidth() != 64)
-                    src_vpr = std::move(src_vpr).into_extended(false, 64, res.getType().getIntOrFloatBitWidth());
                 auto res_ref = this->result_ref(res);
                 res_ref.part(0).set_value(std::move(src_vpr));
                 return true;
@@ -1447,10 +1427,13 @@ namespace lingodb::execution::baseline {
                 error.emit() << "Unsupported type for store operation.";
                 return false;
             }
-            GenericValuePart ptr = create_idx_offset_expr(std::move(array_ptr_pr), idx, *elem_size);
+            auto offset_expr = create_idx_offset_expr(std::move(array_ptr_pr), idx, elem_type);
+            if (!offset_expr) {
+                return false;
+            }
 
             // load value to register (e.g. mov + add / lea for x86_64)
-            AsmReg res_reg = derived()->gval_expr_as_reg(ptr);
+            AsmReg res_reg = derived()->gval_expr_as_reg(*offset_expr);
             ScratchReg res_scratch{derived()};
             derived()->mov(res_scratch.alloc_gp(), res_reg, 8);
 
@@ -1685,6 +1668,19 @@ namespace lingodb::execution::baseline {
             return true;
         }
 
+        bool compile_util_buffer_get_ref_op(dialect::util::BufferGetRef op) {
+            const mlir::TypedValue<dialect::util::BufferType> buf = op.getBuffer();
+
+            const auto dst = op->getResult(0);
+            assert(val_parts(buf).count() == 2);
+            assert(val_parts(dst).count() == 1);
+            auto buf_vr = this->val_ref(buf);
+
+            auto [_, res_vr] = this->result_ref_single(dst);
+            res_vr.set_value(buf_vr.part(1));
+            return true;
+        }
+
         bool compile_inst(const IRInstRef inst, InstRange) noexcept {
             return mlir::TypeSwitch<IRInstRef, bool>(inst)
                     .Case<mlir::arith::AddIOp, mlir::arith::SubIOp, mlir::arith::MulIOp, mlir::arith::DivSIOp,
@@ -1764,12 +1760,14 @@ namespace lingodb::execution::baseline {
                     .template Case<dialect::util::HashVarLen>([&](auto op) {
                         return compile_util_hash_varlen_op(op);
                     })
+                    .template Case<dialect::util::BufferGetRef>([&](auto op) {
+                        return compile_util_buffer_get_ref_op(op);
+                    })
                     .template Case<dialect::util::VarLenCmp>([&](auto op) { return compile_util_varlen_cmp_op(op); })
                     .Default([&](IRInstRef op) {
                         error.emit() << "Encountered unimplemented instruction: " << op->getName().getStringRef().
                                 str()
                                 << "\n";
-                        op->dump();
                         return false;
                     });
         }
@@ -1952,14 +1950,14 @@ namespace lingodb::execution::baseline {
         }
 
         bool compile_cf_cond_br_op(mlir::cf::CondBranchOp op) {
-            const auto true_block = op.getTrueDest();
-            const auto false_block = op.getFalseDest();
+            auto *const true_block = op.getTrueDest();
+            auto *const false_block = op.getFalseDest();
 
             auto [_, cond_ref] = this->val_ref_single(op.getCondition());
             const auto cond_reg = cond_ref.load_to_reg();
             ASM(TEST32ri, cond_reg, 1);
 
-            const auto next_block = this->analyzer.block_ref(this->next_block());
+            auto *const next_block = this->analyzer.block_ref(this->next_block());
 
             const auto true_needs_split = this->branch_needs_split(true_block);
             const auto false_needs_split = this->branch_needs_split(false_block);
@@ -2114,7 +2112,7 @@ namespace lingodb::execution::baseline {
         // lower mlir IR to a form that can be compiled by tpde
         // currently mostly does a SCF to CF conversion
         bool lower(mlir::ModuleOp &moduleOp,
-                   std::shared_ptr<lingodb::execution::SnapshotState> serializationState) {
+                   const std::shared_ptr<lingodb::execution::SnapshotState> &serializationState) {
             mlir::PassManager pm2(moduleOp->getContext());
             pm2.enableVerifier(verify);
             lingodb::execution::addLingoDBInstrumentation(pm2, serializationState);
@@ -2145,7 +2143,7 @@ namespace lingodb::execution::baseline {
 #error "Baseline backend is only supported on x86_64 architecture."
 #endif
             const auto baselineCodeGenStart = std::chrono::high_resolution_clock::now();
-            if (!compiler.compile()) {
+            if (!compiler.compile() || compiler.adaptor->getError()) {
                 error.emit() << "Could not compile query module:\n"
                         << logSpoof.drain_logs() << "\n"
                         << compiler.adaptor->getError().emit().str() << "\n"
@@ -2178,11 +2176,12 @@ namespace lingodb::execution::baseline {
             if (loader->has_error) return;
             const auto baselineEmitEnd = std::chrono::high_resolution_clock::now();
 
-            const auto executionStart = std::chrono::high_resolution_clock::now();
+            utility::Tracer::Event execution("Execution", "run");
             utility::Tracer::Trace trace(execution);
+            const auto executionStart = std::chrono::high_resolution_clock::now();
             mainFunc();
-            trace.stop();
             const auto executionEnd = std::chrono::high_resolution_clock::now();
+            trace.stop();
             loader->teardown();
 
             timing["baselineCodeGen"] = std::chrono::duration_cast<std::chrono::microseconds>(
