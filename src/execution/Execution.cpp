@@ -219,6 +219,11 @@ ExecutionMode getExecutionMode() {
    else if (std::string(mode) == "BASELINE") {
       runMode = ExecutionMode::BASELINE;
    }
+#else
+   else if (std::string(mode) == "BASELINE") {
+      std::cerr << "Baseline mode is not enabled in this build" << std::endl;
+      exit(1);
+   }
 #endif
    else if (std::string(mode) == "NONE") {
       runMode = ExecutionMode::NONE;
