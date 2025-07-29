@@ -26,8 +26,8 @@ def process_single_query(q_number, db_directory):
         new_output_path = os.path.join(temp_dir, f'new_{q_number}.txt')
 
         # Define commands
-        old_cmd = ['cmake-build-debug/run-sql', sql_file, db_directory]
-        new_cmd = ['cmake-build-debug/run-sql', sql_file, db_directory]
+        old_cmd = ['cmake-build-relwithdebinfo/run-sql', sql_file, db_directory]
+        new_cmd = ['cmake-build-relwithdebinfo/run-sql', sql_file, db_directory]
 
         try:
             # Run old command and capture output to the temporary file
@@ -61,7 +61,6 @@ def process_single_query(q_number, db_directory):
 
 
 success_count = 0
-total_queries = 99
 failed_queries = []
 db_directory = './resources/data/tpcds-1/'  # Define outside the loop
 sql_directory = './resources/sql/tpcds/'  # Define outside the loop
@@ -70,13 +69,15 @@ sql_directory = './resources/sql/tpcds/'  # Define outside the loop
 query_numbers = [os.path.splitext(os.path.basename(f))[0] for f in glob(os.path.join(sql_directory, '*.sql'))]
 query_numbers.remove('initialize')
 
+total_queries = len(query_numbers)
+
 # Use ProcessPoolExecutor for parallel execution
 # max_workers can be adjusted based on your system's capabilities
 # It's generally good to set it to os.cpu_count() or slightly more if tasks are I/O bound
 with concurrent.futures.ProcessPoolExecutor(max_workers=os.cpu_count()) as executor:
     # Map the process_single_query function to each query number
     # tqdm wraps the executor.map to provide a progress bar for the parallel tasks
-    results = list(tqdm(executor.map(process_single_query, range(1, total_queries + 1), [db_directory] * total_queries),
+    results = list(tqdm(executor.map(process_single_query, query_numbers, [db_directory] * total_queries),
                         total=total_queries,
                         desc="Processing SQL Queries in Parallel",
                         unit="query"))
