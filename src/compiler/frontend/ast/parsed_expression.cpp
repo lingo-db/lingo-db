@@ -452,6 +452,8 @@ OperatorExpression::OperatorExpression(ExpressionType type, std::shared_ptr<Pars
 }
 OperatorExpression::OperatorExpression(ExpressionType type, std::shared_ptr<ParsedExpression> left, std::shared_ptr<ParsedExpression> right) : ParsedExpression(type, TYPE), children(std::vector{left, right}) {
 }
+OperatorExpression::OperatorExpression(std::string opString, std::shared_ptr<ParsedExpression> left, std::shared_ptr<ParsedExpression> right) : ParsedExpression(ExpressionType::OPERATOR_UNKNOWN, TYPE), opString(opString), children(std::vector{left, right}) {
+}
 std::string OperatorExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    std::string dot{};
 
