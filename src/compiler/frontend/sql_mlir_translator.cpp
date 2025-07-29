@@ -98,7 +98,7 @@ std::optional<mlir::Value> SQLMlirTranslator::translateStart(mlir::OpBuilder& bu
                }
                case ast::NamedResultType::Function: {
                   auto functionInfo = std::static_pointer_cast<ast::FunctionInfo>(named);
-                  names.push_back(builder.getStringAttr(functionInfo->displayName.empty() ? functionInfo->name : functionInfo->displayName));
+                  names.push_back(builder.getStringAttr(functionInfo->displayName));
                   auto colMemberName = memberManager.getUniqueMember(functionInfo->name);
                   colMemberNames.push_back(builder.getStringAttr(colMemberName));
                   colTypes.push_back(mlir::TypeAttr::get(functionInfo->resultType.toMlirType(builder.getContext())));
@@ -567,7 +567,17 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
                   return isNull;
                }
             }
-            default: error("Not implemented", expression->loc);
+            case ast::ExpressionType::OPERATOR_CONCAT: {
+               left = translateExpression(builder, operatorExpr->children[0], context);
+               right = translateExpression(builder, operatorExpr->children[1], context);
+               //Cast both to string
+               left = operatorExpr->resultType->castValueToThisType(builder, left, operatorExpr->children[0]->resultType->isNullable);
+               right = operatorExpr->resultType->castValueToThisType(builder, right, operatorExpr->children[0]->resultType->isNullable);
+
+               mlir::Type resType = operatorExpr->resultType->toMlirType(builder.getContext());
+               return builder.create<db::RuntimeCall>(builder.getUnknownLoc(), resType, "Concatenate", mlir::ValueRange({left, right})).getRes();
+            }
+            default: error("Operator not implemented", expression->loc);
          }
       }
       case ast::ExpressionClass::BOUND_CAST: {

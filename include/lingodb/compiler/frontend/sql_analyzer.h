@@ -95,6 +95,14 @@ class SQLQueryAnalyzer {
    std::shared_ptr<ast::BoundExpression> analyzeExpression(std::shared_ptr<ast::ParsedExpression> rootNode, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope);
    std::shared_ptr<ast::BoundColumnRefExpression> analyzeColumnRefExpression(std::shared_ptr<ast::ColumnRefExpression> columnRef, std::shared_ptr<SQLContext> context);
 
+   ast::ExpressionType stringToExpressionType(const std::string& parserStr) {
+      std::string str = parserStr;
+      std::transform(str.begin(), str.end(), str.begin(), ::toupper);
+      return llvm::StringSwitch<ast::ExpressionType>(str)
+         .Case("||", ast::ExpressionType::OPERATOR_CONCAT)
+         .Default(ast::ExpressionType::OPERATOR_UNKNOWN);
+   }
+
    std::string createTmpScope() {
       static size_t tmpScopeCounter = 0;
       std::string scope{"tmp_attr"};

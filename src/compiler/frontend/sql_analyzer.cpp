@@ -15,6 +15,7 @@
 namespace lingodb::analyzer {
 using ResolverScope = llvm::ScopedHashTable<std::string, std::shared_ptr<ast::NamedResult>, StringInfo>::ScopeTy;
 
+
 /*
     * SQLCanonicalizer
     */
@@ -347,7 +348,7 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
             }
 
             auto columnRef = drv.nf.node<ast::ColumnRefExpression>(functionExpr->loc, functionExpr->alias);
-            columnRef->alias = alias;
+            columnRef->alias = functionExpr->alias;
             return columnRef;
          }
          return functionExpr;
@@ -1388,6 +1389,13 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
       }
       case ast::ExpressionClass::OPERATOR: {
          auto operatorExpr = std::static_pointer_cast<ast::OperatorExpression>(rootNode);
+         if (operatorExpr->type == ast::ExpressionType::OPERATOR_UNKNOWN) {
+            operatorExpr->type = stringToExpressionType(operatorExpr->opString);
+            if (operatorExpr->type == ast::ExpressionType::OPERATOR_UNKNOWN) {
+               error("Unknown operator: " << operatorExpr->opString, operatorExpr->loc);
+            }
+
+         }
 
          if (operatorExpr->children.size() == 0) {
             error("Operator expression has no children", operatorExpr->loc);
@@ -1416,6 +1424,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
             }
             return c;
          });
+         //TODO handle types for different operations better
          catalog::NullableType resultType = SQLTypeUtils::getCommonBaseType(castValues, operatorExpr->type);
          switch (operatorExpr->type) {
             case ast::ExpressionType::OPERATOR_IS_NOT_NULL:
@@ -1424,6 +1433,11 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
                   return drv.nf.node<ast::BoundConstantExpression>(operatorExpr->loc, catalog::Type::boolean(), std::make_shared<ast::BoolValue>(operatorExpr->type == ast::ExpressionType::OPERATOR_IS_NOT_NULL), operatorExpr->alias);
                }
                resultType = catalog::Type::boolean();
+               break;
+            }
+            case ast::ExpressionType::OPERATOR_CONCAT: {
+               resultType = catalog::NullableType(catalog::Type::stringType(), resultType.isNullable);
+
                break;
             }
             default:;
@@ -1701,7 +1715,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
             error("Function '" << function->functionName << "' not implemented", function->loc);
          }
          auto fInfo = std::make_shared<ast::FunctionInfo>(scope, fName, resultType);
-         fInfo->displayName = function->alias;
+
 
          boundFunctionExpression->namedResult = fInfo;
 
