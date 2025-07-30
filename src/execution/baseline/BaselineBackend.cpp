@@ -882,7 +882,11 @@ namespace lingodb::execution::baseline {
                         {"arith.xori", {&Derived::encode_arith_lxor_i32, &Derived::encode_arith_lxor_i64}},
                         {"arith.andi", {&Derived::encode_arith_land_i32, &Derived::encode_arith_land_i64}},
                         {"arith.shrui", {&Derived::encode_arith_shr_u32, &Derived::encode_arith_shr_u64}},
-                        {"arith.shli", {&Derived::encode_arith_shl_i32, &Derived::encode_arith_shl_i64}}
+                        {"arith.shli", {&Derived::encode_arith_shl_i32, &Derived::encode_arith_shl_i64}},
+                        {"arith.minsi", {&Derived::encode_arith_minsi_i32, &Derived::encode_arith_minsi_i64}},
+                        {"arith.maxsi", {&Derived::encode_arith_maxsi_i32, &Derived::encode_arith_maxsi_i64}},
+                        {"arith.minui", {&Derived::encode_arith_minui_i32, &Derived::encode_arith_minui_i64}},
+                        {"arith.maxui", {&Derived::encode_arith_maxui_i32, &Derived::encode_arith_maxui_i64}},
                     };
                 }
 #ifndef NDEBUG
@@ -1769,7 +1773,10 @@ namespace lingodb::execution::baseline {
                         mlir::arith::DivUIOp, mlir::arith::RemSIOp, mlir::arith::RemUIOp,
                         mlir::arith::AndIOp, mlir::arith::OrIOp, mlir::arith::XOrIOp, mlir::arith::ShLIOp,
                         mlir::arith::ShRUIOp, mlir::arith::AddFOp, mlir::arith::SubFOp, mlir::arith::MulFOp,
-                        mlir::arith::DivFOp>([&](auto op) { return compile_arith_binary_op(op); })
+                        mlir::arith::DivFOp, mlir::arith::MaxSIOp, mlir::arith::MinSIOp, mlir::arith::MaxUIOp,
+                        mlir::arith::MinUIOp>([&](auto op) {
+                        return compile_arith_binary_op(op);
+                    })
                     .template Case<mlir::arith::CmpIOp>(
                         [&](auto op) { return derived()->compile_arith_cmp_int_op(op); })
                     .template Case<mlir::arith::CmpFOp>([&](auto op) { return compile_arith_cmp_float_op(op); })

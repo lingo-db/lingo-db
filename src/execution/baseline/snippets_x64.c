@@ -2,6 +2,10 @@
 #include <stddef.h>
 #include <stdbool.h>
 
+// --------------------------
+// arithmetic binary operations
+// --------------------------
+
 uint32_t arith_add_i32(uint32_t a, uint32_t b) { return (a + b); }
 uint32_t arith_sub_i32(uint32_t a, uint32_t b) { return (a - b); }
 uint32_t arith_mul_i32(uint32_t a, uint32_t b) { return (a * b); }
@@ -14,6 +18,10 @@ uint32_t arith_lor_i32(uint32_t a, uint32_t b) { return (a | b); }
 uint32_t arith_lxor_i32(uint32_t a, uint32_t b) { return (a ^ b); }
 uint32_t arith_shl_i32(uint32_t a, uint32_t b) { return (a << b); }
 uint32_t arith_shr_u32(uint32_t a, uint32_t b) { return (a >> b); }
+uint32_t arith_minui_i32(uint32_t lhs, uint32_t rhs) { return lhs < rhs ? lhs : rhs; }
+int32_t arith_minsi_i32(int32_t lhs, int32_t rhs) { return lhs < rhs ? lhs : rhs; }
+uint32_t arith_maxui_i32(uint32_t lhs, uint32_t rhs) { return lhs > rhs ? lhs : rhs; }
+int32_t arith_maxsi_i32(int32_t lhs, int32_t rhs) { return lhs > rhs ? lhs : rhs; }
 
 uint64_t arith_add_i64(uint64_t a, uint64_t b) { return (a + b); }
 uint64_t arith_sub_i64(uint64_t a, uint64_t b) { return (a - b); }
@@ -27,16 +35,16 @@ uint64_t arith_lor_i64(uint64_t a, uint64_t b) { return (a | b); }
 uint64_t arith_lxor_i64(uint64_t a, uint64_t b) { return (a ^ b); }
 uint64_t arith_shl_i64(uint64_t a, uint64_t b) { return (a << b); }
 uint64_t arith_shr_u64(uint64_t a, uint64_t b) { return (a >> b); }
+uint64_t arith_minui_i64(uint64_t lhs, uint64_t rhs) { return lhs < rhs ? lhs : rhs; }
+int64_t arith_minsi_i64(int64_t lhs, int64_t rhs) { return lhs < rhs ? lhs : rhs; }
+uint64_t arith_maxui_i64(uint64_t lhs, uint64_t rhs) { return lhs > rhs ? lhs : rhs; }
+int64_t arith_maxsi_i64(int64_t lhs, int64_t rhs) { return lhs > rhs ? lhs : rhs; }
 
 __uint128_t arith_add_i128(__uint128_t a, __uint128_t b) { return (a + b); }
 __uint128_t arith_sub_i128(__uint128_t a, __uint128_t b) { return (a - b); }
 __uint128_t arith_mul_i128(__uint128_t a, __uint128_t b) { return (a * b); }
 __uint128_t arith_shr_u128(__uint128_t a, __uint128_t b) { return (a >> b); }
-// Division and remainder operations are not supported by tpde_encoder. We need to call builtins for these.
-//__int128_t arith_sdiv_i128(__int128_t a, __int128_t b) { return (a / b); }
-//__uint128_t arith_udiv_i128(__uint128_t a, __uint128_t b) { return (a / b); }
-//__int128_t arith_srem_i128(__int128_t a, __int128_t b) { return (a % b); }
-//__uint128_t arith_urem_i128(__uint128_t a, __uint128_t b) { return (a % b); }
+// 128-bit division and remainder operations are not supported by tpde_encoder. We need to call builtins for these.
 __uint128_t arith_land_i128(__uint128_t a, __uint128_t b) { return (a & b); }
 __uint128_t arith_lor_i128(__uint128_t a, __uint128_t b) { return (a | b); }
 __uint128_t arith_lxor_i128(__uint128_t a, __uint128_t b) { return (a ^ b); }
@@ -45,13 +53,17 @@ float arith_add_f32(float a, float b) { return (a + b); }
 float arith_sub_f32(float a, float b) { return (a - b); }
 float arith_mul_f32(float a, float b) { return (a * b); }
 float arith_div_f32(float a, float b) { return (a / b); }
-// float arith_rem_f32(float a, float b) { return __builtin_fmodf(a, b); }
+// 128-bit float remainder operation is not supported by tpde_encoder. We need to call builtins for it.
 
 double arith_add_f64(double a, double b) { return (a + b); }
 double arith_sub_f64(double a, double b) { return (a - b); }
 double arith_mul_f64(double a, double b) { return (a * b); }
 double arith_div_f64(double a, double b) { return (a / b); }
-// double arith_rem_f64(double a, double b) { return __builtin_fmod(a, b); }
+// 128-bit float remainder operation is not supported by tpde_encoder. We need to call builtins for it.
+
+// --------------------------
+// load / store
+// --------------------------
 
 bool util_load_i1(bool* ptr) { return *ptr; }
 uint8_t util_load_i8(uint8_t* ptr) { return *ptr; }
@@ -72,6 +84,10 @@ void store_i128(__uint128_t* ptr, __uint128_t value) { *ptr = value; }
 
 void util_store_f32(float* ptr, float value) { *ptr = value; }
 void util_store_f64(double* ptr, double value) { *ptr = value; }
+
+// --------------------------
+// Other
+// --------------------------
 
 int32_t arith_select_i32(uint8_t cond, int32_t val1, int32_t val2) { return ((cond & 1) ? val1 : val2); }
 int64_t arith_select_i64(uint8_t cond, int64_t val1, int64_t val2) { return ((cond & 1) ? val1 : val2); }
