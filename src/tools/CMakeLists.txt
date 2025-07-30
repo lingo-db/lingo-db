@@ -43,6 +43,8 @@ target_compile_definitions(sql-to-mlir PRIVATE ${COMPILE_DEFS})
 add_executable(run-mlir run-mlir.cpp)
 target_link_libraries(run-mlir PUBLIC runner runtime utility mlir-support scheduler)
 set_target_properties(run-mlir PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+target_link_libraries(run-mlir PRIVATE libpython3.14.so)
+target_link_directories(run-mlir PRIVATE /home/michael/Downloads/Python-3.14.0b3/installed/lib)
 target_compile_definitions(run-mlir PRIVATE ${COMPILE_DEFS})
 
 # run-sql

@@ -7,6 +7,8 @@
 #include <iostream>
 #include <memory>
 #include <thread>
+#include <Python.h>
+
 
 #include "lingodb/scheduler/Scheduler.h"
 #include "lingodb/scheduler/Task.h"
@@ -755,6 +757,8 @@ std::unique_ptr<SchedulerHandle> startScheduler(size_t numWorkers) {
             }
          }
       }
+      Py_Initialize();
+      auto _save = PyEval_SaveThread();
       scheduler = new Scheduler(numWorkers);
       scheduler->start();
    }

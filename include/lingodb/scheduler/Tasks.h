@@ -10,9 +10,11 @@ class TaskWithContext : public Task {
    TaskWithContext(runtime::ExecutionContext* context) : context(context) {}
    void setup() override {
       runtime::setCurrentExecutionContext(context);
+      context->setupPython();
    }
    void teardown() override {
       runtime::setCurrentExecutionContext(nullptr);
+      context->teardownPython();
    }
 };
 class TaskWithImplicitContext : public Task {
@@ -22,9 +24,11 @@ class TaskWithImplicitContext : public Task {
    TaskWithImplicitContext() : context(runtime::getCurrentExecutionContext()) {}
    void setup() override {
       runtime::setCurrentExecutionContext(context);
+      context->setupPython();
    }
    void teardown() override {
       runtime::setCurrentExecutionContext(nullptr);
+      context->teardownPython();
    }
 };
 } // namespace lingodb::scheduler

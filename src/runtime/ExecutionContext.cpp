@@ -1,4 +1,5 @@
 #include "lingodb/runtime/ExecutionContext.h"
+#include "Python.h"
 #include <cassert>
 
 void lingodb::runtime::ExecutionContext::setResult(uint32_t id, uint8_t* ptr) {
@@ -49,4 +50,31 @@ void lingodb::runtime::setCurrentExecutionContext(lingodb::runtime::ExecutionCon
 lingodb::runtime::ExecutionContext* lingodb::runtime::getCurrentExecutionContext() {
    assert(currentExecutionContext);
    return currentExecutionContext;
+}
+
+void lingodb::runtime::ExecutionContext::setupPython() {
+   auto workerId = scheduler::currentWorkerId();
+   if (pythonThreadStates[workerId] == nullptr) {
+      PyGILState_STATE gs = PyGILState_Ensure();
+      PyThreadState *tstate = nullptr;
+      PyInterpreterConfig config = {
+         .use_main_obmalloc = 0,
+         .allow_fork = 0,
+         .allow_threads = 0,
+         .allow_daemon_threads = 0,
+         .check_multi_interp_extensions = 1,
+         .gil = PyInterpreterConfig_OWN_GIL,
+      };
+      PyStatus status = Py_NewInterpreterFromConfig(&tstate, &config);
+      if (PyStatus_Exception(status)) {
+         Py_ExitStatusException(status);
+      }
+   } else {
+      PyThreadState_Swap((PyThreadState*)pythonThreadStates[workerId]);
+   }
+}
+void lingodb::runtime::ExecutionContext::teardownPython() {
+   auto workerId = scheduler::currentWorkerId();
+   auto state = PyThreadState_Swap(nullptr);
+   pythonThreadStates[workerId] = state;
 }
