@@ -214,7 +214,7 @@
 
 %type<std::vector<std::shared_ptr<lingodb::ast::ParsedExpression>>> target_list group_by_list func_arg_list func_arg_list_opt 
                                                                     extract_list expr_list substr_list distinct_clause
-                                                                    opt_partition_clause
+                                                                    opt_partition_clause rollup_clause
 
 /*
 * in_expr either returns a SubQuery or a list of expressions
@@ -748,12 +748,20 @@ set_quantifier:
  * GroupingSet node of some type.
  */
 group_clause: 
-    GROUP_P BY set_quantifier group_by_list 
+    GROUP_P BY set_quantifier group_by_list
     {
         auto node = mkNode<lingodb::ast::GroupByNode>(@$);
         node->group_expressions = $group_by_list;
         $$ = node;
         //TODO Support set_quantifier
+    }
+    //TODO find a better solution
+    | GROUP_P BY set_quantifier rollup_clause %prec ROLLUP_PRIORITY
+    {
+        auto node = mkNode<lingodb::ast::GroupByNode>(@$);
+        node->group_expressions = $rollup_clause;
+        node->rollup = true;
+        $$ = node;
     }
     | %empty
     ;
@@ -771,13 +779,17 @@ group_by_list:
         $$ = $list;
     }
     ;
+rollup_clause: 
+    ROLLUP LP expr_list RP
+    {
+        $$ = $expr_list;
+    }
 //TODO Add missing rules
 group_by_item:
     a_expr {$$ = $1;}
     | empty_grouping_set {}
-    /*| cube_clause
-    | rollup_clause
-    | grouping_sets_clause*/
+    /*| cube_clause */
+    /*| grouping_sets_clause*/
     ;
 empty_grouping_set:
     LP RP
@@ -2872,6 +2884,10 @@ opt_interval:
      | YEAR_P 
      {
         $$ = lingodb::ast::LogicalType::YEARS;
+     }
+     | MONTH_P
+     {
+        $$ = lingodb::ast::LogicalType::MONTHS;
      }
      | %empty
     ;

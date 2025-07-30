@@ -23,6 +23,12 @@ std::string SetOperationNode::toDotGraph(uint32_t depth, NodeIdGenerator& idGen)
    if (setOpAll) label += "\\nALL";
    dot += nodeId + " [label=\"" + label + "\"];\n";
 
+   if (input) {
+      std::string rightId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(input.get())));
+      dot += nodeId + " -> " + rightId + " [label=\"input\"];\n";
+      dot += input->toDotGraph(depth + 1, idGen);
+   }
+
    // Add edge to left child if present
    if (left) {
       std::string leftId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(left.get())));
