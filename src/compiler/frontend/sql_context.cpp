@@ -85,6 +85,16 @@ std::shared_ptr<ast::NamedResult> SQLContext::getNamedResultInfo(location loc, s
    return res;
 }
 
+void SQLContext::replace(ResolverScope& scope, std::shared_ptr<ast::NamedResult> old, std::shared_ptr<ast::NamedResult> value) {
+   //TODO make faster
+   std::vector<std::pair<std::string, std::shared_ptr<ast::NamedResult>>> toReplace;
+   std::ranges::copy_if(definedAttributes.top(), std::back_inserter(toReplace), [&](auto& p) { return p.second == old; });
+
+   for (auto& c: toReplace) {
+      mapAttribute(scope, c.first, value);
+   }
+}
+
 std::string SQLContext::getUniqueScope(std::string base) {
    if (scopeUnifier.contains(std::string(base))) {
       scopeUnifier[std::string(base)] += 1;

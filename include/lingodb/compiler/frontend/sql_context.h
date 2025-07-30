@@ -91,6 +91,7 @@ class SQLContext {
    std::vector<std::shared_ptr<ast::NamedResult>> mapAttribute(ResolverScope& scope, std::string sqlScopeName, std::string uniqueScope, std::shared_ptr<catalog::TableCatalogEntry> tableCatalogEntry);
    void mapAttribute(ResolverScope& scope, std::string name, std::vector<std::shared_ptr<ast::NamedResult>> targetInfos);
    std::shared_ptr<ast::NamedResult> getNamedResultInfo(location loc, std::string name);
+   void replace(ResolverScope& scope, std::shared_ptr<ast::NamedResult> old, std::shared_ptr<ast::NamedResult> value);
 
    std::string getUniqueScope(std::string base);
 
