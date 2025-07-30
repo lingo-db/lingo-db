@@ -60,6 +60,9 @@ uint32_t util_load_i32(uint32_t* ptr) { return *ptr; }
 uint64_t util_load_i64(uint64_t* ptr) { return *ptr; }
 __uint128_t load_i128(__uint128_t* ptr) { return *ptr; }
 
+float util_load_f32(float* ptr) { return *ptr; }
+double util_load_f64(double* ptr) { return *ptr; }
+
 void util_store_i1(bool* ptr, bool value) { *ptr = value; }
 void util_store_i8(uint8_t* ptr, uint8_t value) { *ptr = value; }
 void util_store_i16(uint16_t* ptr, uint16_t value) { *ptr = value; }
@@ -67,8 +70,13 @@ void util_store_i32(uint32_t* ptr, uint32_t value) { *ptr = value; }
 void util_store_i64(uint64_t* ptr, uint64_t value) { *ptr = value; }
 void store_i128(__uint128_t* ptr, __uint128_t value) { *ptr = value; }
 
+void util_store_f32(float* ptr, float value) { *ptr = value; }
+void util_store_f64(double* ptr, double value) { *ptr = value; }
+
 int32_t arith_select_i32(uint8_t cond, int32_t val1, int32_t val2) { return ((cond & 1) ? val1 : val2); }
 int64_t arith_select_i64(uint8_t cond, int64_t val1, int64_t val2) { return ((cond & 1) ? val1 : val2); }
+float arith_select_f32(uint8_t cond, float val1, float val2) { return ((cond & 1) ? val1 : val2); }
+double arith_select_f64(uint8_t cond, double val1, double val2) { return ((cond & 1) ? val1 : val2); }
 __uint128_t arith_select_i128(uint8_t cond, __uint128_t val1, __uint128_t val2) { return ((cond & 1) ? val1 : val2); }
 
 __int128_t arith_sext_i8_i128(int8_t in) { return (__int128_t)in; }
@@ -80,24 +88,8 @@ __uint128_t arith_zext_i32_i128(uint32_t in) { return (__uint128_t)in; }
 __int128_t arith_sext_i64_i128(int64_t in) { return (__int128_t)in; }
 __uint128_t arith_zext_i64_i128(uint64_t in) { return (__uint128_t)in; }
 
-typedef struct UtilVarLenRes { uint64_t totalEqual; uint64_t needsDetailedComp; } UtilVarLenRes;
-UtilVarLenRes util_varlen_cmp(__uint128_t lhs, __uint128_t rhs) {
-    // cmp lengths + first 4 chars
-    uint64_t first64Left = (uint64_t)(lhs);
-    uint64_t first64Right = (uint64_t)(rhs);
-    bool first64Equal = (first64Left == first64Right);
-
-    // cmp chars 5-8 or pointers (bad)
-    uint64_t left64Left = (uint64_t)(lhs >> 64);
-    uint64_t left64Right = (uint64_t)(rhs >> 64);
-    bool last64Equal = (left64Left == left64Right);
-
-    bool totalEqual = first64Equal && last64Equal;
-    uint32_t len = first64Left & 0xFFFFFFFF;
-    bool lenGt12 = len > 12;
-    bool needsDetailedComp = first64Equal && lenGt12;
-    return (UtilVarLenRes){totalEqual, needsDetailedComp};
-}
+float arith_sitofp_i64_f32(int64_t in) { return (float)in; }
+double arith_sitofp_i64_f64(int64_t in) { return (double)in; }
 
 // --------------------------
 // float comparisons
@@ -165,7 +157,6 @@ uint64_t util_hash_combine(uint64_t h1, uint64_t h2) {
     return h2 ^ reversed;
 }
 
-
 typedef struct UtilTryCheapHashRes { bool lenLt13; uint64_t hash; } UtilTryCheapHashRes;
 UtilTryCheapHashRes util_varlen_try_cheap_hash(__uint128_t varlen) {
     uint64_t first64 = (uint64_t)(varlen);
@@ -178,4 +169,23 @@ UtilTryCheapHashRes util_varlen_try_cheap_hash(__uint128_t varlen) {
     uint64_t lHash = util_hash_64(last64);
     uint64_t hash = util_hash_combine(fHash, lHash);
     return (UtilTryCheapHashRes){lenLt13, hash};
+}
+
+typedef struct UtilVarLenRes { uint64_t totalEqual; uint64_t needsDetailedComp; } UtilVarLenRes;
+UtilVarLenRes util_varlen_cmp(__uint128_t lhs, __uint128_t rhs) {
+    // cmp lengths + first 4 chars
+    uint64_t first64Left = (uint64_t)(lhs);
+    uint64_t first64Right = (uint64_t)(rhs);
+    bool first64Equal = (first64Left == first64Right);
+
+    // cmp chars 5-8 or pointers (bad)
+    uint64_t left64Left = (uint64_t)(lhs >> 64);
+    uint64_t left64Right = (uint64_t)(rhs >> 64);
+    bool last64Equal = (left64Left == left64Right);
+
+    bool totalEqual = first64Equal && last64Equal;
+    uint32_t len = first64Left & 0xFFFFFFFF;
+    bool lenGt12 = len > 12;
+    bool needsDetailedComp = first64Equal && lenGt12;
+    return (UtilVarLenRes){totalEqual, needsDetailedComp};
 }

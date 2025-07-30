@@ -84,11 +84,10 @@ with concurrent.futures.ProcessPoolExecutor(max_workers=os.cpu_count()) as execu
 
 # After all tasks are complete, aggregate the results
 for q_index, result in enumerate(results):
-    query_number = q_index + 1  # Queries are 1-indexed
     if result:
         success_count += 1
     else:
-        failed_queries.append(query_number)
+        failed_queries.append(query_numbers[q_index])
 
 percent_successful = (success_count / total_queries) * 100
 print(f'\n--- Final Report ---')

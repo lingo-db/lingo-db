@@ -78,7 +78,9 @@ namespace lingodb::execution::baseline {
 
     static std::optional<size_t> get_size(mlir::Type type) noexcept {
         return mlir::TypeSwitch<mlir::Type, size_t>(type)
-                .Case<mlir::IntegerType>([](auto intType) { return intType.getIntOrFloatBitWidth() / 8; })
+                .Case<mlir::IntegerType, mlir::FloatType>([](auto intType) {
+                    return intType.getIntOrFloatBitWidth() / 8;
+                })
                 .Case<dialect::util::VarLen32Type, dialect::util::BufferType>([](auto) { return 16; })
                 .Case<mlir::TupleType>([](auto t) { return TupleHelper{t}.sizeAndPadding().first; })
                 .Case<mlir::IndexType, dialect::util::RefType>([](auto) { return 8; })
@@ -456,6 +458,7 @@ namespace lingodb::execution::baseline {
             SymRef get_symbol(IRCompilerBase *compiler, Type type) {
                 if (SymRef ref = funcs[static_cast<unsigned>(type)]; ref != SymRef{}) { return ref; } else {
                     std::string name;
+                    // https://gcc.gnu.org/onlinedocs/gccint/Integer-library-routines.html
                     switch (type) {
                         case Type::divti3: name = "__divti3";
                             break;
@@ -1022,6 +1025,15 @@ namespace lingodb::execution::baseline {
                                 return false;
                         }
                     })
+                    .Case([&](const mlir::FloatType t) {
+                        switch (t.getIntOrFloatBitWidth()) {
+                            case 32: return derived()->encode_util_store_f32(std::move(*offset_expr), in_vr.part(0));
+                            case 64: return derived()->encode_util_store_f64(std::move(*offset_expr), in_vr.part(0));
+                            default:
+                                assert(0 && "Unsupported float type width for store operation");
+                                return false;
+                        }
+                    })
                     .template Case<dialect::util::RefType, mlir::IndexType>([&](auto) {
                         return derived()->encode_util_store_i64(std::move(*offset_expr), in_vr.part(0));
                     })
@@ -1078,6 +1090,20 @@ namespace lingodb::execution::baseline {
                         this->set_value(res_ref, res_scratch);
                         return true;
                     })
+                    .Case([&](const mlir::FloatType t) {
+                        switch (t.getIntOrFloatBitWidth()) {
+                            case 32: derived()->encode_util_load_f32(std::move(*offset_expr), res_scratch);
+                                break;
+                            case 64: derived()->encode_util_load_f64(std::move(*offset_expr), res_scratch);
+                                break;
+                            default:
+                                assert(false && "Unsupported float type width for load operation");
+                                return false;
+                        }
+                        ValuePartRef res_ref = res.part(0);
+                        this->set_value(res_ref, res_scratch);
+                        return true;
+                    })
                     .template Case<dialect::util::RefType, mlir::IndexType>([&](auto) {
                         derived()->encode_util_load_i64(std::move(*offset_expr), res_scratch);
                         ValuePartRef res_ref = res.part(0);
@@ -1105,9 +1131,7 @@ namespace lingodb::execution::baseline {
             mlir::func::FuncOp callee_func = mlir::cast<mlir::func::FuncOp>(op.resolveCallable());
 
             // we only call into the runtime => use C-CallConv (yes, this is a hack since the runtime is actually C++ code. works for now)
-            auto call_conv_assigner = tpde::x64::CCAssignerSysV(false /* is_vararg */); // TODO: this only works for x64
-            auto builder = typename Derived::CallBuilder(*derived(), call_conv_assigner);
-
+            auto builder = derived()->create_call_builder();
             for (size_t i = 0; i < op.getArgOperands().size(); ++i) {
                 const mlir::Value arg = op.getArgOperands()[i];
                 auto flag = Base::CallArg::Flag::none;
@@ -1262,6 +1286,19 @@ namespace lingodb::execution::baseline {
                                 this->set_value(res_ref_high, res_scratch_high);
                                 return success;
                             }
+                            default:
+                                assert(0 && "Unsupported integer type width for select operation");
+                                return false;
+                        }
+                    })
+                    .template Case<mlir::FloatType>([&](auto) {
+                        switch (lhs.getType().getIntOrFloatBitWidth()) {
+                            case 32: return derived()->encode_arith_select_f32(std::move(cond_vpr), lhs_vr.part(0),
+                                                                               rhs_vr.part(0),
+                                                                               res_scratch);
+                            case 64: return derived()->encode_arith_select_f64(std::move(cond_vpr), lhs_vr.part(0),
+                                                                               rhs_vr.part(0),
+                                                                               res_scratch);
                             default:
                                 assert(0 && "Unsupported integer type width for select operation");
                                 return false;
@@ -1445,8 +1482,7 @@ namespace lingodb::execution::baseline {
         }
 
         bool compile_util_create_varlen_op(dialect::util::CreateVarLen op) {
-            auto call_conv_assigner = tpde::x64::CCAssignerSysV(false /* is_vararg */); // TODO: this only works for x64
-            auto builder = typename Derived::CallBuilder(*derived(), call_conv_assigner);
+            auto builder = derived()->create_call_builder();
             builder.add_arg(typename Base::CallArg{op.getRef()});
             builder.add_arg(typename Base::CallArg{op.getLen()});
             assert(externFuncMap.contains("createVarLen32"));
@@ -1635,8 +1671,7 @@ namespace lingodb::execution::baseline {
         }
 
         bool compile_util_hash_varlen_op(dialect::util::HashVarLen op) {
-            auto call_conv_assigner = tpde::x64::CCAssignerSysV(false /* is_vararg */); // TODO: this only works for x64
-            auto builder = typename Derived::CallBuilder(*derived(), call_conv_assigner);
+            auto builder = derived()->create_call_builder();
             builder.add_arg(typename Base::CallArg{op.getVal()});
             assert(externFuncMap.contains("hashVarLenData"));
             ValuePart funcPtrRef{
@@ -1679,6 +1714,53 @@ namespace lingodb::execution::baseline {
             auto [_, res_vr] = this->result_ref_single(dst);
             res_vr.set_value(buf_vr.part(1));
             return true;
+        }
+
+        bool compile_arith_sitofp_op(mlir::arith::SIToFPOp op) {
+            mlir::Value src = op->getOperand(0);
+            mlir::Value res = op->getResult(0);
+            assert(mlir::isa<mlir::IntegerType>(src.getType()) && "Source value must be an integer type for sitofp");
+            assert(mlir::isa<mlir::FloatType>(res.getType()) && "Result value must be a float type for sitofp");
+            unsigned src_width = src.getType().getIntOrFloatBitWidth();
+            unsigned dst_width = res.getType().getIntOrFloatBitWidth();
+            assert((src_width <= 64 || src_width == 128) && (dst_width == 32 || dst_width == 64) &&
+                "Source width must be less than or equal to 64 bits and destination width must be 32 or 64 bits");
+
+            if (src_width == 128) {
+                auto builder = derived()->create_call_builder();
+                builder.add_arg(typename Base::CallArg{src});
+                std::string_view func_name;
+                if (dst_width == 32) {
+                    func_name = "sitofp_i128_f32";
+                } else {
+                    func_name = "sitofp_i128_f64";
+                }
+                assert(externFuncMap.contains(func_name));
+                ValuePart funcPtrRef{
+                    std::bit_cast<uint64_t>(externFuncMap[func_name]), 8, Config::GP_BANK
+                };
+
+                builder.call(std::move(funcPtrRef));
+                ValueRef res_vr = this->result_ref(res);
+                builder.add_ret(res_vr);
+                return true;
+            }
+
+            auto [_, src_vpr] = this->val_ref_single(src);
+            auto res_ref = this->result_ref(res);
+            ScratchReg res_scratch{derived()};
+            bool ret = false;
+
+            if (src_width < 64) {
+                src_vpr = std::move(src_vpr).into_extended(true, src_width, 64);
+            }
+            if (dst_width == 32) {
+                ret = derived()->encode_arith_sitofp_i64_f32(std::move(src_vpr), res_scratch);
+            } else {
+                ret = derived()->encode_arith_sitofp_i64_f64(std::move(src_vpr), res_scratch);
+            }
+            this->set_value(res_ref.part(0), res_scratch);
+            return ret;
         }
 
         bool compile_inst(const IRInstRef inst, InstRange) noexcept {
@@ -1763,6 +1845,9 @@ namespace lingodb::execution::baseline {
                     .template Case<dialect::util::BufferGetRef>([&](auto op) {
                         return compile_util_buffer_get_ref_op(op);
                     })
+                    .template Case<mlir::arith::SIToFPOp>([&](auto op) {
+                        return compile_arith_sitofp_op(op);
+                    })
                     .template Case<dialect::util::VarLenCmp>([&](auto op) { return compile_util_varlen_cmp_op(op); })
                     .Default([&](IRInstRef op) {
                         error.emit() << "Encountered unimplemented instruction: " << op->getName().getStringRef().
@@ -1785,6 +1870,9 @@ namespace lingodb::execution::baseline {
         using EncCompiler = tpde_encodegen::EncodeCompiler<IRAdaptor, IRCompilerX64, IRCompilerBase, CompilerConfig>;
 
         std::unique_ptr<IRAdaptor> adaptor;
+
+        // since this needs to life past the create_call_builder function call, we store it here
+        std::variant<std::monostate, tpde::x64::CCAssignerSysV> cc_assigners;
 
         explicit IRCompilerX64(std::unique_ptr<IRAdaptor> &&adaptor)
             : Base{adaptor.get()},
@@ -1993,6 +2081,11 @@ namespace lingodb::execution::baseline {
         }
 
         Error &getError() { return Base::getError(); }
+
+        CallBuilder create_call_builder() {
+            cc_assigners = tpde::x64::CCAssignerSysV(false);
+            return CallBuilder{*this, std::get<tpde::x64::CCAssignerSysV>(cc_assigners)};
+        }
     };
 
     // NOLINTEND(readability-identifier-naming)
@@ -2192,7 +2285,7 @@ namespace lingodb::execution::baseline {
                                           executionEnd - executionStart).count() / 1000.0;
         }
     };
-}
+} // namespace lingodb::execution::baseline
 
 std::unique_ptr<lingodb::execution::ExecutionBackend> lingodb::execution::createBaselineBackend() {
     return std::make_unique<baseline::BaselineBackend>();
