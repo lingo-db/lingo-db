@@ -20,6 +20,9 @@ class SQLScope {
    ast::TargetInfo targetInfo;
    std::vector<std::shared_ptr<ast::BoundExpression>> evalBefore;
 
+   //Stores the grouping functions
+   std::vector<std::shared_ptr<ast::BoundFunctionExpression>> groupingFunctions;
+
    std::shared_ptr<SQLScope> parent;
    size_t id = 0;
 };

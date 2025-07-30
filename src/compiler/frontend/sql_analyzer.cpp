@@ -101,6 +101,8 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                }
                selectNode->modifiers.clear();
 
+
+
                return transformed;
             }
             case ast::QueryNodeType::CTE_NODE: {
@@ -172,6 +174,17 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                assert(aggNode);
                std::vector<std::shared_ptr<ast::ParsedExpression>> newGroupByExpressions{};
                if (aggNode->groupByNode) {
+                  if (aggNode->groupByNode->rollup) {
+                     for (size_t i = 0; i <= aggNode->groupByNode->group_expressions.size(); i++) {
+                        size_t n = aggNode->groupByNode->group_expressions.size() - i;
+                        std::set<size_t> set;
+                        for (size_t j = 0; j < n; j++) {
+                           set.emplace(j);
+                        }
+                        aggNode->groupByNode->groupingSet.emplace_back(set);
+                     }
+
+                  }
                   for (auto e : aggNode->groupByNode->group_expressions) {
                      auto canonicalized = canonicalizeParsedExpression(e, context, true);
                      newGroupByExpressions.emplace_back(canonicalized);
@@ -322,6 +335,8 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
       }
       case ast::ExpressionClass::FUNCTION: {
          auto functionExpr = std::static_pointer_cast<ast::FunctionExpression>(rootNode);
+         std::string columnAlias = functionExpr->alias.empty() ? functionExpr->functionName : functionExpr->alias;
+
 
          std::string alias = functionExpr->alias.empty() ? functionExpr->functionName : functionExpr->alias;
          if (functionExpr->type == ast::ExpressionType::AGGREGATE) {
@@ -329,13 +344,36 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
             i++;
 
             auto columnRef = drv.nf.node<ast::ColumnRefExpression>(functionExpr->loc, functionExpr->alias);
-            columnRef->alias = alias;
+            columnRef->alias = columnAlias;
             context->currentScope->aggregationNode->aggregations.push_back(functionExpr);
 
             return columnRef;
          } else {
             i++;
-            if (!extend)
+            std::string upperCaseName = functionExpr->functionName;
+            std::ranges::transform(upperCaseName.begin(), upperCaseName.end(), upperCaseName.begin(), ::toupper);
+
+            //Extract Grouping into aggregation node
+            if (upperCaseName == "GROUPING") {
+
+               auto find = context->currentScope->aggregationNode->groupByNode->groupingFunctions.find(functionExpr);
+
+               if (find ==   context->currentScope->aggregationNode->groupByNode->groupingFunctions.end()) {
+                  if (functionExpr->alias.empty()) {
+                     functionExpr->alias = "grouping_" + std::to_string(i);
+                  }
+                  context->currentScope->aggregationNode->groupByNode->groupingFunctions.emplace(functionExpr);
+               } else {
+                  functionExpr->alias = find->get()->alias;
+               }
+
+               auto columnRef = drv.nf.node<ast::ColumnRefExpression>(functionExpr->loc, functionExpr->alias);
+               columnRef->alias = columnAlias;
+
+               return columnRef;
+            }
+
+            if (!extend || functionExpr->functionName == "GROUPING")
                return rootNode;
             auto find = context->currentScope->groupedByExpressions.find(functionExpr);
             if (find == context->currentScope->groupedByExpressions.end()) {
@@ -348,9 +386,10 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
             }
 
             auto columnRef = drv.nf.node<ast::ColumnRefExpression>(functionExpr->loc, functionExpr->alias);
-            columnRef->alias = functionExpr->alias;
+            columnRef->alias = columnAlias;
             return columnRef;
          }
+
          return functionExpr;
       }
       case ast::ExpressionClass::WINDOW: {
@@ -361,11 +400,11 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
             windowExpr->filter = canonicalizeParsedExpression(windowExpr->filter, context, false);
          }
          std::ranges::transform(windowExpr->functionExpression->arguments, windowExpr->functionExpression->arguments.begin(), [&](auto& arg) {
-            return canonicalizeParsedExpression(arg, context, true);
+            return canonicalizeParsedExpression(arg, context, false);
          });
 
          std::ranges::transform(windowExpr->partitions, windowExpr->partitions.begin(), [&](auto& partition) {
-            return canonicalizeParsedExpression(partition, context, true);
+            return canonicalizeParsedExpression(partition, context, false);
          });
          if (windowExpr->startExpr) {
             windowExpr->startExpr = canonicalizeParsedExpression(windowExpr->startExpr, context, false);
@@ -400,6 +439,11 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
          for (auto& caseCheck : caseExpr->caseChecks) {
             caseCheck.thenExpr = canonicalizeParsedExpression(caseCheck.thenExpr, context, false);
             caseCheck.whenExpr = canonicalizeParsedExpression(caseCheck.whenExpr, context, false);
+         }
+         if (!caseExpr->elseExpr) {
+            auto constExpr = drv.nf.node<ast::ConstantExpression>(caseExpr->loc);
+            constExpr->value = std::make_shared<ast::NullValue>();
+            caseExpr->elseExpr = constExpr;
          }
          caseExpr->elseExpr = canonicalizeParsedExpression(caseExpr->elseExpr, context, false);
          std::string alias = caseExpr->alias.empty() ? "" : caseExpr->alias;
@@ -584,6 +628,9 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableProducer(std::
             }
             case ast::QueryNodeType::SET_OPERATION_NODE: {
                auto setOperationNode = std::static_pointer_cast<ast::SetOperationNode>(rootNode);
+               if (setOperationNode->input) {
+                  setOperationNode->input = analyzeTableProducer(setOperationNode->input, context, resolverScope);
+               }
                std::shared_ptr<ast::TableProducer> boundLeft = nullptr;
                std::shared_ptr<ast::TableProducer> boundRight = nullptr;
                std::shared_ptr<SQLScope> leftScope, rightScope;
@@ -855,7 +902,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
             return std::static_pointer_cast<ast::BoundFunctionExpression>(boundExpr);
          });
          auto mapName = createMapName();
-         auto boundGroupByNode = drv.nf.node<ast::BoundGroupByNode>(aggregationNode->groupByNode ? aggregationNode->groupByNode->loc : aggregationNode->loc, groupNamedResults);
+         auto boundGroupByNode = drv.nf.node<ast::BoundGroupByNode>(aggregationNode->groupByNode ? aggregationNode->groupByNode->loc : aggregationNode->loc, groupNamedResults, aggregationNode->groupByNode ? aggregationNode->groupByNode->groupingSet : std::vector<std::set<size_t>>{});
          std::vector<std::shared_ptr<ast::BoundExpression>> toMap{};
          for (auto& aggr : boundAggregationExpressions) {
             if (aggr->arguments.empty() || aggr->arguments[0]->type == ast::ExpressionType::BOUND_COLUMN_REF) {
@@ -869,7 +916,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
          //Maybe Not the best way!
          if (!aggregationNode->groupByNode || aggregationNode->groupByNode->group_expressions.empty()) {
             for (auto boundAggr : boundAggregationExpressions) {
-               boundAggr->resultType->isNullable = boundAggr->functionName != "count";
+               boundAggr->resultType->isNullable = boundAggr->functionName != "COUNT";
             }
          }
          std::vector<std::shared_ptr<ast::BoundWindowExpression>> boundWindowFunctions;
@@ -883,6 +930,152 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
          auto boundAggrNode = drv.nf.node<ast::BoundAggregationNode>(pipeOperator->loc, boundGroupByNode, boundAggregationExpressions, toMap, mapName, evalBeforeAggr);
          boundAggrNode->windowFunctions = boundWindowFunctions;
          boundAstNode = boundAggrNode;
+
+         if (aggregationNode->groupByNode && !aggregationNode->groupByNode->groupingSet.empty()) {
+            static size_t rollupId = 0;
+            //TODO work with grouping sets
+            auto groupingSets = aggregationNode->groupByNode->groupingSet;
+            for (size_t i = 0; i < groupingSets.size(); i++) {
+               auto groupingSet = groupingSets[i];
+               std::vector<std::shared_ptr<ast::NamedResult>> localGroupBy{};
+               std::vector<std::shared_ptr<ast::NamedResult>> mapToNull{};
+               std::vector<std::shared_ptr<ast::NamedResult>> notAvailable{};
+               int present = 0;
+
+
+
+               for (size_t j = 0; j < aggregationNode->groupByNode->group_expressions.size(); j++) {
+
+
+                  if (groupingSet.contains(j)) {
+
+                     localGroupBy.emplace_back(groupNamedResults[j]);
+                     auto mappedNamedResult = std::make_shared<ast::NamedResult>(groupNamedResults[j]->type, "rollup_" + std::to_string(rollupId), groupNamedResults[j]->resultType, "tmp_" + std::to_string(j));
+                     mappedNamedResult->displayName = groupNamedResults[j]->displayName;
+                     mapToNull.emplace_back(mappedNamedResult);
+                     mappedNamedResult->resultType.isNullable = true;
+                  } else {
+                     present |= (1 << j);
+                     auto mappedNamedResult = std::make_shared<ast::NamedResult>(groupNamedResults[j]->type, "rollup_" + std::to_string(rollupId), groupNamedResults[j]->resultType, "tmp_" + std::to_string(j));
+                     notAvailable.emplace_back(mappedNamedResult);
+                     mappedNamedResult->displayName = groupNamedResults[j]->displayName;
+                     mappedNamedResult->resultType.isNullable = true;
+
+                  }
+               }
+
+               std::vector<std::shared_ptr<ast::NamedResult>> aggregationNamedResults{};
+               for (auto& aggr : boundAggrNode->aggregations) {
+                  auto namedResultAggr = std::make_shared<ast::NamedResult>(aggr->namedResult.value()->type, "rollupAgg_" + std::to_string(rollupId), aggr->namedResult.value()->resultType, aggr->namedResult.value()->name);
+                  namedResultAggr->displayName = aggr->namedResult.value()->displayName;
+                  aggregationNamedResults.emplace_back(namedResultAggr);
+               }
+               boundAggrNode->groupByNode->localAggregationNamedResults.emplace_back(std::move(aggregationNamedResults));
+
+
+
+               boundAggrNode->groupByNode->localGroupByNamedResults.emplace_back(std::move(localGroupBy));
+               boundAggrNode->groupByNode->localMapToNullNamedResults.emplace_back(std::move(mapToNull));
+               boundAggrNode->groupByNode->localNotAvailableNamedResults.emplace_back(std::move(notAvailable));
+               auto presentNamedResult = std::make_shared<ast::NamedResult>(ast::NamedResultType::EXPRESSION, boundAggrNode->mapName, catalog::Type::int64(), "intval" + std::to_string(present));
+               boundAggrNode->groupByNode->localPresentIntval.emplace_back(std::pair{present,presentNamedResult});
+               rollupId++;
+
+            }
+
+
+
+
+            std::vector<std::shared_ptr<ast::NamedResult>> currentAttributes(
+               boundAggrNode->groupByNode->localMapToNullNamedResults.at(0).begin(),
+               boundAggrNode->groupByNode->localMapToNullNamedResults.at(0).end());
+
+            currentAttributes.insert(currentAttributes.end(),
+               boundAggrNode->groupByNode->localNotAvailableNamedResults.at(0).begin(),
+               boundAggrNode->groupByNode->localNotAvailableNamedResults.at(0).end());
+
+            currentAttributes.insert(currentAttributes.end(),
+               boundAggrNode->groupByNode->localAggregationNamedResults.at(0).begin(),
+               boundAggrNode->groupByNode->localAggregationNamedResults.at(0).end());
+            currentAttributes.emplace_back(boundAggrNode->groupByNode->localPresentIntval.at(0).second);
+            for (size_t i = 1; i < boundAggrNode->groupByNode->localGroupByNamedResults.size(); i++) {
+               auto rollUpUnionName = context->getUniqueScope("rollupUnion");
+               std::vector<std::shared_ptr<ast::NamedResult>> currentLocalAttributes(
+               boundAggrNode->groupByNode->localMapToNullNamedResults.at(i).begin(),
+               boundAggrNode->groupByNode->localMapToNullNamedResults.at(i).end());
+               currentLocalAttributes.insert(currentLocalAttributes.end(),
+               boundAggrNode->groupByNode->localNotAvailableNamedResults.at(i).begin(),
+               boundAggrNode->groupByNode->localNotAvailableNamedResults.at(i).end());
+               currentLocalAttributes.insert(currentLocalAttributes.end(),
+               boundAggrNode->groupByNode->localAggregationNamedResults.at(i).begin(),
+               boundAggrNode->groupByNode->localAggregationNamedResults.at(i).end());
+               currentLocalAttributes.emplace_back(boundAggrNode->groupByNode->localPresentIntval.at(i).second);
+
+               size_t id = 0;
+               std::vector<std::shared_ptr<ast::NamedResult>> unionNamedResults{};
+               for (size_t j = 0; j < currentLocalAttributes.size(); j++) {
+                  auto left = currentAttributes[j];
+                  auto right = currentLocalAttributes[j];
+                  auto unionNamedResult = std::make_shared<ast::NamedResult>(left->type, rollUpUnionName + std::to_string(i), right->resultType, left->name);
+                  unionNamedResults.emplace_back(unionNamedResult);
+                  unionNamedResult->displayName = left->displayName;
+
+               }
+               currentAttributes= unionNamedResults;
+
+               boundAggrNode->groupByNode->unionNamedResults.emplace_back(std::move(unionNamedResults));
+
+
+
+            }
+            //TODO better!
+            for (size_t i = 0; i < boundAggrNode->groupByNode->groupNamedResults.size(); i++) {
+               auto old = boundAggrNode->groupByNode->groupNamedResults[i];
+               auto newN = boundAggrNode->groupByNode->unionNamedResults.back().at(i);
+               context->replace(resolverScope, old, newN);
+            }
+            for (size_t i = 0; i < boundAggrNode->aggregations.size(); i++) {
+               auto old = boundAggrNode->aggregations[i]->namedResult.value();
+               auto newN = boundAggrNode->groupByNode->unionNamedResults.back().at(boundAggrNode->groupByNode->groupNamedResults.size()+i);
+               //TODO Maybe add aggregations instead of replacing?
+               context->replace(resolverScope, old, newN);
+            }
+
+
+            std::vector<std::shared_ptr<ast::BoundFunctionExpression>> boundGroupingFunctions;
+            for (size_t i = 0; i < aggregationNode->groupByNode->groupingFunctions.size(); i++) {
+               auto boundGroupingFunction = analyzeExpression(*std::next(aggregationNode->groupByNode->groupingFunctions.begin(), i), context, resolverScope);
+               boundGroupingFunctions.emplace_back(std::static_pointer_cast<ast::BoundFunctionExpression>(boundGroupingFunction));
+               assert(std::static_pointer_cast<ast::BoundFunctionExpression>(boundGroupingFunction)->functionName == "GROUPING");
+               context->mapAttribute(resolverScope, boundGroupingFunction->alias, boundGroupingFunction->namedResult.value());
+               //TODO hardcoded
+
+
+               //TODO make faster and find better solution for finding the correct shiftNumber
+               assert(std::static_pointer_cast<ast::BoundFunctionExpression>(boundGroupingFunction)->arguments[0]->namedResult.has_value());
+               auto functionArgNamedResult = std::static_pointer_cast<ast::BoundFunctionExpression>(boundGroupingFunction)->arguments[0];;
+               size_t j = 0;
+               for (; j < boundAggrNode->groupByNode->groupNamedResults.size(); j++) {
+                  auto groupNamedResult =  boundAggrNode->groupByNode->unionNamedResults.back().at(j);
+
+                  if (groupNamedResult->name == functionArgNamedResult->namedResult.value()->name) {
+                     break;
+                  }
+
+               }
+
+               boundAggrNode->groupByNode->groupingFunctions.emplace_back(std::pair{j, boundGroupingFunction->namedResult.value()});
+
+
+
+            }
+
+
+
+
+            rollupId++;
+         }
+
 
          break;
       }
@@ -1457,9 +1650,9 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
          auto function = std::static_pointer_cast<ast::FunctionExpression>(rootNode);
          std::vector<std::shared_ptr<ast::BoundExpression>> boundArguments{};
          if (rootNode->type == ast::ExpressionType::AGGREGATE) {
-            std::ranges::transform(function->functionName, function->functionName.begin(), ::tolower);
             auto scope = createTmpScope();
             auto fName = function->alias.empty() ? function->functionName : function->alias;
+            std::ranges::transform(function->functionName, function->functionName.begin(), ::toupper);
             std::shared_ptr<ast::BoundFunctionExpression> boundFunctionExpression = nullptr;
             catalog::NullableType resultType{catalog::Type::noneType()};
 
@@ -1474,7 +1667,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
             /**
                 * SUM, AVG, MIN, MAX
                 */
-            if (function->functionName == "sum" || function->functionName == "avg" || function->functionName == "min" || function->functionName == "max") {
+            if (function->functionName == "SUM" || function->functionName == "AVG" || function->functionName == "MIN" || function->functionName == "MAX") {
                if (function->arguments.size() > 1) {
                   error("Aggregation with more than one argument not supported", function->loc);
                }
@@ -1494,7 +1687,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
                /**
                     * AVG
                 */
-               if (function->functionName == "avg") {
+               if (function->functionName == "AVG") {
                   //TODO type
                   if (resultType.type.getTypeId() == catalog::LogicalTypeId::INT) {
                      resultType = SQLTypeUtils::getCommonTypeAfterOperation(catalog::Type::decimal(19, 0), catalog::Type::decimal(19, 0), ast::ExpressionType::OPERATOR_DIVIDE);
@@ -1509,7 +1702,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
 
                boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, boundArguments);
             }
-            if (function->functionName == "rank" || function->functionName == "row_number") {
+            if (function->functionName == "RANK" || function->functionName == "ROW_NUMBER") {
                //TODO check if is inside window function
                if (!function->arguments.empty()) {
                   error("RANK and ROW_NUMBER do not support any arguments", function->loc);
@@ -1523,7 +1716,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
             /*
                 * COUNT
                 */
-            if (function->functionName == "count") {
+            if (function->functionName == "COUNT") {
                //TODO parse agrguments if not star!!
 
                if (function->arguments.size() > 1) {
@@ -1544,7 +1737,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
             /*
                 * STDDEV_SAMP
                 */
-            if (function->functionName == "stddev_samp") {
+            if (function->functionName == "STDDEV_SAMP") {
                if (boundArguments.size() != 1) {
                   error("Aggregation with more than one argument not supported", function->loc);
                }
@@ -1691,6 +1884,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
             boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, std::vector{arg1});
 
          } else if (function->functionName == "COALESCE") {
+
             if (function->arguments.size() < 2) {
                error("Function with less than two argument not supported", function->loc);
             }
@@ -1708,6 +1902,21 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
 
 
             boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, boundArgs);
+
+         } else if (function->functionName == "GROUPING") {
+            if (function->arguments.size() != 1) {
+               error("Function grouping needs exactly one argument", function->loc);
+            }
+            if (function->arguments[0]->type != ast::ExpressionType::COLUMN_REF) {
+               error("Function grouping needs argument of type column", function->loc);
+            }
+            auto arg = analyzeExpression(function->arguments[0], context, resolverScope);
+            if (arg->exprClass != ast::ExpressionClass::BOUND_COLUMN_REF) {
+               error("Function grouping needs argument of type column", function->loc);
+            }
+
+            resultType = catalog::Type::int64();
+            boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, std::vector{arg});
 
          }
 
@@ -1767,6 +1976,10 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
                      case ast::LogicalType::YEARS: {
                         resultType = catalog::Type::intervalMonths();
                         stringRepresentation = std::to_string(std::stol(stringRepresentation) * 12);
+                        break;
+                     }
+                     case ast::LogicalType::MONTHS: {
+                        resultType = catalog::Type::intervalMonths();
                         break;
                      }
                      default: stringRepresentation += "days";

@@ -12,7 +12,29 @@ std::string GroupByNode::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
 
    // Create the group by node with its label
    dot.append(nodeId);
-   dot.append(" [label=\"GROUP BY\"];\n");
+   dot.append(" [label=\"GROUP BY");
+
+   // Add grouping sets information if they exist
+   if (!groupingSet.empty()) {
+      dot.append("\\nGrouping Sets: {");
+      for (size_t i = 0; i < groupingSet.size(); ++i) {
+         if (i > 0) {
+            dot.append(", ");
+         }
+         dot.append("{");
+         bool first = true;
+         for (const auto& idx : groupingSet[i]) {
+            if (!first) {
+               dot.append(",");
+            }
+            dot.append(std::to_string(idx + 1));
+            first = false;
+         }
+         dot.append("}");
+      }
+      dot.append("}");
+   }
+   dot.append("\"];\n");
 
    // Add all group expressions
    for (size_t i = 0; i < group_expressions.size(); ++i) {
@@ -34,29 +56,7 @@ std::string GroupByNode::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
       }
    }
 
-   // Add grouping sets information if present
-   if (!grouping_sets.empty()) {
-      for (size_t i = 0; i < grouping_sets.size(); ++i) {
-         std::string setId;
-         setId.append("node");
-         setId.append(std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(this))));
-         setId.append("_set");
-         setId.append(std::to_string(i));
-
-         // Create the set node
-         dot.append(setId);
-         dot.append(" [label=\"Set ");
-         dot.append(std::to_string(i + 1));
-         dot.append("\"];\n");
-
-         // Connect group by to set
-         dot.append(nodeId);
-         dot.append(" -> ");
-         dot.append(setId);
-         dot.append(" [label=\"grouping set\"];\n");
-      }
-   }
-
    return dot;
 }
+
 } // namespace lingodb::ast
