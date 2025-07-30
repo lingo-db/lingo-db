@@ -210,6 +210,8 @@ boolean [fF][aA][lL][sS][eE]
 [lL][iI][kK][eE]                      { MAKE_KEYWORD(LIKE); }
 [lL][iI][mM][iI][tT]                  { MAKE_KEYWORD(LIMIT); }
 
+[mM][oO][nN][tT][hH]                  { MAKE_KEYWORD(MONTH_P); }
+
 [nN][aA][tT][uU][rR][aA][lL]          { MAKE_KEYWORD(NATURAL); }
 [nN][oO][tT]                          { MAKE_KEYWORD(NOT); }
 [nN][uU][lL][lL]                      { MAKE_KEYWORD(NULL_P); }
@@ -226,6 +228,7 @@ boolean [fF][aA][lL][sS][eE]
 [pP][rR][iI][mM][aA][rR][yY]          { MAKE_KEYWORD(PRIMARY); }
 
 [rR][iI][gG][hH][tT]                  { MAKE_KEYWORD(RIGHT); }
+[rR][oO][lL][lL][uU][pP]              { MAKE_KEYWORD(ROLLUP); }
 [rR][oO][wW]                          { MAKE_KEYWORD(ROW); }
 [rR][oO][wW][sS]                      { MAKE_KEYWORD(ROWS); }
 

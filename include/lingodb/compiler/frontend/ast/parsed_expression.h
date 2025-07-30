@@ -21,6 +21,7 @@ enum LogicalType : uint8_t {
    INTERVAL = 5,
    DAYS = 6,
    YEARS = 7,
+   MONTHS = 8,
    SMALLINT = 8,
    INT = 9,
    BIGINT = 10,
