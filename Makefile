@@ -88,7 +88,7 @@ run-test: build/lingodb-$(TEST_BUILD_TYPE)/.stamp
 	cmake --build $(dir $<) --target mlir-db-opt run-mlir run-sql sql-to-mlir sqlite-tester tester -- -j${NPROCS}
 	$(MAKE) test-no-rebuild
 
-test-no-rebuild-lit: build/lingodb-$(TEST_BUILD_TYPE)/.buildstamp
+test-no-rebuild-lit: build/lingodb-$(TEST_BUILD_TYPE)/.buildstamp resources/data/test/.stamp resources/data/uni/.stamp
 	${LLVM_LIT_BINARY} -v build/lingodb-$(TEST_BUILD_TYPE)/test/lit -j 1
 
 test-no-rebuild-unit: build/lingodb-$(TEST_BUILD_TYPE)/.buildstamp
