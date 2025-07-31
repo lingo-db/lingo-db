@@ -7,7 +7,6 @@ on:
 env:
   REGISTRY: ghcr.io
 jobs:
-
   build:
     if: github.event.pull_request.draft == false
     strategy:
@@ -18,6 +17,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
+        with:
+          submodules: recursive
       - name: CCache
         id: ccache
         uses: actions/cache@v3
@@ -57,7 +58,10 @@ jobs:
           touch build/lingodb-${{ matrix.build_type }}/.stamp
           touch build/lingodb-${{ matrix.build_type }}/.buildstamp
           chmod +x build/lingodb-${{ matrix.build_type }}/*
+
           make TEST_BUILD_TYPE=${{ matrix.build_type }} DATA_BUILD_TYPE=${{ matrix.build_type }} test-no-rebuild
+          LINGODB_EXECUTION_MODE=BASELINE make TEST_BUILD_TYPE=${{ matrix.build_type }} DATA_BUILD_TYPE=${{ matrix.build_type }} test-no-rebuild
+
   sqlite_tests:
     strategy:
       matrix:
@@ -78,6 +82,7 @@ jobs:
           touch build/lingodb-${{ matrix.build_type }}/.buildstamp
           chmod +x build/lingodb-${{ matrix.build_type }}/*
           make SQLITE_TEST_BUILD_TYPE=${{ matrix.build_type }} sqlite-test-no-rebuild
+          LINGODB_EXECUTION_MODE=BASELINE make SQLITE_TEST_BUILD_TYPE=${{ matrix.build_type }} sqlite-test-no-rebuild
 
   sqlite_dataset-tests:
     strategy:
@@ -121,7 +126,10 @@ jobs:
       - name: Test
         run: |
           ./build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpchSf1.test /db/tpch-1
+          LINGODB_EXECUTION_MODE=BASELINE ./build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpchSf1.test /db/tpch-1
+
           ./build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpcdsSf1.test /db/tpcds-1
+          LINGODB_EXECUTION_MODE=BASELINE ./build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpcdsSf1.test /db/tpcds-1
 
 
   build_lingodb_python:
@@ -143,6 +151,7 @@ jobs:
         with:
           name: lingodb-python-build
           path: /built-packages
+
   test_lingodb_python:
     needs: build_lingodb_python
     runs-on: ubuntu-24.04

@@ -26,8 +26,8 @@ TEST_CASE("TupleHelper::getElementOffset and sizeAndPadding with real MLIR types
    auto t2 = mlir::TupleType::get(&ctx, {i8, ref, i8});
    auto t3 = mlir::TupleType::get(&ctx, {ref, idx});
    auto t4 = mlir::TupleType::get(&ctx, {t1, t2, i8});
-   auto t5_h = mlir::TupleType::get(&ctx, {i8});
-   auto t5 = mlir::TupleType::get(&ctx, {t5_h, i8});
+   auto t5H = mlir::TupleType::get(&ctx, {i8});
+   auto t5 = mlir::TupleType::get(&ctx, {t5H, i8});
 
    SECTION("getElementOffset returns correct offsets") {
       TupleHelper helper(t1);

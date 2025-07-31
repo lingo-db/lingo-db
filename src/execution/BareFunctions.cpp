@@ -16,12 +16,11 @@ extern "C" void dumpF64(double d) {
 extern "C" void dumpBool(bool b) {
    std::cout << "bool(" << (b ? "true" : "false") << ")" << std::endl;
 }
-extern "C" double sitofp_i128_f64(const __int128_t i) {
+extern "C" double sitofpI128F64(const __int128_t i) {
    // required for the baseline backend since TPDE currently does not support this as a snippet
    return static_cast<double>(i);
 }
-
-extern "C" float sitofp_i128_f32(const __int128_t i) {
+extern "C" float sitofpI128F32(const __int128_t i) {
    // required for the baseline backend since TPDE currently does not support this as a snippet
    return static_cast<float>(i);
 }
@@ -34,6 +33,6 @@ void lingodb::execution::visitBareFunctions(const std::function<void(std::string
    fn("dumpI64", reinterpret_cast<void*>(&dumpI64));
    fn("dumpF64", reinterpret_cast<void*>(&dumpF64));
    fn("dumpBool", reinterpret_cast<void*>(&dumpBool));
-   fn("sitofp_i128_f64", reinterpret_cast<void*>(&sitofp_i128_f64));
-   fn("sitofp_i128_f32", reinterpret_cast<void*>(&sitofp_i128_f32));
+   fn("sitofpI128F64", reinterpret_cast<void*>(&sitofpI128F64));
+   fn("sitofpI128F32", reinterpret_cast<void*>(&sitofpI128F32));
 }

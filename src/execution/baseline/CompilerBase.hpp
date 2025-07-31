@@ -1332,9 +1332,9 @@ namespace lingodb::execution::baseline {
                 builder.add_arg(typename Base::CallArg{src});
                 std::string_view func_name;
                 if (dst_width == 32) {
-                    func_name = "sitofp_i128_f32";
+                    func_name = "sitofpI128F32";
                 } else {
-                    func_name = "sitofp_i128_f64";
+                    func_name = "sitofpI128F64";
                 }
                 assert(externFuncMap.contains(func_name));
                 ValuePart funcPtrRef{

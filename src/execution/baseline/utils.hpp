@@ -86,4 +86,4 @@ namespace lingodb::execution::baseline {
     auto llvm_iter_range_to_tpde_iter(llvm::iterator_range<Iter> iter) {
         return IRRangeWrapper<Iter>{IRIterWrapper<Iter>(iter.begin()), IRIterWrapper<Iter>(iter.end())};
     }
-}
+} // lingodb::execution::baseline

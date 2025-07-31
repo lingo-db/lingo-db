@@ -1,9 +1,9 @@
-#ifndef UTILS_HPP
-#define UTILS_HPP
+#ifndef LINGODB_EXECUTION_BASELINE_UTILS_HPP
+#define LINGODB_EXECUTION_BASELINE_UTILS_HPP
+
+#include <lingodb/compiler/Dialect/util/UtilTypes.h>
 
 #include <llvm/ADT/TypeSwitch.h>
-#include <ranges>
-#include <lingodb/compiler/Dialect/util/UtilTypes.h>
 
 namespace lingodb::execution::baseline {
 using namespace compiler;
@@ -157,5 +157,5 @@ class TupleHelper {
       return {offset, maxAlign};
    }
 };
-}
-#endif //UTILS_HPP
+} // namespace lingodb::execution::baseline
+#endif
