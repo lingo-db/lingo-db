@@ -5,7 +5,9 @@
 
 namespace lingodb::runtime {
 struct ArrayView {
-   static std::array<uint8_t, 4096> validData;
+   static constexpr int64_t maxNullCount = 1 << 20;
+   static constexpr int64_t validDataLength = maxNullCount / 8;
+   static std::array<uint8_t, validDataLength> validData;
    // Array data description
    int64_t length;
    int64_t nullCount;
