@@ -6,16 +6,18 @@
 #include "CompilerConfig.hpp"
 
 #include <tpde/x64/CompilerX64.hpp>
+#include <tpde/ValueRef.hpp>
+#include <tpde/AssemblerElf.hpp>
 
 namespace lingodb::execution::baseline {
-    // x86_64 target specific compiler
     // NOLINTBEGIN(readability-identifier-naming)
+
+    // x86_64 target specific compiler
     struct IRCompilerX64
             : tpde::x64::CompilerX64<IRAdaptor, IRCompilerX64, IRCompilerBase, CompilerConfig>,
-              tpde_encodegen::EncodeCompiler<IRAdaptor, IRCompilerX64, IRCompilerBase,
-                  CompilerConfig> {
+              tpde_encodegen::EncodeCompiler<IRAdaptor, IRCompilerX64, IRCompilerBase, CompilerConfig> {
         using Base = tpde::x64::CompilerX64<IRAdaptor, IRCompilerX64, IRCompilerBase, CompilerConfig>;
-        using EncCompiler = tpde_encodegen::EncodeCompiler<IRAdaptor, IRCompilerX64, IRCompilerBase, CompilerConfig>;
+        using IRValueRef = IRAdaptor::IRValueRef;
 
         std::unique_ptr<IRAdaptor> adaptor;
 
@@ -90,8 +92,7 @@ namespace lingodb::execution::baseline {
             ScratchReg res_scratch{this};
 
             if (int_width == 128) {
-                if ((jump == Jump::ja) || (jump == Jump::jbe) || (jump == Jump::jle) ||
-                    (jump == Jump::jg)) {
+                if ((jump == Jump::ja) || (jump == Jump::jbe) || (jump == Jump::jle) || (jump == Jump::jg)) {
                     std::swap(lhs, rhs);
                     jump = swap_jump(jump);
                 }
@@ -175,9 +176,8 @@ namespace lingodb::execution::baseline {
                     }
                 }
             }
-            // TODO: why does this not work?
-            // lhs.reset();
-            // rhs.reset();
+            lhs.reset();
+            rhs.reset();
 
             auto [_, res_ref] = result_ref_single(op);
             generate_raw_set(jump, res_scratch.alloc_gp());
@@ -225,7 +225,7 @@ namespace lingodb::execution::baseline {
 
         void reset() noexcept {
             Base::reset();
-            EncCompiler::reset();
+            EncodeCompiler::reset();
         }
 
         Error &getError() { return Base::getError(); }

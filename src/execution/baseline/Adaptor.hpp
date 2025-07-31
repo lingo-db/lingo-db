@@ -21,8 +21,9 @@
 
 
 namespace lingodb::execution::baseline {
-    // adaptor mlir -> tpde
     // NOLINTBEGIN(readability-identifier-naming)
+
+    // adaptor mlir -> tpde
     struct IRAdaptor {
         using IRFuncRef = mlir::func::FuncOp;
         using IRBlockRef = mlir::Block *;
@@ -172,8 +173,7 @@ namespace lingodb::execution::baseline {
             return values[val].local_idx;
         }
 
-        [[maybe_unused]] bool val_ignore_in_liveness_analysis(IRValueRef val) const noexcept {
-            // return !mlir::isa<mlir::BlockArgument>(val); // TODO: refine this
+        [[maybe_unused]] bool val_ignore_in_liveness_analysis(IRValueRef) const noexcept {
             return false;
         }
 

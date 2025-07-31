@@ -404,7 +404,7 @@ int main(int argc, char** argv) {
       if (parts[0] == "statement") {
          try {
             runStatement(*session, lines, line);
-         } catch (const std::exception &e) {
+         } catch (const std::exception& e) {
             std::cerr << "ERROR: " << e.what() << std::endl;
             std::cerr << "while executing statement: " << lines[line] << std::endl;
          }
@@ -416,7 +416,7 @@ int main(int argc, char** argv) {
          }
          try {
             runQuery(*session, lines, line);
-         } catch (const std::exception &e) {
+         } catch (const std::exception& e) {
             std::cerr << "ERROR: " << e.what() << std::endl;
             std::cerr << "while executing query: " << lines[line] << std::endl;
          }

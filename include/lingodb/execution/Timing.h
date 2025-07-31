@@ -36,22 +36,22 @@ class TimingPrinter : public TimingProcessor {
       timing["total"] = total;
       std::vector<std::string> printOrder = {
          "QOpt", "lowerRelAlg", "lowerSubOp", "lowerDB", "lowerArrow", "lowerToLLVM", "baselineLowering", "toLLVMIR",
-         "llvmOptimize", "llvmCodeGen", "baselineCodeGen", "baselineEmit", "executionTime", "total"
-      };
+         "llvmOptimize", "llvmCodeGen", "baselineCodeGen", "baselineEmit", "executionTime", "total"};
       const unsigned headerLen = std::ranges::max_element(
                                     printOrder.begin(), printOrder.end(),
-                                    [](const std::string &a, const std::string &b) { return a.length() < b.length(); })
-                                 ->length() + 3;
+                                    [](const std::string& a, const std::string& b) { return a.length() < b.length(); })
+                                    ->length() +
+         3;
       const unsigned queryNameLen = queryName.length();
       std::cout << std::endl
-            << std::endl;
+                << std::endl;
       std::cout << std::setw(queryNameLen) << "name";
-      for (auto n: printOrder) {
+      for (auto n : printOrder) {
          std::cout << std::setw(headerLen) << n;
       }
       std::cout << std::endl;
       std::cout << std::setw(queryNameLen) << queryName;
-      for (auto n: printOrder) {
+      for (auto n : printOrder) {
          if (timing.contains(n)) {
             std::cout << std::setw(headerLen) << timing[n];
          } else {

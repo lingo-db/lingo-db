@@ -34,6 +34,6 @@ void lingodb::execution::visitBareFunctions(const std::function<void(std::string
    fn("dumpI64", reinterpret_cast<void*>(&dumpI64));
    fn("dumpF64", reinterpret_cast<void*>(&dumpF64));
    fn("dumpBool", reinterpret_cast<void*>(&dumpBool));
-   fn("sitofp_i128_f64", reinterpret_cast<void *>(&sitofp_i128_f64));
-   fn("sitofp_i128_f32", reinterpret_cast<void *>(&sitofp_i128_f32));
+   fn("sitofp_i128_f64", reinterpret_cast<void*>(&sitofp_i128_f64));
+   fn("sitofp_i128_f32", reinterpret_cast<void*>(&sitofp_i128_f32));
 }

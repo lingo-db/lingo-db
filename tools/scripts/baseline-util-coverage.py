@@ -2,7 +2,7 @@ import re
 
 # File paths
 file1 = './include/lingodb/compiler/Dialect/util/UtilOps.td'
-file2 = './src/execution/baseline/BaselineBackend.cpp'
+file2 = './src/execution/baseline/CompilerBase.hpp'
 
 # Extract strings from the first file
 with open(file1, 'r') as f:

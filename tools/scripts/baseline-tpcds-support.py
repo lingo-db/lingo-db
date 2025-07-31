@@ -24,10 +24,12 @@ def process_single_query(q_number, db_directory):
         # Construct full paths for the temporary files within the temp_dir
         old_output_path = os.path.join(temp_dir, f'old_{q_number}.txt')
         new_output_path = os.path.join(temp_dir, f'new_{q_number}.txt')
+        old_trimmed_path = os.path.join(temp_dir, f'old_{q_number}_trimmed.txt')
+        new_trimmed_path = os.path.join(temp_dir, f'new_{q_number}_trimmed.txt')
 
         # Define commands
-        old_cmd = ['cmake-build-relwithdebinfo/run-sql', sql_file, db_directory]
-        new_cmd = ['cmake-build-relwithdebinfo/run-sql', sql_file, db_directory]
+        old_cmd = ['./cmake-build-relwithdebinfo/run-sql', sql_file, db_directory]
+        new_cmd = ['./cmake-build-relwithdebinfo/run-sql', sql_file, db_directory]
 
         try:
             # Run old command and capture output to the temporary file
@@ -38,8 +40,15 @@ def process_single_query(q_number, db_directory):
             with open(new_output_path, 'w') as f_new:
                 subprocess.run(new_cmd, stdout=f_new, stderr=subprocess.PIPE, check=True, env=env)
 
+            # Remove last two lines from each output file
+            for src, dst in [(old_output_path, old_trimmed_path), (new_output_path, new_trimmed_path)]:
+                with open(src, 'r') as fin:
+                    lines = fin.readlines()
+                with open(dst, 'w') as fout:
+                    fout.writelines(lines[:-2] if len(lines) > 2 else [])
+
             # Compare outputs using the temporary file paths
-            diff = subprocess.run(['diff', old_output_path, new_output_path], stdout=subprocess.PIPE)
+            diff = subprocess.run(['diff', old_trimmed_path, new_trimmed_path], stdout=subprocess.PIPE)
 
             # No need to explicitly remove files; TemporaryDirectory handles cleanup
 

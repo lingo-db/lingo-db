@@ -13,8 +13,9 @@
 #include <iostream>
 
 namespace lingodb::execution::baseline {
-    // cross-platform compiler base class
     // NOLINTBEGIN(readability-identifier-naming)
+
+    // cross-platform compiler base class
     template<typename Adaptor, typename Derived, typename Config>
     struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
         using Base = tpde::CompilerBase<IRAdaptor, Derived, Config>;
@@ -273,21 +274,20 @@ namespace lingodb::execution::baseline {
         }
 
         static bool arg_is_int128(IRAdaptor::IRValueRef val) noexcept {
-            // TODO: implement this properly
-            return mlir::isa<dialect::util::VarLen32Type>(val.getType()) || (
-                       mlir::isa<mlir::IntegerType>(val.getType()) && val.getType().getIntOrFloatBitWidth() == 128) ||
-                   mlir::isa<dialect::util::BufferType>(val.getType());
+            return mlir::isa<dialect::util::VarLen32Type, dialect::util::BufferType>(val.getType()) || (
+                       mlir::isa<mlir::IntegerType>(val.getType()) && val.getType().getIntOrFloatBitWidth() == 128);
         }
 
-        static bool arg_allow_split_reg_stack_passing(IRAdaptor::IRValueRef val) noexcept {
-            return false; // we do not support split register stack passing
+        static bool arg_allow_split_reg_stack_passing(IRAdaptor::IRValueRef) noexcept {
+            // we do not support split register stack passing
+            return false;
         }
 
         void define_func_idx(IRAdaptor::IRFuncRef func, uint32_t idx) {
             localFuncMap[func.getSymName()] = idx;
         }
 
-        // [ptr + idx * elem_size]
+        // [ptr + idx * size_of(elem_t)]
         std::optional<GenericValuePart> create_idx_offset_expr(ValuePartRef base, IRValueRef idx,
                                                                const mlir::Type elem_t) {
             const auto elem_size = get_size(elem_t);
@@ -316,7 +316,7 @@ namespace lingodb::execution::baseline {
         }
 
         bool compile_arith_binary_op(IRInstRef op) {
-            auto res_type = op->getResult(0).getType();
+            const auto res_type = op->getResult(0).getType();
             unsigned res_width;
             unsigned op_width;
             if (mlir::isa<mlir::IndexType>(res_type)) {
@@ -394,9 +394,10 @@ namespace lingodb::execution::baseline {
                     return true;
                 }
 
-                std::unordered_map<std::string, bool (Derived::*)(GenericValuePart &&, GenericValuePart &&,
-                                                                  GenericValuePart &&, GenericValuePart &&,
-                                                                  ScratchReg &, ScratchReg &)> encoder_lookup = {
+                static llvm::SmallDenseMap<llvm::StringRef, bool (Derived::*)(
+                    GenericValuePart &&, GenericValuePart &&,
+                    GenericValuePart &&, GenericValuePart &&,
+                    ScratchReg &, ScratchReg &), 8> encoder_lookup = {
                     {"arith.addi", &Derived::encode_arith_add_i128},
                     {"arith.andi", &Derived::encode_arith_land_i128},
                     {"arith.ori", &Derived::encode_arith_lor_i128},
@@ -405,14 +406,14 @@ namespace lingodb::execution::baseline {
                     {"arith.subi", &Derived::encode_arith_sub_i128},
                 };
 #ifndef NDEBUG
-                if (!encoder_lookup.contains(op->getName().getStringRef().str().c_str())) {
+                if (!encoder_lookup.contains(op->getName().getStringRef())) {
                     op->dump();
                     error.emit() << op->getName().getStringRef().str().c_str() <<
                             " is not supported by the baseline backend\n";
                     return false;
                 }
 #endif
-                const auto encoder = encoder_lookup[op->getName().getStringRef().str().c_str()];
+                const auto encoder = encoder_lookup[op->getName().getStringRef()];
 
                 auto lhs_vr = this->val_ref(op->getOperand(0));
                 auto rhs_vr = this->val_ref(op->getOperand(1));
@@ -448,52 +449,62 @@ namespace lingodb::execution::baseline {
                 ScratchReg res_scratch{derived()};
 
                 // encode functions for 32/64 bit operations
-                // TODO: replace this map with something more efficient
-                std::unordered_map<std::string, std::array<bool (Derived::*)(
-                    GenericValuePart &&, GenericValuePart &&, ScratchReg &), 2> > encoder_lookup;
+                static llvm::SmallDenseMap<llvm::StringRef, std::array<bool (Derived::*)(
+                    GenericValuePart &&, GenericValuePart &&, ScratchReg &), 2>, 16> encoder_lookup_int;
+                static llvm::SmallDenseMap<llvm::StringRef, std::array<bool (Derived::*)(
+                    GenericValuePart &&, GenericValuePart &&, ScratchReg &), 2>, 4> encoder_lookup_float;
 
-                if (mlir::isa<mlir::FloatType>(res_type)) {
-                    encoder_lookup = {
-                        {"arith.addf", {&Derived::encode_arith_add_f32, &Derived::encode_arith_add_f64}},
-                        {"arith.subf", {&Derived::encode_arith_sub_f32, &Derived::encode_arith_sub_f64}},
-                        {"arith.mulf", {&Derived::encode_arith_mul_f32, &Derived::encode_arith_mul_f64}},
-                        {"arith.divf", {&Derived::encode_arith_div_f32, &Derived::encode_arith_div_f64}},
-                    };
-                } else {
-                    encoder_lookup = {
-                        {"arith.addi", {&Derived::encode_arith_add_i32, &Derived::encode_arith_add_i64}},
-                        {"arith.subi", {&Derived::encode_arith_sub_i32, &Derived::encode_arith_sub_i64}},
-                        {"arith.muli", {&Derived::encode_arith_mul_i32, &Derived::encode_arith_mul_i64}},
-                        {"arith.divsi", {&Derived::encode_arith_sdiv_i32, &Derived::encode_arith_sdiv_i64}},
-                        {"arith.divui", {&Derived::encode_arith_udiv_i32, &Derived::encode_arith_udiv_i64}},
-                        {"arith.remsi", {&Derived::encode_arith_srem_i32, &Derived::encode_arith_srem_i64}},
-                        {"arith.remui", {&Derived::encode_arith_urem_i32, &Derived::encode_arith_urem_i64}},
-                        {"arith.ori", {&Derived::encode_arith_lor_i32, &Derived::encode_arith_lor_i64}},
-                        {"arith.xori", {&Derived::encode_arith_lxor_i32, &Derived::encode_arith_lxor_i64}},
-                        {"arith.andi", {&Derived::encode_arith_land_i32, &Derived::encode_arith_land_i64}},
-                        {"arith.shrui", {&Derived::encode_arith_shr_u32, &Derived::encode_arith_shr_u64}},
-                        {"arith.shli", {&Derived::encode_arith_shl_i32, &Derived::encode_arith_shl_i64}},
-                        {"arith.minsi", {&Derived::encode_arith_minsi_i32, &Derived::encode_arith_minsi_i64}},
-                        {"arith.maxsi", {&Derived::encode_arith_maxsi_i32, &Derived::encode_arith_maxsi_i64}},
-                        {"arith.minui", {&Derived::encode_arith_minui_i32, &Derived::encode_arith_minui_i64}},
-                        {"arith.maxui", {&Derived::encode_arith_maxui_i32, &Derived::encode_arith_maxui_i64}},
-                    };
-                }
+                auto encoder_call = [&](auto encoder_table) {
 #ifndef NDEBUG
-                if (!encoder_lookup.contains(op->getName().getStringRef().str().c_str())) {
-                    op->dump();
-                    std::cerr << op->getName().getStringRef().str().c_str() <<
-                            " is not supported by the baseline backend\n";
-                    assert(0);
-                    return false;
-                }
+                    if (!encoder_table.contains(op->getName().getStringRef())) {
+                        op->dump();
+                        std::cerr << op->getName().getStringRef().str().c_str() <<
+                                " is not supported by the baseline backend\n";
+                        assert(0);
+                        return false;
+                    }
 #endif
-                const auto encoders = encoder_lookup[op->getName().getStringRef().str().c_str()];
-                const auto sub_encoder_idx = op_width == 64 ? 1 : 0;
-                (derived()->*encoders[sub_encoder_idx])(std::move(lhs_op), std::move(rhs_op), res_scratch);
+                    const auto encoders = encoder_table[op->getName().getStringRef()];
+                    const auto sub_encoder_idx = op_width == 64 ? 1 : 0;
+                    return (derived()->*encoders[sub_encoder_idx])(std::move(lhs_op), std::move(rhs_op), res_scratch);
+                };
+                bool ret = false;
+                if (mlir::isa<mlir::FloatType>(res_type)) {
+                    if (encoder_lookup_float.empty()) {
+                        encoder_lookup_float = {
+                            {"arith.addf", {&Derived::encode_arith_add_f32, &Derived::encode_arith_add_f64}},
+                            {"arith.subf", {&Derived::encode_arith_sub_f32, &Derived::encode_arith_sub_f64}},
+                            {"arith.mulf", {&Derived::encode_arith_mul_f32, &Derived::encode_arith_mul_f64}},
+                            {"arith.divf", {&Derived::encode_arith_div_f32, &Derived::encode_arith_div_f64}},
+                        };
+                    }
+                    ret = encoder_call(encoder_lookup_float);
+                } else {
+                    if (encoder_lookup_int.empty()) {
+                        encoder_lookup_int = {
+                            {"arith.addi", {&Derived::encode_arith_add_i32, &Derived::encode_arith_add_i64}},
+                            {"arith.subi", {&Derived::encode_arith_sub_i32, &Derived::encode_arith_sub_i64}},
+                            {"arith.muli", {&Derived::encode_arith_mul_i32, &Derived::encode_arith_mul_i64}},
+                            {"arith.divsi", {&Derived::encode_arith_sdiv_i32, &Derived::encode_arith_sdiv_i64}},
+                            {"arith.divui", {&Derived::encode_arith_udiv_i32, &Derived::encode_arith_udiv_i64}},
+                            {"arith.remsi", {&Derived::encode_arith_srem_i32, &Derived::encode_arith_srem_i64}},
+                            {"arith.remui", {&Derived::encode_arith_urem_i32, &Derived::encode_arith_urem_i64}},
+                            {"arith.ori", {&Derived::encode_arith_lor_i32, &Derived::encode_arith_lor_i64}},
+                            {"arith.xori", {&Derived::encode_arith_lxor_i32, &Derived::encode_arith_lxor_i64}},
+                            {"arith.andi", {&Derived::encode_arith_land_i32, &Derived::encode_arith_land_i64}},
+                            {"arith.shrui", {&Derived::encode_arith_shr_u32, &Derived::encode_arith_shr_u64}},
+                            {"arith.shli", {&Derived::encode_arith_shl_i32, &Derived::encode_arith_shl_i64}},
+                            {"arith.minsi", {&Derived::encode_arith_minsi_i32, &Derived::encode_arith_minsi_i64}},
+                            {"arith.maxsi", {&Derived::encode_arith_maxsi_i32, &Derived::encode_arith_maxsi_i64}},
+                            {"arith.minui", {&Derived::encode_arith_minui_i32, &Derived::encode_arith_minui_i64}},
+                            {"arith.maxui", {&Derived::encode_arith_maxui_i32, &Derived::encode_arith_maxui_i64}},
+                        };
+                    }
+                    ret = encoder_call(encoder_lookup_int);
+                }
                 auto [res_vr, res_pr] = this->result_ref_single(op->getResult(0));
                 this->set_value(res_pr, res_scratch);
-                return true;
+                return ret;
             }
         }
 
@@ -550,19 +561,16 @@ namespace lingodb::execution::baseline {
         }
 
         bool compile_util_buffer_cast_op(dialect::util::BufferCastOp op) {
-            // TODO: replace code below with this code to omit unnecessary copies (currently this doesn't work though)
-            // auto [tmp, src_vpr] = this->val_ref_single(op.getVal());
-            // auto [tmp1, res_vpr] = this->result_ref_single(op.getRes());
-            // res_vpr.set_value(std::move(src_vpr));
-            // return true;
             auto src_vr = this->val_ref(op.getVal());
-            auto res_vr = this->result_ref(op.getRes());
-            ScratchReg res_scratch_low{derived()};
-            ScratchReg res_scratch_high{derived()};
-            derived()->mov(res_scratch_low.alloc_gp(), src_vr.part(0).load_to_reg(), 8);
-            derived()->mov(res_scratch_high.alloc_gp(), src_vr.part(1).load_to_reg(), 8);
-            this->set_value(res_vr.part(0), res_scratch_low);
-            this->set_value(res_vr.part(1), res_scratch_high);
+            auto res_vr = this->result_ref(op.getRes()); {
+                ScratchReg res_scratch{derived()};
+                derived()->mov(res_scratch.alloc_gp(), src_vr.part(0).load_to_reg(), 8);
+                this->set_value(res_vr.part(0), res_scratch);
+            } {
+                ScratchReg res_scratch{derived()};
+                derived()->mov(res_scratch.alloc_gp(), src_vr.part(1).load_to_reg(), 8);
+                this->set_value(res_vr.part(1), res_scratch);
+            }
             return true;
         }
 
@@ -720,7 +728,6 @@ namespace lingodb::execution::baseline {
                     });
         }
 
-        // TODO: this is veeeery brittle -> test!
         bool compile_func_call_op(mlir::func::CallOp op) {
             mlir::func::FuncOp callee_func = mlir::cast<mlir::func::FuncOp>(op.resolveCallable());
 
