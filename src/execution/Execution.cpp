@@ -188,49 +188,52 @@ class DefaultImperativeLowering : public LoweringStep {
 };
 ExecutionMode getExecutionMode() {
    ExecutionMode runMode;
-   if (RUN_QUERIES_WITH_PERF) {
+   if constexpr (RUN_QUERIES_WITH_PERF) {
       runMode = ExecutionMode::PERF;
    } else {
       runMode = ExecutionMode::DEFAULT;
    }
    std::string mode = executionModeSetting.getValue();
-   if (std::string(mode) == "PERF") {
+   if (mode == "PERF") {
       runMode = ExecutionMode::PERF;
-   } else if (std::string(mode) == "CHEAP") {
+   } else if (mode == "CHEAP") {
       runMode = ExecutionMode::CHEAP;
-   } else if (std::string(mode) == "EXTREME_CHEAP") {
+   } else if (mode == "EXTREME_CHEAP") {
       runMode = ExecutionMode::EXTREME_CHEAP;
-   } else if (std::string(mode) == "DEFAULT") {
+   } else if (mode == "DEFAULT") {
       runMode = ExecutionMode::DEFAULT;
-   } else if (std::string(mode) == "DEBUGGING") {
+   } else if (mode == "DEBUGGING") {
       runMode = ExecutionMode::DEBUGGING;
-   } else if (std::string(mode) == "SPEED") {
+   } else if (mode == "SPEED") {
       std::cout << "using speed mode" << std::endl;
       runMode = ExecutionMode::SPEED;
-   } else if (std::string(mode) == "C") {
+   } else if (mode == "C") {
       runMode = ExecutionMode::C;
    }
 #if GPU_ENABLED == 1
-   else if (std::string(mode) == "GPU") {
+   else if (mode == "GPU") {
       runMode = ExecutionMode::GPU;
    }
 #endif
 #if BASELINE_ENABLED == 1
-   else if (std::string(mode) == "BASELINE") {
+   else if (mode == "BASELINE") {
       runMode = ExecutionMode::BASELINE;
    }
 #else
-   else if (std::string(mode) == "BASELINE") {
+   else if (mode == "BASELINE") {
       std::cerr << "Baseline mode is not enabled in this build" << std::endl;
       exit(1);
    }
 #endif
-   else if (std::string(mode) == "NONE") {
+   else if (mode == "NONE") {
       runMode = ExecutionMode::NONE;
    } else {
       std::cerr << "Unknown execution mode: " << mode << std::endl;
       exit(1);
    }
+#ifndef NDEBUG
+   std::cout << "Execution Mode: " << mode << std::endl;
+#endif
    return runMode;
 }
 

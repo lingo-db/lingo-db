@@ -62,7 +62,7 @@ void LingoDBHashIndex::rawInsert(size_t startRowId, std::shared_ptr<arrow::Table
       auto createTableDef = catalog::CreateTableDef{"tmp", table->getColumns(), {}};
       tmpSession->getCatalog()->insertEntry(catalog::LingoDBTableCatalogEntry::createFromCreateTable(createTableDef));
       tmpSession->getCatalog()->getTypedEntry<catalog::LingoDBTableCatalogEntry>("tmp").value()->getTableStorage().append(t);
-      auto queryExecutionConfig = execution::createQueryExecutionConfig(execution::ExecutionMode::SPEED, true);
+      auto queryExecutionConfig = execution::createQueryExecutionConfig(execution::getExecutionMode(), true);
       queryExecutionConfig->parallel = false;
       std::shared_ptr<arrow::Table> result;
       queryExecutionConfig->resultProcessor = execution::createTableRetriever(result);

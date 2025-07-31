@@ -10,6 +10,7 @@ add_custom_command(
         OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/snippets_x64.bc
         COMMAND clang -c -emit-llvm -ffreestanding -fcf-protection=none -O3 -fomit-frame-pointer -fno-math-errno --target=x86_64-linux -march=opteron -o ${CMAKE_CURRENT_BINARY_DIR}/snippets_x64.bc ${CMAKE_CURRENT_SOURCE_DIR}/snippets_x64.c
         DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/snippets_x64.c
+        DEPENDS_EXPLICIT_ONLY
         COMMENT "Generating LLVM bitcode from snippets.c"
 )
 # Step 2: Use tpde to generate C++ header file from LLVM bitcode
@@ -17,6 +18,7 @@ add_custom_command(
         OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/snippet_encoders_x64.hpp
         COMMAND tpde_encodegen -o ${SNIPPED_INCLUDE_DIR}/snippet_encoders_x64.hpp ${CMAKE_CURRENT_BINARY_DIR}/snippets_x64.bc
         DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/snippets_x64.bc
+        DEPENDS_EXPLICIT_ONLY
         COMMENT "Generating ${SNIPPED_INCLUDE_DIR}/snippet_encoders_x64.hpp from ${CMAKE_CURRENT_BINARY_DIR}/snippets_x64.bc"
 )
 add_custom_target(snippet_encoders ALL
