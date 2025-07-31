@@ -1,4 +1,6 @@
-//RUN: run-mlir %s | FileCheck %s
+//RUN: env LINGODB_EXECUTION_MODE=DEFAULT run-mlir %s | FileCheck %s
+//RUN: env LINGODB_EXECUTION_MODE=BASELINE run-mlir %s | FileCheck %s
+
 //CHECK: |                            id  |                             x  |                             y  |
 //CHECK: ----------------------------------------------------------------------------------------------------
 //CHECK: |                             0  |                          1.75  |                           1.5  |

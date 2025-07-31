@@ -59,8 +59,13 @@ jobs:
           touch build/lingodb-${{ matrix.build_type }}/.buildstamp
           chmod +x build/lingodb-${{ matrix.build_type }}/*
 
-          make TEST_BUILD_TYPE=${{ matrix.build_type }} DATA_BUILD_TYPE=${{ matrix.build_type }} test-no-rebuild
-          LINGODB_EXECUTION_MODE=BASELINE make TEST_BUILD_TYPE=${{ matrix.build_type }} DATA_BUILD_TYPE=${{ matrix.build_type }} test-no-rebuild
+          export TEST_BUILD_TYPE=${{ matrix.build_type }}
+          export DATA_BUILD_TYPE=${{ matrix.build_type }}
+          # only run sqlite-small for default and baseline backend, since lit chooses backend on its own and unit is backend-agnostic
+          make test-no-rebuild-lit
+          make test-no-rebuild-unit
+          make test-no-rebuild-sqlite-small
+          LINGODB_EXECUTION_MODE=BASELINE make test-no-rebuild-sqlite-small
 
   sqlite_tests:
     strategy:
@@ -81,8 +86,10 @@ jobs:
           touch build/lingodb-${{ matrix.build_type }}/.stamp
           touch build/lingodb-${{ matrix.build_type }}/.buildstamp
           chmod +x build/lingodb-${{ matrix.build_type }}/*
-          make SQLITE_TEST_BUILD_TYPE=${{ matrix.build_type }} sqlite-test-no-rebuild
-          LINGODB_EXECUTION_MODE=BASELINE make SQLITE_TEST_BUILD_TYPE=${{ matrix.build_type }} sqlite-test-no-rebuild
+
+          export SQLITE_TEST_BUILD_TYPE=${{ matrix.build_type }}
+          make test-no-rebuild-sqlite
+          LINGODB_EXECUTION_MODE=BASELINE make test-no-rebuild-sqlite
 
   sqlite_dataset-tests:
     strategy:

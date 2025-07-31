@@ -80,7 +80,6 @@ module  {
        //CHECK: float(-41)
        //CHECK: float(84)
        //CHECK: float(21)
-       //CHECK: float(0)
     	%c1 = arith.constant 1.0 : f64
     	%c2 = arith.constant 2.0 : f64
     	%c42 = arith.constant 42.0 : f64
@@ -93,7 +92,6 @@ module  {
     	call @dumpF64(%sub) : (f64) -> ()
     	call @dumpF64(%mul) : (f64) -> ()
     	call @dumpF64(%div) : (f64) -> ()
-    	//call @dumpF64(%mod) : (f64) -> ()
     	return
     }
   func.func @testFloatCmp(){

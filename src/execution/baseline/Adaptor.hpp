@@ -248,11 +248,11 @@ namespace lingodb::execution::baseline {
             if (const auto size = allocaOp.getSize()) {
                 if (auto const_int = mlir::dyn_cast<mlir::arith::ConstantIntOp>(size.getDefiningOp())) {
                     count = const_int.value();
-                }
-                if (auto const_index = mlir::dyn_cast<mlir::arith::ConstantIndexOp>(size.getDefiningOp())) {
+                } else if (auto const_index = mlir::dyn_cast<mlir::arith::ConstantIndexOp>(size.getDefiningOp())) {
                     count = const_index.value();
+                } else {
+                    getError().emit() << "Value is not an arith int constant\n";
                 }
-                getError().emit() << "Value is not an arith int constant";
             }
 
             const mlir::TypedValue<dialect::util::RefType> res_ptr = allocaOp.getRef();

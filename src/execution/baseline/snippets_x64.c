@@ -107,6 +107,11 @@ __uint128_t arith_zext_i64_i128(uint64_t in) { return (__uint128_t)in; }
 float arith_sitofp_i64_f32(int64_t in) { return (float)in; }
 double arith_sitofp_i64_f64(int64_t in) { return (double)in; }
 
+float arith_uitofp_i64_f32(uint64_t in) { return (float)in; }
+double arith_uitofp_i64_f64(uint64_t in) { return (double)in; }
+
+double arith_extf_f32_f64(float in) { return (double)in; }
+
 // --------------------------
 // float comparisons
 // --------------------------

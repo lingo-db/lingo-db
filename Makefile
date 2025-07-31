@@ -87,12 +87,21 @@ run-test: build/lingodb-$(TEST_BUILD_TYPE)/.stamp
 	cmake --build $(dir $<) --target mlir-db-opt run-mlir run-sql sql-to-mlir sqlite-tester tester -- -j${NPROCS}
 	$(MAKE) test-no-rebuild
 
-test-no-rebuild: build/lingodb-$(TEST_BUILD_TYPE)/.buildstamp resources/data/test/.stamp resources/data/uni/.stamp
+test-no-rebuild-lit: build/lingodb-$(TEST_BUILD_TYPE)/.buildstamp
 	${LLVM_LIT_BINARY} -v build/lingodb-$(TEST_BUILD_TYPE)/test/lit -j 1
+
+test-no-rebuild-unit: build/lingodb-$(TEST_BUILD_TYPE)/.buildstamp
 	./build/lingodb-$(TEST_BUILD_TYPE)/tester
+
+test-no-rebuild-sqlite-small: build/lingodb-$(TEST_BUILD_TYPE)/.buildstamp
 	find ./test/sqlite-small/ -maxdepth 1 -type f -name '*.test' | xargs -L 1 -P ${NPROCS} ./build/lingodb-$(TEST_BUILD_TYPE)/sqlite-tester
 
-sqlite-test-no-rebuild: build/lingodb-$(SQLITE_TEST_BUILD_TYPE)/.buildstamp
+test-no-rebuild: build/lingodb-$(TEST_BUILD_TYPE)/.buildstamp
+	$(MAKE) test-no-rebuild-lit
+	$(MAKE) test-no-rebuild-unit
+	$(MAKE) test-no-rebuild-sqlite-small
+
+test-no-rebuild-sqlite: build/lingodb-$(SQLITE_TEST_BUILD_TYPE)/.buildstamp
 	find ./test/sqlite/ -maxdepth 1 -type f -name '*.test' | xargs -L 1 -P ${NPROCS} ./build/lingodb-$(SQLITE_TEST_BUILD_TYPE)/sqlite-tester
 
 .PHONY: test-coverage

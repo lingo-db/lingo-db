@@ -759,9 +759,8 @@ namespace lingodb::execution::baseline {
                 builder.call(std::move(func_ref));
             }
 
-            assert(op.getNumResults() <= 1 && "Function call must have exactly one result in the IR");
-            if (op.getNumResults() != 0) {
-                ValueRef res = this->result_ref(op.getResult(0));
+            for (size_t i = 0; i < op.getNumResults(); ++i) {
+                ValueRef res = this->result_ref(op.getResult(i));
                 builder.add_ret(res);
             }
             return true;
@@ -769,17 +768,16 @@ namespace lingodb::execution::baseline {
 
         bool compile_func_return_op(const mlir::func::ReturnOp op) {
             assert(!this->adaptor->cur_func.getResAttrs() && "we do not support return attributes yet");
-            assert(op->getNumOperands() <= 1 && "Function return must have at most one operand in the IR");
             typename Derived::RetBuilder rb{*derived(), *derived()->cur_cc_assigner()};
-            if (op->getNumOperands() != 0) {
-                rb.add(op->getOperand(0));
+            for (size_t i = 0; i < op->getNumOperands(); ++i) {
+                rb.add(op->getOperand(i));
             }
             rb.ret();
             return true;
         }
 
         // zext and sext operations
-        bool compile_arith_exti_op(const auto op, bool sign) {
+        bool compile_arith_exti_op(const auto op, const bool sign) {
             mlir::Value src_val = op->getOperand(0);
             mlir::Value res_val = op->getResult(0);
             assert(
@@ -788,7 +786,7 @@ namespace lingodb::execution::baseline {
             unsigned src_width = src_val.getType().getIntOrFloatBitWidth();
             unsigned dst_width = res_val.getType().getIntOrFloatBitWidth();
             assert(
-                src_width <= dst_width &&
+                src_width < dst_width &&
                 "Source width must be less than or equal to destination width for zext operation");
             assert(
                 src_width <= 64 && (dst_width <= 64 || dst_width == 128) &&
@@ -848,6 +846,24 @@ namespace lingodb::execution::baseline {
                 this->set_value(res.part(0), res_scratch_low);
                 this->set_value(res.part(1), res_scratch_high);
             }
+            return true;
+        }
+
+        bool compile_arith_extf_op(const auto op) {
+            mlir::Value src_val = op->getOperand(0);
+            mlir::Value res_val = op->getResult(0);
+            assert(mlir::isa<mlir::FloatType>(src_val.getType()) && mlir::isa<mlir::FloatType>(res_val.getType()) &&
+                "Source and destination value must be a float type for extend operation");
+            unsigned src_width = src_val.getType().getIntOrFloatBitWidth();
+            unsigned dst_width = res_val.getType().getIntOrFloatBitWidth();
+            assert(
+                src_width == 32 && dst_width == 64 &&
+                "For extend operation, source must be float and destination must be double");
+            auto [_, src_vpr] = this->val_ref_single(src_val);
+            auto res = this->result_ref(res_val);
+            ScratchReg res_scratch{derived()};
+            bool ret = derived()->encode_arith_extf_f32_f64(std::move(src_vpr), res_scratch);
+            this->set_value(res.part(0), res_scratch);
             return true;
         }
 
@@ -1317,7 +1333,7 @@ namespace lingodb::execution::baseline {
             return true;
         }
 
-        bool compile_arith_sitofp_op(mlir::arith::SIToFPOp op) {
+        bool compile_arith_sitofp_op(const auto op, const bool sign) {
             mlir::Value src = op->getOperand(0);
             mlir::Value res = op->getResult(0);
             assert(mlir::isa<mlir::IntegerType>(src.getType()) && "Source value must be an integer type for sitofp");
@@ -1355,10 +1371,18 @@ namespace lingodb::execution::baseline {
             if (src_width < 64) {
                 src_vpr = std::move(src_vpr).into_extended(true, src_width, 64);
             }
-            if (dst_width == 32) {
-                ret = derived()->encode_arith_sitofp_i64_f32(std::move(src_vpr), res_scratch);
+            if (sign) {
+                if (dst_width == 32) {
+                    ret = derived()->encode_arith_sitofp_i64_f32(std::move(src_vpr), res_scratch);
+                } else {
+                    ret = derived()->encode_arith_sitofp_i64_f64(std::move(src_vpr), res_scratch);
+                }
             } else {
-                ret = derived()->encode_arith_sitofp_i64_f64(std::move(src_vpr), res_scratch);
+                if (dst_width == 32) {
+                    ret = derived()->encode_arith_uitofp_i64_f32(std::move(src_vpr), res_scratch);
+                } else {
+                    ret = derived()->encode_arith_uitofp_i64_f64(std::move(src_vpr), res_scratch);
+                }
             }
             this->set_value(res_ref.part(0), res_scratch);
             return ret;
@@ -1399,6 +1423,7 @@ namespace lingodb::execution::baseline {
                     .template Case<mlir::func::ReturnOp>([&](auto op) { return compile_func_return_op(op); })
                     .template Case<mlir::arith::ExtUIOp>([&](auto op) { return compile_arith_exti_op(op, false); })
                     .template Case<mlir::arith::ExtSIOp>([&](auto op) { return compile_arith_exti_op(op, true); })
+                    .template Case<mlir::arith::ExtFOp>([&](auto op) { return compile_arith_extf_op(op); })
                     .template Case<mlir::arith::SelectOp>([&](auto op) { return compile_arith_select_op(op); })
                     .template Case<mlir::arith::IndexCastOp>([&](auto op) { return compile_arith_index_cast_op(op); })
                     .template Case<dialect::util::CreateConstVarLen>([&](auto op) {
@@ -1450,7 +1475,10 @@ namespace lingodb::execution::baseline {
                         return compile_util_buffer_get_ref_op(op);
                     })
                     .template Case<mlir::arith::SIToFPOp>([&](auto op) {
-                        return compile_arith_sitofp_op(op);
+                        return compile_arith_sitofp_op(op, true);
+                    })
+                    .template Case<mlir::arith::UIToFPOp>([&](auto op) {
+                        return compile_arith_sitofp_op(op, false);
                     })
                     .template Case<dialect::util::VarLenCmp>([&](auto op) { return compile_util_varlen_cmp_op(op); })
                     .Default([&](IRInstRef op) {
