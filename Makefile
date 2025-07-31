@@ -7,7 +7,7 @@ CMAKE_PREFIX_PATH_FLAG := -DCMAKE_PREFIX_PATH=$(CMAKE_PREFIX_PATH)
 DATA_BUILD_TYPE ?= debug
 TEST_BUILD_TYPE ?= debug
 SQLITE_TEST_BUILD_TYPE ?= release
-
+ENABLE_BASELINE_BACKEND ?= OFF
 
 build:
 	mkdir -p $@
@@ -44,7 +44,8 @@ resources/data/%/.stamp: resources/data/%/.rawdata build/lingodb-$(DATA_BUILD_TY
 
 
 LDB_ARGS= -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  \
-	   	 -DCMAKE_BUILD_TYPE=Debug
+	   	 -DCMAKE_BUILD_TYPE=Debug \
+	   	 -DENABLE_BASELINE_BACKEND=$(ENABLE_BASELINE_BACKEND)
 
 build/lingodb-debug/.stamp: build
 	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS) -DCMAKE_BUILD_TYPE=Debug $(CMAKE_PREFIX_PATH_FLAG)

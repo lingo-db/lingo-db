@@ -31,6 +31,7 @@ jobs:
           export CXX="ccache clang++-20"
           export CC="ccache clang-20"
           export CCACHE_DIR="/ccache"
+          export ENABLE_BASELINE_BACKEND=ON
           make clean
           make build-${{ matrix.build_type }}
       - uses: actions/upload-artifact@master
