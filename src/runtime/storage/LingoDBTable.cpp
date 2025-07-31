@@ -217,6 +217,9 @@ LingoDBTable::TableChunk::TableChunk(std::shared_ptr<arrow::RecordBatch> data, s
          }
       }
       if (!buffers[currBufId]) {
+         if (numRows > ArrayView::maxNullCount) {
+            throw std::runtime_error("LingoDBTable: too many nulls in column");
+         }
          buffers[currBufId] = ArrayView::validData.data();
       }
       bufferStart.push_back(currBufId);
