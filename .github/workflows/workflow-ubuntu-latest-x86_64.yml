@@ -7,8 +7,8 @@ on:
 env:
   REGISTRY: ghcr.io
 jobs:
-
   build:
+    if: github.event.pull_request.draft == false
     strategy:
       matrix:
         build_type: [ debug, asan, release ]
@@ -17,6 +17,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
+        with:
+          submodules: recursive
       - name: CCache
         id: ccache
         uses: actions/cache@v3
@@ -29,6 +31,7 @@ jobs:
           export CXX="ccache clang++-20"
           export CC="ccache clang-20"
           export CCACHE_DIR="/ccache"
+          export ENABLE_BASELINE_BACKEND=ON
           make clean
           make build-${{ matrix.build_type }}
       - uses: actions/upload-artifact@master
@@ -56,7 +59,15 @@ jobs:
           touch build/lingodb-${{ matrix.build_type }}/.stamp
           touch build/lingodb-${{ matrix.build_type }}/.buildstamp
           chmod +x build/lingodb-${{ matrix.build_type }}/*
-          make TEST_BUILD_TYPE=${{ matrix.build_type }} DATA_BUILD_TYPE=${{ matrix.build_type }} test-no-rebuild
+
+          export TEST_BUILD_TYPE=${{ matrix.build_type }}
+          export DATA_BUILD_TYPE=${{ matrix.build_type }}
+          # only run sqlite-small for default and baseline backend, since lit chooses backend on its own and unit is backend-agnostic
+          make test-no-rebuild-lit
+          make test-no-rebuild-unit
+          make test-no-rebuild-sqlite-small
+          LINGODB_EXECUTION_MODE=BASELINE make test-no-rebuild-sqlite-small
+
   sqlite_tests:
     strategy:
       matrix:
@@ -76,7 +87,10 @@ jobs:
           touch build/lingodb-${{ matrix.build_type }}/.stamp
           touch build/lingodb-${{ matrix.build_type }}/.buildstamp
           chmod +x build/lingodb-${{ matrix.build_type }}/*
-          make SQLITE_TEST_BUILD_TYPE=${{ matrix.build_type }} sqlite-test-no-rebuild
+
+          export SQLITE_TEST_BUILD_TYPE=${{ matrix.build_type }}
+          make test-no-rebuild-sqlite
+          LINGODB_EXECUTION_MODE=BASELINE make test-no-rebuild-sqlite
 
   sqlite_dataset-tests:
     strategy:
@@ -120,10 +134,14 @@ jobs:
       - name: Test
         run: |
           ./build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpchSf1.test /db/tpch-1
+          LINGODB_EXECUTION_MODE=BASELINE ./build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpchSf1.test /db/tpch-1
+
           ./build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpcdsSf1.test /db/tpcds-1
+          LINGODB_EXECUTION_MODE=BASELINE ./build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpcdsSf1.test /db/tpcds-1
 
 
   build_lingodb_python:
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-24.04
     container: ghcr.io/lingo-db/lingodb-py-dev:c26a3fc2f7789da61d04b7e416915a530b70db2d
     steps:
@@ -141,6 +159,7 @@ jobs:
         with:
           name: lingodb-python-build
           path: /built-packages
+
   test_lingodb_python:
     needs: build_lingodb_python
     runs-on: ubuntu-24.04

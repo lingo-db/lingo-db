@@ -1,4 +1,5 @@
-// RUN: run-mlir %s | FileCheck %s
+// RUN: env LINGODB_EXECUTION_MODE=DEFAULT run-mlir %s | FileCheck %s
+// RUN: env LINGODB_EXECUTION_MODE=BASELINE run-mlir %s | FileCheck %s
 
 //CHECK: char<1>("A")
 //CHECK: int(10)
