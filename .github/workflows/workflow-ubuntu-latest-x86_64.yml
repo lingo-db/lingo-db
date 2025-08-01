@@ -156,3 +156,32 @@ jobs:
           pip install pandas
           python3 tools/python/test/test.py
           python3 tools/python/test/mlir-construction.py
+  test_standalone:
+    needs: build
+    strategy:
+      matrix:
+        build_type: [ debug]
+    runs-on: ubuntu-24.04
+    container: ghcr.io/lingo-db/lingodb-dev:c26a3fc2f7789da61d04b7e416915a530b70db2d
+    steps:
+      - uses: actions/checkout@master
+      - uses: actions/download-artifact@master
+        with:
+          name: ${{ matrix.build_type }}-build
+          path: build/lingodb-${{ matrix.build_type }}
+      - name: Test
+        run: |
+          REPO_ROOT=$(pwd)
+          git config --global --add safe.directory "$REPO_ROOT"
+          touch build/dependencies
+          touch build/lingodb-${{ matrix.build_type }}/.stamp
+          touch build/lingodb-${{ matrix.build_type }}/.buildstamp
+          chmod +x build/lingodb-${{ matrix.build_type }}/*
+          make DATA_BUILD_TYPE=${{ matrix.build_type }} resources/data/test/.stamp
+          echo "select * from test" > test.sql
+          bash tools/standalone-query/create.sh test.sql resources/data/test build/lingodb-${{ matrix.build_type }} /standalone-dir gh-ci-standalone-test-branch
+          cd /standalone-dir
+          mkdir build && cd build
+          cmake  -DCMAKE_BUILD_TYPE=Release ..
+          cmake --build . -j $(nproc)
+          ./main $REPO_ROOT/resources/data/test
