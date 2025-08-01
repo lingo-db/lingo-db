@@ -83,7 +83,7 @@ struct CppEmitter {
    void* resolveFunction(std::string name) {
       return symbolMap.at(name);
    }
-   explicit CppEmitter(raw_ostream& os, bool declareVariablesAtTop);
+   explicit CppEmitter(raw_ostream& os, bool declareVariablesAtTop, bool leaveFunctionsUnresolved);
 
    /// Emits attribute or returns failure.
    LogicalResult emitAttribute(Location loc, Attribute attr);
@@ -183,6 +183,7 @@ struct CppEmitter {
    /// Returns if all variables for op results and basic block arguments need to
    /// be declared at the beginning of a function.
    bool shouldDeclareVariablesAtTop() { return declareVariablesAtTop; };
+   bool shouldLeaveFunctionsUnresolved() { return leaveFunctionsUnresolved; }
    std::string& getStructDefs() { return structDefs; }
 
    private:
@@ -196,6 +197,7 @@ struct CppEmitter {
    /// arguments are declared at the beginning of the function. This also
    /// includes results from ops located in nested regions.
    bool declareVariablesAtTop;
+   bool leaveFunctionsUnresolved;
 
    /// Map from value to name of C++ variable that contain the name.
    ValueMapper valueMapper;
@@ -843,31 +845,51 @@ LogicalResult printOperation(CppEmitter& emitter, ModuleOp moduleOp) {
 LogicalResult printOperation(CppEmitter& emitter,
                              func::FuncOp functionOp) {
    if (functionOp.getFunctionBody().empty()) {
-      raw_indented_ostream& os = emitter.ostream();
+      if (emitter.shouldLeaveFunctionsUnresolved()) {
+         raw_indented_ostream& os = emitter.ostream();
 
-      if (failed(emitter.emitTypes(functionOp.getLoc(),
-                                   functionOp.getFunctionType().getResults())))
-         return failure();
-      os << "( *" << functionOp.getName();
-      os << ")(";
-      if (failed(interleaveCommaWithError(
-             functionOp.getFunctionType().getInputs(), os,
-             [&](mlir::Type argType) -> LogicalResult {
-                if (failed(emitter.emitType(functionOp.getLoc(), argType)))
-                   return failure();
-                return success();
-             })))
-         return failure();
-      os << ")=(";
-      if (emitter.emitType(functionOp->getLoc(), functionOp.getFunctionType(), os).failed()) {
-         return failure();
+         if (failed(emitter.emitTypes(functionOp.getLoc(),
+                                      functionOp.getFunctionType().getResults())))
+            return failure();
+         os << " " << functionOp.getName() << "(";
+         if (failed(interleaveCommaWithError(
+                functionOp.getFunctionType().getInputs(), os,
+                [&](mlir::Type argType) -> LogicalResult {
+                   if (failed(emitter.emitType(functionOp.getLoc(), argType)))
+                      return failure();
+                   return success();
+                })))
+            return failure();
+         os << ") asm(\""
+            << functionOp.getName() << "\");";
+         return success();
+      } else {
+         raw_indented_ostream& os = emitter.ostream();
+
+         if (failed(emitter.emitTypes(functionOp.getLoc(),
+                                      functionOp.getFunctionType().getResults())))
+            return failure();
+         os << "( *" << functionOp.getName();
+         os << ")(";
+         if (failed(interleaveCommaWithError(
+                functionOp.getFunctionType().getInputs(), os,
+                [&](mlir::Type argType) -> LogicalResult {
+                   if (failed(emitter.emitType(functionOp.getLoc(), argType)))
+                      return failure();
+                   return success();
+                })))
+            return failure();
+         os << ")=(";
+         if (emitter.emitType(functionOp->getLoc(), functionOp.getFunctionType(), os).failed()) {
+            return failure();
+         }
+         os << ")" << emitter.resolveFunction(functionOp.getName().str()) << ";";
+         /*// if (functionOp.getName().starts_with("_Z")) {
+         os << "asm(\"" << functionOp.getName() << "\")";
+         //}
+         os << ";";*/
+         return success();
       }
-      os << ")" << emitter.resolveFunction(functionOp.getName().str()) << ";";
-      /*// if (functionOp.getName().starts_with("_Z")) {
-      os << "asm(\"" << functionOp.getName() << "\")";
-      //}
-      os << ";";*/
-      return success();
    }
    // We need to declare variables at top if the function has multiple blocks.
    if (!emitter.shouldDeclareVariablesAtTop() &&
@@ -957,8 +979,8 @@ LogicalResult printOperation(CppEmitter& emitter,
 }
 } // namespace
 
-CppEmitter::CppEmitter(raw_ostream& os, bool declareVariablesAtTop)
-   : os(os), declareVariablesAtTop(declareVariablesAtTop) {
+CppEmitter::CppEmitter(raw_ostream& os, bool declareVariablesAtTop, bool leaveFunctionsUnresolved)
+   : os(os), declareVariablesAtTop(declareVariablesAtTop), leaveFunctionsUnresolved(leaveFunctionsUnresolved) {
    valueInScopeCount.push(0);
    labelInScopeCount.push(0);
    util::FunctionHelper::visitAllFunctions([&](std::string s, void* ptr) {
@@ -1479,10 +1501,10 @@ LogicalResult CppEmitter::emitTupleType(Location loc, ArrayRef<Type> types,
    return success();
 }
 
-LogicalResult lingodb::execution::emitC(Operation* op, raw_ostream& os, bool declareVariablesAtTop) {
+LogicalResult lingodb::execution::emitC(Operation* op, raw_ostream& os, bool declareVariablesAtTop, bool leaveFunctionsUnresolved) {
    std::string resultingCpp;
    llvm::raw_string_ostream sstream(resultingCpp);
-   CppEmitter emitter(sstream, declareVariablesAtTop);
+   CppEmitter emitter(sstream, declareVariablesAtTop, leaveFunctionsUnresolved);
    if (emitter.emitOperation(*op, /*trailingSemicolon=*/false).failed()) {
       return failure();
    }

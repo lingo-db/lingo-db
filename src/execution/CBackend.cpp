@@ -28,7 +28,7 @@ class DefaultCBackend : public lingodb::execution::ExecutionBackend {
       std::string translatedModule;
       llvm::raw_string_ostream sstream(translatedModule);
 
-      if (lingodb::execution::emitC(moduleOp.getOperation(), sstream, false).failed()) {
+      if (lingodb::execution::emitC(moduleOp.getOperation(), sstream, false, false).failed()) {
          error.emit() << "Can not translate module to c++";
          return;
       }

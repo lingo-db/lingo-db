@@ -1,0 +1,32 @@
+cmake_minimum_required(VERSION 3.13.4)
+project(lingodb-standalone-query LANGUAGES CXX C)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DMLIR_DISABLED")
+
+
+set(CMAKE_CXX_STANDARD 20 CACHE STRING "C++ standard to conform to")
+
+find_package(Arrow 20 REQUIRED)
+find_package(LLVM 20.1 REQUIRED)
+message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
+
+
+
+include_directories(${PROJECT_SOURCE_DIR}/include)
+
+include_directories(${LLVM_INCLUDE_DIRS})
+
+
+include_directories(vendored)
+add_executable(main
+        tools/standalone-query/main.cpp
+        query.cpp
+)
+
+
+add_subdirectory(src/catalog)
+add_subdirectory(src/runtime)
+add_subdirectory(src/utility)
+add_subdirectory(src/scheduler)
+add_library(execution_utils src/execution/ResultProcessor.cpp)
+
+target_link_libraries(main runtime scheduler catalog utility LLVMSupport execution_utils)
