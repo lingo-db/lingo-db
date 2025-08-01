@@ -89,7 +89,6 @@ jobs:
       - name: Test
         run: |
           export ASAN_OPTIONS="detect_leaks=0 detect_container_overflow=0"
-
           touch build/dependencies
           touch build/lingodb-${{ matrix.build_type }}/.stamp
           touch build/lingodb-${{ matrix.build_type }}/.buildstamp
@@ -164,20 +163,21 @@ jobs:
         uses: actions/cache@v3
         with:
           path: ~/datasets/
-          key: datasets-macos
+          key: datasets-macos-with-job
 
       - name: Generate dataset if not cached
         if: steps.cache-datasets.outputs.cache-hit != 'true'
         run: |
           mkdir -p ~/datasets/tpch-1
           mkdir -p ~/datasets/tpcds-1
+          mkdir -p ~/datasets/job
           bash tools/generate/tpch.sh ~/datasets/tpch-1 1
           bash tools/generate/tpcds.sh ~/datasets/tpcds-1 1
+          bash tools/generate/job.sh ~/datasets/job
 
       - name: Load datasets
         run: |
           export BASE_PATH=$(pwd)
-          export ASAN_OPTIONS="detect_leaks=0 detect_container_overflow=0"
           mkdir -p ~/db/tpch-1
           cd ~/datasets/tpch-1
           chmod +x $BASE_PATH/build/lingodb-${{ matrix.build_type }}/sql
@@ -187,11 +187,14 @@ jobs:
           mkdir -p ~/db/tpcds-1
           cd ~/datasets/tpcds-1
           $BASE_PATH/build/lingodb-${{ matrix.build_type }}/sql ~/db/tpcds-1 < $BASE_PATH/resources/sql/tpcds/initialize.sql
-
+          
+          mkdir -p ~/db/job
+          cd ~/datasets/job
+          $BASE_PATH/build/lingodb-${{ matrix.build_type }}/sql ~/db/job < $BASE_PATH/resources/sql/job/initialize.sql
       - name: Test
         run: |
-          export ASAN_OPTIONS="detect_leaks=0 detect_container_overflow=0"
           chmod +x ./build/lingodb-${{ matrix.build_type }}/sqlite-tester
 
           ./build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpchSf1.test ~/db/tpch-1
           ./build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpcdsSf1.test ~/db/tpcds-1
+          ./build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/job.test ~/db/job
