@@ -16,6 +16,7 @@
 #include <iostream>
 #include <random>
 #include <ranges>
+#include <shared_mutex>
 namespace {
 namespace utility = lingodb::utility;
 static utility::Tracer::Event processMorsel("DataSourceIteration", "processMorsel");
@@ -322,26 +323,41 @@ void LingoDBTable::serialize(lingodb::utility::Serializer& serializer) const {
 class BatchesWorkerResvState {
    public:
    size_t batchId;
-   std::mutex mutex;
-   bool hasMore{false};
+   std::shared_mutex mutex;
    size_t resvCursor{0};
    size_t resvId{0};
    size_t unitAmount;
    // workerId steal task from
    size_t stealWorkerId{std::numeric_limits<size_t>::max()};
 
+   bool hasMoreWork() {
+      std::shared_lock<std::shared_mutex> stateLock(this->mutex);
+      return resvCursor < unitAmount;
+   }
+   int fetchAndNextOwn(size_t splitSize, std::atomic<size_t>& startIndex, const std::vector<lingodb::runtime::LingoDBTable::TableChunk>& batches) {
+      std::unique_lock<std::shared_mutex> stateLock(this->mutex);
+      size_t curr = resvCursor++;
+
+      if (curr < unitAmount) {
+         return curr;
+      }
+      //2. if the current worker has no more work locally, try to allocate new work
+      size_t localStartIndex = startIndex.fetch_add(1);
+      if (localStartIndex < batches.size()) {
+         auto& buffer = batches[localStartIndex];
+         unitAmount = (buffer.getNumRows() + splitSize - 1) / splitSize;
+         resvCursor = 1;
+         resvId = 0;
+         batchId = localStartIndex;
+
+         return 0;
+      }
+      return -1;
+   }
    int fetchAndNext() {
-      size_t cur;
-      {
-         std::lock_guard<std::mutex> stateLock(this->mutex);
-         cur = resvCursor;
-         resvCursor++;
-         hasMore = resvCursor < unitAmount;
-      }
-      if (cur >= unitAmount) {
-         return -1;
-      }
-      return cur;
+      std::unique_lock<std::shared_mutex> resvLock(mutex);
+      size_t cur = resvCursor++;
+      return cur >= unitAmount ? -1 : cur;
    }
 };
 
@@ -393,32 +409,16 @@ class ScanBatchesTask : public lingodb::scheduler::TaskWithImplicitContext {
 
       //1. if the current worker has more work locally, do it
       auto* state = workerResvs[lingodb::scheduler::currentWorkerId()].get();
-      auto id = state->fetchAndNext();
+      auto id = state->fetchAndNextOwn(splitSize, startIndex, batches);
       if (id != -1) {
          state->resvId = id;
          return true;
       }
 
-      //2. if the current worker has no more work locally, try to allocate new work
-      size_t localStartIndex = startIndex.fetch_add(1);
-      if (localStartIndex < batches.size()) {
-         auto& buffer = batches[localStartIndex];
-         auto unitAmount = (buffer.getNumRows() + splitSize - 1) / splitSize;
-         {
-            // reset local state
-            std::lock_guard<std::mutex> resetLock(state->mutex);
-            state->hasMore = true;
-            state->resvCursor = 1;
-            state->resvId = 0;
-            state->batchId = localStartIndex;
-            state->unitAmount = unitAmount;
-         }
-         return true;
-      }
       //3. if the current worker has no more work locally and no more work globally, try to steal work from the worker we stole from last time
       if (state->stealWorkerId != std::numeric_limits<size_t>::max()) {
          auto* other = workerResvs[state->stealWorkerId].get();
-         if (other->hasMore) {
+         if (other->hasMoreWork()) {
             auto id = other->fetchAndNext();
             if (id != -1) {
                state->resvId = id;
@@ -432,7 +432,7 @@ class ScanBatchesTask : public lingodb::scheduler::TaskWithImplicitContext {
          // make sure index of worker to steal never exceed worker number limits
          auto idx = (lingodb::scheduler::currentWorkerId() + i) % workerResvs.size();
          auto* other = workerResvs[idx].get();
-         if (other->hasMore) {
+         if (other->hasMoreWork()) {
             auto id = other->fetchAndNext();
             if (id != -1) {
                // only current worker can modify its onw stealWorkerId. no need to lock
