@@ -743,6 +743,7 @@ void awaitEntryTask(std::unique_ptr<Task> task) {
       // wait for all workers to return the task
    }
    // taskWrapper is not used anymore, so we can delete it
+   lk.release();
    delete taskWrapper;
 }
 void awaitChildTask(std::unique_ptr<Task> task) {
