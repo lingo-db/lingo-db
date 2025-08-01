@@ -1,6 +1,10 @@
 #ifndef LINGODB_CATALOG_MLIRTYPES_H
 #define LINGODB_CATALOG_MLIRTYPES_H
-#include "mlir/IR/Types.h"
+#include <memory>
+namespace mlir {
+class Type;
+class MLIRContext;
+} // namespace mlir
 
 namespace lingodb::catalog {
 class IntTypeInfo;

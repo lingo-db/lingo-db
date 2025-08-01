@@ -1,5 +1,6 @@
 #include "lingodb/catalog/MLIRTypes.h"
 #include "../../include/lingodb/catalog/Types.h"
+#ifndef MLIR_DISABLED
 #include "../../include/lingodb/compiler/Dialect/DB/IR/DBTypes.h"
 namespace {
 class BoolTypeCreator : public lingodb::catalog::MLIRTypeCreator {
@@ -109,3 +110,37 @@ std::shared_ptr<MLIRTypeCreator> createStringTypeCreator(std::shared_ptr<catalog
    return std::make_shared<GenericTypeCreator<lingodb::compiler::dialect::db::StringType>>();
 }
 } // namespace lingodb::catalog
+#else
+namespace lingodb::catalog {
+std::shared_ptr<MLIRTypeCreator> createBoolTypeCreator() {
+   return {};
+}
+std::shared_ptr<MLIRTypeCreator> createIntTypeCreator(std::shared_ptr<catalog::IntTypeInfo> info) {
+   return {};
+}
+std::shared_ptr<MLIRTypeCreator> createFloatTypeCreator() {
+   return {};
+}
+std::shared_ptr<MLIRTypeCreator> createDoubleTypeCreator() {
+   return {};
+}
+std::shared_ptr<MLIRTypeCreator> createDecimalTypeCreator(std::shared_ptr<catalog::DecimalTypeInfo> info) {
+   return {};
+}
+std::shared_ptr<MLIRTypeCreator> createDateTypeCreator(std::shared_ptr<catalog::DateTypeInfo> info) {
+   return {};
+}
+std::shared_ptr<MLIRTypeCreator> createTimestampTypeCreator(std::shared_ptr<catalog::TimestampTypeInfo> info) {
+   return {};
+}
+std::shared_ptr<MLIRTypeCreator> createIntervalTypeCreator(std::shared_ptr<catalog::IntervalTypeInfo> info) {
+   return {};
+}
+std::shared_ptr<MLIRTypeCreator> createCharTypeCreator(std::shared_ptr<catalog::CharTypeInfo> info) {
+   return {};
+}
+std::shared_ptr<MLIRTypeCreator> createStringTypeCreator(std::shared_ptr<catalog::StringTypeInfo> info) {
+   return {};
+}
+}
+#endif

@@ -47,6 +47,7 @@ void LingoDBHashIndex::rawBuild() {
 }
 
 void LingoDBHashIndex::rawInsert(size_t startRowId, std::shared_ptr<arrow::Table> t) {
+#ifndef MLIR_DISABLED
    if (t->num_rows() == 0) {
       throw std::runtime_error("empty table");
    } else {
@@ -80,6 +81,9 @@ void LingoDBHashIndex::rawInsert(size_t startRowId, std::shared_ptr<arrow::Table
          entry->next = nullptr;
       }
    }
+#else
+   assert(false && "LingoDBHashIndex::rawInsert not supported without MLIR");
+#endif
 }
 
 void LingoDBHashIndex::flush() {
