@@ -4,15 +4,30 @@ import sys
 def convert_markdown_to_html(input_file, output_file):
     # Read the input file
     with open(input_file, 'r') as file:
-        lines = file.readlines()
-
+        raw_lines = file.readlines()
+    # Make sure that {{% markdown %}} and {{% /markdown %}} are not in the same line, split them if necessary
+    # also: nothing should be after {{% markdown %}} and before {{% /markdown %}} in the same line
+    fixed_lines = []
+    for line in raw_lines:
+        if "{{% markdown %}}" in line and "{{% /markdown %}}" in line:
+            parts = line.split("{{% markdown %}}")
+            fixed_lines.append(parts[0] + "{{% markdown %}}")
+            for part in parts[1:]:
+                if "{{% /markdown %}}" in part:
+                    sub_parts = part.split("{{% /markdown %}}")
+                    fixed_lines.append("{{% markdown %}}".join(sub_parts[:-1]))
+                    fixed_lines.append("{{% /markdown %}}" + sub_parts[-1])
+                else:
+                    fixed_lines.append(part)
+        else:
+            fixed_lines.append(line)
     in_markdown_block = False
     output_lines = []
     current_block = []
 
     # Iterate through each line in the input file
-    for line in lines:
-        if line.strip() =="[TOC]":
+    for line in fixed_lines:
+        if line.strip() == "[TOC]":
             # Skip the [TOC] line
             continue
         # Check if we are entering a markdown block
