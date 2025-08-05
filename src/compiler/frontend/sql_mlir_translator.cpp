@@ -1108,7 +1108,7 @@ mlir::Value SQLMlirTranslator::translateTableRef(mlir::OpBuilder& builder, std::
 
          return translated;
       }
-      case ast::TableReferenceType::EXPRESSION_LIST: {
+      case ast::TableReferenceType::BOUND_EXPRESSION_LIST: {
          auto expressionList = std::static_pointer_cast<ast::BoundExpressionListRef>(tableRef);
          std::vector<mlir::Attribute> rows;
          for (auto row : expressionList->values) {
@@ -1152,6 +1152,7 @@ mlir::Value SQLMlirTranslator::translateTableRef(mlir::OpBuilder& builder, std::
          auto translated = builder.create<relalg::ConstRelationOp>(builder.getUnknownLoc(), builder.getArrayAttr(attributes), builder.getArrayAttr(rows));
          return translated;
       }
+
       default:
          error("Not implemented", tableRef->loc);
    }
