@@ -11,7 +11,8 @@ class GroupByNode : public AstNode {
    public:
    GroupByNode() : AstNode(NodeType::GROUP_BY) {};
    //! The total set of all group expressions
-   std::vector<std::shared_ptr<ParsedExpression>> group_expressions;
+   //TODO
+   std::vector<std::shared_ptr<ParsedExpression>> groupByExpressions;
 
    std::vector<std::set<size_t>> groupingSet;
 
