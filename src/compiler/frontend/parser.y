@@ -209,8 +209,8 @@
 %token		FORMAT_LA NOT_LA NULLS_LA WITH_LA WITHOUT_LA
 %type <std::vector<std::shared_ptr<lingodb::ast::AstNode>>> stmtmulti
 %type <std::shared_ptr<lingodb::ast::AstNode>> toplevel_stmt stmt 
-%type <std::shared_ptr<lingodb::ast::TableProducer>> select_no_parens SelectStmt  select_with_parens PreparableStmt common_table_expr cte_list with_clause 
-%type <std::shared_ptr<lingodb::ast::QueryNode>> simple_select select_clause
+%type <std::shared_ptr<lingodb::ast::TableProducer>>  SelectStmt   PreparableStmt
+%type <std::shared_ptr<lingodb::ast::QueryNode>> simple_select select_clause select_no_parens with_clause select_with_parens cte_list common_table_expr
 
 %type<std::vector<std::shared_ptr<lingodb::ast::ParsedExpression>>> target_list group_by_list func_arg_list func_arg_list_opt 
                                                                     extract_list expr_list substr_list distinct_clause
@@ -320,9 +320,13 @@
 %left		AND
 %right		NOT
 %nonassoc	IS ISNULL NOTNULL	/* IS sets precedence for IS NULL, etc */
-%nonassoc	GREATER LESS EQUAL LESS_EQUAL GREATER_EQUAL NOT_EQUAL
+%nonassoc	GREATER LESS EQUAL   NOT_EQUAL
 %nonassoc	BETWEEN IN_P LIKE ILIKE SIMILAR NOT_LA
 %nonassoc	ESCAPE			/* ESCAPE must be just above LIKE/ILIKE/SIMILAR */
+
+%left QUAL_OP        // lowest
+%left  LESS_EQUAL GREATER_EQUAL
+
 
 
 %nonassoc	UNBOUNDED NESTED /* ideally would have same precedence as IDENT */
@@ -443,7 +447,7 @@ select_no_parens:
         current->child = $select_clause;
         $$ = $with_clause;
     }
-    | values_clause	{ $$ = $1; }
+    //| values_clause	{ $$ = $1; }
     | with_clause select_clause opt_sort_clause  opt_select_limit
     {
         if ($opt_sort_clause.has_value()) {
@@ -465,7 +469,7 @@ select_no_parens:
     }
     //TODO | with_clause select_clause opt_sort_clause select_limit opt_for_locking_clause
     //PIPE:
-    | from_clause 
+   /* | from_clause 
      {
         
         $$ = $from_clause;
@@ -487,7 +491,7 @@ select_no_parens:
         $$ = $pipe_operator;
         
     }
-    ;
+    ;*/
 pipe_start:
     | from_clause 
      {
@@ -502,7 +506,7 @@ pipe_start:
     ;
 select_clause: 
     simple_select {$$ = $1;}
-    | select_with_parens {}
+    | select_with_parens {$$=$1;}
     ;
 
 
@@ -751,7 +755,7 @@ group_clause:
     GROUP_P BY set_quantifier group_by_list
     {
         auto node = mkNode<lingodb::ast::GroupByNode>(@$);
-        node->group_expressions = $group_by_list;
+        node->groupByExpressions = $group_by_list;
         $$ = node;
         //TODO Support set_quantifier
     }
@@ -759,7 +763,7 @@ group_clause:
     | GROUP_P BY set_quantifier rollup_clause %prec ROLLUP_PRIORITY
     {
         auto node = mkNode<lingodb::ast::GroupByNode>(@$);
-        node->group_expressions = $rollup_clause;
+        node->groupByExpressions = $rollup_clause;
         node->rollup = true;
         $$ = node;
     }
@@ -912,6 +916,9 @@ opt_nowait_or_skip:
 join_type: 
     FULL
     | FULL OUTER_P
+    {
+        $$ = lingodb::ast::JoinType::FULL;
+    }
     | LEFT OUTER_P 
     {
         $$ = lingodb::ast::JoinType::LEFT;
@@ -1111,15 +1118,17 @@ TODO
 */
 a_expr: 
     c_expr { $$ = $c_expr;}
-   //TODO | a_expr TYPECAST Type
+   
     //TODO | a-expr COLLATE any_name
     //TODO | a_expr AT TIME ZONE a_expr
     //TODO | a_expr AT LOCAL
-    | PLUS a_expr
-    | MINUS a_expr
     | a_expr PLUS a_expr
     {
         $$ = mkNode<lingodb::ast::OperatorExpression>(@$, lingodb::ast::ExpressionType::OPERATOR_PLUS, $1,$3);
+    }
+    | a_expr[e] TYPECAST Type
+    {
+     $$ = mkNode<lingodb::ast::CastExpression>(@$, $Type, $e);
     }
     | a_expr MINUS a_expr
     {
@@ -1231,7 +1240,8 @@ a_expr:
     {
         $$ = mkNode<lingodb::ast::OperatorExpression>(@$, lingodb::ast::ExpressionType::OPERATOR_IS_NOT_NULL, $1);
     }
-    | a_expr[left] qual_Op a_expr[right] {
+    | a_expr[left] qual_Op a_expr[right] %prec QUAL_OP
+    {
         $$ = mkNode<lingodb::ast::OperatorExpression>(@$, $2, $left, $right);
     }
     ;
@@ -2850,7 +2860,7 @@ SignedIconst:
     
         $$=$Iconst;
     }
-    | MINUS Iconst
+    | MINUS Iconst %prec UMINUS
     {
         std::static_pointer_cast<lingodb::ast::IntValue>(std::static_pointer_cast<lingodb::ast::ConstantExpression>($Iconst)->value)->iVal = -std::static_pointer_cast<lingodb::ast::IntValue>(std::static_pointer_cast<lingodb::ast::ConstantExpression>($Iconst)->value)->iVal;
         $$=$Iconst;
