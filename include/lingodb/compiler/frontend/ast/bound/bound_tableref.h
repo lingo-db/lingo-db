@@ -78,7 +78,7 @@ class BoundSubqueryRef : public BoundTableRef {
 
 class BoundExpressionListRef : public BoundTableRef {
    public:
-   static constexpr TableReferenceType TYPE = TableReferenceType::EXPRESSION_LIST;
+   static constexpr TableReferenceType TYPE = TableReferenceType::BOUND_EXPRESSION_LIST;
    BoundExpressionListRef(std::vector<std::vector<std::shared_ptr<BoundConstantExpression>>> values, std::vector<std::shared_ptr<NamedResult>> namedResultsEntries);
 
    //! The expressions in the list
