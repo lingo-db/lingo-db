@@ -33,7 +33,8 @@ enum class TableReferenceType : uint8_t {
    PIVOT = 9, // pivot statement
    SHOW_REF = 10, // SHOW statement
    COLUMN_DATA = 11, // column data collection
-   DELIM_GET = 12 // Delim get ref
+   DELIM_GET = 12, // Delim get ref
+   BOUND_EXPRESSION_LIST = 13,
 };
 class TableDescription {
    public:

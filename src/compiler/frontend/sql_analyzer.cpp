@@ -142,6 +142,11 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                setOperationNode->modifiers.clear();
                return transformed;
             }
+            case ast::QueryNodeType::VALUES: {
+               auto valuesNode = std::static_pointer_cast<ast::ValuesQueryNode>(queryNode);
+               valuesNode->expressionListRef = canonicalizeCast<ast::ExpressionListRef>(valuesNode->expressionListRef, context);
+               return valuesNode;
+            }
             default: error("Not implemented", queryNode->loc);
          }
       }
@@ -697,36 +702,13 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableProducer(std::
                context->currentScope->targetInfo.targetColumns = newTargetInfos;
                auto boundSetOperationNode = drv.nf.node<ast::BoundSetOperationNode>(setOperationNode->loc, setOperationNode->alias, setOperationNode->setType, setOperationNode->setOpAll, boundLeft, boundRight, leftScope, rightScope);
                return boundSetOperationNode;
-
-               /* auto t = std::dynamic_pointer_cast<ast::TableProducer>(pipeOperator->node);
-                if (t == nullptr) {
-                    error("Pipe operator node for union is not a table producer", pipeOperator->loc);
-                }
-                auto unionContext = std::make_shared<SQLContext>();
-                unionContext->catalog = context->catalog;
-                unionContext->pushNewScope();
-                auto scope = unionContext->createResolverScope();
-                boundAstNode = analyzeTableProducer(t, unionContext, scope);
-                auto rightTargetInfo = unionContext->currentScope->targetInfo;
-                auto leftTargetInfo = context->currentScope->targetInfo;
-                if (rightTargetInfo.targetColumns.size() != leftTargetInfo.targetColumns.size()) {
-                    error("Right and left child of union must have same amount of columns", pipeOperator->loc);
-                }
-                auto newScope = context->getUniqueScope("setop");
-                auto boundSetPipeOp = drv.nf.node<ast::BoundSetPipeOperator>(pipeOperator->loc, pipeOperator->pipeOpType, t, pipeOperator->input);
-                boundSetPipeOp->rightScope = unionContext->currentScope;
-                boundSetPipeOp->leftScope = context->currentScope;
-
-                std::vector<std::shared_ptr<ast::NamedResult>> newTargetInfos;
-                for (auto n : context->currentScope->targetInfo.targetColumns) {
-                    auto newNamedResult = std::make_shared<ast::NamedResult>(n->type, newScope, n->resultType, n->name );
-                    newNamedResult->displayName = n->displayName;
-                    newTargetInfos.emplace_back(newNamedResult);
-                }
-
-                context->mapAttribute(resolverScope, pipeOperator->alias.empty() ? context->getUniqueScope("union") : pipeOperator->alias, newTargetInfos);
-                context->currentScope->targetInfo.targetColumns = newTargetInfos;
-                pipeOperator = boundSetPipeOp;*/
+            }
+            case ast::QueryNodeType::VALUES: {
+               auto valuesNode = std::static_pointer_cast<ast::ValuesQueryNode>(queryNode);
+               assert(valuesNode->expressionListRef);
+               auto boundExpressionListRef = analyzeTableRef(valuesNode->expressionListRef, context, resolverScope);
+               assert(std::static_pointer_cast<ast::TableProducer>(boundExpressionListRef)->nodeType == ast::NodeType::BOUND_TABLE_REF && std::static_pointer_cast<ast::TableRef>(boundExpressionListRef)->type == ast::TableReferenceType::BOUND_EXPRESSION_LIST);
+               return drv.nf.node<ast::BoundValuesQueryNode>(valuesNode->loc, valuesNode->alias, std::static_pointer_cast<ast::BoundExpressionListRef>(boundExpressionListRef));
             }
 
             default: throw std::runtime_error("Not implemented");
@@ -805,11 +787,14 @@ std::shared_ptr<ast::BoundInsertNode> SQLQueryAnalyzer::analyzeInsertNode(std::s
    }
    auto boundTableProducer = analyzeTableProducer(insertNode->producer, context, resolverScope);
    //TODO Maybe add BoundTableProducer which has a produced columns and their type
-   if (boundTableProducer->nodeType != ast::NodeType::BOUND_TABLE_REF || std::static_pointer_cast<ast::BoundTableRef>(boundTableProducer)->type != ast::TableReferenceType::EXPRESSION_LIST) {
+   if (boundTableProducer->nodeType != ast::NodeType::QUERY_NODE || std::static_pointer_cast<ast::QueryNode>(boundTableProducer)->type != ast::QueryNodeType::BOUND_VALUES) {
       error("Table producer type for insert node not yet supported", boundTableProducer->loc);
    }
+   if (!std::static_pointer_cast<ast::BoundValuesQueryNode>(boundTableProducer)->modifiers.empty()) {
+      error("Modifiers for insert node not yet supported", boundTableProducer->loc);
+   }
 
-   auto exprListTableRef = std::static_pointer_cast<ast::BoundExpressionListRef>(boundTableProducer);
+   auto exprListTableRef = std::static_pointer_cast<ast::BoundValuesQueryNode>(boundTableProducer)->expressionListRef;
    auto rel = maybeRel.value();
    std::unordered_map<std::string, catalog::NullableType> allCollumnTypes;
    //Check for correct Type

@@ -246,7 +246,8 @@
 */
 %type<std::shared_ptr<lingodb::ast::ParsedExpression>> columnref indirection indirection_el
 
-%type<std::shared_ptr<lingodb::ast::TableRef>> from_clause opt_from_clause table_ref from_list joined_table values_clause
+%type<std::shared_ptr<lingodb::ast::TableRef>> from_clause opt_from_clause table_ref from_list joined_table
+%type<std::shared_ptr<lingodb::ast::ExpressionListRef>>  values_clause
 
 %type<std::string>  ColId ColLabel BareColLabel attr_name 
                     qualified_name relation_expr alias_clause opt_alias_clause 
@@ -447,7 +448,10 @@ select_no_parens:
         current->child = $select_clause;
         $$ = $with_clause;
     }
-    //| values_clause	{ $$ = $1; }
+    | values_clause	
+    { 
+        $$ = mkNode<lingodb::ast::ValuesQueryNode>(@$, $1);
+    }
     | with_clause select_clause opt_sort_clause  opt_select_limit
     {
         if ($opt_sort_clause.has_value()) {
