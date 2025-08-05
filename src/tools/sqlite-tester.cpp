@@ -1,6 +1,7 @@
 #include "lingodb/compiler/mlir-support/eval.h"
 #include "lingodb/execution/Execution.h"
 #include "lingodb/runtime/ArrowTable.h"
+#include "lingodb/utility/Setting.h"
 
 #include <arrow/array.h>
 #include <arrow/pretty_print.h>
@@ -14,6 +15,7 @@
 #include "md5.h"
 
 namespace {
+lingodb::utility::GlobalSetting<bool> verbose("system.sqlite_tester.verbose", true);
 using namespace lingodb;
 enum SortMode {
    NONE,
@@ -361,7 +363,9 @@ void runQuery(runtime::Session& session, const std::vector<std::string>& lines, 
    resultHasher->sortMode = sort;
    resultHasher->tsv = tsv;
    queryExecutionConfig->resultProcessor = std::move(resultHasher);
-   std::cerr << "executing:" << description << std::endl;
+   if (verbose.getValue()) {
+      std::cerr << "executing:" << description << std::endl;
+   }
 
    auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), session);
    executer->fromData(query);

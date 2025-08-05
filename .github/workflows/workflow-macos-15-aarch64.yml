@@ -125,6 +125,7 @@ jobs:
       - name: Test
         run: |
           export ASAN_OPTIONS="detect_leaks=0 detect_container_overflow=0"
+          export LINGODB_SQLITE_TESTER_VERBOSE=false
           touch build/dependencies
           touch build/lingodb-${{ matrix.build_type }}/.stamp
           touch build/lingodb-${{ matrix.build_type }}/.buildstamp
