@@ -2,6 +2,8 @@
 namespace lingodb::ast {
 ExtendNode::ExtendNode() : AstNode(NodeType::EXTEND_NODE) {
 }
+ExtendNode::ExtendNode(bool hidden) : AstNode(NodeType::EXTEND_NODE), hidden(hidden) {
+}
 
 std::string ExtendNode::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    std::string dot;
@@ -10,7 +12,9 @@ std::string ExtendNode::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    std::string nodeId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(this)));
 
    // Create the ExtendNode label
-   dot += nodeId + " [label=\"ExtendNode\"];\n";
+   dot += nodeId + " [label=\"ExtendNode";
+   dot+= hidden ? " (hidden)" : "";
+   dot+="\"];\n";
 
    // Add all extension expressions if present
    for (size_t i = 0; i < extensions.size(); ++i) {
