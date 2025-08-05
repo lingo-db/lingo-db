@@ -154,6 +154,7 @@ boolean [fF][aA][lL][sS][eE]
 ">"             { return lingodb::parser::make_GREATER(loc); }
 "#"             { return lingodb::parser::make_YYEOF(loc);}
 "|>"            { return lingodb::parser::make_PIPE(loc); }
+"::"            { return lingodb::parser::make_TYPECAST(loc); }	      
 {newline}              { loc.lines();}
 
 [aA][lL][lL]                          { MAKE_KEYWORD(ALL); }
@@ -285,6 +286,25 @@ boolean [fF][aA][lL][sS][eE]
 }
 {operator} {
   std::string ident(yytext);
+
+  /*
+   * For SQL compatibility multi char operators cannot end with '+' and '-'. 
+   * They should be parsed as two tokens
+  */
+  //Remove '+' and '-' at the end if necessary
+  while(ident[ident.length() - 1] == '-' || ident[ident.length() - 1] == '+') {
+    ident.erase(ident.length() - 1);
+  }
+  yyless(ident.length());
+  
+  if(ident == "<=") {
+    return lingodb::parser::make_LESS_EQUAL(loc);
+  } else if(ident == "<>") {
+    return lingodb::parser::make_NOT_EQUAL(loc);
+  } else if(ident == ">=") {
+    return lingodb::parser::make_GREATER_EQUAL(loc);
+  }
+
   return lingodb::parser::make_Op(std::move(ident), loc);
 }
 %%

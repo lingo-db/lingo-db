@@ -37,11 +37,11 @@ std::string GroupByNode::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    dot.append("\"];\n");
 
    // Add all group expressions
-   for (size_t i = 0; i < group_expressions.size(); ++i) {
-      if (group_expressions[i]) {
+   for (size_t i = 0; i < groupByExpressions.size(); ++i) {
+      if (groupByExpressions[i]) {
          std::string exprId;
          exprId.append("node");
-         exprId.append(std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(group_expressions[i].get()))));
+         exprId.append(std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(groupByExpressions[i].get()))));
 
          // Create edge from group by to this expression
          dot.append(nodeId);
@@ -52,7 +52,7 @@ std::string GroupByNode::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
          dot.append("\"];\n");
 
          // Add the expression's graph representation
-         dot.append(group_expressions[i]->toDotGraph(depth + 1, idGen));
+         dot.append(groupByExpressions[i]->toDotGraph(depth + 1, idGen));
       }
    }
 

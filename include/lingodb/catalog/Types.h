@@ -90,6 +90,7 @@ class NullableType {
    Type type;
    std::shared_ptr<NullableType> castType = nullptr;
    bool isNullable;
+   bool useZeroInsteadOfNull = false;
    mlir::Type toMlirType(mlir::MLIRContext* context) const;
    mlir::Value castValueToThisType(mlir::OpBuilder& builder, mlir::Value valueToCast, bool valueNullable) const;
    mlir::Value castValue(mlir::OpBuilder& builder, mlir::Value valueToCast) const;
