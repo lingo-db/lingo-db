@@ -93,6 +93,7 @@ enum class JoinType : uint8_t {
    RIGHT_ANTI = 10, // RIGHT ANTI join is created by the optimizer when the children of an anti join need to be
    // switched so that the build side can be the smaller table
    CROSS = 11, // CROSS join is a special case of INNER JOIN where no condition is specified
+   FULL = 12,
 };
 using jointCondOrUsingCols = std::variant<std::shared_ptr<ParsedExpression>, std::vector<std::shared_ptr<ColumnRefExpression>>>;
 class JoinRef : public TableRef {

@@ -679,6 +679,14 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
 
                //TODO use zero instead of null
                mlir::Value scalarValue = builder.create<relalg::GetScalarOp>(builder.getUnknownLoc(), resType, subquery->namedResult.value()->createRef(builder, attrManager), translatedSubquery);
+               if (subquery->namedResult.value()->resultType.useZeroInsteadOfNull) {
+                  mlir::Value isNull = builder.create<db::IsNullOp>(builder.getUnknownLoc(), scalarValue);
+                  mlir::Value nonNullValue = builder.create<db::NullableGetVal>(builder.getUnknownLoc(), scalarValue);
+                  mlir::Value defaultValue = builder.create<db::ConstantOp>(builder.getUnknownLoc(), getBaseType(scalarValue.getType()), builder.getIntegerAttr(getBaseType(scalarValue.getType()), 0));
+                  return builder.create<mlir::arith::SelectOp>(builder.getUnknownLoc(), isNull, defaultValue, nonNullValue);
+               } else {
+                  return scalarValue;
+               }
                return scalarValue;
             }
             case ast::SubqueryType::ANY:
@@ -885,8 +893,9 @@ mlir::Value SQLMlirTranslator::translateWhenCheks(mlir::OpBuilder& builder, std:
 
    auto condTranslated = translateExpression(builder, check.whenExpr, context);
    //TODO fix
-   //condTranslated = check.whenExpr->resultType->castValue(builder, condTranslated);
+
    if (caseExprTranslated.has_value()) {
+      condTranslated = check.whenExpr->resultType->castValue(builder, condTranslated);
       caseExprTranslated = boundCase->caseExpr.value()->resultType->castValue(builder, caseExprTranslated.value());
       condTranslated = builder.create<db::CmpOp>(builder.getUnknownLoc(), db::DBCmpPredicate::eq, condTranslated, caseExprTranslated.value());
    }
@@ -1045,7 +1054,7 @@ mlir::Value SQLMlirTranslator::translateTableRef(mlir::OpBuilder& builder, std::
                static size_t i = 0;
                std::ranges::transform(boundJoin->outerJoinMapping, std::back_inserter(outerJoinMapping), [&](std::pair<std::string, std::shared_ptr<ast::NamedResult>> scopeAndNamedResult) {
                   i++;
-                  std::cout << "Add to mapping: " << scopeAndNamedResult.second->scope << "," << scopeAndNamedResult.second->name << "from existing: " << scopeAndNamedResult.first << "," << scopeAndNamedResult.second->name << std::endl;
+                  //TODO DEBUG std::cout << "Add to mapping: " << scopeAndNamedResult.second->scope << "," << scopeAndNamedResult.second->name << "from existing: " << scopeAndNamedResult.first << "," << scopeAndNamedResult.second->name << std::endl;
 
                   auto attrDef = scopeAndNamedResult.second->createDef(builder, attrManager, builder.getArrayAttr({attrManager.createRef(scopeAndNamedResult.first, scopeAndNamedResult.second->name)}));
 
@@ -1058,7 +1067,31 @@ mlir::Value SQLMlirTranslator::translateTableRef(mlir::OpBuilder& builder, std::
                join.getPredicate().push_back(pred);
                return join;
             }
-            case ast::JoinType::OUTER: {
+            case ast::JoinType::FULL: {
+               mlir::Block* pred;
+               if (!std::holds_alternative<std::shared_ptr<ast::BoundExpression>>(boundJoin->condition)) {
+                  error("Not implemented", tableRef->loc);
+               }
+
+               pred = translatePredicate(builder, std::get<std::shared_ptr<ast::BoundExpression>>(boundJoin->condition), context);
+
+               std::vector<mlir::Attribute> outerJoinMapping{};
+               static size_t i = 0;
+               std::ranges::transform(boundJoin->outerJoinMapping, std::back_inserter(outerJoinMapping), [&](std::pair<std::string, std::shared_ptr<ast::NamedResult>> scopeAndNamedResult) {
+                  i++;
+                  //TODO DEBUG std::cout << "Add to mapping: " << scopeAndNamedResult.second->scope << "," << scopeAndNamedResult.second->name << "from existing: " << scopeAndNamedResult.first << "," << scopeAndNamedResult.second->name << std::endl;
+
+                  auto attrDef = scopeAndNamedResult.second->createDef(builder, attrManager, builder.getArrayAttr({attrManager.createRef(scopeAndNamedResult.first, scopeAndNamedResult.second->name)}));
+
+                  return attrDef;
+               });
+
+               mlir::ArrayAttr mapping = builder.getArrayAttr(outerJoinMapping);
+
+               auto join = builder.create<relalg::FullOuterJoinOp>(builder.getUnknownLoc(), tuples::TupleStreamType::get(builder.getContext()), left, right, mapping);
+               join.getPredicate().push_back(pred);
+               return join;
+
             }
             default: error("Not implemented", tableRef->loc);
          }
@@ -1143,8 +1176,8 @@ mlir::Value SQLMlirTranslator::translateSetOperation(mlir::OpBuilder& builder, s
    rightMapBuilder.setInsertionPointToStart(rightMapBlock);
    leftMapBlock->addArgument(tuples::TupleType::get(builder.getContext()), builder.getUnknownLoc());
    rightMapBlock->addArgument(tuples::TupleType::get(builder.getContext()), builder.getUnknownLoc());
-   auto leftMapScope = attrManager.getUniqueScope("map");
-   auto rightMapScope = attrManager.getUniqueScope("map");
+   auto leftMapScope = attrManager.getUniqueScope("setMap");
+   auto rightMapScope = attrManager.getUniqueScope("setMap");
    std::vector<mlir::Attribute> createdColsLeft;
    std::vector<mlir::Attribute> createdColsRight;
    mlir::Value leftTuple = leftMapBlock->getArgument(0);
@@ -1163,7 +1196,7 @@ mlir::Value SQLMlirTranslator::translateSetOperation(mlir::OpBuilder& builder, s
 
          createdColsRight.push_back(attrDef);
          mlir::Value expr = rightMapBuilder.create<tuples::GetColumnOp>(rightMapBuilder.getUnknownLoc(), attrRef.getColumn().type, attrRef, rightTuple);
-         rightMapResults.push_back(rightResult->resultType.castValue(rightMapBuilder, expr));
+         rightMapResults.push_back(commonType.castValueToThisType(rightMapBuilder, expr,   rightResult->resultType.isNullable));
          rightResult->resultType = commonType;
          rightResult->scope = rightMapScope;
          rightResult->name = "set_op" + std::to_string(i);
@@ -1174,7 +1207,7 @@ mlir::Value SQLMlirTranslator::translateSetOperation(mlir::OpBuilder& builder, s
 
          createdColsLeft.push_back(attrDef);
          mlir::Value expr = leftMapBuilder.create<tuples::GetColumnOp>(leftMapBuilder.getUnknownLoc(), attrRef.getColumn().type, attrRef, leftTuple);
-         leftMapResults.push_back(leftResult->resultType.castValue(leftMapBuilder, expr));
+         leftMapResults.push_back(commonType.castValueToThisType(leftMapBuilder, expr,  leftResult->resultType.isNullable));
          leftResult->resultType = commonType;
          leftResult->scope = leftMapScope;
          leftResult->name = "set_op" + std::to_string(i);
@@ -1232,11 +1265,7 @@ mlir::Value SQLMlirTranslator::translateAggregationFunction(mlir::OpBuilder& bui
    attrDef = aggrFunction->namedResult.value()->createDef(builder, attrManager);
    if (aggrFuncName == "COUNT*") {
       expr = functionBuilder.create<relalg::CountRowsOp>(builder.getUnknownLoc(), builder.getI64Type(), relation);
-      //TODO not star
-      //TODO use zero instead of null
-      /*if (groupByAttrs.empty()) {
-               context.useZeroInsteadNull.insert(&attrDef.getColumn());
-            }*/
+
    } else if (aggrFuncName == "RANK" || aggrFuncName == "ROW_NUMBER") {
       expr = functionBuilder.create<relalg::RankOp>(builder.getUnknownLoc(), builder.getI64Type(), relation);
    } else {
