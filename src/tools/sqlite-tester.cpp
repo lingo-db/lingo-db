@@ -419,6 +419,7 @@ int main(int argc, char** argv) {
          line += 2;
       }
    }
+   std::cout<<"Done!"<<std::endl;
 
    return 0;
 }
