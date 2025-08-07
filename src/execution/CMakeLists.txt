@@ -22,7 +22,7 @@ endif (ENABLE_GPU_BACKEND)
 
 add_library(runner ${EXECUTION_FILES})
 llvm_update_compile_flags(runner)
-target_link_libraries(runner PRIVATE ${LIBS} MLIRSQLFrontend utility PUBLIC pg_query::pg_query)
+target_link_libraries(runner PRIVATE ${LIBS} MLIRSQLFrontend sql-frontend-new utility PUBLIC pg_query::pg_query)
 set(COMPILE_DEFS "SOURCE_DIR=\"${CMAKE_SOURCE_DIR}\"")
 if (ENABLE_BASELINE_BACKEND)
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/baseline ${CMAKE_CURRENT_BINARY_DIR}/baseline)
