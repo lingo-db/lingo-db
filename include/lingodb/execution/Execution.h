@@ -104,6 +104,7 @@ enum class ExecutionMode {
    BASELINE_SPEED = 10, // like baseline, but like SPEED without verification
 };
 std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(ExecutionMode runMode, bool sqlInput);
+std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfigWithNewFrontend(execution::ExecutionMode runMode, bool sqlInput);
 ExecutionMode getExecutionMode();
 
 class QueryExecuter {
