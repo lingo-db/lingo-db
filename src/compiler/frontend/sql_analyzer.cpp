@@ -77,9 +77,7 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
 
 
 
-               auto extendPipeOpBeforeResultModifier = drv.nf.node<ast::PipeOperator>(selectNode->loc, ast::PipeOperatorType::EXTEND, context->currentScope->extendNodeBeforeOrderBy);
-               extendPipeOpBeforeResultModifier->input = transformed;
-               transformed = extendPipeOpBeforeResultModifier;
+
                //Transform target selection
                std::shared_ptr<ast::PipeOperator> transformedSelect = nullptr;
                if (selectNode->select_list) {
@@ -97,6 +95,10 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                   transformed = transformedHaving;
                   selectNode->having = nullptr;
                }
+
+               auto extendPipeOpBeforeResultModifier = drv.nf.node<ast::PipeOperator>(selectNode->loc, ast::PipeOperatorType::EXTEND, context->currentScope->extendNodeBeforeOrderBy);
+               extendPipeOpBeforeResultModifier->input = transformed;
+               transformed = extendPipeOpBeforeResultModifier;
 
 
 
