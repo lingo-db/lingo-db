@@ -296,6 +296,26 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
       case ast::ExpressionClass::SUBQUERY: {
          auto subqueryExpr = std::static_pointer_cast<ast::SubqueryExpression>(rootNode);
          subqueryExpr->subquery = canonicalizeCast<ast::TableProducer>(subqueryExpr->subquery, std::make_shared<ASTTransformContext>());
+         std::string alias = subqueryExpr->alias.empty() ? "" : subqueryExpr->alias;
+         if (extend) {
+            auto find = context->currentScope->groupedByExpressions.find(subqueryExpr);
+            if (find == context->currentScope->groupedByExpressions.end()) {
+               if (subqueryExpr->alias.empty()) {
+                  subqueryExpr->alias = "op_" + std::to_string(i);
+               }
+               i++;
+               extendNode->extensions.push_back(subqueryExpr);
+            } else {
+               subqueryExpr->alias = find->get()->alias;
+            }
+
+
+            auto columnRef = drv.nf.node<ast::ColumnRefExpression>(subqueryExpr->loc, subqueryExpr->alias);
+            columnRef->alias = alias;
+            return columnRef;
+
+         }
+
          return subqueryExpr;
       }
       case ast::ExpressionClass::OPERATOR: {
@@ -1139,10 +1159,15 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                case ast::ExpressionClass::BOUND_CONSTANT:
                case ast::ExpressionClass::BOUND_OPERATOR:
                case ast::ExpressionClass::BOUND_CAST:
+               case ast::ExpressionClass::BOUND_SUBQUERY:
                case ast::ExpressionClass::BOUND_CASE: {
                   assert(parsedExpression->resultType.has_value());
                   auto scope = parsedExpression->alias.empty() ? parsedExpression->alias : createTmpScope();
-                  auto n = std::make_shared<ast::NamedResult>(ast::NamedResultType::EXPRESSION, scope, parsedExpression->resultType.value(), createTmpScope());
+                  auto resultType = parsedExpression->resultType.value();
+                  if (resultType.useZeroInsteadOfNull) {
+                     resultType.isNullable = false;
+                  }
+                  auto n = std::make_shared<ast::NamedResult>(ast::NamedResultType::EXPRESSION, scope, resultType , createTmpScope());
                   n->displayName = parsedExpression->alias.empty() ? "" : parsedExpression->alias;
                   context->mapAttribute(resolverScope, parsedExpression->alias.empty() ? n->name : parsedExpression->alias, n);
                   if (extendNode->hidden) {
@@ -1158,6 +1183,8 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                   parsedExpression->namedResult = n;
                   break;
                }
+
+
                default: error("Extend: Not implemented", parsedExpression->loc);
             }
          }
