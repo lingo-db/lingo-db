@@ -173,6 +173,35 @@ std::string ConjunctionExpression::toDotGraph(uint32_t depth, NodeIdGenerator& i
 
    return dot;
 }
+size_t ConjunctionExpression::hash() {
+   size_t result = ParsedExpression::hash();
+   // Hash all children expressions using built-in hash combine
+   for (const auto& child : children) {
+      result ^= child->hash() + 0x9e3779b9 + (result << 6) + (result >> 2);
+   }
+   return result;
+}
+
+bool ConjunctionExpression::operator==(ParsedExpression& other) {
+   if (!ParsedExpression::operator==(other)) {
+      return false;
+   }
+   auto& otherConj = static_cast<ConjunctionExpression&>(other);
+   // Compare the number of children first
+   if (children.size() != otherConj.children.size()) {
+      return false;
+   }
+   // Compare each child expression
+   for (size_t i = 0; i < children.size(); i++) {
+      if (!(*children[i] == *otherConj.children[i])) {
+         return false;
+      }
+   }
+   return true;
+}
+
+
+
 /// ConstantExpression
 ConstantExpression::ConstantExpression() : ParsedExpression(ExpressionType::VALUE_CONSTANT, TYPE) {}
 
@@ -410,6 +439,46 @@ std::string StarExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
 
    return dot;
 }
+size_t StarExpression::hash() {
+   size_t result = ParsedExpression::hash();
+   // Hash the relation name
+   result ^= std::hash<std::string>{}(relationName) + 0x9e3779b9 + (result << 6) + (result >> 2);
+   // Hash the expr if it exists
+   if (expr) {
+      result ^= expr->hash() + 0x9e3779b9 + (result << 6) + (result >> 2);
+   }
+   // Hash the columnsExpr boolean
+   result ^= std::hash<bool>{}(columnsExpr) + 0x9e3779b9 + (result << 6) + (result >> 2);
+   return result;
+}
+
+bool StarExpression::operator==(ParsedExpression& other) {
+   if (!ParsedExpression::operator==(other)) {
+      return false;
+   }
+   auto& otherStar = static_cast<StarExpression&>(other);
+
+   // Compare relation name
+   if (relationName != otherStar.relationName) {
+      return false;
+   }
+
+   // Compare columnsExpr
+   if (columnsExpr != otherStar.columnsExpr) {
+      return false;
+   }
+
+   // Compare expr (handle null cases)
+   if (expr == otherStar.expr) {
+      return true; // Both null or same pointer
+   }
+   if (!expr || !otherStar.expr) {
+      return false; // One is null, other isn't
+   }
+   return *expr == *otherStar.expr;
+}
+
+
 ///TargetsExpression
 TargetsExpression::TargetsExpression() : ParsedExpression(ExpressionType::TARGETS, TYPE) {
 }
@@ -448,6 +517,61 @@ std::string TargetsExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen
 
    return dot;
 }
+size_t TargetsExpression::hash() {
+   size_t result = ParsedExpression::hash();
+
+   // Hash all target expressions
+   for (const auto& target : targets) {
+      result ^= target->hash() + 0x9e3779b9 + (result << 6) + (result >> 2);
+   }
+
+   // Hash distinct expressions if they exist
+   if (distinctExpressions) {
+      for (const auto& distinct : *distinctExpressions) {
+         result ^= distinct->hash() + 0x9e3779b9 + (result << 6) + (result >> 2);
+      }
+   }
+
+   return result;
+}
+
+bool TargetsExpression::operator==(ParsedExpression& other) {
+   if (!ParsedExpression::operator==(other)) {
+      return false;
+   }
+
+   auto& otherTargets = static_cast<TargetsExpression&>(other);
+
+   // Compare targets
+   if (targets.size() != otherTargets.targets.size()) {
+      return false;
+   }
+   for (size_t i = 0; i < targets.size(); i++) {
+      if (!(*targets[i] == *otherTargets.targets[i])) {
+         return false;
+      }
+   }
+
+   // Compare distinct expressions
+   if (distinctExpressions.has_value() != otherTargets.distinctExpressions.has_value()) {
+      return false;
+   }
+
+   if (distinctExpressions) {
+      if (distinctExpressions->size() != otherTargets.distinctExpressions->size()) {
+         return false;
+      }
+      for (size_t i = 0; i < distinctExpressions->size(); i++) {
+         if (!(*(*distinctExpressions)[i] == *(*otherTargets.distinctExpressions)[i])) {
+            return false;
+         }
+      }
+   }
+
+   return true;
+}
+
+
 OperatorExpression::OperatorExpression(ExpressionType type, std::shared_ptr<ParsedExpression> left) : ParsedExpression(type, TYPE), children(std::vector{left}) {
 }
 OperatorExpression::OperatorExpression(ExpressionType type, std::shared_ptr<ParsedExpression> left, std::shared_ptr<ParsedExpression> right) : ParsedExpression(type, TYPE), children(std::vector{left, right}) {
@@ -520,6 +644,45 @@ std::string OperatorExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGe
 
    return dot;
 }
+size_t OperatorExpression::hash() {
+   size_t result = ParsedExpression::hash();
+
+   // Hash the operator string
+   result ^= std::hash<std::string>{}(opString) + 0x9e3779b9 + (result << 6) + (result >> 2);
+
+   // Hash all children expressions
+   for (const auto& child : children) {
+      result ^= child->hash() + 0x9e3779b9 + (result << 6) + (result >> 2);
+   }
+
+   return result;
+}
+
+bool OperatorExpression::operator==(ParsedExpression& other) {
+   if (!ParsedExpression::operator==(other)) {
+      return false;
+   }
+
+   auto& otherOp = static_cast<OperatorExpression&>(other);
+
+   // Compare operator strings
+   if (opString != otherOp.opString) {
+      return false;
+   }
+
+   // Compare children
+   if (children.size() != otherOp.children.size()) {
+      return false;
+   }
+
+   for (size_t i = 0; i < children.size(); i++) {
+      if (!(*children[i] == *otherOp.children[i])) {
+         return false;
+      }
+   }
+
+   return true;
+}
 
 CastExpression::CastExpression(LogicalTypeWithMods logicalTypeWithMods, std::shared_ptr<ParsedExpression> child) : ParsedExpression(ExpressionType::CAST, TYPE), logicalTypeWithMods(logicalTypeWithMods), child(std::move(child)) {
 }
@@ -559,6 +722,82 @@ std::string CastExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
 
    return dot;
 }
+size_t CastExpression::hash() {
+    size_t result = ParsedExpression::hash();
+
+    // Hash the logical type with mods if present
+    if (logicalTypeWithMods) {
+        // Hash the logical type
+        result ^= std::hash<uint8_t>{}(static_cast<uint8_t>(logicalTypeWithMods->logicalType)) +
+                  0x9e3779b9 + (result << 6) + (result >> 2);
+
+        // Hash type modifiers
+        for (const auto& mod : logicalTypeWithMods->typeModifiers) {
+            if (mod) {
+                result ^= mod->hash() + 0x9e3779b9 + (result << 6) + (result >> 2);
+            }
+        }
+    }
+
+    // Hash the optional interval type if present
+    if (optInterval) {
+        result ^= std::hash<uint8_t>{}(static_cast<uint8_t>(*optInterval)) +
+                  0x9e3779b9 + (result << 6) + (result >> 2);
+    }
+
+    // Hash the child expression
+    if (child) {
+        result ^= child->hash() + 0x9e3779b9 + (result << 6) + (result >> 2);
+    }
+
+    return result;
+}
+
+bool CastExpression::operator==(ParsedExpression& other) {
+    if (!ParsedExpression::operator==(other)) {
+        return false;
+    }
+
+    auto& otherCast = static_cast<CastExpression&>(other);
+
+    // Compare logical type with mods
+    if (logicalTypeWithMods.has_value() != otherCast.logicalTypeWithMods.has_value()) {
+        return false;
+    }
+
+    if (logicalTypeWithMods) {
+        if (logicalTypeWithMods->logicalType != otherCast.logicalTypeWithMods->logicalType) {
+            return false;
+        }
+
+        if (logicalTypeWithMods->typeModifiers.size() !=
+            otherCast.logicalTypeWithMods->typeModifiers.size()) {
+            return false;
+        }
+
+        for (size_t i = 0; i < logicalTypeWithMods->typeModifiers.size(); i++) {
+            if (!(*logicalTypeWithMods->typeModifiers[i] ==
+                  *otherCast.logicalTypeWithMods->typeModifiers[i])) {
+                return false;
+            }
+        }
+    }
+
+    // Compare optional interval
+    if (optInterval != otherCast.optInterval) {
+        return false;
+    }
+
+    // Compare child expressions
+    if (child == otherCast.child) {
+        return true; // Both null or same pointer
+    }
+    if (!child || !otherCast.child) {
+        return false; // One is null, other isn't
+    }
+    return *child == *otherCast.child;
+}
+
 WindowBoundary::WindowBoundary(WindowBoundaryType start) : start(start) {
 }
 WindowBoundary::WindowBoundary(WindowBoundaryType start, std::shared_ptr<ParsedExpression> startExpr) : start(start), startExpr(startExpr) {
@@ -566,87 +805,253 @@ WindowBoundary::WindowBoundary(WindowBoundaryType start, std::shared_ptr<ParsedE
 WindowExpression::WindowExpression() : ParsedExpression(ExpressionType::WINDOW_INVALID, TYPE) {
 }
 std::string WindowExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
-    std::string dot{};
+   std::string dot{};
 
-    // Create node identifier for the window expression
-    std::string nodeId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(this)));
+   // Create node identifier for the window expression
+   std::string nodeId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(this)));
 
-    // Create the window node with its basic information
-    dot += nodeId + " [label=\"Window";
-    if (!alias.empty()) {
-        dot += "\\nalias: " + alias;
-    }
+   // Create the window node with its basic information
+   dot += nodeId + " [label=\"Window";
+   if (!alias.empty()) {
+      dot += "\\nalias: " + alias;
+   }
 
-    // Add window function details if present
+   // Add window function details if present
+   if (functionExpression) {
+      dot += "\\nFunction: " + functionExpression->functionName;
+      if (distinct) {
+         dot += "\\nDISTINCT";
+      }
+      if (ignoreNulls) {
+         dot += "\\nIGNORE NULLS";
+      }
+   }
+   dot += "\"];\n";
+
+   // Add function expression if present
+   if (functionExpression) {
+      std::string funcId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(functionExpression.get())));
+      dot += nodeId + " -> " + funcId + " [label=\"function\"];\n";
+      dot += functionExpression->toDotGraph(depth + 1, idGen);
+   }
+
+   // Add partition expressions
+   for (size_t i = 0; i < partitions.size(); i++) {
+      if (partitions[i]) {
+         std::string partId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(partitions[i].get())));
+         dot += nodeId + " -> " + partId + " [label=\"partition " + std::to_string(i + 1) + "\"];\n";
+         dot += partitions[i]->toDotGraph(depth + 1, idGen);
+      }
+   }
+
+   // Add order by expressions
+   if (order.has_value()) {
+      std::string orderId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(order.value().get())));
+      dot += nodeId + " -> " + orderId + " [label=\"order by\"];\n";
+      dot += order.value()->toDotGraph(depth + 1, idGen);
+   }
+
+   // Add filter expression if present
+   if (filter) {
+      std::string filterId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(filter.get())));
+      dot += nodeId + " -> " + filterId + " [label=\"filter\"];\n";
+      dot += filter->toDotGraph(depth + 1, idGen);
+   }
+
+   // Add window boundary expressions if present
+   if (startExpr) {
+      std::string startId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(startExpr.get())));
+      dot += nodeId + " -> " + startId + " [label=\"start\"];\n";
+      dot += startExpr->toDotGraph(depth + 1, idGen);
+   }
+
+   if (endExpr) {
+      std::string endId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(endExpr.get())));
+      dot += nodeId + " -> " + endId + " [label=\"end\"];\n";
+      dot += endExpr->toDotGraph(depth + 1, idGen);
+   }
+
+   // Add offset expression if present
+   if (offsetExpr) {
+      std::string offsetId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(offsetExpr.get())));
+      dot += nodeId + " -> " + offsetId + " [label=\"offset\"];\n";
+      dot += offsetExpr->toDotGraph(depth + 1, idGen);
+   }
+
+   // Add default expression if present
+   if (defaultExpr) {
+      std::string defaultId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(defaultExpr.get())));
+      dot += nodeId + " -> " + defaultId + " [label=\"default\"];\n";
+      dot += defaultExpr->toDotGraph(depth + 1, idGen);
+   }
+
+   return dot;
+}
+size_t WindowExpression::hash() {
+    size_t result = ParsedExpression::hash();
+
+    // Hash function expression
     if (functionExpression) {
-        dot += "\\nFunction: " + functionExpression->functionName;
-        if (distinct) {
-            dot += "\\nDISTINCT";
-        }
-        if (ignoreNulls) {
-            dot += "\\nIGNORE NULLS";
-        }
-    }
-    dot += "\"];\n";
-
-    // Add function expression if present
-    if (functionExpression) {
-        std::string funcId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(functionExpression.get())));
-        dot += nodeId + " -> " + funcId + " [label=\"function\"];\n";
-        dot += functionExpression->toDotGraph(depth + 1, idGen);
+        result ^= functionExpression->hash() + 0x9e3779b9 + (result << 6) + (result >> 2);
     }
 
-    // Add partition expressions
-    for (size_t i = 0; i < partitions.size(); i++) {
-        if (partitions[i]) {
-            std::string partId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(partitions[i].get())));
-            dot += nodeId + " -> " + partId + " [label=\"partition " + std::to_string(i + 1) + "\"];\n";
-            dot += partitions[i]->toDotGraph(depth + 1, idGen);
+    // Hash partition expressions
+    for (const auto& partition : partitions) {
+        if (partition) {
+            result ^= partition->hash() + 0x9e3779b9 + (result << 6) + (result >> 2);
         }
     }
 
-    // Add order by expressions
-    if (order.has_value()) {
-        std::string orderId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(order.value().get())));
-        dot += nodeId + " -> " + orderId + " [label=\"order by\"];\n";
-        dot += order.value()->toDotGraph(depth + 1, idGen);
+    // Hash order by modifier
+    if (order && *order) {
+       //TODO
+       // result ^= (*order)->hash() + 0x9e3779b9 + (result << 6) + (result >> 2);
     }
 
-    // Add filter expression if present
+    // Hash filter expression
     if (filter) {
-        std::string filterId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(filter.get())));
-        dot += nodeId + " -> " + filterId + " [label=\"filter\"];\n";
-        dot += filter->toDotGraph(depth + 1, idGen);
+        result ^= filter->hash() + 0x9e3779b9 + (result << 6) + (result >> 2);
     }
 
-    // Add window boundary expressions if present
+    // Hash boolean flags
+    result ^= std::hash<bool>{}(ignoreNulls) + 0x9e3779b9 + (result << 6) + (result >> 2);
+    result ^= std::hash<bool>{}(distinct) + 0x9e3779b9 + (result << 6) + (result >> 2);
+
+    // Hash window boundary
+    if (windowBoundary) {
+        result ^= std::hash<uint8_t>{}(static_cast<uint8_t>(windowBoundary->windowMode)) +
+                  0x9e3779b9 + (result << 6) + (result >> 2);
+        result ^= std::hash<uint8_t>{}(static_cast<uint8_t>(windowBoundary->start)) +
+                  0x9e3779b9 + (result << 6) + (result >> 2);
+        result ^= std::hash<uint8_t>{}(static_cast<uint8_t>(windowBoundary->end)) +
+                  0x9e3779b9 + (result << 6) + (result >> 2);
+        if (windowBoundary->startExpr) {
+            result ^= windowBoundary->startExpr->hash() + 0x9e3779b9 + (result << 6) + (result >> 2);
+        }
+        if (windowBoundary->endExpr) {
+            result ^= windowBoundary->endExpr->hash() + 0x9e3779b9 + (result << 6) + (result >> 2);
+        }
+    }
+
+    // Hash expressions
     if (startExpr) {
-        std::string startId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(startExpr.get())));
-        dot += nodeId + " -> " + startId + " [label=\"start\"];\n";
-        dot += startExpr->toDotGraph(depth + 1, idGen);
+        result ^= startExpr->hash() + 0x9e3779b9 + (result << 6) + (result >> 2);
     }
-
     if (endExpr) {
-        std::string endId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(endExpr.get())));
-        dot += nodeId + " -> " + endId + " [label=\"end\"];\n";
-        dot += endExpr->toDotGraph(depth + 1, idGen);
+        result ^= endExpr->hash() + 0x9e3779b9 + (result << 6) + (result >> 2);
     }
-
-    // Add offset expression if present
     if (offsetExpr) {
-        std::string offsetId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(offsetExpr.get())));
-        dot += nodeId + " -> " + offsetId + " [label=\"offset\"];\n";
-        dot += offsetExpr->toDotGraph(depth + 1, idGen);
+        result ^= offsetExpr->hash() + 0x9e3779b9 + (result << 6) + (result >> 2);
     }
-
-    // Add default expression if present
     if (defaultExpr) {
-        std::string defaultId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(defaultExpr.get())));
-        dot += nodeId + " -> " + defaultId + " [label=\"default\"];\n";
-        dot += defaultExpr->toDotGraph(depth + 1, idGen);
+        result ^= defaultExpr->hash() + 0x9e3779b9 + (result << 6) + (result >> 2);
     }
 
-    return dot;
+    // Hash argument orders
+    if (argOrders) {
+       //TODO
+        //result ^= argOrders->hash() + 0x9e3779b9 + (result << 6) + (result >> 2);
+    }
+
+    return result;
+}
+
+bool WindowExpression::operator==(ParsedExpression& other) {
+    if (!ParsedExpression::operator==(other)) {
+        return false;
+    }
+
+    auto& otherWindow = static_cast<WindowExpression&>(other);
+
+    // Compare function expressions
+    if (!((functionExpression == otherWindow.functionExpression) ||
+          (functionExpression && otherWindow.functionExpression &&
+           *functionExpression == *otherWindow.functionExpression))) {
+        return false;
+    }
+
+    // Compare partitions
+    if (partitions.size() != otherWindow.partitions.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < partitions.size(); i++) {
+        if (!((partitions[i] == otherWindow.partitions[i]) ||
+              (partitions[i] && otherWindow.partitions[i] &&
+               *partitions[i] == *otherWindow.partitions[i]))) {
+            return false;
+        }
+    }
+
+    // Compare order
+    if (order.has_value() != otherWindow.order.has_value()) {
+        return false;
+    }
+   //TODO
+    if (order && *order && otherWindow.order && *otherWindow.order
+        //&& !(**order == **otherWindow.order)
+        ) {
+        return false;
+    }
+
+    // Compare filter
+    if (!((filter == otherWindow.filter) ||
+          (filter && otherWindow.filter && *filter == *otherWindow.filter))) {
+        return false;
+    }
+
+    // Compare boolean flags
+    if (ignoreNulls != otherWindow.ignoreNulls || distinct != otherWindow.distinct) {
+        return false;
+    }
+
+    // Compare window boundary
+    if ((windowBoundary == nullptr) != (otherWindow.windowBoundary == nullptr)) {
+        return false;
+    }
+    if (windowBoundary) {
+        if (windowBoundary->windowMode != otherWindow.windowBoundary->windowMode ||
+            windowBoundary->start != otherWindow.windowBoundary->start ||
+            windowBoundary->end != otherWindow.windowBoundary->end) {
+            return false;
+        }
+        if (!((windowBoundary->startExpr == otherWindow.windowBoundary->startExpr) ||
+              (windowBoundary->startExpr && otherWindow.windowBoundary->startExpr &&
+               *windowBoundary->startExpr == *otherWindow.windowBoundary->startExpr))) {
+            return false;
+        }
+        if (!((windowBoundary->endExpr == otherWindow.windowBoundary->endExpr) ||
+              (windowBoundary->endExpr && otherWindow.windowBoundary->endExpr &&
+               *windowBoundary->endExpr == *otherWindow.windowBoundary->endExpr))) {
+            return false;
+        }
+    }
+
+    // Compare expressions
+    if (!((startExpr == otherWindow.startExpr) ||
+          (startExpr && otherWindow.startExpr && *startExpr == *otherWindow.startExpr))) {
+        return false;
+    }
+    if (!((endExpr == otherWindow.endExpr) ||
+          (endExpr && otherWindow.endExpr && *endExpr == *otherWindow.endExpr))) {
+        return false;
+    }
+    if (!((offsetExpr == otherWindow.offsetExpr) ||
+          (offsetExpr && otherWindow.offsetExpr && *offsetExpr == *otherWindow.offsetExpr))) {
+        return false;
+    }
+    if (!((defaultExpr == otherWindow.defaultExpr) ||
+          (defaultExpr && otherWindow.defaultExpr && *defaultExpr == *otherWindow.defaultExpr))) {
+        return false;
+    }
+
+    // Compare argument orders
+   //TODO
+    /*if (!((argOrders == otherWindow.argOrders) ||
+          (argOrders && otherWindow.argOrders && *argOrders == *otherWindow.argOrders))) {
+        return false;
+    }*/
+
+    return true;
 }
 
 
@@ -713,6 +1118,63 @@ std::string BetweenExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen
 
    return dot;
 }
+size_t BetweenExpression::hash() {
+   size_t result = ParsedExpression::hash();
+
+   // Hash input expression
+   if (input) {
+      result ^= input->hash() + 0x9e3779b9 + (result << 6) + (result >> 2);
+   }
+
+   // Hash lower bound
+   if (lower) {
+      result ^= lower->hash() + 0x9e3779b9 + (result << 6) + (result >> 2);
+   }
+
+   // Hash upper bound
+   if (upper) {
+      result ^= upper->hash() + 0x9e3779b9 + (result << 6) + (result >> 2);
+   }
+
+   // Hash asymmetric flag
+   result ^= std::hash<bool>{}(asymmetric) + 0x9e3779b9 + (result << 6) + (result >> 2);
+
+   return result;
+}
+
+bool BetweenExpression::operator==(ParsedExpression& other) {
+   if (!ParsedExpression::operator==(other)) {
+      return false;
+   }
+
+   auto& otherBetween = static_cast<BetweenExpression&>(other);
+
+   // Compare asymmetric flag
+   if (asymmetric != otherBetween.asymmetric) {
+      return false;
+   }
+
+   // Compare input expressions
+   if (!((input == otherBetween.input) ||
+         (input && otherBetween.input && *input == *otherBetween.input))) {
+      return false;
+         }
+
+   // Compare lower bounds
+   if (!((lower == otherBetween.lower) ||
+         (lower && otherBetween.lower && *lower == *otherBetween.lower))) {
+      return false;
+         }
+
+   // Compare upper bounds
+   if (!((upper == otherBetween.upper) ||
+         (upper && otherBetween.upper && *upper == *otherBetween.upper))) {
+      return false;
+         }
+
+   return true;
+}
+
 
 SubqueryExpression::SubqueryExpression(SubqueryType subQueryType, std::shared_ptr<TableProducer> subquery) : ParsedExpression(ExpressionType::SUBQUERY, TYPE), subQueryType(subQueryType), subquery(subquery) {
 }
@@ -734,6 +1196,53 @@ std::string SubqueryExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGe
 
    return dot;
 }
+size_t SubqueryExpression::hash() {
+   size_t result = ParsedExpression::hash();
+
+   // Hash subquery type
+   result ^= std::hash<uint8_t>{}(static_cast<uint8_t>(subQueryType)) +
+             0x9e3779b9 + (result << 6) + (result >> 2);
+
+   // Hash subquery
+   if (subquery) {
+      //result ^= subquery->hash() + 0x9e3779b9 + (result << 6) + (result >> 2);
+   }
+
+   // Hash test expression
+   if (testExpr) {
+      result ^= testExpr->hash() + 0x9e3779b9 + (result << 6) + (result >> 2);
+   }
+
+   return result;
+}
+
+bool SubqueryExpression::operator==(ParsedExpression& other) {
+   if (!ParsedExpression::operator==(other)) {
+      return false;
+   }
+
+   auto& otherSubquery = static_cast<SubqueryExpression&>(other);
+
+   // Compare subquery types
+   if (subQueryType != otherSubquery.subQueryType) {
+      return false;
+   }
+
+   // Compare subqueries
+   /*if (!((subquery == otherSubquery.subquery) ||
+         (subquery && otherSubquery.subquery && *subquery == *otherSubquery.subquery))) {
+      return false;
+         }*/
+
+   // Compare test expressions
+   if (!((testExpr == otherSubquery.testExpr) ||
+         (testExpr && otherSubquery.testExpr && *testExpr == *otherSubquery.testExpr))) {
+      return false;
+         }
+
+   return true;
+}
+
 
 CaseExpression::CaseExpression(std::optional<std::shared_ptr<ParsedExpression>> caseExpr, std::vector<CaseCheck> caseChecks, std::shared_ptr<ParsedExpression> elseExpr) : ParsedExpression(ExpressionType::CASE_EXPR, TYPE), caseExpr(caseExpr), caseChecks(std::move(caseChecks)), elseExpr(std::move(elseExpr)) {
 }
@@ -769,6 +1278,74 @@ std::string CaseExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    }
 
    return dot;
+}
+
+size_t CaseExpression::hash() {
+    size_t result = ParsedExpression::hash();
+
+    // Hash caseExpr if present
+    if (caseExpr && *caseExpr) {
+        result ^= (*caseExpr)->hash() + 0x9e3779b9 + (result << 6) + (result >> 2);
+    }
+
+    // Hash all caseChecks (WHEN/THEN pairs)
+    for (const auto& check : caseChecks) {
+        if (check.whenExpr) {
+            result ^= check.whenExpr->hash() + 0x9e3779b9 + (result << 6) + (result >> 2);
+        }
+        if (check.thenExpr) {
+            result ^= check.thenExpr->hash() + 0x9e3779b9 + (result << 6) + (result >> 2);
+        }
+    }
+
+    // Hash elseExpr if present
+    if (elseExpr) {
+        result ^= elseExpr->hash() + 0x9e3779b9 + (result << 6) + (result >> 2);
+    }
+
+    return result;
+}
+
+bool CaseExpression::operator==(ParsedExpression& other) {
+    if (!ParsedExpression::operator==(other)) {
+        return false;
+    }
+    auto& otherCase = static_cast<CaseExpression&>(other);
+
+    // Compare caseExpr
+    if (caseExpr.has_value() != otherCase.caseExpr.has_value()) {
+        return false;
+    }
+    if (caseExpr && *caseExpr && otherCase.caseExpr && *otherCase.caseExpr) {
+        if (!(**caseExpr == **otherCase.caseExpr)) {
+            return false;
+        }
+    }
+
+    // Compare caseChecks
+    if (caseChecks.size() != otherCase.caseChecks.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < caseChecks.size(); ++i) {
+        const auto& a = caseChecks[i];
+        const auto& b = otherCase.caseChecks[i];
+        if (!((a.whenExpr == b.whenExpr) ||
+              (a.whenExpr && b.whenExpr && *a.whenExpr == *b.whenExpr))) {
+            return false;
+        }
+        if (!((a.thenExpr == b.thenExpr) ||
+              (a.thenExpr && b.thenExpr && *a.thenExpr == *b.thenExpr))) {
+            return false;
+        }
+    }
+
+    // Compare elseExpr
+    if (!((elseExpr == otherCase.elseExpr) ||
+          (elseExpr && otherCase.elseExpr && *elseExpr == *otherCase.elseExpr))) {
+        return false;
+    }
+
+    return true;
 }
 
 } // namespace lingodb::ast
