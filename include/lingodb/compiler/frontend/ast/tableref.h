@@ -133,6 +133,7 @@ class SubqueryRef : public TableRef {
    //! The subquery
    //TODO correct Type?
    std::shared_ptr<TableProducer> subSelectNode;
+   std::vector<std::string> columnNames;
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };

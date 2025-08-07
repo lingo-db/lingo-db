@@ -17,7 +17,7 @@ class CTENode : public QueryNode {
    //Maybe use input logic instead
    std::shared_ptr<TableProducer> child;
 
-   std::vector<std::string> columnAliases;
+   std::vector<std::string> columnNames;
 
    //!The scope for the query. Must be not a pointer, so a copy is required everytime the cte query is translated
    analyzer::SQLScope subQueryScope;
