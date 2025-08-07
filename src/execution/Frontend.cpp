@@ -10,6 +10,9 @@
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamDialect.h"
 #include "lingodb/compiler/Dialect/util/UtilDialect.h"
+#include "lingodb/compiler/frontend/driver.h"
+#include "lingodb/compiler/frontend/sql_analyzer.h"
+#include "lingodb/compiler/frontend/sql_mlir_translator.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Async/IR/Async.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
@@ -144,10 +147,86 @@ class SQLFrontend : public lingodb::execution::Frontend {
       return parallismAllowed;
    }
 };
+
+
+
+class NewSQLFrontend : public lingodb::execution::Frontend {
+   mlir::MLIRContext context;
+   mlir::OwningOpRef<mlir::ModuleOp> module;
+   bool parallismAllowed;
+   void loadFromString(std::string sql) override {
+      sql = ":" + sql;
+      lingodb::execution::initializeContext(context);
+      driver drv;
+      if (!drv.parse(sql)) {
+         auto results = drv.result;
+         if (results.empty() || results.size() > 1) {
+            error.emit() << "Error during parsing";
+         }
+         auto cShared = std::make_shared<lingodb::catalog::Catalog>(*catalog);
+         lingodb::analyzer::SQLQueryAnalyzer sqlAnalyzer{cShared};
+         auto sqlContext = std::make_shared<lingodb::analyzer::SQLContext>();
+         lingodb::analyzer::SQLQueryAnalyzer analyzer{cShared};
+         drv.result[0] = analyzer.canonicalizeAndAnalyze(drv.result[0], sqlContext);
+
+         mlir::OpBuilder builder(&context);
+
+         mlir::ModuleOp moduleOp = builder.create<mlir::ModuleOp>(builder.getUnknownLoc());
+         lingodb::translator::SQLMlirTranslator translator{moduleOp, cShared};
+         builder.setInsertionPointToStart(moduleOp.getBody());
+         auto* queryBlock = new mlir::Block;
+         std::vector<mlir::Type> returnTypes;
+         {
+            mlir::OpBuilder::InsertionGuard guard(builder);
+            builder.setInsertionPointToStart(queryBlock);
+            auto val = translator.translateStart(builder, drv.result[0], sqlContext);
+            if (val.has_value()) {
+               builder.create<lingodb::compiler::dialect::subop::SetResultOp>(builder.getUnknownLoc(), 0, val.value());
+            }
+            builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc());
+         }
+         mlir::func::FuncOp funcOp = builder.create<mlir::func::FuncOp>(builder.getUnknownLoc(), "main", builder.getFunctionType({}, {}));
+         funcOp.getBody().push_back(queryBlock);
+         module = moduleOp;
+         parallismAllowed = false;
+
+
+
+
+
+      } else {
+         error.emit() << "Error during parsing";
+      }
+
+
+   }
+   void loadFromFile(std::string fileName) override {
+      std::ifstream istream{fileName};
+      if (!istream) {
+         error.emit() << "Error can't load file " << fileName;
+      }
+      std::stringstream buffer;
+      buffer << istream.rdbuf();
+      std::string sqlQuery = buffer.str();
+      loadFromString(sqlQuery);
+   }
+   mlir::ModuleOp* getModule() override {
+      assert(module);
+      return module.operator->();
+   }
+   bool isParallelismAllowed() override {
+      return parallismAllowed;
+   }
+};
+
+
 } // namespace
 std::unique_ptr<lingodb::execution::Frontend> lingodb::execution::createMLIRFrontend() {
    return std::make_unique<MLIRFrontend>();
 }
 std::unique_ptr<lingodb::execution::Frontend> lingodb::execution::createSQLFrontend() {
    return std::make_unique<SQLFrontend>();
+}
+std::unique_ptr<lingodb::execution::Frontend> lingodb::execution::createNewSQLFrontend() {
+   return std::make_unique<NewSQLFrontend>();
 }
