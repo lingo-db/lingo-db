@@ -342,6 +342,9 @@ class ConjunctionExpression : public ParsedExpression {
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 
+   size_t hash() override;
+   bool operator==(ParsedExpression& other) override;
+
    private:
    std::string typeToAscii(ExpressionType type) const;
 };
@@ -413,13 +416,12 @@ class StarExpression : public ParsedExpression {
    //! Whether or not this is a COLUMNS expression
    bool columnsExpr = false;
 
-   /*
-    * Semantic
-    */
-   //Columns and their scope
-   std::vector<std::pair<std::string, catalog::Column>> columns{};
+
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
+
+   size_t hash() override;
+   bool operator==(ParsedExpression& other) override;
 };
 
 //List of targets
@@ -434,14 +436,11 @@ class TargetsExpression : public ParsedExpression {
 
    std::optional<std::vector<std::shared_ptr<ParsedExpression>>> distinctExpressions = std::nullopt;
 
-   /*
-    * Semantic
-    */
-   //TODO make std::vector<mlir::Attribute> names; instead of std::string vector
-   std::vector<std::string> names{};
-   //TODO only reference to column
+
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
+   size_t hash() override;
+   bool operator==(ParsedExpression& other) override;
 };
 
 class OperatorExpression : public ParsedExpression {
@@ -451,7 +450,10 @@ class OperatorExpression : public ParsedExpression {
    OperatorExpression(ExpressionType type, std::shared_ptr<ParsedExpression> left, std::shared_ptr<ParsedExpression> right);
    OperatorExpression(std::string opString, std::shared_ptr<ParsedExpression> left, std::shared_ptr<ParsedExpression> right);
    std::vector<std::shared_ptr<ParsedExpression>> children;
+
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
+   size_t hash() override;
+   bool operator==(ParsedExpression& other) override;
 
    std::string opString = "";
 };
@@ -464,7 +466,10 @@ class CastExpression : public ParsedExpression {
    //TODO better
    std::optional<LogicalType> optInterval;
    std::shared_ptr<ParsedExpression> child;
+
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
+   size_t hash() override;
+   bool operator==(ParsedExpression& other) override;
 };
 
 enum class WindowMode : uint8_t {
@@ -536,6 +541,8 @@ class WindowExpression : public ParsedExpression {
    std::shared_ptr<OrderByModifier> argOrders;
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
+   size_t hash() override;
+   bool operator==(ParsedExpression& other) override;
 };
 
 class BetweenExpression : public ParsedExpression {
@@ -550,6 +557,8 @@ class BetweenExpression : public ParsedExpression {
    bool asymmetric = false; // If true, the lower and upper bounds are not symmetric (e.g., BETWEEN x AND y vs. BETWEEN y AND x)
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
+   size_t hash() override;
+   bool operator==(ParsedExpression& other) override;
 };
 
 enum class SubqueryType : uint8_t {
@@ -575,6 +584,8 @@ class SubqueryExpression : public ParsedExpression {
    std::shared_ptr<ParsedExpression> testExpr; // For EXISTS/NOT EXISTS/ANY/NOT ANY, the expression to test against
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
+   size_t hash() override;
+   bool operator==(ParsedExpression& other) override;
 };
 
 class CaseExpression : public ParsedExpression {
@@ -593,6 +604,8 @@ class CaseExpression : public ParsedExpression {
    std::shared_ptr<ParsedExpression> elseExpr;
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
+   size_t hash() override;
+   bool operator==(ParsedExpression& other) override;
 };
 
 } // namespace lingodb::ast
