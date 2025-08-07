@@ -356,7 +356,7 @@ void runQuery(runtime::Session& session, const std::vector<std::string>& lines, 
       expectedResult += lines[line] + "\n";
       line++;
    }
-   auto queryExecutionConfig = execution::createQueryExecutionConfig(execution::getExecutionMode(), true);
+   auto queryExecutionConfig = execution::createQueryExecutionConfigWithNewFrontend(execution::getExecutionMode(), true);
    auto resultHasher = std::make_unique<ResultHasher>();
    auto& resultHasherRef = *resultHasher;
    resultHasher->sortMode = sort;
