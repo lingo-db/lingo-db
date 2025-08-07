@@ -317,6 +317,7 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
                operatorExpr->alias = find->get()->alias;
             }
 
+
             auto columnRef = drv.nf.node<ast::ColumnRefExpression>(operatorExpr->loc, operatorExpr->alias);
             columnRef->alias = alias;
             return columnRef;
@@ -641,13 +642,20 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableProducer(std::
 
                      cteNode->subQueryScope = *subQueryScope;
                      std::vector<std::pair<std::shared_ptr<ast::NamedResult>, std::shared_ptr<ast::NamedResult>>> renamedResults;
+                     size_t i = 0;
                      for (auto targetColumns : targetInfo.targetColumns) {
                         auto from = targetColumns;
                         auto to = std::make_shared<ast::NamedResult>(from->type, context->getUniqueScope(cteNode->alias), from->resultType, from->name);
                         to->displayName = from->displayName;
+                        if (cteNode->columnNames.size() > i) {
+                           to->displayName = cteNode->columnNames[i];
+                           to->name = cteNode->columnNames[i];
+                        }
                         renamedResults.emplace_back(std::pair{from, to});
+                        i++;
                      }
                      cteNode->renamedResults = std::move(renamedResults);
+
 
                      context->ctes.insert({cteNode->alias, {targetInfo, cteNode}});
                   }
@@ -1432,10 +1440,12 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableRef(std::share
             evalBefore = context->currentScope->evalBefore;
             context->popCurrentScope();
          }
-
+         size_t i = 0;
          for (auto target : targetInfo.targetColumns) {
             assert(!subquery->alias.empty());
-
+            if (subquery->columnNames.size() > i) {
+               target->displayName = subquery->columnNames[i];
+            }
             if (!target->displayName.empty()) {
                context->mapAttribute(resolverScope, subquery->alias + "." + target->displayName, target);
                context->mapAttribute(resolverScope, target->displayName, target);
@@ -1443,6 +1453,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableRef(std::share
                context->mapAttribute(resolverScope, subquery->alias + "." + target->name, target);
                context->mapAttribute(resolverScope, target->name, target);
             }
+            i++;
          }
 
          return drv.nf.node<ast::BoundSubqueryRef>(subquery->loc, subQueryScope, t);
@@ -1777,11 +1788,12 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
                if (!boundArguments[0]->resultType.has_value() && !function->star) {
                   error("Argument of aggregation function is not a valid expression", boundArguments[0]->loc);
                }
-               if (boundArguments[0]->resultType.value().type.getTypeId() != catalog::LogicalTypeId::INT &&
+               if ((function->functionName == "SUM" || function->functionName == "AVG") && boundArguments[0]->resultType.value().type.getTypeId() != catalog::LogicalTypeId::INT &&
                    boundArguments[0]->resultType.value().type.getTypeId() != catalog::LogicalTypeId::FLOAT &&
                    boundArguments[0]->resultType.value().type.getTypeId() != catalog::LogicalTypeId::DECIMAL &&
                    boundArguments[0]->resultType.value().type.getTypeId() != catalog::LogicalTypeId::DOUBLE) {
-                  error("AVG function needs argument of type int or float", function->loc);
+
+
                }
 
                //Find correct resultType
@@ -2386,7 +2398,7 @@ catalog::NullableType SQLTypeUtils::getCommonType(catalog::NullableType nullable
           return catalog::NullableType(type1, isNullable);
            }
        if (type1.getTypeId() == catalog::LogicalTypeId::STRING) {
-         if (type2.getTypeId() == catalog::LogicalTypeId::INT) {
+         if (type2.getTypeId() == catalog::LogicalTypeId::INT || type2.getTypeId() == catalog::LogicalTypeId::DECIMAL) {
             return catalog::NullableType(type1, isNullable);
          }
        }

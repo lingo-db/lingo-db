@@ -116,7 +116,7 @@ identifier      {ident_start}{ident_cont}*
 quoted_identifier   \"([^\"]|\"\")*\"
 squote			\'
 dquote			\"
-strChars ({ident_cont}|,)
+strChars ({ident_cont}|,|\(|\)|\[|\]|\:)
 str       {squote}({strChars}|{op_chars}|[ ])*{squote}
 
 operator		{op_chars}+
@@ -148,6 +148,7 @@ boolean [fF][aA][lL][sS][eE]
 "*"             { return lingodb::parser::make_STAR(loc); }
 "="             { return lingodb::parser::make_EQUAL(loc); }
 "<>"            { return lingodb::parser::make_NOT_EQUAL(loc); }
+"!="            { return lingodb::parser::make_NOT_EQUAL(loc); }
 "<="            { return lingodb::parser::make_LESS_EQUAL(loc); }
 "<"             { return lingodb::parser::make_LESS(loc); }
 ">="            { return lingodb::parser::make_GREATER_EQUAL(loc); }
@@ -299,7 +300,7 @@ boolean [fF][aA][lL][sS][eE]
   
   if(ident == "<=") {
     return lingodb::parser::make_LESS_EQUAL(loc);
-  } else if(ident == "<>") {
+  } else if(ident == "<>" || ident == "!=") {
     return lingodb::parser::make_NOT_EQUAL(loc);
   } else if(ident == ">=") {
     return lingodb::parser::make_GREATER_EQUAL(loc);
