@@ -3,6 +3,7 @@
 #include "lingodb/compiler/frontend/ast/aggregation_node.h"
 #include "lingodb/compiler/frontend/ast/extend_node.h"
 #include "lingodb/compiler/frontend/sql_scope.h"
+#include "parsenodes.h"
 
 #include <llvm/ADT/ScopedHashTable.h>
 
@@ -30,6 +31,7 @@ class ASTTransformScope {
    std::shared_ptr<ast::ExtendNode> extendNodeBeforeWindowFunctions;
    std::shared_ptr<ast::ExtendNode> extendNodeAfterAggregations;
    std::shared_ptr<ast::ExtendNode> extendNodeBeforeOrderBy;
+   std::unordered_map<std::shared_ptr<ast::ParsedExpression>, std::shared_ptr<ast::ColumnRefExpression>, ast::ParsedExprPtrHash, ast::ParsedExprPtrEqual> alreadyExtendedExpression;
    /// Container for GROUP BY expressions that ensures uniqueness, reuse in the canonicalization step
    std::unordered_set<std::shared_ptr<ast::ParsedExpression>, ast::ParsedExprPtrHash, ast::ParsedExprPtrEqual> groupedByExpressions;
 };

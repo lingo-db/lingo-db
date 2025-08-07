@@ -11,11 +11,11 @@ std::string CTENode::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
 
    // Create label with CTE and column aliases
    std::string label = "CTE";
-   if (!columnAliases.empty()) {
+   if (!columnNames.empty()) {
       label += "\\nColumns: ";
-      for (size_t i = 0; i < columnAliases.size(); ++i) {
+      for (size_t i = 0; i < columnNames.size(); ++i) {
          if (i > 0) label += ", ";
-         label += columnAliases[i];
+         label += columnNames[i];
       }
    }
 

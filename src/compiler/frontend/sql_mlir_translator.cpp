@@ -1006,7 +1006,7 @@ mlir::Value SQLMlirTranslator::translateTableRef(mlir::OpBuilder& builder, std::
 
          std::vector<mlir::NamedAttribute> columns{};
          for (auto& info : rel) {
-            auto attrDef = attrManager.createDef(uniqueScope, info->name);
+            auto attrDef = info->createDef(builder, attrManager);
             attrDef.getColumn().type = info->resultType.toMlirType(builder.getContext());
             columns.push_back(builder.getNamedAttr(info->name, attrDef));
          }
@@ -1177,20 +1177,19 @@ mlir::Value SQLMlirTranslator::translateSetOperation(mlir::OpBuilder& builder, s
    rightMapBuilder.setInsertionPointToStart(rightMapBlock);
    leftMapBlock->addArgument(tuples::TupleType::get(builder.getContext()), builder.getUnknownLoc());
    rightMapBlock->addArgument(tuples::TupleType::get(builder.getContext()), builder.getUnknownLoc());
-   auto leftMapScope = attrManager.getUniqueScope("setMap");
-   auto rightMapScope = attrManager.getUniqueScope("setMap");
+   auto leftMapScope = context->getUniqueScope("setMap");
+   auto rightMapScope = context->getUniqueScope("setMap");
    std::vector<mlir::Attribute> createdColsLeft;
    std::vector<mlir::Attribute> createdColsRight;
    mlir::Value leftTuple = leftMapBlock->getArgument(0);
    mlir::Value rightTuple = rightMapBlock->getArgument(0);
    std::vector<mlir::Value> leftMapResults;
    std::vector<mlir::Value> rightMapResults;
-   //TODO Move most logic to analyzer
    for (size_t i = 0; i < boundSetOp->leftScope->targetInfo.targetColumns.size(); i++) {
       auto leftResult = boundSetOp->leftScope->targetInfo.targetColumns[i];
       auto rightResult = boundSetOp->rightScope->targetInfo.targetColumns[i];
       auto commonType = context->currentScope->targetInfo.targetColumns[i]->resultType;
-      //TODO what todo if left.type != right.type != context.result.type
+      //TODO move logic to analyzer
       if (rightResult->resultType != commonType) {
          auto attrDef = attrManager.createDef(rightMapScope, std::string("set_op") + std::to_string(i));
          auto attrRef = rightResult->createRef(builder, attrManager);
@@ -1202,6 +1201,7 @@ mlir::Value SQLMlirTranslator::translateSetOperation(mlir::OpBuilder& builder, s
          rightResult->scope = rightMapScope;
          rightResult->name = "set_op" + std::to_string(i);
       }
+      //TODO move logic to analyzer
       if (leftResult->resultType != commonType) {
          auto attrDef = attrManager.createDef(leftMapScope, std::string("set_op") + std::to_string(i));
          auto attrRef = leftResult->createRef(builder, attrManager);
@@ -1298,7 +1298,7 @@ mlir::Value SQLMlirTranslator::translateAggregationFunction(mlir::OpBuilder& bui
          }
          default: {
             //Is in map
-            refAttr = attrManager.createRef(mapName, aggrFunction->arguments[0]->alias);
+            refAttr = aggrFunction->arguments[0]->namedResult.value()->createRef(builder, attrManager);
 
             break;
          };
@@ -1321,29 +1321,6 @@ mlir::Value SQLMlirTranslator::translateAggregationFunction(mlir::OpBuilder& bui
       }
       //TODO define type
       if (relalgAggrFunc == relalg::AggrFunc::avg) {
-         /*auto baseType = getBaseType(aggrResultType);
-               if (baseType.isIntOrFloat() && !baseType.isIntOrIndex()) {
-                  //keep aggrResultType
-               } else if (mlir::isa<db::DecimalType>(baseType)) {
-                  mlir::OpBuilder b(builder.getContext());
-                  mlir::Value x = b.create<db::ConstantOp>(b.getUnknownLoc(), baseType, b.getUnitAttr());
-                  mlir::Value x2 = b.create<db::ConstantOp>(b.getUnknownLoc(), db::DecimalType::get(b.getContext(), 19, 0), b.getUnitAttr());
-                  mlir::Value div = b.create<db::DivOp>(b.getUnknownLoc(), x, x2);
-                  aggrResultType = div.getType();
-                  div.getDefiningOp()->erase();
-                  x2.getDefiningOp()->erase();
-                  x.getDefiningOp()->erase();
-               } else {
-                  mlir::OpBuilder b(builder.getContext());
-                  mlir::Value x = b.create<db::ConstantOp>(b.getUnknownLoc(), db::DecimalType::get(b.getContext(), 19, 0), b.getUnitAttr());
-                  mlir::Value div = b.create<db::DivOp>(b.getUnknownLoc(), x, x);
-                  aggrResultType = div.getType();
-                  div.getDefiningOp()->erase();
-                  x.getDefiningOp()->erase();
-               }
-               if (mlir::isa<db::NullableType>(refAttr.getColumn().type)) {
-                  aggrResultType = db::NullableType::get(builder.getContext(), aggrResultType);
-               }*/
          assert(aggrFunction->namedResult.has_value());
          aggrFunction->namedResult.value()->resultType.isNullable = true;
       }
@@ -1368,13 +1345,8 @@ mlir::Value SQLMlirTranslator::translateGroupByAttributesAndAggregate(mlir::OpBu
    std::unordered_map<std::string, size_t> groupByAttrToPos;
    for (auto& groupByNamedResult : groupNamedResults) {
       auto attrDef = groupByNamedResult->createRef(builder, attrManager);
-      //TODO
-      /*auto attrName = fieldsToString(columnRef->fields_);
-         groupByAttrToPos[attrName] = i;*/
       groupByAttrs.push_back(attrDef);
    }
-
-   //TODO maby split logic into two different methods!
 
    /*
        *Perform aggregation
@@ -1400,8 +1372,6 @@ mlir::Value SQLMlirTranslator::translateGroupByAttributesAndAggregate(mlir::OpBu
       mlir::Value expr;
       tuples::ColumnDefAttr attrDef;
       expr = translateAggregationFunction(builder, mapName, groupByAttrs, relation, aggrBuilder, aggrFunction, expr, attrDef);
-
-      //TODO mapping.insert({12, "&attrDef.getColumn()"});
       createdCols.push_back(attrDef);
       createdValues.push_back(expr);
    }
@@ -1434,7 +1404,7 @@ mlir::Value SQLMlirTranslator::translateAggregation(mlir::OpBuilder& builder, st
          if (colRef.getColumn().type != newColDef.getColumn().type) {
             expr = mapBuilder.create<db::AsNullableOp>(builder.getUnknownLoc(), newColDef.getColumn().type, expr);
          }
-         auto attrDef = attrManager.createDef(&newColDef.getColumn());
+         auto attrDef = mapTo[i]->createDef(builder, attrManager);
          createdCols.push_back(attrDef);
          createdValues.push_back(expr);
       }
@@ -1459,9 +1429,8 @@ mlir::Value SQLMlirTranslator::translateAggregation(mlir::OpBuilder& builder, st
       std::vector<mlir::Value> createdValues;
       std::vector<mlir::Attribute> createdCols;
       for (auto p : toMap) {
-         auto colRef =p->createDef(builder, attrManager);
-         mlir::Value expr = mapBuilder.create<db::NullOp>(builder.getUnknownLoc(), colRef.getColumn().type);
-         auto attrDef = attrManager.createDef(&colRef.getColumn());
+         mlir::Value expr = mapBuilder.create<db::NullOp>(builder.getUnknownLoc(), p->resultType.toMlirType(builder.getContext()));
+         auto attrDef = p->createDef(builder, attrManager);
          createdCols.push_back(attrDef);
          createdValues.push_back(expr);
       }
@@ -1538,13 +1507,11 @@ mlir::Value SQLMlirTranslator::translateAggregation(mlir::OpBuilder& builder, st
 
 
       struct Part {
-
          mlir::Value tree;
          std::vector<std::shared_ptr<ast::NamedResult>> groupByCols;
          std::vector<std::shared_ptr<ast::NamedResult>> groupByCols2;
          std::vector<std::shared_ptr<ast::NamedResult>> computed;
          std::shared_ptr<ast::NamedResult> grouping;
-
 
       };
       std::vector<Part> parts;
@@ -1644,15 +1611,11 @@ mlir::Value SQLMlirTranslator::createMap(mlir::OpBuilder& builder, std::string m
 
    for (auto p : toMap) {
       mlir::Value expr = translateExpression(mapBuilder, p, context);
-      //TODO does the use of alias make sense here?
-      auto attrDef = attrManager.createDef(mapName, p->alias);
-      if (p->namedResult.has_value()) {
-         p->namedResult.value()->scope = mapName;
-         attrDef = p->namedResult.value()->createDef(builder, attrManager);
-      }
+      assert(p->namedResult.has_value());
+      p->namedResult.value()->scope = mapName;
+      auto attrDef = p->namedResult.value()->createDef(builder, attrManager);
 
       attrDef.getColumn().type = expr.getType();
-      //TODO MAP context.mapAttribute(scope, p.first->colId, &attrDef.getColumn());
       createdCols.push_back(attrDef);
       createdValues.push_back(expr);
    }
