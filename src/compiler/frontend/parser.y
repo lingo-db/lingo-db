@@ -250,10 +250,11 @@
 %type<std::shared_ptr<lingodb::ast::ExpressionListRef>>  values_clause
 
 %type<std::string>  ColId ColLabel BareColLabel attr_name 
-                    qualified_name relation_expr alias_clause opt_alias_clause 
+                    qualified_name relation_expr 
                     name type_function_name func_name col_name_keyword unreserved_keyword reserved_keyword all_Op qual_Op MathOp
+%type<std::pair<std::string, std::vector<std::string>>> alias_clause opt_alias_clause 
 
-%type<std::vector<std::string>> name_list opt_name_list
+%type<std::vector<std::string>> name_list opt_name_list qualified_name_list
 
 %type<std::shared_ptr<lingodb::ast::ParsedExpression>> Iconst SignedIconst AexprConst  Sconst Bconst Fconst 
 
@@ -656,6 +657,7 @@ common_table_expr:
         auto cteNode = mkNode<lingodb::ast::CTENode>(@$);
         cteNode->alias = $name;
         cteNode->query = $PreparableStmt;
+        cteNode->columnNames = $opt_name_list;
         $$ = cteNode;
 
     }
@@ -698,14 +700,14 @@ from_list:
  */
  //TODO add missing rules
 table_ref: 
-    relation_expr opt_alias_clause 
+    relation_expr opt_alias_clause
     { 
         //TODO Alias clause
         //TODO schema 
         //TODO for now it is very simplyfied
         lingodb::ast::TableDescription desc{"", "", $relation_expr };
         auto tableref = mkNode<lingodb::ast::BaseTableRef>(@$, desc);
-        tableref->alias = $opt_alias_clause;
+        tableref->alias = $opt_alias_clause.first;
         $$ = tableref;
 
     }
@@ -716,12 +718,14 @@ table_ref:
     {
         //TODO
         auto subquery = mkNode<lingodb::ast::SubqueryRef>(@$, std::static_pointer_cast<lingodb::ast::SelectNode>($select_with_parens));
-        subquery->alias = $opt_alias_clause;
+        subquery->alias = $opt_alias_clause.first;
+        subquery->columnNames = $opt_alias_clause.second;
         $$ = subquery;
     }
 
 
     ;
+
 
 set_quantifier: 
     ALL
@@ -873,9 +877,21 @@ joined_table:
 
 alias_clause: 
     AS ColId LP name_list RP
-    | AS ColId {$$ = $ColId;}
+    {
+        $$ = std::make_pair($ColId, $name_list);
+    }
+    | AS ColId 
+    {
+        $$ = std::make_pair($ColId, std::vector<std::string>());
+    }
     | ColId LP name_list RP
-    | ColId {$$ = $ColId;} //TODO Check if correct
+    {
+        $$ = std::make_pair($ColId, $name_list);
+    }
+    | ColId 
+    {
+        $$ = std::make_pair($ColId, std::vector<std::string>());
+    } //TODO Check if correct
     ;
 
 
@@ -889,7 +905,10 @@ opt_nulls_order:
     }
 
 opt_alias_clause: 
-    alias_clause {$$ = $alias_clause;}
+    alias_clause 
+    {
+        $$ = $alias_clause;
+    }
     | %empty
     ;
 
@@ -1843,7 +1862,7 @@ type_func_name_keyword:
 ColLabel:
     IDENTIFIER									{ $$=$1; }
 	| unreserved_keyword					{ $$ = $1;}
-	//TODO | col_name_keyword						{ }
+	| col_name_keyword						{ $$=$1; }
 	//TODO | type_func_name_keyword				{ }
 	| reserved_keyword						{ $$ = $1; }
 	;
@@ -2362,7 +2381,16 @@ col_name_keyword:
  //TODO Add missinge names and constants for instance qualified_name
 qualified_name_list: 
     qualified_name 
-    | qualified_name_list COMMA qualified_name
+    {
+        auto list = mkListShared<lingodb::ast::QualifiedName>();
+        list.emplace_back($qualified_name);
+        $$ = list;
+    }
+    | qualified_name_list[list] COMMA qualified_name
+    {
+        $list.emplace_back($qualified_name);
+        $$ = $list;
+    }
     ;
 
 
