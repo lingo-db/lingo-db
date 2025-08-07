@@ -20,14 +20,14 @@
 #include <iostream>
 int main(int argc, char* argv[]) {
    if (argc <= 2) {
-      std::cerr << "USAGE: <sql database> <sql statement> [-e]" << std::endl;
+      std::cerr << "USAGE: <sql statement> <sql database>  [-e]" << std::endl;
       return 1;
    }
 
-   auto session = lingodb::runtime::Session::createSession(std::string(argv[1]), false);
+   auto session = lingodb::runtime::Session::createSession(std::string(argv[2]), false);
    driver drv;
 
-   if (!drv.parse(argv[2])) {
+   if (!drv.parse(argv[1])) {
       auto results = drv.result;
       if (results.empty()) {
          std::cerr << "Error parsing query" << std::endl;
