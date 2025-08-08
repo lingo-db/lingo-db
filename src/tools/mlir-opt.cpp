@@ -51,7 +51,6 @@ int main(int argc, char** argv) {
    db::registerDBConversionPasses();
    subop::registerSubOpToControlFlowConversionPasses();
    subop::registerSubOpTransformations();
-   //todo
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return lingodb::compiler::dialect::arrow::createLowerToStdPass();
    });

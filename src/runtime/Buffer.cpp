@@ -70,7 +70,7 @@ class FlexibleBufferIteratorTask : public lingodb::scheduler::TaskWithImplicitCo
       }
       lingodb::utility::Tracer::Trace trace(iterateEvent);
       size_t begin = splitSize * unitId;
-      size_t len = std::min(begin + splitSize, buffer.numElements) - begin;
+      size_t len = std::min(begin + splitSize, static_cast<size_t>(buffer.numElements)) - begin;
       auto buf = lingodb::runtime::Buffer{len, buffer.ptr + begin * std::max(1ul, typeSize)};
       cb(buf);
       trace.stop();

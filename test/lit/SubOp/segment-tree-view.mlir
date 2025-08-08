@@ -1,4 +1,6 @@
-//RUN: run-mlir %s | FileCheck %s
+//RUN: env LINGODB_EXECUTION_MODE=DEFAULT run-mlir %s | FileCheck %s
+//RUN: if [ "$(uname)" = "Linux" ]; then env LINGODB_EXECUTION_MODE=BASELINE run-mlir %s | FileCheck %s; fi
+
 //CHECK: |                             v  |                             s  |
 //CHECK: -------------------------------------------------------------------
 //CHECK: |                             0  |                             0  |

@@ -7,7 +7,7 @@ CMAKE_PREFIX_PATH_FLAG := -DCMAKE_PREFIX_PATH=$(CMAKE_PREFIX_PATH)
 DATA_BUILD_TYPE ?= debug
 TEST_BUILD_TYPE ?= debug
 SQLITE_TEST_BUILD_TYPE ?= release
-
+ENABLE_BASELINE_BACKEND ?= OFF
 
 build:
 	mkdir -p $@
@@ -44,7 +44,8 @@ resources/data/%/.stamp: resources/data/%/.rawdata build/lingodb-$(DATA_BUILD_TY
 
 
 LDB_ARGS= -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  \
-	   	 -DCMAKE_BUILD_TYPE=Debug
+	   	 -DCMAKE_BUILD_TYPE=Debug \
+	   	 -DENABLE_BASELINE_BACKEND=$(ENABLE_BASELINE_BACKEND)
 
 build/lingodb-debug/.stamp: build
 	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS) -DCMAKE_BUILD_TYPE=Debug $(CMAKE_PREFIX_PATH_FLAG)
@@ -87,12 +88,21 @@ run-test: build/lingodb-$(TEST_BUILD_TYPE)/.stamp
 	cmake --build $(dir $<) --target mlir-db-opt run-mlir run-sql sql-to-mlir sqlite-tester tester -- -j${NPROCS}
 	$(MAKE) test-no-rebuild
 
-test-no-rebuild: build/lingodb-$(TEST_BUILD_TYPE)/.buildstamp resources/data/test/.stamp resources/data/uni/.stamp
+test-no-rebuild-lit: build/lingodb-$(TEST_BUILD_TYPE)/.buildstamp resources/data/test/.stamp resources/data/uni/.stamp
 	${LLVM_LIT_BINARY} -v build/lingodb-$(TEST_BUILD_TYPE)/test/lit -j 1
+
+test-no-rebuild-unit: build/lingodb-$(TEST_BUILD_TYPE)/.buildstamp
 	./build/lingodb-$(TEST_BUILD_TYPE)/tester
+
+test-no-rebuild-sqlite-small: build/lingodb-$(TEST_BUILD_TYPE)/.buildstamp
 	find ./test/sqlite-small/ -maxdepth 1 -type f -name '*.test' | xargs -L 1 -P ${NPROCS} ./build/lingodb-$(TEST_BUILD_TYPE)/sqlite-tester
 
-sqlite-test-no-rebuild: build/lingodb-$(SQLITE_TEST_BUILD_TYPE)/.buildstamp
+test-no-rebuild: build/lingodb-$(TEST_BUILD_TYPE)/.buildstamp
+	$(MAKE) test-no-rebuild-lit
+	$(MAKE) test-no-rebuild-unit
+	$(MAKE) test-no-rebuild-sqlite-small
+
+test-no-rebuild-sqlite: build/lingodb-$(SQLITE_TEST_BUILD_TYPE)/.buildstamp
 	find ./test/sqlite/ -maxdepth 1 -type f -name '*.test' | xargs -L 1 -P ${NPROCS} ./build/lingodb-$(SQLITE_TEST_BUILD_TYPE)/sqlite-tester
 
 .PHONY: test-coverage
@@ -126,13 +136,14 @@ clean:
 	rm -rf build
 
 lint: build/lingodb-debug/.stamp
+	@echo "BASELINE enabled: $(ENABLE_BASELINE_BACKEND)"
 	cmake --build build/lingodb-debug --target build_includes
 	@if [ "$(shell uname)" = "Darwin" ]; then \
 		sed -i '' 's/-fno-lifetime-dse//g' build/lingodb-debug/compile_commands.json; \
 	else \
 		sed -i 's/-fno-lifetime-dse//g' build/lingodb-debug/compile_commands.json; \
 	fi
-	python3 tools/scripts/run-clang-tidy.py -p $(dir $<) -quiet -header-filter="$(shell pwd)/include/.*" -exclude="arrow|vendored" -clang-tidy-binary=clang-tidy-20
+	python3 tools/scripts/run-clang-tidy.py -p $(dir $<) -quiet -header-filter="$(shell pwd)/include/.*" -exclude-header-filter="generated|vendored" -exclude="arrow|vendored" -clang-tidy-binary=clang-tidy-20
 
 format:
 	find include \( -name '*.cpp' -o -name '*.h' \) -exec clang-format-20 -i {} +

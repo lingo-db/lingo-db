@@ -148,6 +148,7 @@ TEST_CASE("Storage") {
 }
 TEST_CASE("Storage:RelationHelper") {
    auto scheduler = lingodb::scheduler::startScheduler();
+   REQUIRE(lingodb::scheduler::getNumWorkers() > 1);
 
    fs::path tempDir = fs::temp_directory_path() / "lingodb-test-dir";
    //if exists: delete

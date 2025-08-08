@@ -402,14 +402,24 @@ int main(int argc, char** argv) {
          continue;
       }
       if (parts[0] == "statement") {
-         runStatement(*session, lines, line);
+         try {
+            runStatement(*session, lines, line);
+         } catch (const std::exception& e) {
+            std::cerr << "ERROR: " << e.what() << std::endl;
+            std::cerr << "while executing statement: " << lines[line] << std::endl;
+         }
       }
       if (parts[0] == "query") {
          if (first) {
             first = false;
             continue;
          }
-         runQuery(*session, lines, line);
+         try {
+            runQuery(*session, lines, line);
+         } catch (const std::exception& e) {
+            std::cerr << "ERROR: " << e.what() << std::endl;
+            std::cerr << "while executing query: " << lines[line] << std::endl;
+         }
       }
       if (parts[0] == "hash-threshold") {
          line += 2;
