@@ -70,7 +70,7 @@ static std::optional<size_t> get_size(mlir::Type type) noexcept {
          return intType.getIntOrFloatBitWidth() / 8;
       })
       .Case<dialect::util::VarLen32Type, dialect::util::BufferType>([](auto) { return 16; })
-      .Case<mlir::TupleType>([](auto t) { return TupleHelper{t}.sizeAndPadding().first; })
+      .Case<mlir::TupleType>([](auto t) { return TupleHelper::sizeAndPadding(t).first; })
       .Case<mlir::IndexType, dialect::util::RefType>([](auto) { return 8; })
       .Default([](mlir::Type t) {
          t.dump();

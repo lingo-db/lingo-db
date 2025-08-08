@@ -122,11 +122,19 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
                return (intType.getIntOrFloatBitWidth() + 64 - 1) / 64;
             })
             .template Case<dialect::util::VarLen32Type, dialect::util::BufferType>([](auto) { return 2; })
+            .template Case<mlir::TupleType>([](const mlir::TupleType t) { return TupleHelper::numSlots(t); })
             .Default([](mlir::Type t) { return 1; });
       }
 
       uint32_t size_bytes(uint32_t part_idx) const noexcept {
-         return mlir::TypeSwitch<mlir::Type, uint32_t>(valType)
+         mlir::Type typeAtSlot;
+         if (mlir::isa<mlir::TupleType>(valType)) {
+            typeAtSlot = TupleHelper::typeAtSlot(mlir::cast<mlir::TupleType>(valType), part_idx);
+            part_idx = 0; // reset idx for later following logic
+         } else {
+            typeAtSlot = valType;
+         }
+         return mlir::TypeSwitch<mlir::Type, uint32_t>(typeAtSlot)
             .Case<mlir::IntegerType, mlir::FloatType>([&](auto numType) {
                assert(
                   part_idx < (numType.getIntOrFloatBitWidth() + 64 - 1) / 64 &&
@@ -142,7 +150,7 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
                // these container types are 2x64-bit
                return 8;
             })
-            .Default([](mlir::Type t) {
+            .Default([](const mlir::Type t) {
                t.dump();
                assert(0 && "invalid type");
                return 0;
@@ -150,14 +158,19 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
       }
 
       tpde::RegBank reg_bank(uint32_t part_idx) const noexcept {
-         return mlir::TypeSwitch<mlir::Type, tpde::RegBank>(valType)
+         mlir::Type typeAtSlot;
+         if (mlir::isa<mlir::TupleType>(valType)) {
+            typeAtSlot = TupleHelper::typeAtSlot(mlir::cast<mlir::TupleType>(valType), part_idx);
+         } else {
+            typeAtSlot = valType;
+         }
+         return mlir::TypeSwitch<mlir::Type, tpde::RegBank>(typeAtSlot)
             .Case<mlir::IntegerType, mlir::IndexType, dialect::util::RefType, mlir::FunctionType,
                   dialect::util::VarLen32Type, dialect::util::BufferType>([&](auto) {
                return Config::GP_BANK;
             })
             .template Case<mlir::FloatType>([](auto) { return Config::FP_BANK; })
-
-            .Default([](mlir::Type t) {
+            .Default([](const mlir::Type t) {
                t.dump();
                assert(0 && "invalid type");
                return Config::GP_BANK;
@@ -227,7 +240,7 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
       if (const auto utilSizeOfOp = mlir::dyn_cast_or_null<dialect::util::SizeOfOp>(ref.value.getDefiningOp())) {
          assert(part == 0);
          const mlir::TypeAttr type_attr = mlir::cast<mlir::TypeAttr>(utilSizeOfOp->getAttr("type"));
-         const uint64_t tuple_size = TupleHelper{mlir::cast<mlir::TupleType>(type_attr.getValue())}.sizeAndPadding().first;
+         const uint64_t tuple_size = TupleHelper::sizeAndPadding(mlir::cast<mlir::TupleType>(type_attr.getValue())).first;
          return ValuePartRef(this, tuple_size, 8, Config::GP_BANK);
       }
       if (const auto constVarLenOp = mlir::dyn_cast_or_null<dialect::util::CreateConstVarLen>(
@@ -272,7 +285,7 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
          } else if (mlir::isa<mlir::FloatType>(ret_type)) {
             return ValuePartRef(this, 0, ret_type.getIntOrFloatBitWidth() / 8, Config::FP_BANK);
          } else if (mlir::isa<dialect::util::VarLen32Type, dialect::util::BufferType>(ret_type)) {
-            return ValuePartRef(this, 0, 8, Config::FP_BANK);
+            return ValuePartRef(this, 0, 8, Config::GP_BANK);
          } else {
             assert(0);
             return ValuePartRef{this};
@@ -529,7 +542,7 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
       const mlir::TupleType tuple_type = mlir::cast<mlir::TupleType>(base_ref.getType().getElementType());
 
       // calc the byte-offset of the element in the tuple (same address layout as C++ structs for target)
-      unsigned elementOffset = TupleHelper{tuple_type}.getElementOffset(op.getIdx());
+      unsigned elementOffset = TupleHelper::getElementOffset(tuple_type, op.getIdx());
 
       const auto dst = op->getResult(0);
       assert(val_parts(base_ref).count() == 1);
@@ -1289,6 +1302,89 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
       return ret;
    }
 
+   bool compile_util_pack_op(dialect::util::PackOp op) {
+      mlir::TypedValue<mlir::Type> res = op.getTuple();
+      auto vals = op.getVals();
+
+      const mlir::TupleType tuple_type = mlir::cast<mlir::TupleType>(res.getType());
+      assert(tuple_type.getTypes().size() == vals.size() && "Number of values must match number of tuple elements");
+
+      auto res_vr = this->result_ref(res);
+      unsigned offset = 0;
+      for (size_t i = 0; i < vals.size(); ++i) {
+         auto val_vr = this->val_ref(vals[i]);
+         auto val_type = vals[i].getType();
+         mlir::TypeSwitch<mlir::Type>(val_type)
+            .Case<mlir::TupleType>([](const mlir::TupleType) {
+               ;
+               assert(0 && "Nested tuples are not supported");
+               return;
+            })
+            .template Case<mlir::IntegerType>([&](const mlir::IntegerType int_type) {
+               res_vr.part(offset++).set_value(val_vr.part(0));
+               if (int_type.getWidth() == 128) {
+                  res_vr.part(offset++).set_value(val_vr.part(1));
+               }
+            })
+            .template Case<dialect::util::VarLen32Type, dialect::util::BufferType>([&](auto) {
+               res_vr.part(offset++).set_value(val_vr.part(0));
+               res_vr.part(offset++).set_value(val_vr.part(1));
+            })
+            .Default([&](const mlir::Type) {
+               res_vr.part(offset++).set_value(val_vr.part(0));
+            });
+      }
+      return true;
+   }
+
+   bool compile_util_get_tuple_op(dialect::util::GetTupleOp op) {
+      mlir::TypedValue<mlir::Type> val = op.getTuple();
+      mlir::TypedValue<mlir::Type> res = op.getVal();
+
+      auto val_vr = this->val_ref(val);
+      auto res_vr = this->result_ref(res);
+
+      auto tuple_type = mlir::cast<mlir::TupleType>(val.getType());
+
+      unsigned offset = 0;
+      for (uint32_t i = 0; i < op.getOffset(); ++i) {
+         offset += mlir::TypeSwitch<mlir::Type, unsigned>(tuple_type.getType(i))
+                      .Case<mlir::TupleType>([](const mlir::TupleType t) {
+                         return TupleHelper::numSlots(t);
+                      })
+                      .template Case<mlir::IntegerType>([](const mlir::IntegerType int_type) {
+                         return int_type.getWidth() == 128 ? 2u : 1u;
+                      })
+                      .template Case<dialect::util::VarLen32Type, dialect::util::BufferType>([](auto) {
+                         return 2u;
+                      })
+                      .Default([](const mlir::Type) {
+                         return 1u;
+                      });
+      }
+
+      mlir::TypeSwitch<mlir::Type>(TupleHelper::typeAtSlot(tuple_type, offset))
+         .template Case<mlir::TupleType>([&](const mlir::TupleType t) {
+            for (size_t i = 0; i < TupleHelper::numSlots(t); ++i) {
+               res_vr.part(i).set_value(val_vr.part(offset + i));
+            }
+         })
+         .template Case<mlir::IntegerType>([&](const mlir::IntegerType int_type) {
+            res_vr.part(0).set_value(val_vr.part(offset));
+            if (int_type.getWidth() == 128) {
+               res_vr.part(1).set_value(val_vr.part(offset + 1));
+            }
+         })
+         .template Case<dialect::util::VarLen32Type, dialect::util::BufferType>([&](auto) {
+            res_vr.part(0).set_value(val_vr.part(offset));
+            res_vr.part(1).set_value(val_vr.part(offset + 1));
+         })
+         .Default([&](const mlir::Type) {
+            res_vr.part(0).set_value(val_vr.part(offset));
+         });
+      return true;
+   }
+
    bool compile_inst(const IRInstRef inst, InstRange) noexcept {
       return mlir::TypeSwitch<IRInstRef, bool>(inst)
          .Case<mlir::arith::AddIOp, mlir::arith::SubIOp, mlir::arith::MulIOp, mlir::arith::DivSIOp,
@@ -1380,6 +1476,12 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
          })
          .template Case<mlir::arith::UIToFPOp>([&](auto op) {
             return compile_arith_sitofp_op(op, false);
+         })
+         .template Case<dialect::util::PackOp>([&](auto op) {
+            return compile_util_pack_op(op);
+         })
+         .template Case<dialect::util::GetTupleOp>([&](auto op) {
+            return compile_util_get_tuple_op(op);
          })
          .template Case<dialect::util::VarLenCmp>([&](auto op) { return compile_util_varlen_cmp_op(op); })
          .Default([&](IRInstRef op) {
