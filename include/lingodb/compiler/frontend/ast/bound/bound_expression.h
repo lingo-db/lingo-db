@@ -11,11 +11,9 @@ class BoundOrderByModifier;
 enum class BindingType : uint8_t {
    TABLE = 1,
    FUNCTION = 2,
-   //TODO other
 };
 class BoundExpression : public AstNode {
    public:
-   //TODO make enums sense
    BoundExpression(ExpressionClass exprClass, ExpressionType type, std::string alias) : AstNode(NodeType::BOUND_EXPRESSION), exprClass(exprClass), type(type), alias(alias) {}
    BoundExpression(ExpressionClass exprClass, ExpressionType type, catalog::Type resultType, std::string alias) : AstNode(NodeType::BOUND_EXPRESSION), exprClass(exprClass), type(type), resultType(catalog::NullableType(resultType)), alias(alias) {}
    BoundExpression(ExpressionClass exprClass, ExpressionType type, catalog::NullableType resultType, std::string alias) : AstNode(NodeType::BOUND_EXPRESSION), exprClass(exprClass), type(type), resultType(resultType), alias(alias) {}
@@ -38,10 +36,7 @@ class BoundColumnRefExpression : public BoundExpression {
    //! Specify both the column and table name
    BoundColumnRefExpression(std::string scope, catalog::NullableType resultType, std::shared_ptr<NamedResult> namedResult, std::string alias);
 
-   //TODO semenatic
    std::string scope;
-
-   //TODO type etc
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
@@ -82,7 +77,6 @@ class BoundConstantExpression : public BoundExpression {
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 
-//TODO other
 class BoundTargetsExpression : public BoundExpression {
    public:
    static constexpr ExpressionClass TYPE = ExpressionClass::BOUND_TARGETS;
@@ -105,13 +99,13 @@ class BoundTargetsExpression : public BoundExpression {
 class BoundFunctionExpression : public BoundExpression {
    public:
    static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_FUNCTION;
-   BoundFunctionExpression(ExpressionType type, catalog::NullableType resultType, std::string functionName, std::string scope, std::string aliasOrUniqueIdentifier, bool distinct, std::vector<std::shared_ptr<BoundExpression>> arguments);
+   BoundFunctionExpression(ExpressionType type, catalog::NullableType resultType, std::string functionName, std::string scope, std::string alias, bool distinct, std::vector<std::shared_ptr<BoundExpression>> arguments);
 
    std::string functionName;
    std::string scope;
    bool distinct;
-   //TODO!!!!!!!
-   std::string aliasOrUniqueIdentifier;
+
+
    std::vector<std::shared_ptr<BoundExpression>> arguments;
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
@@ -143,7 +137,7 @@ class BoundCastExpression : public BoundExpression {
    static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_CAST;
    BoundCastExpression(catalog::NullableType resultType, std::string alias, std::shared_ptr<BoundExpression> child, std::optional<LogicalTypeWithMods> logicalTypeWithMods, std::string stringRepr);
    std::optional<LogicalTypeWithMods> logicalTypeWithMods;
-   //TODO better
+
    std::string stringRepr;
    std::shared_ptr<BoundExpression> child;
    //LogicalType logicalType;

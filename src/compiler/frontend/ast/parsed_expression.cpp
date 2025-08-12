@@ -23,7 +23,7 @@ ColumnRefExpression::ColumnRefExpression(std::string columnName, std::string tab
 ColumnRefExpression::ColumnRefExpression(std::string columnName) : ColumnRefExpression(std::vector<std::string>{std::move(columnName)}) {
 }
 
-ColumnRefExpression::ColumnRefExpression(std::vector<std::string> columnNames) : ParsedExpression(ExpressionType::COLUMN_REF, TYPE), column_names(columnNames) {
+ColumnRefExpression::ColumnRefExpression(std::vector<std::string> columnNames) : ParsedExpression(ExpressionType::COLUMN_REF, TYPE), columnNames(columnNames) {
 }
 
 std::string ColumnRefExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
@@ -39,11 +39,11 @@ std::string ColumnRefExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idG
    label.append("ColumnRef\\n");
 
    // Add all column names with dots between them
-   for (size_t i = 0; i < column_names.size(); ++i) {
+   for (size_t i = 0; i < columnNames.size(); ++i) {
       if (i > 0) {
          label.append(".");
       }
-      label.append(column_names[i]);
+      label.append(columnNames[i]);
    }
 
    // Create the node
@@ -60,7 +60,7 @@ std::string ColumnRefExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idG
 
 size_t ColumnRefExpression::hash() {
    size_t result = ParsedExpression::hash();
-   for (const auto& name : column_names) {
+   for (const auto& name : columnNames) {
       result = result * 31 + std::hash<std::string>{}(name);
    }
 
@@ -70,7 +70,7 @@ bool ColumnRefExpression::operator==(ParsedExpression& other) {
    if (!ParsedExpression::operator==(other)) return false;
 
    const auto& otherRef = static_cast<ColumnRefExpression&>(other);
-   return column_names == otherRef.column_names;
+   return columnNames == otherRef.columnNames;
 }
 
 /// ComparisonExpression

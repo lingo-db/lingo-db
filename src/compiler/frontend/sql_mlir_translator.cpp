@@ -96,22 +96,12 @@ std::optional<mlir::Value> SQLMlirTranslator::translateStart(mlir::OpBuilder& bu
                   attrs.push_back(attrDef);
                   break;
                }
-               case ast::NamedResultType::Function: {
-                  auto functionInfo = std::static_pointer_cast<ast::FunctionInfo>(named);
-                  names.push_back(builder.getStringAttr(functionInfo->displayName));
-                  auto colMemberName = memberManager.getUniqueMember(functionInfo->name);
-                  colMemberNames.push_back(builder.getStringAttr(colMemberName));
-                  colTypes.push_back(mlir::TypeAttr::get(functionInfo->resultType.toMlirType(builder.getContext())));
-                  auto attrDef = functionInfo->createRef(builder, attrManager);
-                  attrs.push_back(attrDef);
-                  break;
-               }
+               case ast::NamedResultType::Function:
                case ast::NamedResultType::EXPRESSION: {
                   names.push_back(builder.getStringAttr(named->displayName));
                   auto colMemberName = memberManager.getUniqueMember(named->name);
                   colMemberNames.push_back(builder.getStringAttr(colMemberName));
                   colTypes.push_back(mlir::TypeAttr::get(named->resultType.toMlirType(builder.getContext())));
-
                   auto attrDef = named->createRef(builder, attrManager);
                   attrs.push_back(attrDef);
                   break;

@@ -20,6 +20,9 @@ struct NamedResult {
    //TODO find better name
    std::string displayName{};
    NamedResult(NamedResultType type, std::string scope, catalog::NullableType resultType, std::string name) : type(type), scope(scope), resultType(resultType), name(name) {}
+   NamedResult(std::string scope, catalog::Column c) : type(NamedResultType::Column), scope(scope), resultType(catalog::NullableType(c.getLogicalType(), c.getIsNullable())), name(c.getColumnName()), displayName(c.getColumnName()) {}
+
+
 
    virtual compiler::dialect::tuples::ColumnRefAttr createRef(mlir::OpBuilder& builder, compiler::dialect::tuples::ColumnManager& attrManager) {
       auto ref = attrManager.createRef(this->scope, name);
@@ -37,16 +40,6 @@ struct NamedResult {
       def.getColumn().type = resultType.toMlirType(builder.getContext());
       return def;
    };
-};
-struct FunctionInfo : public NamedResult {
-   FunctionInfo(std::string scope, std::string name, catalog::NullableType resultType) : NamedResult(NamedResultType::Function, scope, resultType, name) {}
-};
-struct ColumnInfo : public NamedResult {
-   catalog::Column column;
-
-   ColumnInfo(std::string scope, catalog::Column column) : NamedResult(NamedResultType::Column, scope, catalog::NullableType(column.getLogicalType(), column.getIsNullable()), column.getColumnName()), column(column) {
-      displayName = column.getColumnName();
-   }
 };
 
 class BoundColumnEntry {

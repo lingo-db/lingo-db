@@ -1926,7 +1926,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
                error("Not implemented", rootNode->loc);
             }
 
-            auto fInfo = std::make_shared<ast::FunctionInfo>(scope, fName, resultType);
+            auto fInfo = std::make_shared<ast::NamedResult>(ast::NamedResultType::Function, scope, resultType, fName);
 
             fInfo->displayName = function->alias;
             context->mapAttribute(resolverScope, fName, fInfo);
@@ -2096,7 +2096,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
          if (boundFunctionExpression == nullptr) {
             error("Function '" << function->functionName << "' not implemented", function->loc);
          }
-         auto fInfo = std::make_shared<ast::FunctionInfo>(scope, fName, resultType);
+         auto fInfo = std::make_shared<ast::NamedResult>(ast::NamedResultType::Function, scope, resultType, fName);
 
 
          boundFunctionExpression->namedResult = fInfo;
@@ -2402,15 +2402,15 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
 
 std::shared_ptr<ast::BoundColumnRefExpression> SQLQueryAnalyzer::analyzeColumnRefExpression(std::shared_ptr<ast::ColumnRefExpression> columnRef, std::shared_ptr<SQLContext> context) {
    //new implementation which uses the new concept of TableProducers
-   auto columnName = columnRef->column_names.size() == 1 ? columnRef->column_names[0] : columnRef->column_names[1];
+   auto columnName = columnRef->columnNames.size() == 1 ? columnRef->columnNames[0] : columnRef->columnNames[1];
 
    std::string scope;
    std::shared_ptr<ast::NamedResult> found;
-   if (columnRef->column_names.size() == 2) {
-      found = context->getNamedResultInfo(columnRef->loc, columnRef->column_names[0] + "." + columnRef->column_names[1]);
+   if (columnRef->columnNames.size() == 2) {
+      found = context->getNamedResultInfo(columnRef->loc, columnRef->columnNames[0] + "." + columnRef->columnNames[1]);
 
-   } else if (columnRef->column_names.size() == 1) {
-      found = context->getNamedResultInfo(columnRef->loc, columnRef->column_names[0]);
+   } else if (columnRef->columnNames.size() == 1) {
+      found = context->getNamedResultInfo(columnRef->loc, columnRef->columnNames[0]);
    } else {
       throw std::runtime_error("Not implemented");
    }
