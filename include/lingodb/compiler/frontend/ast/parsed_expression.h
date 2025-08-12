@@ -294,16 +294,16 @@ class ColumnRefExpression : public ParsedExpression {
    static constexpr ExpressionClass TYPE = ExpressionClass::COLUMN_REF;
 
    //! Specify both the column and table name
-   ColumnRefExpression(std::string column_name, std::string table_name);
+   ColumnRefExpression(std::string columnName, std::string tableName);
    //! Specify both the column and table alias
    //TODO ColumnRefExpression(std::string column_name, const BindingAlias &alias);
    //! Only specify the column name, the table name will be derived later
-   explicit ColumnRefExpression(std::string column_name);
+   explicit ColumnRefExpression(std::string columnName);
    //! Specify a set of names
-   explicit ColumnRefExpression(std::vector<std::string> column_names);
+   explicit ColumnRefExpression(std::vector<std::string> columnNames);
 
    //! The stack of names in order of which they appear (column_names[0].column_names[1].column_names[2]....)
-   std::vector<std::string> column_names;
+   std::vector<std::string> columnNames;
 
    size_t hash() override;
    bool operator==(ParsedExpression& other) override;
@@ -408,8 +408,6 @@ class StarExpression : public ParsedExpression {
    //! The relation name in case of tbl.*, or empty if this is a normal *
    std::string relationName;
 
-   //TODO add missing variables
-
    //! The expression to select the columns (regular expression or list)
    std::shared_ptr<ParsedExpression> expr;
 
@@ -436,8 +434,6 @@ class TargetsExpression : public ParsedExpression {
 
    std::optional<std::vector<std::shared_ptr<ParsedExpression>>> distinctExpressions = std::nullopt;
 
-
-
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
    size_t hash() override;
    bool operator==(ParsedExpression& other) override;
@@ -463,7 +459,7 @@ class CastExpression : public ParsedExpression {
    static constexpr const ExpressionClass TYPE = ExpressionClass::CAST;
    CastExpression(LogicalTypeWithMods logicalTypeWithMods, std::shared_ptr<ParsedExpression> child);
    std::optional<LogicalTypeWithMods> logicalTypeWithMods;
-   //TODO better
+
    std::optional<LogicalType> optInterval;
    std::shared_ptr<ParsedExpression> child;
 
@@ -505,8 +501,6 @@ class WindowExpression : public ParsedExpression {
    public:
    static constexpr const ExpressionClass TYPE = ExpressionClass::WINDOW;
    WindowExpression();
-
-   //TODO add missing
 
    std::shared_ptr<FunctionExpression> functionExpression;
 

@@ -13,9 +13,9 @@ namespace lingodb::analyzer {
 
 class SQLScope {
    public:
-   std::map<std::string, std::pair<size_t, ast::ColumnInfo>> tables;
-   std::map<std::string, std::vector<std::pair<size_t, ast::ColumnInfo>>> columns;
-   std::map<std::string, std::vector<std::pair<size_t, ast::FunctionInfo>>> functionsEntry;
+   std::map<std::string, std::pair<size_t, ast::NamedResult>> tables;
+   std::map<std::string, std::vector<std::pair<size_t, ast::NamedResult>>> columns;
+   std::map<std::string, std::vector<std::pair<size_t, ast::NamedResult>>> functionsEntry;
    //Stores the columns that should be produced at the end
    ast::TargetInfo targetInfo;
    std::vector<std::shared_ptr<ast::BoundExpression>> evalBefore;
