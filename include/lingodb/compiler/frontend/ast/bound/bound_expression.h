@@ -192,11 +192,12 @@ class BoundSubqueryExpression : public BoundExpression {
    public:
    static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_SUBQUERY;
 
-   BoundSubqueryExpression(SubqueryType subqueryType, catalog::NullableType resultType, std::string alias, std::shared_ptr<NamedResult> namedResult, std::shared_ptr<analyzer::SQLScope> sqlScope, std::shared_ptr<TableProducer> subquery, std::shared_ptr<BoundExpression> testExpr);
+   BoundSubqueryExpression(SubqueryType subqueryType, catalog::NullableType resultType, std::string alias, std::shared_ptr<NamedResult> namedResultForSubquery, std::shared_ptr<analyzer::SQLScope> sqlScope, std::shared_ptr<TableProducer> subquery, std::shared_ptr<BoundExpression> testExpr);
 
    SubqueryType subqueryType = SubqueryType::INVALID;
    //! The subquery expression
    std::shared_ptr<TableProducer> subquery;
+   std::shared_ptr<NamedResult> namedResultForSubquery;
    std::shared_ptr<analyzer::SQLScope> sqlScope;
    //! Expression to test against. The left side expression of an IN expression.
    std::shared_ptr<BoundExpression> testExpr;

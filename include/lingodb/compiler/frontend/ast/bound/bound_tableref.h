@@ -49,7 +49,12 @@ class BoundJoinRef : public BoundTableRef {
    //! Join condition type
    JoinCondType refType;
 
-   std::vector<std::pair<std::string, std::shared_ptr<ast::NamedResult>>> outerJoinMapping;
+   /**
+    * Join attribute mapping for outer joins.
+    * first: original attribute ref
+    * second: new attribute ref
+    */
+   std::vector<std::pair<std::shared_ptr<NamedResult>, std::shared_ptr<NamedResult>>> outerJoinMapping;
 
    //TODO check if needed for every type of JOIN
    std::shared_ptr<analyzer::SQLScope> leftScope;

@@ -40,6 +40,9 @@ Type::Type(lingodb::catalog::LogicalTypeId id, std::shared_ptr<TypeInfo> infoInp
       case LogicalTypeId::STRING:
          mlirTypeCreator = lingodb::catalog::createStringTypeCreator(std::dynamic_pointer_cast<StringTypeInfo>(info));
          break;
+      case LogicalTypeId::NONE:
+         mlirTypeCreator = lingodb::catalog::createNoneTypeCreator();
+         break;
    }
 }
 void Type::serialize(utility::Serializer& serializer) const {
