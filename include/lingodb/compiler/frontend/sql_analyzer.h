@@ -5,6 +5,7 @@
 #include "lingodb/compiler/frontend/ast/query_node.h"
 #include "lingodb/compiler/frontend/driver.h"
 #include "sql_context.h"
+#define DEBUG false
 
 #include <functional>
 namespace lingodb::analyzer {

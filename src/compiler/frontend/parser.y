@@ -1202,6 +1202,10 @@ a_expr:
     {
         $$ = mkNode<lingodb::ast::ConjunctionExpression>(@$, lingodb::ast::ExpressionType::CONJUNCTION_OR, $1, $3);
     }
+    | NOT a_expr
+    {
+        $$ = mkNode<lingodb::ast::OperatorExpression>(@$, lingodb::ast::ExpressionType::OPERATOR_NOT, $2);
+    }
     | a_expr LIKE a_expr
     {
         $$ = mkNode<lingodb::ast::ComparisonExpression>(@$, lingodb::ast::ExpressionType::COMPARE_LIKE, $1, $3);
