@@ -116,8 +116,7 @@ std::string BoundBetweenExpression::toDotGraph(uint32_t depth, NodeIdGenerator& 
 /*
  * BoundSubqueryExpression
  */
-BoundSubqueryExpression::BoundSubqueryExpression(SubqueryType subqueryType, catalog::NullableType resultType, std::string alias, std::shared_ptr<NamedResult> namedResult, std::shared_ptr<analyzer::SQLScope> sqlScope, std::shared_ptr<TableProducer> subquery, std::shared_ptr<BoundExpression> testExpr) : BoundExpression(TYPE, ExpressionType::SUBQUERY, resultType, alias), subqueryType(subqueryType), sqlScope(sqlScope), subquery(std::move(subquery)), testExpr(testExpr) {
-   this->namedResult = namedResult;
+BoundSubqueryExpression::BoundSubqueryExpression(SubqueryType subqueryType, catalog::NullableType resultType, std::string alias, std::shared_ptr<NamedResult> namedResultForSubquery, std::shared_ptr<analyzer::SQLScope> sqlScope, std::shared_ptr<TableProducer> subquery, std::shared_ptr<BoundExpression> testExpr) : BoundExpression(TYPE, ExpressionType::SUBQUERY, resultType, alias), subqueryType(subqueryType), sqlScope(sqlScope), namedResultForSubquery(namedResultForSubquery), subquery(std::move(subquery)), testExpr(testExpr) {
 }
 std::string BoundSubqueryExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    return "";
