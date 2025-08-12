@@ -2308,70 +2308,78 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
          auto boundWindowBoundary = std::make_shared<ast::BoundWindowBoundary>();
 
          //TODO add missing analysis
-
-         if (windowExpr->windowBoundary) {
-            //TODO check for different WindowModes
-            boundWindowBoundary->loc = windowExpr->windowBoundary->loc;
-            boundWindowBoundary->windowMode = windowExpr->windowBoundary->windowMode;
-            //Start
-            switch (windowExpr->windowBoundary->start) {
-               case ast::WindowBoundaryType::CURRENT_ROW: {
-                  boundWindowBoundary->start = 0;
-                  break;
-               }
-               case ast::WindowBoundaryType::EXPR_PRECEDING:
-               case ast::WindowBoundaryType::EXPR_FOLLOWING: {
-                  assert(windowExpr->windowBoundary->startExpr);
-                  assert(windowExpr->windowBoundary->startExpr->exprClass == ast::ExpressionClass::CONSTANT);
-
-                  auto constantExpr = std::static_pointer_cast<ast::BoundConstantExpression>(analyzeExpression(windowExpr->windowBoundary->startExpr, context, resolverScope));
-                  if (constantExpr->value->type != ast::ConstantType::INT) {
-                     error("unsupported window start specification", boundWindowBoundary->loc);
-                  }
-                  boundWindowBoundary->start = std::static_pointer_cast<ast::IntValue>(constantExpr->value)->iVal;
-                  if (windowExpr->windowBoundary->start == ast::WindowBoundaryType::EXPR_PRECEDING) {
-                     boundWindowBoundary->start = -boundWindowBoundary->start;
-                  }
-               }
-
-               case ast::WindowBoundaryType::INVALID: {
-                  error("Invalid boundary type", boundWindowBoundary->loc)
-                  break;
-               }
-                  default: ;
-
+         if (!windowExpr->windowBoundary) {
+            windowExpr->windowBoundary = drv.nf.node<ast::WindowBoundary>(windowExpr->loc, ast::WindowBoundaryType::UNBOUNDED_PRECEDING);
+            if (windowExpr->order.has_value()) {
+               windowExpr->windowBoundary->end = ast::WindowBoundaryType::CURRENT_ROW;
+            } else {
+               windowExpr->windowBoundary->end = ast::WindowBoundaryType::UNBOUNDED_FOLLOWING;
             }
-            //End
-            switch (windowExpr->windowBoundary->end) {
-               case ast::WindowBoundaryType::CURRENT_ROW: {
-                  boundWindowBoundary->end = 0;
-                  break;
-               }
-               case ast::WindowBoundaryType::EXPR_PRECEDING:
-               case ast::WindowBoundaryType::EXPR_FOLLOWING: {
-                  assert(windowExpr->windowBoundary->endExpr);
-                  assert(windowExpr->windowBoundary->endExpr->exprClass == ast::ExpressionClass::CONSTANT);
 
-                  auto constantExpr = std::static_pointer_cast<ast::BoundConstantExpression>(analyzeExpression(windowExpr->windowBoundary->endExpr, context, resolverScope));
-                  if (constantExpr->value->type != ast::ConstantType::INT) {
-                     error("unsupported window start specification", boundWindowBoundary->loc);
-                  }
-                  boundWindowBoundary->end = std::static_pointer_cast<ast::IntValue>(constantExpr->value)->iVal;
-                  if (windowExpr->windowBoundary->end == ast::WindowBoundaryType::EXPR_PRECEDING) {
-                     boundWindowBoundary->end = -boundWindowBoundary->end;
-                  }
-               }
+            windowExpr->windowBoundary->windowMode = ast::WindowMode::ROWS;
 
-               case ast::WindowBoundaryType::INVALID: {
-                  error("Invalid boundary type", boundWindowBoundary->loc)
-                  break;
+         }
+
+         //TODO check for different WindowModes
+         boundWindowBoundary->loc = windowExpr->windowBoundary->loc;
+         boundWindowBoundary->windowMode = windowExpr->windowBoundary->windowMode;
+         //Start
+         switch (windowExpr->windowBoundary->start) {
+            case ast::WindowBoundaryType::CURRENT_ROW: {
+               boundWindowBoundary->start = 0;
+               break;
+            }
+            case ast::WindowBoundaryType::EXPR_PRECEDING:
+            case ast::WindowBoundaryType::EXPR_FOLLOWING: {
+               assert(windowExpr->windowBoundary->startExpr);
+               assert(windowExpr->windowBoundary->startExpr->exprClass == ast::ExpressionClass::CONSTANT);
+
+               auto constantExpr = std::static_pointer_cast<ast::BoundConstantExpression>(analyzeExpression(windowExpr->windowBoundary->startExpr, context, resolverScope));
+               if (constantExpr->value->type != ast::ConstantType::INT) {
+                  error("unsupported window start specification", boundWindowBoundary->loc);
                }
+               boundWindowBoundary->start = std::static_pointer_cast<ast::IntValue>(constantExpr->value)->iVal;
+               if (windowExpr->windowBoundary->start == ast::WindowBoundaryType::EXPR_PRECEDING) {
+                  boundWindowBoundary->start = -boundWindowBoundary->start;
+               }
+            }
+
+            case ast::WindowBoundaryType::INVALID: {
+               error("Invalid boundary type", boundWindowBoundary->loc)
+               break;
+            }
                default: ;
 
-            }
-         } else {
-            boundWindowBoundary->loc = windowExpr->loc;
          }
+         //End
+         switch (windowExpr->windowBoundary->end) {
+            case ast::WindowBoundaryType::CURRENT_ROW: {
+               boundWindowBoundary->end = 0;
+               break;
+            }
+            case ast::WindowBoundaryType::EXPR_PRECEDING:
+            case ast::WindowBoundaryType::EXPR_FOLLOWING: {
+               assert(windowExpr->windowBoundary->endExpr);
+               assert(windowExpr->windowBoundary->endExpr->exprClass == ast::ExpressionClass::CONSTANT);
+
+               auto constantExpr = std::static_pointer_cast<ast::BoundConstantExpression>(analyzeExpression(windowExpr->windowBoundary->endExpr, context, resolverScope));
+               if (constantExpr->value->type != ast::ConstantType::INT) {
+                  error("unsupported window start specification", boundWindowBoundary->loc);
+               }
+               boundWindowBoundary->end = std::static_pointer_cast<ast::IntValue>(constantExpr->value)->iVal;
+               if (windowExpr->windowBoundary->end == ast::WindowBoundaryType::EXPR_PRECEDING) {
+                  boundWindowBoundary->end = -boundWindowBoundary->end;
+               }
+            }
+
+            case ast::WindowBoundaryType::INVALID: {
+               error("Invalid boundary type", boundWindowBoundary->loc)
+               break;
+            }
+            default: ;
+
+         }
+
 
          ast::ExpressionType windowType = ast::ExpressionType::WINDOW_AGGREGATE;
          catalog::Type resultType = catalog::Type::int64();
