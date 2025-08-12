@@ -1728,7 +1728,7 @@ opt_frame_clause:
     }
     | %empty
     {
-        $$ = nullptr;
+       
     }
     ;
 
