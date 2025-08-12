@@ -1398,7 +1398,7 @@ columnref:
         if(in->exprClass == lingodb::ast::ExpressionClass::COLUMN_REF) {
             auto columnref = std::static_pointer_cast<lingodb::ast::ColumnRefExpression>(in);
             auto newColumnRef = mkNode<lingodb::ast::ColumnRefExpression>(@$, $ColId);
-            newColumnRef->column_names.insert(newColumnRef->column_names.end(), columnref->column_names.begin(), columnref->column_names.end() );
+            newColumnRef->columnNames.insert(newColumnRef->columnNames.end(), columnref->columnNames.begin(), columnref->columnNames.end() );
             $$ = newColumnRef;
             
 
