@@ -29,19 +29,19 @@ namespace lingodb::execution::baseline {
     template<typename Assembler>
     class InMemoryLoader final : public DynamicLoader {
         tpde::ElfMapper mapper;
-        tpde::AssemblerElfBase::SymRef main_func;
+       tpde::SymRef mainFunc;
 
-    public:
-        InMemoryLoader(Assembler &assembler, Error &error, typename Assembler::SymRef main_func)
-            : DynamicLoader(error),
-              main_func(main_func) {
-            mapper.map(assembler, [](const std::string_view name) {
-                return dlsym(RTLD_DEFAULT, std::string(name).c_str());
-            });
+        public:
+        InMemoryLoader(Assembler& assembler, Error& error, tpde::SymRef mainFunc)
+           : DynamicLoader(error),
+             mainFunc(mainFunc) {
+           mapper.map(assembler, [](const std::string_view name) {
+              return dlsym(RTLD_DEFAULT, std::string(name).c_str());
+           });
         }
 
         mainFnType getMainFunction() override {
-            return reinterpret_cast<mainFnType>(mapper.get_sym_addr(main_func));
+           return reinterpret_cast<mainFnType>(mapper.get_sym_addr(mainFunc));
         }
     };
 
