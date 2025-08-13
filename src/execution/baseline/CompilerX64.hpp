@@ -17,7 +17,14 @@ namespace lingodb::execution::baseline {
             : tpde::x64::CompilerX64<IRAdaptor, IRCompilerX64, IRCompilerBase, CompilerConfig>,
               tpde_encodegen::EncodeCompiler<IRAdaptor, IRCompilerX64, IRCompilerBase, CompilerConfig> {
         using Base = tpde::x64::CompilerX64<IRAdaptor, IRCompilerX64, IRCompilerBase, CompilerConfig>;
-        using IRValueRef = IRAdaptor::IRValueRef;
+        using ScratchReg = typename Base::ScratchReg;
+        using ValuePartRef = typename Base::ValuePartRef;
+        using ValuePart = typename Base::ValuePart;
+        using ValueRef = typename Base::ValueRef;
+        using Assembler = typename Base::Assembler;
+        using SymRef = typename Assembler::SymRef;
+        using AsmReg = typename Base::AsmReg;
+        using GenericValuePart = typename Base::GenericValuePart;
 
         std::unique_ptr<IRAdaptor> adaptor;
 
