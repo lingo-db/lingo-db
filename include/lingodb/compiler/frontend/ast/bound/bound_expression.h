@@ -34,9 +34,8 @@ class BoundColumnRefExpression : public BoundExpression {
    static constexpr ExpressionClass TYPE = ExpressionClass::BOUND_COLUMN_REF;
 
    //! Specify both the column and table name
-   BoundColumnRefExpression(std::string scope, catalog::NullableType resultType, std::shared_ptr<NamedResult> namedResult, std::string alias);
+   BoundColumnRefExpression(catalog::NullableType resultType, std::shared_ptr<NamedResult> namedResult, std::string alias);
 
-   std::string scope;
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
@@ -62,9 +61,6 @@ class BoundConjunctionExpression : public BoundExpression {
    std::vector<std::shared_ptr<BoundExpression>> children;
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
-
-   private:
-   std::string typeToAscii(ExpressionType type) const;
 };
 
 class BoundConstantExpression : public BoundExpression {
@@ -209,11 +205,11 @@ class BoundCaseExpression : public BoundExpression {
    };
    static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_CASE;
 
-   BoundCaseExpression(catalog::NullableType resultType, std::string alias, std::optional<std::shared_ptr<ast::BoundExpression>> caseExpr, std::vector<BoundCaseCheck> caseChecks, std::shared_ptr<BoundExpression> elseExpr);
+   BoundCaseExpression(catalog::NullableType resultType, std::string alias, std::optional<std::shared_ptr<BoundExpression>> caseExpr, std::vector<BoundCaseCheck> caseChecks, std::shared_ptr<BoundExpression> elseExpr);
 
-   std::optional<std::shared_ptr<ast::BoundExpression>> caseExpr;
-   std::vector<BoundCaseCheck> caseChecks;
-   std::shared_ptr<BoundExpression> elseExpr;
+   std::optional<std::shared_ptr<BoundExpression>> caseExpr; //CASE expr ...
+   std::vector<BoundCaseCheck> caseChecks; //CASE ... WHEN caseCheck
+   std::shared_ptr<BoundExpression> elseExpr; // CASE ... WHEN ...  ELSE expr
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };

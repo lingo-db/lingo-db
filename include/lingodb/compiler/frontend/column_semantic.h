@@ -7,20 +7,15 @@
 namespace lingodb::ast {
 class BoundFunctionExpression;
 
-enum class NamedResultType : uint8_t {
-   Column = 1,
-   Function = 2,
-   EXPRESSION = 3,
-};
-struct NamedResult {
-   NamedResultType type;
+class NamedResult {
+   public:
    std::string scope;
    catalog::NullableType resultType;
    std::string name;
    //TODO find better name
    std::string displayName{};
-   NamedResult(NamedResultType type, std::string scope, catalog::NullableType resultType, std::string name) : type(type), scope(scope), resultType(resultType), name(name) {}
-   NamedResult(std::string scope, catalog::Column c) : type(NamedResultType::Column), scope(scope), resultType(catalog::NullableType(c.getLogicalType(), c.getIsNullable())), name(c.getColumnName()), displayName(c.getColumnName()) {}
+   NamedResult(std::string scope, catalog::NullableType resultType, std::string name) : scope(scope), resultType(resultType), name(name) {}
+   NamedResult(std::string scope, catalog::Column c) : scope(scope), resultType(catalog::NullableType(c.getLogicalType(), c.getIsNullable())), name(c.getColumnName()), displayName(c.getColumnName()) {}
 
 
 
@@ -42,26 +37,10 @@ struct NamedResult {
    };
 };
 
-class BoundColumnEntry {
-   public:
-   size_t index;
-   std::string displayName{};
-
-   static std::shared_ptr<BoundColumnEntry> create() {
-      static size_t currentId = 0;
-      return std::make_shared<BoundColumnEntry>(currentId++);
-   }
-};
 struct TargetInfo {
-   public:
    std::vector<std::shared_ptr<NamedResult>> targetColumns;
    void add(std::shared_ptr<NamedResult> entry) {
       targetColumns.push_back(std::move(entry));
    }
-
-   //std::vector<std::pair<std::string, std::shared_ptr<NamedResult>>> namedResults;
-   /*void map(std::string name, std::shared_ptr<NamedResult> cInfo) {
-      namedResults.push_back({name, std::move(cInfo)});
-   }*/
 };
 } // namespace lingodb::ast
