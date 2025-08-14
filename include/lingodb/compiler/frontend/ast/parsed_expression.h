@@ -562,6 +562,7 @@ enum class SubqueryType : uint8_t {
    NOT_EXISTS = 3, // NOT EXISTS(SELECT...)
    ANY = 4, // x = ANY(SELECT...) OR x IN (SELECT...)
    NOT_ANY = 5, // x != ANY(SELECT...) OR x NOT IN (SELECT...)
+   ALL = 6, // x = ALL(SELECT...)
 };
 
 class SubqueryExpression : public ParsedExpression {
@@ -575,7 +576,11 @@ class SubqueryExpression : public ParsedExpression {
    //! The subquery expression
    std::shared_ptr<TableProducer> subquery;
 
-   std::shared_ptr<ParsedExpression> testExpr; // For EXISTS/NOT EXISTS/ANY/NOT ANY, the expression to test against
+   /// For EXISTS/NOT EXISTS/ANY/NOT ANY, the expression to test against
+   std::shared_ptr<ParsedExpression> testExpr;
+   //TODO find better solution
+   /// For ANY/NOT ANY, the operator used (e.g., =, !=)
+   std::optional<ExpressionType> comparisonType;
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
    size_t hash() override;
