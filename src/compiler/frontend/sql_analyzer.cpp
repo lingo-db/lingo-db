@@ -299,8 +299,16 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
    switch (rootNode->exprClass) {
       case ast::ExpressionClass::SUBQUERY: {
          auto subqueryExpr = std::static_pointer_cast<ast::SubqueryExpression>(rootNode);
-         subqueryExpr->subquery = canonicalizeCast<ast::TableProducer>(subqueryExpr->subquery, std::make_shared<ASTTransformContext>());
+         auto canacolizedSubquery = canonicalizeCast<ast::PipeOperator>(subqueryExpr->subquery, std::make_shared<ASTTransformContext>());
+         subqueryExpr->subquery = canacolizedSubquery;
+         assert(subqueryExpr->subquery->nodeType == ast::NodeType::PIPE_OP && "Should not happen");
+         if (subqueryExpr->testExpr) {
+            subqueryExpr->testExpr = canonicalizeParsedExpression(subqueryExpr->testExpr, context, true, context->currentScope->extendNodeBeforeAggregation);
+         }
+
          std::string alias = subqueryExpr->alias.empty() ? "" : subqueryExpr->alias;
+
+
          if (extend) {
             auto find = context->currentScope->groupedByExpressions.find(subqueryExpr);
             if (find == context->currentScope->groupedByExpressions.end()) {
@@ -312,12 +320,9 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
             } else {
                subqueryExpr->alias = find->get()->alias;
             }
-
-
             auto columnRef = drv.nf.node<ast::ColumnRefExpression>(subqueryExpr->loc, subqueryExpr->alias);
             columnRef->alias = alias;
             return columnRef;
-
          }
 
          return subqueryExpr;
@@ -2231,9 +2236,10 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
             boundToTestExpr = analyzeExpression(subqueryExpr->testExpr, context, resolverScope);
          }
 
-         auto b = drv.nf.node<ast::BoundSubqueryExpression>(subqueryExpr->loc, subqueryExpr->subQueryType, resultType, subqueryExpr->alias, namedResult, subqueryScope, boundSubquery, boundToTestExpr);
-         b->namedResult = x;
-         return b;
+         auto boundSubqueryExpression = drv.nf.node<ast::BoundSubqueryExpression>(subqueryExpr->loc, subqueryExpr->subQueryType, resultType, subqueryExpr->alias, namedResult, subqueryScope, boundSubquery, boundToTestExpr);
+         boundSubqueryExpression->namedResult = x;
+         boundSubqueryExpression->comparisonType = subqueryExpr->comparisonType;
+         return boundSubqueryExpression;
       }
       case ast::ExpressionClass::CASE: {
          auto caseExpr = std::static_pointer_cast<lingodb::ast::CaseExpression>(rootNode);
