@@ -28,7 +28,6 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 
-#include <lingodb/compiler/Dialect/util/UtilOps.h.inc>
 #include <lingodb/compiler/runtime/ExecutionContext.h>
 #include <lingodb/compiler/runtime/RelationHelper.h>
 #include <mlir-c/IR.h>
@@ -77,7 +76,6 @@ std::optional<mlir::Value> SQLMlirTranslator::translateStart(mlir::OpBuilder& bu
 
          auto tree = translateTableProducer(builder, tableProducer, context);
 
-         context->currentScope->evalBefore.clear();
          std::vector<mlir::Attribute> attrs;
          std::vector<mlir::Attribute> names;
          std::vector<mlir::Attribute> colMemberNames;
@@ -85,31 +83,12 @@ std::optional<mlir::Value> SQLMlirTranslator::translateStart(mlir::OpBuilder& bu
          auto& memberManager = builder.getContext()->getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager();
 
          for (auto& named : context->currentScope->targetInfo.targetColumns) {
-            switch (named->type) {
-               case ast::NamedResultType::Column: {
-                  auto colMemberName = memberManager.getUniqueMember(named->displayName);
-                  names.push_back(builder.getStringAttr(named->displayName));
-
-                  colTypes.push_back(mlir::TypeAttr::get(named->resultType.toMlirType(builder.getContext())));
-                  colMemberNames.push_back(builder.getStringAttr(colMemberName));
-                  auto attrDef = named->createRef(builder, attrManager);
-                  attrs.push_back(attrDef);
-                  break;
-               }
-               case ast::NamedResultType::Function:
-               case ast::NamedResultType::EXPRESSION: {
-                  names.push_back(builder.getStringAttr(named->displayName));
-                  auto colMemberName = memberManager.getUniqueMember(named->name);
-                  colMemberNames.push_back(builder.getStringAttr(colMemberName));
-                  colTypes.push_back(mlir::TypeAttr::get(named->resultType.toMlirType(builder.getContext())));
-                  auto attrDef = named->createRef(builder, attrManager);
-                  attrs.push_back(attrDef);
-                  break;
-               }
-               default: {
-                  error("Not implemented", tableProducer->loc);
-               }
-            }
+            names.push_back(builder.getStringAttr(named->displayName));
+            auto colMemberName = memberManager.getUniqueMember(named->name);
+            colMemberNames.push_back(builder.getStringAttr(colMemberName));
+            colTypes.push_back(mlir::TypeAttr::get(named->resultType.toMlirType(builder.getContext())));
+            auto attrDef = named->createRef(builder, attrManager);
+            attrs.push_back(attrDef);
          }
 
          localTableType = subop::LocalTableType::get(
@@ -360,8 +339,7 @@ mlir::Value SQLMlirTranslator::translatePipeOperator(mlir::OpBuilder& builder, s
          tree = createMap(builder, attrManager.getUniqueScope("mapBeforeAggr"), aggregationNode->evalBeforeAggr, context, tree);
 
          tree = translateAggregation(builder, aggregationNode, context, tree);
-         tree = createMap(builder, attrManager.getUniqueScope("map2"), context->currentScope->evalBefore, context, tree);
-         context->currentScope->evalBefore.clear();
+
          for (auto window: aggregationNode->windowFunctions) {
             tree = translateWindowExpression(builder, tree, window, context);
          }
@@ -1313,11 +1291,12 @@ mlir::Value SQLMlirTranslator::translateSetOperation(mlir::OpBuilder& builder, s
          createdColsRight.push_back(attrDef);
          mlir::Value expr = rightMapBuilder.create<tuples::GetColumnOp>(rightMapBuilder.getUnknownLoc(), attrRef.getColumn().type, attrRef, rightTuple);
          rightMapResults.push_back(commonType.castValueToThisType(rightMapBuilder, expr,   rightResult->resultType.isNullable));
+         //TODO move logic to analyzer
          rightResult->resultType = commonType;
          rightResult->scope = rightMapScope;
          rightResult->name = "set_op" + std::to_string(i);
       }
-      //TODO move logic to analyzer
+
       if (leftResult->resultType != commonType) {
          auto attrDef = attrManager.createDef(leftMapScope, std::string("set_op") + std::to_string(i));
          auto attrRef = leftResult->createRef(builder, attrManager);
@@ -1325,6 +1304,7 @@ mlir::Value SQLMlirTranslator::translateSetOperation(mlir::OpBuilder& builder, s
          createdColsLeft.push_back(attrDef);
          mlir::Value expr = leftMapBuilder.create<tuples::GetColumnOp>(leftMapBuilder.getUnknownLoc(), attrRef.getColumn().type, attrRef, leftTuple);
          leftMapResults.push_back(commonType.castValueToThisType(leftMapBuilder, expr,  leftResult->resultType.isNullable));
+         //TODO move logic to analyzer
          leftResult->resultType = commonType;
          leftResult->scope = leftMapScope;
          leftResult->name = "set_op" + std::to_string(i);

@@ -7,20 +7,14 @@
 namespace lingodb::ast {
 class BoundFunctionExpression;
 
-enum class NamedResultType : uint8_t {
-   Column = 1,
-   Function = 2,
-   EXPRESSION = 3,
-};
 struct NamedResult {
-   NamedResultType type;
    std::string scope;
    catalog::NullableType resultType;
    std::string name;
    //TODO find better name
    std::string displayName{};
-   NamedResult(NamedResultType type, std::string scope, catalog::NullableType resultType, std::string name) : type(type), scope(scope), resultType(resultType), name(name) {}
-   NamedResult(std::string scope, catalog::Column c) : type(NamedResultType::Column), scope(scope), resultType(catalog::NullableType(c.getLogicalType(), c.getIsNullable())), name(c.getColumnName()), displayName(c.getColumnName()) {}
+   NamedResult(std::string scope, catalog::NullableType resultType, std::string name) : scope(scope), resultType(resultType), name(name) {}
+   NamedResult(std::string scope, catalog::Column c) : scope(scope), resultType(catalog::NullableType(c.getLogicalType(), c.getIsNullable())), name(c.getColumnName()), displayName(c.getColumnName()) {}
 
 
 
