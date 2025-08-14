@@ -194,6 +194,8 @@
 
 	ZONE
 
+    EQUAL NOT_EQUAL PLUS MINUS STAR SLASH LESS LESS_EQUAL GREATER_EQUAL GREATER 
+
 %token AGGREGATE
 /*
  * The grammar thinks these are keywords, but they are not in the kwlist.h
@@ -208,13 +210,14 @@
  */
 %token		FORMAT_LA NOT_LA NULLS_LA WITH_LA WITHOUT_LA
 %type <std::vector<std::shared_ptr<lingodb::ast::AstNode>>> stmtmulti
-%type <std::shared_ptr<lingodb::ast::AstNode>> toplevel_stmt stmt 
+%type <std::shared_ptr<lingodb::ast::AstNode>> toplevel_stmt stmt
 %type <std::shared_ptr<lingodb::ast::TableProducer>>  SelectStmt   PreparableStmt
 %type <std::shared_ptr<lingodb::ast::QueryNode>> simple_select select_clause select_no_parens with_clause select_with_parens cte_list common_table_expr
 
-%type<std::vector<std::shared_ptr<lingodb::ast::ParsedExpression>>> target_list group_by_list func_arg_list func_arg_list_opt 
+%type<std::vector<std::shared_ptr<lingodb::ast::ParsedExpression>>> target_list group_by_list func_arg_list func_arg_list_opt
                                                                     extract_list expr_list substr_list distinct_clause
                                                                     opt_partition_clause rollup_clause
+
 
 /*
 * in_expr either returns a SubQuery or a list of expressions
@@ -225,6 +228,8 @@
 
 %type<std::shared_ptr<lingodb::ast::ParsedExpression>>  having_clause target_el a_expr c_expr b_expr  where_clause group_by_item
                                                         func_arg_expr select_limit_value case_expr case_default cast_expr
+
+%type<lingodb::ast::ExpressionType> basicComparisonType
 
 %type<std::shared_ptr<lingodb::ast::WindowExpression>> over_clause window_specification
 
@@ -249,20 +254,23 @@
 %type<std::shared_ptr<lingodb::ast::TableRef>> from_clause opt_from_clause table_ref from_list joined_table
 %type<std::shared_ptr<lingodb::ast::ExpressionListRef>>  values_clause
 
-%type<std::string>  ColId ColLabel BareColLabel attr_name 
-                    qualified_name relation_expr 
-                    name type_function_name func_name col_name_keyword unreserved_keyword reserved_keyword all_Op qual_Op MathOp
-%type<std::pair<std::string, std::vector<std::string>>> alias_clause opt_alias_clause 
+%type<std::string>  ColId ColLabel BareColLabel attr_name
+                    qualified_name relation_expr
+                    name type_function_name func_name col_name_keyword unreserved_keyword reserved_keyword all_Op qual_Op MathOp subquery_op any_operator
+%type<std::pair<std::string, std::vector<std::string>>> alias_clause opt_alias_clause
 
 %type<std::vector<std::string>> name_list opt_name_list qualified_name_list
 
-%type<std::shared_ptr<lingodb::ast::ParsedExpression>> Iconst SignedIconst AexprConst  Sconst Bconst Fconst 
+%type<std::shared_ptr<lingodb::ast::ParsedExpression>> Iconst SignedIconst AexprConst  Sconst Bconst Fconst
 
 %type<std::shared_ptr<lingodb::ast::GroupByNode>> group_clause
 
 %type<std::shared_ptr<lingodb::ast::PipeOperator>> pipe_operator pipe_start
 
 %type<lingodb::ast::JoinType> join_type
+
+
+%type<lingodb::ast::SubqueryType> sub_type
 
 %type<std::shared_ptr<lingodb::ast::AggregationNode>> agg_expr
 
@@ -292,7 +300,7 @@
 %type<std::shared_ptr<lingodb::ast::TableElement>> TableElement columnElement TableConstraint
 %type<std::vector<std::shared_ptr<lingodb::ast::TableElement>>> TableElementList OptTableElementList
 %type<std::shared_ptr<lingodb::ast::Constraint>> ColConstraint ColConstraintElem ConstraintElem
-%type<std::vector<std::shared_ptr<lingodb::ast::Constraint>>> ColQualList 
+%type<std::vector<std::shared_ptr<lingodb::ast::Constraint>>> ColQualList
 %type<std::vector<std::shared_ptr<lingodb::ast::Value>>> opt_type_modifiers type_modifiers
 %type<std::shared_ptr<lingodb::ast::Value>> type_modifier
 
@@ -364,48 +372,48 @@
 /*
  * We parse a list of statements, but if there are any special modes first we can add them here
  */
-parse_toplevel: 
+parse_toplevel:
     stmtmulti {drv.result = $stmtmulti;}
     ;
 /*
- * Allows 
+ * Allows
  */
  //TODO Allow multiple
-stmtmulti: 
-    toplevel_stmt 
+stmtmulti:
+    toplevel_stmt
     {
         auto list = mkListShared<lingodb::ast::AstNode>();
         list.emplace_back($1);
         $$ = list;
     }
-    
-    | stmtmulti[list] SEMICOLON toplevel_stmt 
+
+    | stmtmulti[list] SEMICOLON toplevel_stmt
     {
         if($toplevel_stmt != nullptr) {
             $list.emplace_back($toplevel_stmt);
         }
         $$ = $list;
-        
+
     }
-    
-    
+
+
     ;
 
 toplevel_stmt:
     stmt {$$=$1;}
     | %empty
-  //TODO Add Later  | TransactionStmtLegacy 
+  //TODO Add Later  | TransactionStmtLegacy
   ;
 /*
  * TODO Add the different Statement Types, like Create, Copy etc
 */
-stmt: 
+stmt:
  SelectStmt {$$=$1;}
  | CreateStmt {$$=$1;}
  | InsertStmt {$$=$1;}
  ;
 
- SelectStmt: 
+ SelectStmt:
     select_no_parens {$$=$select_no_parens;}
     | select_with_parens {$$=$select_with_parens;}
     ;
@@ -416,14 +424,14 @@ select_with_parens:
 /*
 * Difference to postgres the values clause is located in the select_no_parens rule so that it can be used as a standalone table producer.
 */
-select_no_parens: 
+select_no_parens:
     simple_select {$$=$1;}
-    | select_clause sort_clause 
+    | select_clause sort_clause
     {
         $select_clause->modifiers.emplace_back($sort_clause);
         $$ = $select_clause;
     }
-    | select_clause opt_sort_clause  opt_select_limit 
+    | select_clause opt_sort_clause  opt_select_limit
     {
         if ($opt_sort_clause.has_value()) {
             $select_clause->modifiers.emplace_back($opt_sort_clause.value());
@@ -449,8 +457,8 @@ select_no_parens:
         current->child = $select_clause;
         $$ = $with_clause;
     }
-    | values_clause	
-    { 
+    | values_clause
+    {
         $$ = mkNode<lingodb::ast::ValuesQueryNode>(@$, $1);
     }
     | with_clause select_clause opt_sort_clause  opt_select_limit
@@ -474,14 +482,14 @@ select_no_parens:
     }
     //TODO | with_clause select_clause opt_sort_clause select_limit opt_for_locking_clause
     //PIPE:
-   /* | from_clause 
+   /* | from_clause
      {
-        
+
         $$ = $from_clause;
-        
+
      }
      //TODO DOC
-    | select_no_parens[parens] PIPE pipe_operator 
+    | select_no_parens[parens] PIPE pipe_operator
     {
 
         auto pipeOp = std::static_pointer_cast<lingodb::ast::PipeOperator>($pipe_operator);
@@ -491,25 +499,25 @@ select_no_parens:
         } else {
             $pipe_operator->input = $parens;
         }
-        
-        
+
+
         $$ = $pipe_operator;
-        
+
     }
     ;*/
 pipe_start:
-    | from_clause 
+    | from_clause
      {
-      
-        
+
+
      }
      //TODO DOC
-    | select_no_parens[parens] PIPE pipe_operator 
+    | select_no_parens[parens] PIPE pipe_operator
     {
-        
+
     }
     ;
-select_clause: 
+select_clause:
     simple_select {$$ = $1;}
     | select_with_parens {$$=$1;}
     ;
@@ -552,9 +560,9 @@ PreparableStmt:
  * !However, this is not checked by the grammar; parse analysis must check it.
  * !Difference to postgres the values clause is located in the select_no_parens rule so that it can be used as a standalone table producer.
  */
-simple_select: 
-    SELECT opt_all_clause opt_target_list 
-    //TODO into_clause 
+simple_select:
+    SELECT opt_all_clause opt_target_list
+    //TODO into_clause
     opt_from_clause where_clause
     group_clause having_clause //TODO window_clause
     {
@@ -581,7 +589,7 @@ simple_select:
         $$ = t;
     }
     //TODO | TABLE relation_expr
-    | select_clause[clause1] UNION set_quantifier select_clause[clause2] 
+    | select_clause[clause1] UNION set_quantifier select_clause[clause2]
     {
         auto setOpNode = mkNode<lingodb::ast::SetOperationNode>(@$, lingodb::ast::SetOperationType::UNION, $clause1, $clause2);
         setOpNode->setOpAll = $set_quantifier;
@@ -604,7 +612,7 @@ simple_select:
     ;
 //TODO Add missing rules
 with_clause:
-    WITH cte_list 
+    WITH cte_list
     {
         $$ = $cte_list;
 
@@ -614,19 +622,19 @@ with_clause:
 
     }
     ;
-distinct_clause: 
+distinct_clause:
     DISTINCT {$$ = mkListShared<lingodb::ast::ParsedExpression>();}
     | DISTINCT ON LP expr_list RP
     {
         $$ = $expr_list;
     }
     ;
-cte_list: 
-    common_table_expr 
+cte_list:
+    common_table_expr
     {
         $$ = $common_table_expr;
     }
-    | cte_list[list] COMMA common_table_expr 
+    | cte_list[list] COMMA common_table_expr
     {
         auto current = std::static_pointer_cast<lingodb::ast::CTENode>($list);
         while(current->child != nullptr) {
@@ -637,7 +645,7 @@ cte_list:
         }
         current->child = $common_table_expr;
         $$ = $list;
-        
+
     }
     ;
 
@@ -651,7 +659,7 @@ window_clause:
     ;
 
 //TODO more complex rules
-common_table_expr: 
+common_table_expr:
     name opt_name_list AS opt_materialized LP PreparableStmt RP
     {
         auto cteNode = mkNode<lingodb::ast::CTENode>(@$);
@@ -683,9 +691,9 @@ opt_materialized:
  from_clause:
 			FROM from_list							{ $$=$from_list; }
             ;
-from_list: 
+from_list:
     table_ref { $$=$1;}
-    | from_list[list] COMMA table_ref 
+    | from_list[list] COMMA table_ref
     {
         auto join = mkNode<lingodb::ast::JoinRef>(@$, lingodb::ast::JoinType::CROSS, lingodb::ast::JoinCondType::CROSS);
         join->left = $list;
@@ -699,11 +707,11 @@ from_list:
  * table_ref is where an alias clause can be attached.
  */
  //TODO add missing rules
-table_ref: 
+table_ref:
     relation_expr opt_alias_clause
-    { 
+    {
         //TODO Alias clause
-        //TODO schema 
+        //TODO schema
         //TODO for now it is very simplyfied
         lingodb::ast::TableDescription desc{"", "", $relation_expr };
         auto tableref = mkNode<lingodb::ast::BaseTableRef>(@$, desc);
@@ -714,7 +722,7 @@ table_ref:
     | joined_table { $$ = $1;}
     | LP joined_table RP alias_clause
     | joined_table opt_alias_clause
-    | select_with_parens opt_alias_clause 
+    | select_with_parens opt_alias_clause
     {
         //TODO
         auto subquery = mkNode<lingodb::ast::SubqueryRef>(@$, std::static_pointer_cast<lingodb::ast::SelectNode>($select_with_parens));
@@ -727,7 +735,7 @@ table_ref:
     ;
 
 
-set_quantifier: 
+set_quantifier:
     ALL
     {
         $$ = true;
@@ -759,7 +767,7 @@ set_quantifier:
  * Each item in the group_clause list is either an expression tree or a
  * GroupingSet node of some type.
  */
-group_clause: 
+group_clause:
     GROUP_P BY set_quantifier group_by_list
     {
         auto node = mkNode<lingodb::ast::GroupByNode>(@$);
@@ -779,19 +787,19 @@ group_clause:
     ;
 
 group_by_list:
-    group_by_item 
+    group_by_item
     {
         auto list = mkListShared<lingodb::ast::ParsedExpression>();
         list.emplace_back($group_by_item);
         $$ = list;
     }
-    | group_by_list[list] COMMA group_by_item 
+    | group_by_list[list] COMMA group_by_item
     {
         $list.emplace_back($group_by_item);
         $$ = $list;
     }
     ;
-rollup_clause: 
+rollup_clause:
     ROLLUP LP expr_list RP
     {
         $$ = $expr_list;
@@ -830,7 +838,7 @@ for_locking_strength:
     | FOR SHARE
     | FOR KEY SHARE
     ;
-locked_rels_list: 
+locked_rels_list:
     OF qualified_name_list
     | %empty
     ;
@@ -850,7 +858,7 @@ locked_rels_list:
  * tables and the shape is determined by which columns are
  * in common. We'll collect columns during the later transformations.
  */
-joined_table: 
+joined_table:
     LP joined_table RP {$$=$2;}
     | table_ref CROSS JOIN table_ref
     | table_ref[left] join_type JOIN table_ref[right] join_qual
@@ -862,7 +870,7 @@ joined_table:
         $$ = join;
 
     }
-    | table_ref[left] JOIN table_ref[right] join_qual 
+    | table_ref[left] JOIN table_ref[right] join_qual
     {
         //TODO find out correct JoinCondType
         auto join = mkNode<lingodb::ast::JoinRef>(@$, lingodb::ast::JoinType::INNER, lingodb::ast::JoinCondType::REGULAR);
@@ -875,12 +883,12 @@ joined_table:
     | table_ref NATURAL JOIN table_ref
     ;
 
-alias_clause: 
+alias_clause:
     AS ColId LP name_list RP
     {
         $$ = std::make_pair($ColId, $name_list);
     }
-    | AS ColId 
+    | AS ColId
     {
         $$ = std::make_pair($ColId, std::vector<std::string>());
     }
@@ -888,7 +896,7 @@ alias_clause:
     {
         $$ = std::make_pair($ColId, $name_list);
     }
-    | ColId 
+    | ColId
     {
         $$ = std::make_pair($ColId, std::vector<std::string>());
     } //TODO Check if correct
@@ -896,16 +904,16 @@ alias_clause:
 
 
 //TODO AST
-opt_nulls_order: 
+opt_nulls_order:
     NULLS_LA FIRST_P
     | NULLS_LA LAST_P
-    | %empty  
+    | %empty
     {
         $$ = lingodb::ast::OrderByNullType::ORDER_DEFAULT;
     }
 
-opt_alias_clause: 
-    alias_clause 
+opt_alias_clause:
+    alias_clause
     {
         $$ = $alias_clause;
     }
@@ -922,7 +930,7 @@ opt_asc_desc:
     {
         $$ = lingodb::ast::OrderType::ASCENDING;
     }
-    | DESC 
+    | DESC
     {
         $$ = lingodb::ast::OrderType::DESCENDING;
     }
@@ -936,29 +944,29 @@ opt_nowait_or_skip:
     | %empty
     ;
 
-join_type: 
+join_type:
     FULL
     | FULL OUTER_P
     {
         $$ = lingodb::ast::JoinType::FULL;
     }
-    | LEFT OUTER_P 
+    | LEFT OUTER_P
     {
         $$ = lingodb::ast::JoinType::LEFT;
     }
-    | LEFT 
+    | LEFT
     {
         $$ = lingodb::ast::JoinType::LEFT;
     }
     | RIGHT
     {
-        $$ = lingodb::ast::JoinType::RIGHT; 
+        $$ = lingodb::ast::JoinType::RIGHT;
     }
-    | RIGHT OUTER_P 
+    | RIGHT OUTER_P
     {
         $$ = lingodb::ast::JoinType::RIGHT;
     }
-    | INNER_P 
+    | INNER_P
     {
         $$ = lingodb::ast::JoinType::INNER;
     }
@@ -977,7 +985,7 @@ join_type:
  */
 
 join_qual:
-    USING LP name_list RP //TODO not allowing alias after USING for now opt_alias_clause_for_join_using 
+    USING LP name_list RP //TODO not allowing alias after USING for now opt_alias_clause_for_join_using
     {
         auto name_list = $name_list;
         auto list = mkListShared<lingodb::ast::ColumnRefExpression>();
@@ -994,8 +1002,8 @@ relation_expr:
     qualified_name {$$ = $qualified_name;}
     | extended_relation_expr
     ;
-    
-extended_relation_expr: 
+
+extended_relation_expr:
     qualified_name STAR
     | ONLY qualified_name
     | ONLY LP qualified_name RP
@@ -1013,7 +1021,7 @@ opt_sort_clause:
     | %empty {$$ = std::nullopt;}
     ;
 sort_clause:
-    ORDER BY sortby_list 
+    ORDER BY sortby_list
     {
         auto n = mkNode<lingodb::ast::OrderByModifier>(@$);
         n->orderByElements = std::move($sortby_list);
@@ -1021,22 +1029,22 @@ sort_clause:
     }
     ;
 sortby_list:
-    sortby 
+    sortby
     {
         auto list = mkListShared<lingodb::ast::OrderByElement>();
         list.emplace_back($sortby);
         $$ = list;
     }
-    | sortby_list[list] COMMA sortby 
+    | sortby_list[list] COMMA sortby
     {
         $list.emplace_back($sortby);
         $$ = $list;
     }
     ;
-sortby: 
+sortby:
     //TODO
     a_expr USING qual_all_Op opt_nulls_order
-    | a_expr opt_asc_desc opt_nulls_order 
+    | a_expr opt_asc_desc opt_nulls_order
     {
         auto orderByElement = mkNode<lingodb::ast::OrderByElement>(@$, $opt_asc_desc, $opt_nulls_order);
         orderByElement->expression = $a_expr;
@@ -1097,7 +1105,7 @@ select_offset_value:
         $$ = $clause;
     }
     ;
-   
+
     ;
 
 
@@ -1107,7 +1115,7 @@ select_offset_value:
  *
  *****************************************************************************/
  //TODO Add missing expressions, for instance func_expr
-/* 
+/*
  * POSGRES
  * General expressions
  * This is the heart of the expression syntax.
@@ -1131,17 +1139,17 @@ select_offset_value:
  * you expect!  So we use %prec annotations freely to set precedences.
  */
 
-where_clause: 
+where_clause:
     WHERE a_expr {$$=$a_expr;}
-    | %empty 
+    | %empty
     ;
 /*
 TODO
  * Add missing rules
 */
-a_expr: 
+a_expr:
     c_expr { $$ = $c_expr;}
-   
+
     //TODO | a-expr COLLATE any_name
     //TODO | a_expr AT TIME ZONE a_expr
     //TODO | a_expr AT LOCAL
@@ -1157,11 +1165,11 @@ a_expr:
     {
         $$ = mkNode<lingodb::ast::OperatorExpression>(@$, lingodb::ast::ExpressionType::OPERATOR_MINUS, $1,$3);
     }
-    | a_expr STAR a_expr 
+    | a_expr STAR a_expr
     {
         $$ = mkNode<lingodb::ast::OperatorExpression>(@$, lingodb::ast::ExpressionType::OPERATOR_TIMES, $1,$3);
     }
-    | a_expr SLASH a_expr 
+    | a_expr SLASH a_expr
     {
         $$ = mkNode<lingodb::ast::OperatorExpression>(@$, lingodb::ast::ExpressionType::OPERATOR_DIVIDE, $1,$3);
     }
@@ -1170,7 +1178,7 @@ a_expr:
         $$ = mkNode<lingodb::ast::OperatorExpression>(@$, lingodb::ast::ExpressionType::OPERATOR_MOD, $1,$3);
     }
     | a_expr HAT a_expr
-    | a_expr LESS a_expr 
+    | a_expr LESS a_expr
     {
         $$ = mkNode<lingodb::ast::ComparisonExpression>(@$, lingodb::ast::ExpressionType::COMPARE_LESSTHAN, $1, $3 );
     }
@@ -1194,7 +1202,7 @@ a_expr:
     {
         $$ = mkNode<lingodb::ast::ComparisonExpression>(@$, lingodb::ast::ExpressionType::COMPARE_NOTEQUAL, $1, $3 );
     }
-    | a_expr AND a_expr 
+    | a_expr AND a_expr
     {
        $$ = mkNode<lingodb::ast::ConjunctionExpression>(@$, lingodb::ast::ExpressionType::CONJUNCTION_AND , $1, $3);
     }
@@ -1220,10 +1228,10 @@ a_expr:
         * in_expr either returns a SubQuery or a list of expressions
         */
         if(std::holds_alternative<std::shared_ptr<lingodb::ast::SubqueryExpression>>($in_expr)) {
-            auto subQuery = std::get<std::shared_ptr<lingodb::ast::SubqueryExpression>>($in_expr);  
+            auto subQuery = std::get<std::shared_ptr<lingodb::ast::SubqueryExpression>>($in_expr);
             subQuery->testExpr = $1;
             $$ = subQuery;
-            
+
         } else {
             auto exprList = std::get<std::vector<std::shared_ptr<lingodb::ast::ParsedExpression>>>($in_expr);
             auto node = mkNode<lingodb::ast::ComparisonExpression>(@$, lingodb::ast::ExpressionType::COMPARE_IN, $1, exprList);
@@ -1236,11 +1244,11 @@ a_expr:
         * in_expr either returns a SubQuery or a list of expressions
         */
         if(std::holds_alternative<std::shared_ptr<lingodb::ast::SubqueryExpression>>($in_expr)) {
-            auto subQuery = std::get<std::shared_ptr<lingodb::ast::SubqueryExpression>>($in_expr);  
+            auto subQuery = std::get<std::shared_ptr<lingodb::ast::SubqueryExpression>>($in_expr);
             subQuery->subQueryType = lingodb::ast::SubqueryType::NOT_ANY;
             subQuery->testExpr = $1;
             $$ = subQuery;
-            
+
         } else {
             auto exprList = std::get<std::vector<std::shared_ptr<lingodb::ast::ParsedExpression>>>($in_expr);
             auto node = mkNode<lingodb::ast::ComparisonExpression>(@$, lingodb::ast::ExpressionType::COMPARE_NOT_IN, $1, exprList);
@@ -1259,17 +1267,24 @@ a_expr:
         node->asymmetric = $opt_asymmetric;
         $$ = node;
     }
-    | a_expr IS NULL_P 
+    | a_expr IS NULL_P
     {
         $$ = mkNode<lingodb::ast::OperatorExpression>(@$, lingodb::ast::ExpressionType::OPERATOR_IS_NULL, $1);
     }
-    | a_expr IS NOT NULL_P 
+    | a_expr IS NOT NULL_P
     {
         $$ = mkNode<lingodb::ast::OperatorExpression>(@$, lingodb::ast::ExpressionType::OPERATOR_IS_NOT_NULL, $1);
     }
     | a_expr[left] qual_Op a_expr[right] %prec QUAL_OP
     {
         $$ = mkNode<lingodb::ast::OperatorExpression>(@$, $2, $left, $right);
+    }
+    | a_expr[left] basicComparisonType sub_type select_with_parens  %prec Op
+    {
+       auto subQueryExpression = mkNode<lingodb::ast::SubqueryExpression>(@$, $sub_type, std::static_pointer_cast<lingodb::ast::SelectNode>($select_with_parens));
+       subQueryExpression->testExpr = $left;
+       subQueryExpression->comparisonType = $basicComparisonType;
+       $$ = subQueryExpression;
     }
     ;
 b_expr:
@@ -1282,11 +1297,11 @@ b_expr:
     {
         $$ = mkNode<lingodb::ast::OperatorExpression>(@$, lingodb::ast::ExpressionType::OPERATOR_MINUS, $1,$3);
     }
-    | b_expr STAR b_expr 
+    | b_expr STAR b_expr
     {
         $$ = mkNode<lingodb::ast::OperatorExpression>(@$, lingodb::ast::ExpressionType::OPERATOR_TIMES, $1,$3);
     }
-    | b_expr SLASH b_expr 
+    | b_expr SLASH b_expr
     {
         $$ = mkNode<lingodb::ast::OperatorExpression>(@$, lingodb::ast::ExpressionType::OPERATOR_DIVIDE, $1,$3);
     }
@@ -1295,13 +1310,13 @@ b_expr:
  * Productions that can be used in both a_expr and b_expr.
  * Note: productions that refer recursively to a_expr or b_expr mostly cannot appear here.
  */
-c_expr: 
+c_expr:
     columnref {$$ = $columnref;}
     | AexprConst {$$=$1;}
     //TODO | PARAM opt_indirection
     //TODO
     | LP a_expr RP {$$=$2;}//opt_indirection
-    | case_expr 
+    | case_expr
     {
         $$ = $1;
     }
@@ -1313,13 +1328,13 @@ c_expr:
         auto subquery = mkNode<lingodb::ast::SubqueryExpression>(@$, lingodb::ast::SubqueryType::SCALAR, $select_with_parens);
         $$ = subquery;
     }
-    //TODO | select_with_parens indirection 
-    | EXISTS select_with_parens 
+    //TODO | select_with_parens indirection
+    | EXISTS select_with_parens
     {
         auto subquery = mkNode<lingodb::ast::SubqueryExpression>(@$, lingodb::ast::SubqueryType::EXISTS, $select_with_parens);
         $$ = subquery;
     }
-    | NOT EXISTS select_with_parens 
+    | NOT EXISTS select_with_parens
     {
         auto subquery = mkNode<lingodb::ast::SubqueryExpression>(@$, lingodb::ast::SubqueryType::NOT_EXISTS, $select_with_parens);
         $$ = subquery;
@@ -1329,10 +1344,44 @@ c_expr:
     //TODO | explicit_row
     //TODO | implicit_row
     //TODO | GROUPING LP expr_list RP
-   
+
+    ;
+basicComparisonType:
+    EQUAL
+    {
+        $$ = lingodb::ast::ExpressionType::COMPARE_EQUAL;
+    }
+    | NOT_EQUAL
+    {
+        $$ = lingodb::ast::ExpressionType::COMPARE_NOTEQUAL;
+    }
+    | LESS
+    {
+        $$ = lingodb::ast::ExpressionType::COMPARE_LESSTHAN;
+    }
+    | GREATER
+    {
+        $$ = lingodb::ast::ExpressionType::COMPARE_GREATERTHAN;
+    }
+    | LESS_EQUAL
+    {
+        $$ = lingodb::ast::ExpressionType::COMPARE_LESSTHANOREQUALTO;
+    }
+    | GREATER_EQUAL
+    {
+        $$ = lingodb::ast::ExpressionType::COMPARE_GREATERTHANOREQUALTO;
+    }
+    | LIKE
+    {
+        $$ = lingodb::ast::ExpressionType::COMPARE_LIKE;
+    }
+    | NOT LIKE
+    {
+        $$ = lingodb::ast::ExpressionType::COMPARE_NOT_LIKE;
+    }
     ;
 //TODO Alias -> opt_alias_clause
-in_expr: 
+in_expr:
     select_with_parens
     {
         auto subquery = mkNode<lingodb::ast::SubqueryExpression>(@$, lingodb::ast::SubqueryType::ANY, $select_with_parens);
@@ -1344,14 +1393,14 @@ in_expr:
         $$ = $expr_list;
     }
     ;
-case_expr: 
+case_expr:
     CASE case_arg when_clause_list case_default END_P
     {
         auto caseExpr = mkNode<lingodb::ast::CaseExpression>(@$, $case_arg, $when_clause_list, $case_default);
         $$ = caseExpr;
     }
     ;
-when_clause_list: 
+when_clause_list:
     when_clause
     {
         auto list = mkList<lingodb::ast::CaseExpression::CaseCheck>();
@@ -1365,8 +1414,8 @@ when_clause_list:
         $$ = $list;
     }
     ;
-    
-when_clause: 
+
+when_clause:
     WHEN a_expr THEN a_expr
     {
         auto whenCheck = lingodb::ast::CaseExpression::CaseCheck($2,$4);
@@ -1374,8 +1423,8 @@ when_clause:
     }
     ;
 
-case_default: 
-    ELSE a_expr 
+case_default:
+    ELSE a_expr
     {
         $$ = $2;
     }
@@ -1383,7 +1432,7 @@ case_default:
     ;
 
 case_arg:
-    a_expr 
+    a_expr
     {
         $$ = $1;
     }
@@ -1391,7 +1440,7 @@ case_arg:
     ;
 
 
-columnref: 
+columnref:
     ColId {$$ = mkNode<lingodb::ast::ColumnRefExpression>(@$, $ColId);}
     | ColId indirection {
         auto in = $indirection;
@@ -1400,18 +1449,18 @@ columnref:
             auto newColumnRef = mkNode<lingodb::ast::ColumnRefExpression>(@$, $ColId);
             newColumnRef->columnNames.insert(newColumnRef->columnNames.end(), columnref->columnNames.begin(), columnref->columnNames.end() );
             $$ = newColumnRef;
-            
+
 
         } else if(in->exprClass == lingodb::ast::ExpressionClass::STAR) {
             auto star = std::static_pointer_cast<lingodb::ast::StarExpression>(in);
             star->relationName = $ColId;
             $$ = star;
         }
-        
+
     } //TODO Add table name
     ;
 func_application:
-    func_name LP RP 
+    func_name LP RP
     {
         std::string catalog("");
         std::string schema("");
@@ -1453,7 +1502,7 @@ func_application:
 
         $$ = funcExpr;
     }
-    | func_name LP STAR RP 
+    | func_name LP STAR RP
     {
         std::string catalog("");
         std::string schema("");
@@ -1463,7 +1512,7 @@ func_application:
         bool exportState = false;
         auto funcExpr = mkNode<lingodb::ast::FunctionExpression>(@$, catalog, schema, functionName, isOperator, distinct, exportState);
 
-      
+
         auto l = mkListShared<lingodb::ast::ParsedExpression>();
         funcExpr->star = true;
         funcExpr->arguments = l;
@@ -1478,35 +1527,35 @@ func_application:
         //TODO within_group_clause filter_clause over_clause
         $$ = $func_application;
     }
-    
-    
+
+
     | func_expr_common_subexpr
     {
         $$ = $1;
     }
     ;
-window_func_expr: 
-    func_application over_clause 
+window_func_expr:
+    func_application over_clause
     {
         $over_clause->functionExpression = $func_application;
         $$=$over_clause;
-    
+
     }
     ;
 
-func_arg_list_opt: 
+func_arg_list_opt:
     func_arg_list
     {
         $$ = $1;
     }
-    | %empty 
+    | %empty
     {
         //TODO
     }
     ;
-/* function arguments can have names */    
+/* function arguments can have names */
 func_arg_list:
-    func_arg_expr 
+    func_arg_expr
     {
         auto list = mkListShared<lingodb::ast::ParsedExpression>();
         list.emplace_back($func_arg_expr);
@@ -1518,21 +1567,21 @@ func_arg_list:
         $$= $list;
     }
     ;
-expr_list: 
-    a_expr 
+expr_list:
+    a_expr
     {
         auto list = mkListShared<lingodb::ast::ParsedExpression>();
         list.emplace_back($a_expr);
         $$ = list;
     }
-    | expr_list[list] COMMA a_expr 
+    | expr_list[list] COMMA a_expr
     {
         $list.emplace_back($a_expr);
         $$ = $list;
     }
     ;
 //TODO Allow for param_name
-func_arg_expr: 
+func_arg_expr:
     a_expr {$$=$1;}
     | param_name COLON_EQUALS a_expr
     | param_name GREATER_EQUAL a_expr
@@ -1542,12 +1591,12 @@ func_arg_expr:
 /*
  * Special expressions that are considered to be functions.
  */
-func_expr_common_subexpr: 
-    EXTRACT LP extract_list RP 
+func_expr_common_subexpr:
+    EXTRACT LP extract_list RP
     {
         auto function  = mkNode<lingodb::ast::FunctionExpression>(@$, "", "", "EXTRACT", false, false, false);
         function->arguments = $extract_list;
-     
+
         $$ = function;
     }
     | SUBSTRING LP substr_list RP
@@ -1571,8 +1620,8 @@ cast_expr:
     }
     ;
 
-extract_list: 
-    extract_arg FROM a_expr 
+extract_list:
+    extract_arg FROM a_expr
     {
         auto list = mkListShared<lingodb::ast::ParsedExpression>();
         list.emplace_back($extract_arg);
@@ -1580,7 +1629,7 @@ extract_list:
         $$ = list;
     }
     ;
-extract_arg: 
+extract_arg:
     YEAR_P
     {
         auto constant = mkNode<lingodb::ast::ConstantExpression>(@$);
@@ -1593,7 +1642,7 @@ extract_arg:
         constant->value = std::make_shared<lingodb::ast::StringValue>("month");
         $$ = constant;
     }
-    | DAY_P 
+    | DAY_P
     {
         auto constant = mkNode<lingodb::ast::ConstantExpression>(@$);
         constant->value = std::make_shared<lingodb::ast::StringValue>("day");
@@ -1601,8 +1650,8 @@ extract_arg:
     }
     ;
 //TODO missing rules
-substr_list: 
-    a_expr FROM a_expr FOR a_expr 
+substr_list:
+    a_expr FROM a_expr FOR a_expr
     {
         auto list = mkListShared<lingodb::ast::ParsedExpression>();
         list.emplace_back($1);
@@ -1619,30 +1668,30 @@ substr_list:
     {
 
     }
-    | a_expr FOR a_expr 
+    | a_expr FOR a_expr
     {
 
     }
     ;
 //TODO missing rules
 over_clause:
-    OVER window_specification 
+    OVER window_specification
     {
         $$ = $window_specification;
     }
-    | OVER ColId 
+    | OVER ColId
     | %empty
     ;
 //TODO missing
 window_specification:
-    LP opt_existing_window_name opt_partition_clause opt_sort_clause opt_frame_clause RP 
+    LP opt_existing_window_name opt_partition_clause opt_sort_clause opt_frame_clause RP
     {
         auto windowExpression = mkNode<lingodb::ast::WindowExpression>(@$);
         windowExpression->partitions = $opt_partition_clause;
         windowExpression->order = $opt_sort_clause;
         windowExpression->windowBoundary = $opt_frame_clause;
         $$ = windowExpression;
-        
+
 
     }
     ;
@@ -1666,7 +1715,7 @@ indirection_el:
  *
  *****************************************************************************/
 opt_target_list:
-    target_list 
+    target_list
     {
         auto node = mkNode<lingodb::ast::TargetsExpression>(@$);
         node->targets = std::move($target_list);
@@ -1728,12 +1777,12 @@ opt_frame_clause:
     }
     | %empty
     {
-       
+
     }
     ;
 
-frame_extent: 
-    frame_bound 
+frame_extent:
+    frame_bound
     {
         $$ = $1;
     }
@@ -1769,13 +1818,16 @@ frame_bound:
     }
     ;
 //TODO misisng rules
-opt_window_exclusion_clause: 
+opt_window_exclusion_clause:
     | %empty
     ;
-
+//TODO add missing rules
 any_operator:
     all_Op
-    | ColId DOT any_operator
+    {
+        $$ = $1;
+    }
+   // | ColId DOT any_operator
     ;
 
 qual_Op:
@@ -1787,10 +1839,36 @@ qual_all_Op:
     all_Op
     | OPERATOR LP any_operator RP
     ;
+//TODO missing rules
+subquery_op:
+    all_Op
+    {
+        $$ = $all_Op;
+    }
+    | OPERATOR LP any_operator RP
+    {
+        $$ = $any_operator;
+    }
+    ;
 
-all_Op: 
+sub_type:
+    ANY
+    {
+        $$ = lingodb::ast::SubqueryType::ANY;
+    }
+    | ALL
+    {
+        $$ = lingodb::ast::SubqueryType::ALL;
+    }
+    | SOME
+    {
+        $$ = lingodb::ast::SubqueryType::ANY;
+    }
+    ;
+
+all_Op:
     Op {$$=$1;}
-    | MathOp {$$=$1;}
+
     ;
 MathOp:
     PLUS
@@ -1804,6 +1882,7 @@ MathOp:
     | LESS_EQUAL
     | GREATER_EQUAL
     | NOT_EQUAL
+    | EQUAL
     ;
 
 /*

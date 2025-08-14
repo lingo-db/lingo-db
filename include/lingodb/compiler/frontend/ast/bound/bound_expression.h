@@ -189,12 +189,14 @@ class BoundSubqueryExpression : public BoundExpression {
    BoundSubqueryExpression(SubqueryType subqueryType, catalog::NullableType resultType, std::string alias, std::shared_ptr<NamedResult> namedResultForSubquery, std::shared_ptr<analyzer::SQLScope> sqlScope, std::shared_ptr<TableProducer> subquery, std::shared_ptr<BoundExpression> testExpr);
 
    SubqueryType subqueryType = SubqueryType::INVALID;
-   //! The subquery expression
+   /// The subquery expression
    std::shared_ptr<TableProducer> subquery;
    std::shared_ptr<NamedResult> namedResultForSubquery;
    std::shared_ptr<analyzer::SQLScope> sqlScope;
-   //! Expression to test against. The left side expression of an IN expression.
+   /// Expression to test against. The left side expression of an IN expression.
    std::shared_ptr<BoundExpression> testExpr;
+   /// e.g. (x LIKE some(...))
+   std::optional<ExpressionType> comparisonType = std::nullopt;
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
