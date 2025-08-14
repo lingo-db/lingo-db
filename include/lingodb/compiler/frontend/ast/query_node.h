@@ -1,7 +1,10 @@
 #pragma once
 #include "ast_node.h"
+#include "group_by_node.h"
+#include "pipe_operator.h"
 #include "result_modifier.h"
 #include "table_producer.h"
+#include "../sql_scope.h"
 
 #include <cstdint>
 #include <memory>
@@ -18,7 +21,7 @@
 namespace lingodb::ast {
 class ExpressionListRef;
 enum class QueryNodeType : uint8_t {
-   SELECT_NODE,
+   SELECT_NODE = 1,
    SET_OPERATION_NODE = 2,
    BOUND_SET_OPERATION_NODE = 4,
    //BOUND_SUBQUERY_NODE = 5,
@@ -27,6 +30,7 @@ enum class QueryNodeType : uint8_t {
    PIPE_NODE = 8,
    VALUES = 9,
    BOUND_VALUES = 10,
+   BOUND_CTE_NODE = 11,
 
 };
 class QueryNode : public TableProducer {
@@ -43,10 +47,34 @@ class QueryNode : public TableProducer {
 
    std::shared_ptr<TableProducer> input;
 
-   virtual std::string toString(uint32_t depth) = 0;
-
    virtual std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) = 0;
 };
+
+class SelectNode : public QueryNode {
+   public:
+   SelectNode();
+   ~SelectNode() override;
+   static constexpr QueryNodeType TYPE = QueryNodeType::SELECT_NODE;
+   //! The projection list
+   std::shared_ptr<TargetsExpression> select_list;
+   //! The FROM clause
+   std::shared_ptr<TableRef> from_clause;
+   //! The WHERE clause
+   std::shared_ptr<ParsedExpression> where_clause;
+
+   //! list of groups
+   std::shared_ptr<GroupByNode> groups;
+
+   //! HAVING clause
+   std::shared_ptr<ParsedExpression> having;
+
+   ///For pipe operators
+   std::shared_ptr<PipeOperator> startPipeOperator;
+   std::shared_ptr<PipeOperator> endPipeOperator;
+
+   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
+};
+
 enum class SetOperationType {
    NONE = 0,
    UNION = 1,
@@ -64,7 +92,6 @@ class SetOperationNode : public QueryNode {
    std::shared_ptr<TableProducer> left;
    std::shared_ptr<TableProducer> right;
 
-   std::string toString(uint32_t depth) override;
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 
@@ -76,8 +103,22 @@ class ValuesQueryNode : public QueryNode {
 
    //! The expressions in the list
    std::shared_ptr<ExpressionListRef> expressionListRef;
-   std::string toString(uint32_t depth) override;
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 
+class CTENode : public QueryNode {
+   public:
+   static constexpr const QueryNodeType TYPE = QueryNodeType::CTE_NODE;
+
+   CTENode() : QueryNode(QueryNodeType::CTE_NODE) {}
+
+   std::shared_ptr<TableProducer> query;
+
+   //Maybe use input logic instead
+   std::shared_ptr<TableProducer> child;
+
+   std::vector<std::string> columnNames;
+
+   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
+};
 } // namespace lingodb::ast

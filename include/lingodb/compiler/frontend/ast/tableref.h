@@ -1,13 +1,15 @@
 #pragma once
 #include "ast_node.h"
 #include "lingodb/catalog/TableCatalogEntry.h"
-#include "query_node.h"
 #include "table_producer.h"
 
 #include <cstdint>
 #include <string>
 #include <variant>
 namespace lingodb::ast {
+class QueryNode;
+class ParsedExpression;
+class ColumnRefExpression;
 enum class TableReferenceType : uint8_t;
 
 class TableRef : public TableProducer {
@@ -15,7 +17,6 @@ class TableRef : public TableProducer {
    explicit TableRef(TableReferenceType type) : TableProducer(NodeType::TABLE_REF), type(type) {
    }
    TableReferenceType type;
-   //TODO missing variables
    std::string alias;
 
    virtual std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) = 0;
@@ -44,7 +45,6 @@ class TableDescription {
    std::string schema;
    std::string table;
    bool readonly = true;
-   //TODO column definitions
 };
 class BaseTableRef : public TableRef {
    public:
@@ -58,7 +58,6 @@ class BaseTableRef : public TableRef {
    //! The table name.
    std::string tableName;
    //! The timestamp/version at which to read this table entry (if any)
-   //TODO  unique_ptr<AtClause> at_clause;
 
    /*
     * Semantic
@@ -108,7 +107,6 @@ class JoinRef : public TableRef {
    std::shared_ptr<TableProducer> left;
    //! The right hand side of the join
    std::shared_ptr<TableProducer> right;
-   //TODO is this condition a good solution for on condiotion and using?
    //! The joint condition or a vector of ColumnRefExpression if USING
    jointCondOrUsingCols condition;
    //! The join type
@@ -116,10 +114,6 @@ class JoinRef : public TableRef {
    //! Join condition type
    JoinCondType refType;
 
-   //! The set of USING columns (if any)
-   //std::vector<std::string> usingColumns;
-   /*//! Duplicate eliminated columns (if any)
-   vector<unique_ptr<ParsedExpression>> duplicate_eliminated_columns;*/
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
@@ -128,10 +122,9 @@ class SubqueryRef : public TableRef {
    static constexpr TableReferenceType TYPE = TableReferenceType::SUBQUERY;
 
    public:
-   SubqueryRef(std::shared_ptr<QueryNode> subSelectNode);
+   SubqueryRef(std::shared_ptr<TableProducer> subSelectNode);
 
    //! The subquery
-   //TODO correct Type?
    std::shared_ptr<TableProducer> subSelectNode;
    std::vector<std::string> columnNames;
 

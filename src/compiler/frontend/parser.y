@@ -15,15 +15,14 @@
   #include <vector>
 
   #include "lingodb/compiler/frontend/ast/table_producer.h"
-  #include "lingodb/compiler/frontend/ast/select_node.h"
   #include "lingodb/compiler/frontend/ast/create_node.h"
   #include "lingodb/compiler/frontend/ast/insert_node.h"
   #include "lingodb/compiler/frontend/ast/tableref.h"
   #include "lingodb/compiler/frontend/ast/aggregation_node.h"
   #include "lingodb/compiler/frontend/ast/result_modifier.h"
   #include "lingodb/compiler/frontend/ast/parsed_expression.h"
+  #include "lingodb/compiler/frontend/ast/query_node.h"
   #include "lingodb/compiler/frontend/ast/constant_value.h"
-  #include "lingodb/compiler/frontend/ast/cte_node.h"
   #include "lingodb/compiler/frontend/ast/constraint.h"
   class driver;
 }
@@ -192,7 +191,7 @@
 
 	ZONE
 
-    EQUAL NOT_EQUAL PLUS MINUS STAR SLASH LESS LESS_EQUAL GREATER_EQUAL GREATER 
+    EQUAL NOT_EQUAL PLUS MINUS STAR SLASH LESS LESS_EQUAL GREATER_EQUAL GREATER TYPECAST
 
 %token AGGREGATE
 /*

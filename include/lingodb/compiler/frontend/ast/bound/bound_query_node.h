@@ -19,7 +19,6 @@ class BoundSetOperationNode : public QueryNode {
    std::shared_ptr<NamedResult> leftMapping;
    std::shared_ptr<NamedResult> rightMapping;
 
-   std::string toString(uint32_t depth) override;
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 
@@ -31,7 +30,26 @@ class BoundValuesQueryNode : public QueryNode {
 
    //! The expressions in the list
    std::shared_ptr<BoundExpressionListRef> expressionListRef;
-   std::string toString(uint32_t depth) override;
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
-}
+
+class BoundCTENode : public QueryNode {
+   public:
+   static constexpr const QueryNodeType TYPE = QueryNodeType::BOUND_CTE_NODE;
+
+   BoundCTENode() : QueryNode(QueryNodeType::BOUND_CTE_NODE) {}
+
+   std::shared_ptr<TableProducer> query;
+
+   //Maybe use input logic instead
+   std::shared_ptr<TableProducer> child;
+
+   //!The scope for the query. Must be not a pointer, so a copy is required everytime the cte query is translated
+   analyzer::SQLScope subQueryScope;
+
+   std::vector<std::pair<std::shared_ptr<NamedResult>, std::shared_ptr<NamedResult>>> renamedResults;
+
+   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
+};
+
+} // namespace lingodb::ast
