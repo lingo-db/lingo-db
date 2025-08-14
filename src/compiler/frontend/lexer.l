@@ -142,20 +142,19 @@ boolean [fF][aA][lL][sS][eE]
 "."             { return lingodb::parser::make_DOT(loc); }
 ","             { return lingodb::parser::make_COMMA(loc); }
 ";"             { return lingodb::parser::make_SEMICOLON(loc); }
-"+"             { return lingodb::parser::make_PLUS(loc); }
-"-"             { return lingodb::parser::make_MINUS(loc); }
-"/"             { return lingodb::parser::make_SLASH(loc); }
-"*"             { return lingodb::parser::make_STAR(loc); }
-"="             { return lingodb::parser::make_EQUAL(loc); }
-"<>"            { return lingodb::parser::make_NOT_EQUAL(loc); }
-"!="            { return lingodb::parser::make_NOT_EQUAL(loc); }
-"<="            { return lingodb::parser::make_LESS_EQUAL(loc); }
-"<"             { return lingodb::parser::make_LESS(loc); }
-">="            { return lingodb::parser::make_GREATER_EQUAL(loc); }
-">"             { return lingodb::parser::make_GREATER(loc); }
-"#"             { return lingodb::parser::make_YYEOF(loc);}
+"+"             { MAKE_KEYWORD(PLUS); }
+"-"             { MAKE_KEYWORD(MINUS); }
+"/"             { MAKE_KEYWORD(SLASH); }
+"*"             { MAKE_KEYWORD(STAR); }
+"="             { MAKE_KEYWORD(EQUAL); }
+"<>"            { MAKE_KEYWORD(NOT_EQUAL); }
+"!="            { MAKE_KEYWORD(NOT_EQUAL); }
+"<="            { MAKE_KEYWORD(LESS_EQUAL); }
+"<"             { MAKE_KEYWORD(LESS); }
+">="            { MAKE_KEYWORD(GREATER_EQUAL); }
+">"             { MAKE_KEYWORD(GREATER); }
 "|>"            { return lingodb::parser::make_PIPE(loc); }
-"::"            { return lingodb::parser::make_TYPECAST(loc); }	      
+"::"            { return lingodb::parser::make_TYPECAST(loc); }
 {newline}              { loc.lines();}
 
 [aA][lL][lL]                          { MAKE_KEYWORD(ALL); }
@@ -236,6 +235,7 @@ boolean [fF][aA][lL][sS][eE]
 
 [sS][eE][lL][eE][cC][tT]              { MAKE_KEYWORD(SELECT); }
 [sS][uU][bB][sS][tT][rR][iI][nN][gG]  { MAKE_KEYWORD(SUBSTRING); }
+[sS][oO][mM][eE]                      { MAKE_KEYWORD(SOME); }
 
 [tT][aA][bB][lL][eE]                  { MAKE_KEYWORD(TABLE); }
 [tT][eE][xX][tT]                      { MAKE_KEYWORD(TEXT_P); }
@@ -289,7 +289,7 @@ boolean [fF][aA][lL][sS][eE]
   std::string ident(yytext);
 
   /*
-   * For SQL compatibility multi char operators cannot end with '+' and '-'. 
+   * For SQL compatibility multi char operators cannot end with '+' and '-'.
    * They should be parsed as two tokens
   */
   //Remove '+' and '-' at the end if necessary
@@ -297,13 +297,13 @@ boolean [fF][aA][lL][sS][eE]
     ident.erase(ident.length() - 1);
   }
   yyless(ident.length());
-  
+
   if(ident == "<=") {
-    return lingodb::parser::make_LESS_EQUAL(loc);
+    return lingodb::parser::make_LESS_EQUAL("<=", loc);
   } else if(ident == "<>" || ident == "!=") {
-    return lingodb::parser::make_NOT_EQUAL(loc);
+    return lingodb::parser::make_NOT_EQUAL("<>", loc);
   } else if(ident == ">=") {
-    return lingodb::parser::make_GREATER_EQUAL(loc);
+    return lingodb::parser::make_GREATER_EQUAL(">=", loc);
   }
 
   return lingodb::parser::make_Op(std::move(ident), loc);

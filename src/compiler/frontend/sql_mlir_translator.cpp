@@ -699,15 +699,56 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
                mlir::Value expr = translateExpression(predBuilder, subquery->testExpr, context);
 
                auto mlirType = subquery->namedResult.value()->resultType.toMlirType(builder.getContext());
-
-               mlir::Value colVal = predBuilder.create<tuples::GetColumnOp>(predBuilder.getUnknownLoc(), mlirType, subquery->namedResult.value()->createRef(builder, attrManager), block->getArgument(0));
+               assert(subquery->namedResultForSubquery);
+               mlir::Value colVal = predBuilder.create<tuples::GetColumnOp>(predBuilder.getUnknownLoc(), mlirType, subquery->namedResultForSubquery->createRef(builder, attrManager), block->getArgument(0));
                //TODO remove
                auto ctCol = subquery->namedResult.value()->resultType.castValue(builder, colVal);
                auto ctExpr = subquery->testExpr->resultType->castValue(builder, expr);
+
+
                //TODO extract and remove hardcoded
                db::DBCmpPredicate dbCmpPred = db::DBCmpPredicate::eq;
-               mlir::Value pred = predBuilder.create<db::CmpOp>(predBuilder.getUnknownLoc(), dbCmpPred, ctCol, ctExpr);
-               ;
+               mlir::Value pred;
+               if (subquery->comparisonType.has_value()) {
+                  if (subquery->comparisonType.value() == ast::ExpressionType::COMPARE_LIKE || subquery->comparisonType.value() == ast::ExpressionType::COMPARE_NOT_LIKE) {
+                     auto isNullable = mlir::isa<db::NullableType>(ctExpr.getType()) || mlir::isa<db::NullableType>(ctCol.getType());
+                     mlir::Type resType = isNullable ? (mlir::Type) db::NullableType::get(predBuilder.getContext(), predBuilder.getI1Type()) : (mlir::Type) predBuilder.getI1Type();
+                     auto like = predBuilder.create<db::RuntimeCall>(predBuilder.getUnknownLoc(), resType, "Like", mlir::ValueRange({ctExpr, ctCol})).getRes();
+                     pred = subquery->comparisonType.value() == ast::ExpressionType::COMPARE_NOT_LIKE ? predBuilder.create<db::NotOp>(predBuilder.getUnknownLoc(), like) : like;
+                  } else {
+                     switch (subquery->comparisonType.value()) {
+                        case ast::ExpressionType::COMPARE_EQUAL:
+                           dbCmpPred = db::DBCmpPredicate::eq;
+                           break;
+                        case ast::ExpressionType::COMPARE_NOTEQUAL:
+                           dbCmpPred = db::DBCmpPredicate::neq;
+                           break;
+                        case ast::ExpressionType::COMPARE_LESSTHAN:
+                           dbCmpPred = db::DBCmpPredicate::lt;
+                           break;
+                        case ast::ExpressionType::COMPARE_GREATERTHAN:
+                           dbCmpPred = db::DBCmpPredicate::gt;
+                           break;
+                        case ast::ExpressionType::COMPARE_LESSTHANOREQUALTO:
+                           dbCmpPred = db::DBCmpPredicate::lte;
+                           break;
+                        case ast::ExpressionType::COMPARE_GREATERTHANOREQUALTO:
+                           dbCmpPred = db::DBCmpPredicate::gte;
+                           break;
+
+                        default: error("Not implemented", expression->loc);
+                     }
+
+                     pred = predBuilder.create<db::CmpOp>(predBuilder.getUnknownLoc(), dbCmpPred, ctExpr, ctCol);
+
+                  }
+
+
+               } else {
+                  pred = predBuilder.create<db::CmpOp>(predBuilder.getUnknownLoc(), dbCmpPred, ctExpr, ctCol);
+               }
+
+
                predBuilder.create<tuples::ReturnOp>(builder.getUnknownLoc(), pred);
 
                auto sel = builder.create<relalg::SelectionOp>(builder.getUnknownLoc(), tuples::TupleStreamType::get(builder.getContext()), translatedSubquery);
@@ -718,6 +759,78 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
                   return builder.create<db::NotOp>(builder.getUnknownLoc(), existsOp);
                }
                return existsOp;
+            }
+            case ast::SubqueryType::ALL: {
+                 auto* block = new mlir::Block;
+               mlir::OpBuilder predBuilder(builder.getContext());
+               block->addArgument(tuples::TupleType::get(builder.getContext()), builder.getUnknownLoc());
+               auto tupleScope = translationContext->createTupleScope();
+               translationContext->setCurrentTuple(block->getArgument(0));
+
+               predBuilder.setInsertionPointToStart(block);
+               mlir::Value expr = translateExpression(predBuilder, subquery->testExpr, context);
+
+               auto mlirType = subquery->namedResult.value()->resultType.toMlirType(builder.getContext());
+               assert(subquery->namedResultForSubquery);
+               mlir::Value colVal = predBuilder.create<tuples::GetColumnOp>(predBuilder.getUnknownLoc(), mlirType, subquery->namedResultForSubquery->createRef(builder, attrManager), block->getArgument(0));
+               //TODO remove
+               auto ctCol = subquery->namedResult.value()->resultType.castValue(builder, colVal);
+               auto ctExpr = subquery->testExpr->resultType->castValue(builder, expr);
+
+
+               //TODO extract and remove hardcoded
+               db::DBCmpPredicate dbCmpPred = db::DBCmpPredicate::eq;
+               mlir::Value pred;
+               if (subquery->comparisonType.has_value()) {
+                  if (subquery->comparisonType.value() == ast::ExpressionType::COMPARE_LIKE || subquery->comparisonType.value() == ast::ExpressionType::COMPARE_NOT_LIKE) {
+                     auto isNullable = mlir::isa<db::NullableType>(ctExpr.getType()) || mlir::isa<db::NullableType>(ctCol.getType());
+                     mlir::Type resType = isNullable ? (mlir::Type) db::NullableType::get(predBuilder.getContext(), predBuilder.getI1Type()) : (mlir::Type) predBuilder.getI1Type();
+                     auto like = predBuilder.create<db::RuntimeCall>(predBuilder.getUnknownLoc(), resType, "Like", mlir::ValueRange({ctExpr, ctCol})).getRes();
+                     pred = subquery->comparisonType.value() == ast::ExpressionType::COMPARE_NOT_LIKE ? predBuilder.create<db::NotOp>(predBuilder.getUnknownLoc(), like) : like;
+                  } else {
+                     switch (subquery->comparisonType.value()) {
+                        case ast::ExpressionType::COMPARE_EQUAL:
+                           dbCmpPred = db::DBCmpPredicate::eq;
+                           break;
+                        case ast::ExpressionType::COMPARE_NOTEQUAL:
+                           dbCmpPred = db::DBCmpPredicate::neq;
+                           break;
+                        case ast::ExpressionType::COMPARE_LESSTHAN:
+                           dbCmpPred = db::DBCmpPredicate::lt;
+                           break;
+                        case ast::ExpressionType::COMPARE_GREATERTHAN:
+                           dbCmpPred = db::DBCmpPredicate::gt;
+                           break;
+                        case ast::ExpressionType::COMPARE_LESSTHANOREQUALTO:
+                           dbCmpPred = db::DBCmpPredicate::lte;
+                           break;
+                        case ast::ExpressionType::COMPARE_GREATERTHANOREQUALTO:
+                           dbCmpPred = db::DBCmpPredicate::gte;
+                           break;
+
+                        default: error("Not implemented", expression->loc);
+                     }
+
+                     pred = predBuilder.create<db::CmpOp>(predBuilder.getUnknownLoc(), dbCmpPred, ctExpr, ctCol);
+
+                  }
+
+
+               } else {
+                  pred = predBuilder.create<db::CmpOp>(predBuilder.getUnknownLoc(), dbCmpPred, ctExpr, ctCol);
+               }
+
+               pred = predBuilder.create<db::NotOp>(predBuilder.getUnknownLoc(), pred);
+
+
+               predBuilder.create<tuples::ReturnOp>(builder.getUnknownLoc(), pred);
+
+               auto sel = builder.create<relalg::SelectionOp>(builder.getUnknownLoc(), tuples::TupleStreamType::get(builder.getContext()), translatedSubquery);
+               sel.getPredicate().push_back(block);
+               translatedSubquery = sel.getResult();
+               auto existsOp = builder.create<relalg::ExistsOp>(builder.getUnknownLoc(), builder.getI1Type(), translatedSubquery);
+               return builder.create<db::NotOp>(builder.getUnknownLoc(), existsOp);
+
             }
             case ast::SubqueryType::EXISTS: {
                return builder.create<relalg::ExistsOp>(builder.getUnknownLoc(), builder.getI1Type(), translatedSubquery);
@@ -785,7 +898,6 @@ mlir::Value SQLMlirTranslator::translateBinaryOperatorExpression(mlir::OpBuilder
 }
 
 mlir::Value SQLMlirTranslator::translateWindowExpression(mlir::OpBuilder& builder, mlir::Value tree, std::shared_ptr<ast::BoundWindowExpression> expression, std::shared_ptr<analyzer::SQLContext> context) {
-   //TODO non columnRef arguments
    mlir::Value expr;
    tuples::ColumnDefAttr attrDef;
    auto tupleStreamType = tuples::TupleStreamType::get(builder.getContext());
