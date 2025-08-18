@@ -184,7 +184,9 @@ boolean [fF][aA][lL][sS][eE]
 [eE][nN][dD]                          { MAKE_KEYWORD(END_P); }
 [eE][xX][cC][eE][pP][tT]              { MAKE_KEYWORD(EXCEPT); }
 [eE][xX][iI][sS][tT][sS]              { MAKE_KEYWORD(EXISTS); }
+[eE][xX][tT][eE][nN][dD]              { MAKE_KEYWORD(EXTEND); }
 [eE][xX][tT][rR][aA][cC][tT]          { MAKE_KEYWORD(EXTRACT); }
+
 
 [fF][lL][oO][aA][tT]                  { MAKE_KEYWORD(FLOAT_P); }
 [fF][oO][rR]                          { MAKE_KEYWORD(FOR); }
