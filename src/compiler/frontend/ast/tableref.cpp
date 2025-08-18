@@ -94,6 +94,21 @@ std::string JoinRef::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
       dot.append(" [label=\"right\"];\n");
       dot.append(right->toDotGraph(depth + 1, idGen));
    }
+   if (std::holds_alternative<std::shared_ptr<ParsedExpression>>(condition)) {
+      auto c  = std::get<std::shared_ptr<ParsedExpression>>(condition);
+      if (c) {
+         std::string rightId;
+         rightId.append("node");
+         rightId.append(std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(c.get()))));
+
+         dot.append(nodeId);
+         dot.append(" -> ");
+         dot.append(rightId);
+         dot.append(" [label=\"condition\"];\n");
+         dot.append(c->toDotGraph(depth + 1, idGen));
+      }
+
+   }
 
    return dot;
 }
