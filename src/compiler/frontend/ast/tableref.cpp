@@ -1,4 +1,5 @@
 #include "lingodb/compiler/frontend/ast/tableref.h"
+#include "lingodb/compiler/frontend/ast/parsed_expression.h"
 namespace lingodb::ast {
 ///BaseTableRef
 BaseTableRef::BaseTableRef(TableDescription tableDescription) : TableRef(TYPE), catalogName(tableDescription.database), schemaName(tableDescription.schema), tableName(tableDescription.table) {
@@ -98,7 +99,7 @@ std::string JoinRef::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
 }
 
 ///SuqueryRef
-SubqueryRef::SubqueryRef(std::shared_ptr<QueryNode> subSelectNode) : TableRef(TYPE), subSelectNode(std::move(subSelectNode)) {
+SubqueryRef::SubqueryRef(std::shared_ptr<TableProducer> subSelectNode) : TableRef(TYPE), subSelectNode(std::move(subSelectNode)) {
 }
 
 std::string SubqueryRef::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
