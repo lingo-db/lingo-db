@@ -26,6 +26,7 @@
   #include "lingodb/compiler/frontend/ast/query_node.h"
   #include "lingodb/compiler/frontend/ast/constant_value.h"
   #include "lingodb/compiler/frontend/ast/constraint.h"
+  #include "lingodb/compiler/frontend/ast/extend_node.h"
   class driver;
 }
 
@@ -161,6 +162,8 @@
 	//!QUOTE 
     QUOTES
 
+    EXTEND
+
 	RANGE READ REAL REASSIGN RECURSIVE REF_P REFERENCES REFERENCING
 	REFRESH REINDEX RELATIVE_P RELEASE RENAME REPEATABLE REPLACE REPLICA
 	RESET RESTART RESTRICT RETURN RETURNING RETURNS REVOKE RIGHT ROLE ROLLBACK ROLLUP
@@ -210,11 +213,11 @@
 %token		FORMAT_LA NOT_LA NULLS_LA WITH_LA WITHOUT_LA
 %type <std::vector<std::shared_ptr<lingodb::ast::AstNode>>> stmtmulti
 %type <std::shared_ptr<lingodb::ast::AstNode>> toplevel_stmt stmt
-%type <std::shared_ptr<lingodb::ast::TableProducer>>  SelectStmt   PreparableStmt
+%type <std::shared_ptr<lingodb::ast::TableProducer>>  SelectStmt  PreparableStmt PipeSQLStmt classic_select_and_pipe_sql_with_parens pipe_sql_with_parens pipe_sql_no_parens 
 %type <std::shared_ptr<lingodb::ast::QueryNode>> simple_select select_clause select_no_parens with_clause select_with_parens cte_list common_table_expr
 
 %type<std::vector<std::shared_ptr<lingodb::ast::ParsedExpression>>> target_list group_by_list func_arg_list func_arg_list_opt
-                                                                    extract_list expr_list substr_list distinct_clause
+                                                                    extract_list expr_list expr_list_with_alias substr_list distinct_clause
                                                                     opt_partition_clause rollup_clause
 
 
@@ -410,19 +413,35 @@ stmt:
  SelectStmt {$$=$1;}
  | CreateStmt {$$=$1;}
  | InsertStmt {$$=$1;}
+ | PipeSQLStmt {$$=$1;}
  ;
 
  SelectStmt:
     select_no_parens {$$=$select_no_parens;}
     | select_with_parens {$$=$select_with_parens;}
     ;
+PipeSQLStmt:
+    pipe_sql_no_parens {$$=$1;}
+    | pipe_sql_with_parens {$$=$1;}
+    ;
+
+classic_select_and_pipe_sql_with_parens:
+    select_with_parens {$$=$1;}
+    | pipe_sql_with_parens {$$=$1;}   
+    ; 
+
 select_with_parens:
     LP select_no_parens RP {$$=$select_no_parens;}
     | LP select_with_parens RP {$$=$2;}
     ;
+pipe_sql_with_parens:
+    LP pipe_sql_no_parens RP {$$=$2;}
+    | LP pipe_sql_with_parens RP {$$=$2;}
+    ;
 /*
 * Difference to postgres the values clause is located in the select_no_parens rule so that it can be used as a standalone table producer.
 */
+//TODO add missing rules
 select_no_parens:
     simple_select {$$=$1;}
     | select_clause sort_clause
@@ -480,15 +499,15 @@ select_no_parens:
         $$ = $with_clause;
     }
     //TODO | with_clause select_clause opt_sort_clause select_limit opt_for_locking_clause
-    //PIPE:
-   /* | from_clause
-     {
+  ;
+pipe_sql_no_parens:
+    | from_clause
+    {
 
         $$ = $from_clause;
 
-     }
-     //TODO DOC
-    | select_no_parens[parens] PIPE pipe_operator
+    }
+    | PipeSQLStmt[parens] PIPE pipe_operator
     {
 
         auto pipeOp = std::static_pointer_cast<lingodb::ast::PipeOperator>($pipe_operator);
@@ -503,7 +522,8 @@ select_no_parens:
         $$ = $pipe_operator;
 
     }
-    ;*/
+    ;
+
 pipe_start:
     | from_clause
      {
@@ -916,7 +936,10 @@ opt_alias_clause:
     {
         $$ = $alias_clause;
     }
-    | %empty
+    | %empty 
+    {
+        $$ = std::make_pair<std::string, std::vector<std::string>>("", std::vector<std::string>());
+    }
     ;
 
 opt_alias_clause_for_join_using:
@@ -1322,20 +1345,20 @@ c_expr:
     | func_expr {$$=$1;}
     | window_func_expr {$$=$1;}
     | cast_expr {$$=$1;}
-    | select_with_parens %prec UMINUS
+    | classic_select_and_pipe_sql_with_parens %prec UMINUS
     {
-        auto subquery = mkNode<lingodb::ast::SubqueryExpression>(@$, lingodb::ast::SubqueryType::SCALAR, $select_with_parens);
+        auto subquery = mkNode<lingodb::ast::SubqueryExpression>(@$, lingodb::ast::SubqueryType::SCALAR, $classic_select_and_pipe_sql_with_parens);
         $$ = subquery;
     }
     //TODO | select_with_parens indirection
-    | EXISTS select_with_parens
+    | EXISTS classic_select_and_pipe_sql_with_parens
     {
-        auto subquery = mkNode<lingodb::ast::SubqueryExpression>(@$, lingodb::ast::SubqueryType::EXISTS, $select_with_parens);
+        auto subquery = mkNode<lingodb::ast::SubqueryExpression>(@$, lingodb::ast::SubqueryType::EXISTS, $classic_select_and_pipe_sql_with_parens);
         $$ = subquery;
     }
-    | NOT EXISTS select_with_parens
+    | NOT EXISTS classic_select_and_pipe_sql_with_parens
     {
-        auto subquery = mkNode<lingodb::ast::SubqueryExpression>(@$, lingodb::ast::SubqueryType::NOT_EXISTS, $select_with_parens);
+        auto subquery = mkNode<lingodb::ast::SubqueryExpression>(@$, lingodb::ast::SubqueryType::NOT_EXISTS, $classic_select_and_pipe_sql_with_parens);
         $$ = subquery;
     }
     //TODO | ARRAY select_with_parens
@@ -1575,6 +1598,21 @@ expr_list:
     }
     | expr_list[list] COMMA a_expr
     {
+        $list.emplace_back($a_expr);
+        $$ = $list;
+    }
+    ;
+expr_list_with_alias:
+    a_expr opt_alias_clause
+    {
+        auto list = mkListShared<lingodb::ast::ParsedExpression>();
+        $a_expr->alias = $opt_alias_clause.first;
+        list.emplace_back($a_expr);
+        $$ = list;
+    }
+    | expr_list[list] COMMA a_expr opt_alias_clause
+    {
+        $a_expr->alias = $opt_alias_clause.first;
         $list.emplace_back($a_expr);
         $$ = $list;
     }
@@ -3060,9 +3098,15 @@ pipe_operator:
     //TODO check if this does not allow to much!
     | AGGREGATE agg_expr
     {
-        $$ = mkNode<lingodb::ast::PipeOperator>(@$,lingodb::ast::PipeOperatorType::AGGREGATE, $agg_expr);
+         $$ = mkNode<lingodb::ast::PipeOperator>(@$, lingodb::ast::PipeOperatorType::AGGREGATE, $agg_expr);
     }
-    | alias_clause
+    | EXTEND expr_list_with_alias
+    {
+        auto extendNode = mkNode<lingodb::ast::ExtendNode>(@$, false);
+        extendNode->extensions = $expr_list_with_alias;
+        $$ = mkNode<lingodb::ast::PipeOperator>(@$, lingodb::ast::PipeOperatorType::EXTEND, extendNode);
+    }
+   
     //...
 
     ;
@@ -3077,13 +3121,21 @@ agg_expr:
       
         
     }
+    | group_clause 
+    {
+        auto aggNode = mkNode<lingodb::ast::AggregationNode>(@$);
+        aggNode->groupByNode = $group_clause;
+        $$ = aggNode;
+      
+        
+    }
     ;
    
 func_expr_list: 
     func_expr opt_alias_clause 
     {
         auto list = mkListShared<lingodb::ast::FunctionExpression>();
-        $func_expr->alias=$opt_alias_clause;
+        $func_expr->alias=$opt_alias_clause.first;
         list.emplace_back($func_expr);
         
         $$ = list;
