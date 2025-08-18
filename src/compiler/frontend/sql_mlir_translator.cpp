@@ -40,6 +40,7 @@ SQLMlirTranslator::SQLMlirTranslator(mlir::ModuleOp moduleOp, std::shared_ptr<ca
    moduleOp.getContext()->getLoadedDialect<util::UtilDialect>()->getFunctionHelper().setParentModule(moduleOp);
 }
 std::optional<mlir::Value> SQLMlirTranslator::translateStart(mlir::OpBuilder& builder, std::shared_ptr<ast::AstNode> astNode, std::shared_ptr<analyzer::SQLContext> context) {
+   auto startTranslate = std::chrono::high_resolution_clock::now();
    auto tableProducer = std::dynamic_pointer_cast<ast::TableProducer>(astNode);
    if (!tableProducer) {
       //Root node is not a TableProducer
@@ -112,6 +113,8 @@ std::optional<mlir::Value> SQLMlirTranslator::translateStart(mlir::OpBuilder& bu
       relalg::QueryOp queryOp = builder.create<relalg::QueryOp>(builder.getUnknownLoc(), mlir::TypeRange{localTableType}, mlir::ValueRange{});
       queryOp.getQueryOps().getBlocks().clear();
       queryOp.getQueryOps().push_back(block);
+      auto endTranslate = std::chrono::high_resolution_clock::now();
+      this->timing = std::chrono::duration_cast<std::chrono::microseconds>(endTranslate - startTranslate).count() / 1000.0;
       return queryOp.getResults()[0];
    }
 }

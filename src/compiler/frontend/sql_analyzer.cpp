@@ -9,12 +9,34 @@
 #include "lingodb/compiler/frontend/ast/bound/bound_query_node.h"
 #include "lingodb/compiler/frontend/ast/bound/bound_tableref.h"
 #include "lingodb/runtime/RecordBatchInfo.h"
-
 #include <cctype>
+#include <chrono>
 #include <ranges>
+#include <sys/resource.h>
 namespace lingodb::analyzer {
 using ResolverScope = llvm::ScopedHashTable<std::string, std::shared_ptr<ast::NamedResult>, StringInfo>::ScopeTy;
 
+bool StackGuard::check() {
+   static void* startFameAddress = nullptr;
+   rlimit rlp{};
+   auto suc = getrlimit(RLIMIT_STACK, &rlp);
+   if (startFameAddress == nullptr) {
+      startFameAddress = __builtin_frame_address(0);
+      return false;
+   }
+   void* currentFrameAddress = __builtin_frame_address(0);
+   if (currentFrameAddress>startFameAddress) {
+      startFameAddress = currentFrameAddress;
+      return false;
+   }
+   size_t size = reinterpret_cast<size_t>(startFameAddress) - reinterpret_cast<size_t>(currentFrameAddress);
+
+   if (size > 950000) {
+
+      return true;
+   }
+   return false;
+}
 
 /*
     * SQLCanonicalizer
@@ -589,6 +611,8 @@ std::shared_ptr<T> SQLCanonicalizer::canonicalizeCast(std::shared_ptr<ast::Table
 SQLQueryAnalyzer::SQLQueryAnalyzer(std::shared_ptr<catalog::Catalog> catalog) : catalog(std::move(catalog)) {
 }
 std::shared_ptr<ast::AstNode> SQLQueryAnalyzer::canonicalizeAndAnalyze(std::shared_ptr<ast::AstNode> astRootNode, std::shared_ptr<SQLContext> context) {
+   auto startCanonicalizeAndAnalyze = std::chrono::high_resolution_clock::now();
+
    auto rootNode = std::dynamic_pointer_cast<ast::TableProducer>(astRootNode);
    if (!rootNode) {
       //RootNode is not a TableProducer
@@ -596,7 +620,8 @@ std::shared_ptr<ast::AstNode> SQLQueryAnalyzer::canonicalizeAndAnalyze(std::shar
          case ast::NodeType::CREATE_NODE: {
             auto createNode = std::static_pointer_cast<ast::CreateNode>(astRootNode);
             auto scope = context->createResolverScope();
-
+            auto endCanonicalizeAndAnalyze = std::chrono::high_resolution_clock::now();
+            this->totalTime = std::chrono::duration_cast<std::chrono::microseconds>(endCanonicalizeAndAnalyze - startCanonicalizeAndAnalyze).count() / 1000.0;
             return analyzeCreateNode(createNode, context, scope);
             ;
          }
@@ -608,6 +633,8 @@ std::shared_ptr<ast::AstNode> SQLQueryAnalyzer::canonicalizeAndAnalyze(std::shar
             insertNode->producer = sqlCanonicalizer.canonicalize(insertNode->producer, std::make_shared<ASTTransformContext>());
             auto i = analyzeInsertNode(insertNode, context, scope);
             //context->popCurrentScope();
+            auto endCanonicalizeAndAnalyze = std::chrono::high_resolution_clock::now();
+            this->totalTime = std::chrono::duration_cast<std::chrono::microseconds>(endCanonicalizeAndAnalyze - startCanonicalizeAndAnalyze).count() / 1000.0;
             return i;
          }
          default: throw std::runtime_error("Invalid root node type");
@@ -628,6 +655,9 @@ std::shared_ptr<ast::AstNode> SQLQueryAnalyzer::canonicalizeAndAnalyze(std::shar
       context->pushNewScope();
       auto scope = context->createResolverScope();
       transformed = analyzeTableProducer(transformed, context, scope);
+      auto endCanonicalizeAndAnalyze = std::chrono::high_resolution_clock::now();
+      this->totalTime = std::chrono::duration_cast<std::chrono::microseconds>(endCanonicalizeAndAnalyze - startCanonicalizeAndAnalyze).count() / 1000.0;
+
       return transformed;
    }
 }
@@ -1617,8 +1647,31 @@ std::shared_ptr<ast::BoundResultModifier> SQLQueryAnalyzer::analyzeResultModifie
 /*
     * Expressions
     */
+size_t get_stack_size() {
+   pthread_attr_t attr;
+   pthread_getattr_np(pthread_self(), &attr);
+
+   void *stack_addr;
+   size_t stack_size;
+   pthread_attr_getstack(&attr, &stack_addr, &stack_size);
+
+   pthread_attr_destroy(&attr);
+   return stack_size;
+}
 
 std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::shared_ptr<ast::ParsedExpression> rootNode, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope) {
+   if (StackGuard::check()) {
+      throw std::runtime_error("Stack overflow");
+   }
+
+
+
+
+
+
+
+
+
    switch (rootNode->exprClass) {
       case ast::ExpressionClass::CONSTANT: {
          auto constExpr = std::static_pointer_cast<ast::ConstantExpression>(rootNode);
