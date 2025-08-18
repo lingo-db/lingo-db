@@ -24,13 +24,11 @@ struct StringInfo {
 };
 class ASTTransformScope {
    public:
-   ASTTransformScope() : aggregationNode(std::make_shared<ast::AggregationNode>()), extendNodeBeforeAggregation(std::make_shared<ast::ExtendNode>(true)), extendNodeBeforeWindowFunctions(std::make_shared<ast::ExtendNode>(true)), extendNodeAfterAggregations(std::make_shared<ast::ExtendNode>(true)), extendNodeBeforeOrderBy(std::make_shared<ast::ExtendNode>(true)), aggregationNodeForWindowFunctions(std::make_shared<ast::AggregationNode>()) {}
+   ASTTransformScope() : aggregationNode(std::make_shared<ast::AggregationNode>()), extendNodeBeforeWindowFunctions(std::make_shared<ast::ExtendNode>(true)), extendNodeForWindowFunctions(std::make_shared<ast::ExtendNode>()) {}
    std::shared_ptr<ast::AggregationNode> aggregationNode;
-   std::shared_ptr<ast::AggregationNode> aggregationNodeForWindowFunctions;
-   std::shared_ptr<ast::ExtendNode> extendNodeBeforeAggregation;
+   std::shared_ptr<ast::ExtendNode> extendNodeForWindowFunctions;
+
    std::shared_ptr<ast::ExtendNode> extendNodeBeforeWindowFunctions;
-   std::shared_ptr<ast::ExtendNode> extendNodeAfterAggregations;
-   std::shared_ptr<ast::ExtendNode> extendNodeBeforeOrderBy;
    std::unordered_map<std::shared_ptr<ast::ParsedExpression>, std::shared_ptr<ast::ColumnRefExpression>, ast::ParsedExprPtrHash, ast::ParsedExprPtrEqual> alreadyExtendedExpression;
    /// Container for GROUP BY expressions that ensures uniqueness, reuse in the canonicalization step
    std::unordered_set<std::shared_ptr<ast::ParsedExpression>, ast::ParsedExprPtrHash, ast::ParsedExprPtrEqual> groupedByExpressions;
