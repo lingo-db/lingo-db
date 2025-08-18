@@ -8,7 +8,6 @@ class BoundAggregationNode : public AstNode {
 
    std::shared_ptr<BoundGroupByNode> groupByNode;
    std::vector<std::shared_ptr<BoundFunctionExpression>> aggregations;
-   std::vector<std::shared_ptr<BoundWindowExpression>> windowFunctions;
    //TODO add name of tmp attr
    std::vector<std::shared_ptr<BoundExpression>> toMapExpressions;
    //TODO use context for this kind of information in future. context->getAttribute(id)....

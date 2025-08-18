@@ -9,7 +9,6 @@ class AggregationNode : public AstNode {
 
    std::shared_ptr<GroupByNode> groupByNode;
    std::vector<std::shared_ptr<FunctionExpression>> aggregations;
-   std::vector<std::shared_ptr<WindowExpression>> windowFunctions;
    //TODO having clause
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;

@@ -5,7 +5,7 @@
 #include "lingodb/compiler/frontend/ast/query_node.h"
 #include "lingodb/compiler/frontend/driver.h"
 #include "sql_context.h"
-#define DEBUG true
+#define DEBUG false
 
 #include <functional>
 #include <sys/resource.h>
@@ -95,7 +95,7 @@ class SQLCanonicalizer {
     * @param extend Controls whether non-aggregate functions should be added to extension node
     * @return The canonicalized expression
     */
-   std::shared_ptr<ast::ParsedExpression> canonicalizeParsedExpression(std::shared_ptr<ast::ParsedExpression> rootNode, std::shared_ptr<ASTTransformContext> context, bool extend, std::shared_ptr<ast::ExtendNode> extendNode = nullptr);
+   std::shared_ptr<ast::ParsedExpression> canonicalizeParsedExpression(std::shared_ptr<ast::ParsedExpression> rootNode, std::shared_ptr<ASTTransformContext> context, bool extend, std::shared_ptr<ast::ExtendNode> extendNode);
 
    private:
    /**

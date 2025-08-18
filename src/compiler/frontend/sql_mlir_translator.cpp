@@ -342,15 +342,16 @@ mlir::Value SQLMlirTranslator::translatePipeOperator(mlir::OpBuilder& builder, s
 
          tree = translateAggregation(builder, aggregationNode, context, tree);
 
-         for (auto window: aggregationNode->windowFunctions) {
-            tree = translateWindowExpression(builder, tree, window, context);
-         }
+
 
          return tree;
       }
       case ast::PipeOperatorType::EXTEND: {
          auto extendNode = std::static_pointer_cast<ast::BoundExtendNode>(pipeOperator->node);
          tree = createMap(builder, extendNode->mapName, extendNode->extensions, context, tree);
+         for (auto window: extendNode->windowExpressions) {
+            tree = translateWindowExpression(builder, tree, window, context);
+         }
          return tree;
       }
       case ast::PipeOperatorType::UNION_ALL:
@@ -831,11 +832,7 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
          }
          return translateWhenCheks(builder, boundCase,caseExprTranslated, boundCase->caseChecks, boundCase->elseExpr, context);
       }
-      case ast::ExpressionClass::BOUND_WINDOW: {
-         auto window = std::static_pointer_cast<ast::BoundWindowExpression>(expression);
-         return translateWindowExpression(builder, nullptr, window, context);
 
-      }
 
       default: error("Not implemented", expression->loc);
    }
