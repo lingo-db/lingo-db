@@ -20,7 +20,41 @@ using ResolverScope = llvm::ScopedHashTable<std::string, std::shared_ptr<ast::Na
 
 class StackGuard {
    public:
-   static bool check();
+   StackGuard() {
+      rlimit rlp{};
+      auto suc = getrlimit(RLIMIT_STACK, &rlp);
+      if (suc != 0) {
+        limit = 0;
+      }
+      limit = 0.09*rlp.rlim_cur;
+
+   }
+   void reset() {
+      startFameAddress = nullptr;
+   }
+   bool check() {
+      rlimit rlp{};
+      auto suc = getrlimit(RLIMIT_STACK, &rlp);
+      if (startFameAddress == nullptr) {
+         startFameAddress = __builtin_frame_address(0);
+         return false;
+      }
+      void* currentFrameAddress = __builtin_frame_address(0);
+      if (currentFrameAddress>startFameAddress) {
+         startFameAddress = currentFrameAddress;
+         return false;
+      }
+      size_t size = reinterpret_cast<size_t>(startFameAddress) - reinterpret_cast<size_t>(currentFrameAddress);
+
+      if (size > limit) {
+         std::cerr << "StackLimit: " << rlp.rlim_cur << " Max: " << rlp.rlim_max << " recorded size: " << size << " Perc: " << ((size*1.0)/rlp.rlim_cur) * 100 << std::endl;
+         return true;
+      }
+      return false;
+   }
+   private:
+   void* startFameAddress;
+   size_t limit;
 
 };
 
@@ -81,6 +115,7 @@ class SQLCanonicalizer {
 
 class SQLQueryAnalyzer {
    public:
+   StackGuard stackGuard{};
    SQLQueryAnalyzer(std::shared_ptr<catalog::Catalog> catalog);
    std::shared_ptr<SQLContext> context = std::make_shared<SQLContext>();
 
