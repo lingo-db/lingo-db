@@ -1,12 +1,10 @@
 #pragma once
 #include "ast_node.h"
 #include "constant_value.h"
-#include "lingodb/catalog/Column.h"
 #include "lingodb/catalog/Types.h"
 #include "table_producer.h"
 
 #include <string>
-#include <variant>
 #include <vector>
 namespace lingodb::ast {
 class OrderByModifier;
@@ -33,7 +31,7 @@ enum LogicalType : uint8_t {
 };
 class LogicalTypeWithMods {
    public:
-   LogicalTypeWithMods() : LogicalTypeWithMods(LogicalType::INVALID) {}
+   LogicalTypeWithMods() : LogicalTypeWithMods(INVALID) {}
    LogicalTypeWithMods(LogicalType logicalType)
       : logicalType(logicalType), typeModifiers({}) {}
    LogicalTypeWithMods(LogicalType logicalType, std::vector<std::shared_ptr<Value>> typeModifiers)
@@ -46,8 +44,9 @@ class BaseExpression : public AstNode {
    public:
    BaseExpression(ExpressionType type, ExpressionClass exprClass) : AstNode(NodeType::EXPRESSION), type(type), exprClass(exprClass) {}
 
-   ExpressionClass exprClass;
+
    ExpressionType type;
+   ExpressionClass exprClass;
    //! The alias of the expression,
    std::string alias;
 };
@@ -511,7 +510,7 @@ class WindowExpression : public ParsedExpression {
     std::optional<std::shared_ptr<OrderByModifier>> order;
 
    /// Expression representing a filter, only used for aggregates
-   std::shared_ptr<ast::ParsedExpression> filter;
+   std::shared_ptr<ParsedExpression> filter;
 
    bool ignoreNulls = false;
    bool distinct = false;

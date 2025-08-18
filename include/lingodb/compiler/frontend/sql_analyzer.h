@@ -85,21 +85,17 @@ class SQLQueryAnalyzer {
    std::shared_ptr<SQLContext> context = std::make_shared<SQLContext>();
 
    std::shared_ptr<ast::AstNode> canonicalizeAndAnalyze(std::shared_ptr<ast::AstNode> rootNode, std::shared_ptr<SQLContext> context);
-   std::shared_ptr<ast::TableProducer> analyzeTableProducer(std::shared_ptr<ast::TableProducer> rootNode, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope);
-   std::shared_ptr<ast::CreateNode> analyzeCreateNode(std::shared_ptr<ast::CreateNode> createNode, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope);
-   std::shared_ptr<ast::BoundInsertNode> analyzeInsertNode(std::shared_ptr<ast::InsertNode> insertNode, std::shared_ptr<SQLContext> context, SQLContext::ResolverScope& resolverScope);
+
 
    double getTiming() {
       return totalTime;
    }
 
    private:
-   std::shared_ptr<catalog::Catalog> catalog;
-   driver drv{};
-   SQLCanonicalizer sqlCanonicalizer{};
-   double totalTime;
+   std::shared_ptr<ast::TableProducer> analyzeTableProducer(std::shared_ptr<ast::TableProducer> rootNode, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope);
+   std::shared_ptr<ast::CreateNode> analyzeCreateNode(std::shared_ptr<ast::CreateNode> createNode, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope);
+   std::shared_ptr<ast::BoundInsertNode> analyzeInsertNode(std::shared_ptr<ast::InsertNode> insertNode, std::shared_ptr<SQLContext> context, SQLContext::ResolverScope& resolverScope);
 
-   private:
    std::shared_ptr<ast::TableProducer> analyzePipeOperator(std::shared_ptr<ast::PipeOperator> pipeOperator, std::shared_ptr<SQLContext>& context, ResolverScope& resolverScope);
    std::shared_ptr<ast::TableProducer> analyzeTableRef(std::shared_ptr<ast::TableRef> tableRef, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope);
    std::shared_ptr<ast::BoundResultModifier> analyzeResultModifier(std::shared_ptr<ast::ResultModifier> resultModifier, std::shared_ptr<SQLContext> context);
@@ -116,19 +112,10 @@ class SQLQueryAnalyzer {
          .Default(ast::ExpressionType::OPERATOR_UNKNOWN);
    }
 
-   std::string createTmpScope() {
-      static size_t tmpScopeCounter = 0;
-      std::string scope{"tmp_attr"};
-      scope.append(std::to_string(tmpScopeCounter++));
-      return scope;
-   }
-
-   std::string createMapName() {
-      static size_t mapCounter = 0;
-      std::string mapName{"map"};
-      mapName.append(std::to_string(mapCounter++));
-      return mapName;
-   }
+   std::shared_ptr<catalog::Catalog> catalog;
+   driver drv{};
+   SQLCanonicalizer sqlCanonicalizer{};
+   double totalTime;
 };
 
 struct SQLTypeUtils {
