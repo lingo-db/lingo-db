@@ -213,7 +213,17 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
             case ast::PipeOperatorType::RESULT_MODIFIER: {
                auto resultModifier = std::static_pointer_cast<ast::ResultModifier>(pipeOp->node);
                //TODO Support more complex modifiers
+               resultModifier->input = pipeOp->input;
                return resultModifier;
+            }
+            case ast::PipeOperatorType::EXTEND: {
+               auto extendNode = std::static_pointer_cast<ast::ExtendNode>(pipeOp->node);
+               for (auto expr : extendNode->extensions) {
+                  canonicalizeParsedExpression(expr, context, false);
+               }
+               return pipeOp;
+
+
             }
             case ast::PipeOperatorType::UNION:
             case ast::PipeOperatorType::UNION_ALL: {
