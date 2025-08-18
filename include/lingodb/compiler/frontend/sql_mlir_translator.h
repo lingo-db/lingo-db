@@ -2,13 +2,11 @@
 #include "ast/bound/bound_insert_node.h"
 #include "ast/bound/bound_pipe_operator.h"
 #include "ast/create_node.h"
-#include "ast/insert_node.h"
 #include "lingodb/compiler/Dialect/TupleStream/ColumnManager.h"
 #include "lingodb/compiler/frontend/ast/bound/bound_aggregation.h"
 #include "lingodb/compiler/frontend/ast/bound/bound_resultmodifier.h"
 #include "lingodb/compiler/frontend/ast/bound/bound_tableref.h"
 #include "lingodb/compiler/frontend/ast/parsed_expression.h"
-#include "lingodb/compiler/frontend/ast/select_node.h"
 #include "lingodb/compiler/frontend/sql_context.h"
 #include "lingodb/compiler/frontend/translation_context.h"
 

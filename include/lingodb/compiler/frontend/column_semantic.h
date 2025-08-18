@@ -7,7 +7,8 @@
 namespace lingodb::ast {
 class BoundFunctionExpression;
 
-struct NamedResult {
+class NamedResult {
+   public:
    std::string scope;
    catalog::NullableType resultType;
    std::string name;
@@ -36,26 +37,10 @@ struct NamedResult {
    };
 };
 
-class BoundColumnEntry {
-   public:
-   size_t index;
-   std::string displayName{};
-
-   static std::shared_ptr<BoundColumnEntry> create() {
-      static size_t currentId = 0;
-      return std::make_shared<BoundColumnEntry>(currentId++);
-   }
-};
 struct TargetInfo {
-   public:
    std::vector<std::shared_ptr<NamedResult>> targetColumns;
    void add(std::shared_ptr<NamedResult> entry) {
       targetColumns.push_back(std::move(entry));
    }
-
-   //std::vector<std::pair<std::string, std::shared_ptr<NamedResult>>> namedResults;
-   /*void map(std::string name, std::shared_ptr<NamedResult> cInfo) {
-      namedResults.push_back({name, std::move(cInfo)});
-   }*/
 };
 } // namespace lingodb::ast

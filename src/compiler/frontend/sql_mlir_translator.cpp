@@ -14,7 +14,6 @@
 #include "lingodb/compiler/frontend/ast/bound/bound_query_node.h"
 #include "lingodb/compiler/frontend/ast/bound/bound_tableref.h"
 #include "lingodb/compiler/frontend/ast/create_node.h"
-#include "lingodb/compiler/frontend/ast/cte_node.h"
 #include "lingodb/compiler/frontend/ast/insert_node.h"
 #include "lingodb/compiler/old-frontend/SQL/Parser.h"
 
@@ -149,8 +148,8 @@ mlir::Value SQLMlirTranslator::translateTableProducer(mlir::OpBuilder& builder, 
       case ast::NodeType::QUERY_NODE: {
          auto queryNode = std::static_pointer_cast<ast::QueryNode>(tableProducer);
          switch (queryNode->type) {
-            case ast::QueryNodeType::CTE_NODE: {
-               auto cteNode = std::static_pointer_cast<ast::CTENode>(queryNode);
+            case ast::QueryNodeType::BOUND_CTE_NODE: {
+               auto cteNode = std::static_pointer_cast<ast::BoundCTENode>(queryNode);
                if (cteNode->child) {
                   tree = translateTableProducer(builder, cteNode->child, context);
                }

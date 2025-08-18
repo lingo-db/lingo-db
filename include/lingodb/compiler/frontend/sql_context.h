@@ -3,7 +3,7 @@
 #include "lingodb/compiler/frontend/ast/aggregation_node.h"
 #include "lingodb/compiler/frontend/ast/extend_node.h"
 #include "lingodb/compiler/frontend/sql_scope.h"
-#include "parsenodes.h"
+#include "lingodb/compiler/frontend/ast/bound/bound_query_node.h"
 
 #include <llvm/ADT/ScopedHashTable.h>
 
@@ -72,8 +72,7 @@ class SQLContext {
 
    std::stack<std::vector<std::pair<std::string, std::shared_ptr<ast::NamedResult>>>> definedAttributes;
    using renameCte = std::vector<std::pair<std::shared_ptr<ast::NamedResult>, std::shared_ptr<ast::NamedResult>>>;
-   //std::unordered_map<std::string, std::pair<ast::TargetInfo, renameCte>> ctes;
-   std::unordered_map<std::string, std::pair<ast::TargetInfo, std::shared_ptr<ast::CTENode>>> ctes;
+   std::unordered_map<std::string, std::pair<ast::TargetInfo, std::shared_ptr<ast::BoundCTENode>>> ctes;
 
    std::unordered_map<std::string, mlir::Value> translatedCtes;
 

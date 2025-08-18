@@ -31,7 +31,7 @@ bool StackGuard::check() {
    }
    size_t size = reinterpret_cast<size_t>(startFameAddress) - reinterpret_cast<size_t>(currentFrameAddress);
 
-   if (size > 950000) {
+   if (size > 90000) {
 
       return true;
    }
@@ -686,6 +686,8 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableProducer(std::
          switch (queryNode->type) {
             case ast::QueryNodeType::CTE_NODE: {
                auto cteNode = std::static_pointer_cast<ast::CTENode>(queryNode);
+               auto boundCteNode = drv.nf.node<ast::BoundCTENode>(cteNode->loc);
+               boundCteNode->alias = cteNode->alias;
 
                if (cteNode->query) {
                   ast::TargetInfo targetInfo{};
@@ -694,11 +696,11 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableProducer(std::
                      auto defineScope = context->createDefineScope();
                      context->pushNewScope();
                      auto subQueryScope = context->currentScope;
-                     cteNode->query = analyzeTableProducer(cteNode->query, context, subQueryResolverScope);
+                     boundCteNode->query = analyzeTableProducer(cteNode->query, context, subQueryResolverScope);
                      targetInfo = context->currentScope->targetInfo;
                      context->popCurrentScope();
 
-                     cteNode->subQueryScope = *subQueryScope;
+                     boundCteNode->subQueryScope = *subQueryScope;
                      std::vector<std::pair<std::shared_ptr<ast::NamedResult>, std::shared_ptr<ast::NamedResult>>> renamedResults;
                      size_t i = 0;
                      for (auto targetColumns : targetInfo.targetColumns) {
@@ -712,16 +714,16 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableProducer(std::
                         renamedResults.emplace_back(std::pair{from, to});
                         i++;
                      }
-                     cteNode->renamedResults = std::move(renamedResults);
+                     boundCteNode->renamedResults = std::move(renamedResults);
 
 
-                     context->ctes.insert({cteNode->alias, {targetInfo, cteNode}});
+                     context->ctes.insert({cteNode->alias, {targetInfo, boundCteNode}});
                   }
                }
                if (cteNode->child) {
-                  cteNode->child = analyzeTableProducer(cteNode->child, context, resolverScope);
+                  boundCteNode->child = analyzeTableProducer(cteNode->child, context, resolverScope);
                }
-               return cteNode;
+               return boundCteNode;
             }
             case ast::QueryNodeType::SET_OPERATION_NODE: {
                auto setOperationNode = std::static_pointer_cast<ast::SetOperationNode>(rootNode);
@@ -956,8 +958,8 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                switch (boundExpression->exprClass) {
                   case ast::ExpressionClass::BOUND_FUNCTION: {
                      assert(boundExpression->resultType.has_value());
-                     auto scope = boundExpression->alias.empty() ? boundExpression->alias : createTmpScope();
-                     auto n = std::make_shared<ast::NamedResult>( scope, boundExpression->resultType.value(), createTmpScope());
+                     auto scope = boundExpression->alias.empty() ? boundExpression->alias : context->getUniqueScope("tmp_attr");
+                     auto n = std::make_shared<ast::NamedResult>( scope, boundExpression->resultType.value(),  context->getUniqueScope("tmp_attr"));
                      n->displayName = boundExpression->alias.empty() ? "" : boundExpression->alias;
                      evalBeforeAggr.emplace_back(boundExpression);
                      ast::NodeIdGenerator g{};
@@ -988,7 +990,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
             //boundExpr->namedResult = std::make_shared<ast::FunctionInfo>("boundExpr->scope", "boundExpr->alias", boundExpr->resultType.value());
             return std::static_pointer_cast<ast::BoundFunctionExpression>(boundExpr);
          });
-         auto mapName = createMapName();
+         auto mapName = context->getUniqueScope("ma");
          auto boundGroupByNode = drv.nf.node<ast::BoundGroupByNode>(aggregationNode->groupByNode ? aggregationNode->groupByNode->loc : aggregationNode->loc, groupNamedResults, aggregationNode->groupByNode ? aggregationNode->groupByNode->groupingSet : std::vector<std::set<size_t>>{});
          std::vector<std::shared_ptr<ast::BoundExpression>> toMap{};
          for (auto& aggr : boundAggregationExpressions) {
@@ -996,7 +998,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                continue;
             }
             toMap.emplace_back(aggr->arguments[0]);
-            aggr->arguments[0]->alias = createTmpScope();
+            aggr->arguments[0]->alias =  context->getUniqueScope("tmp_attr");
             aggr->arguments[0]->namedResult = std::make_shared<ast::NamedResult>(mapName, aggr->arguments[0]->resultType.value(), aggr->arguments[0]->alias);
          }
          //ADD to TargetInfo, see Google PIPE sql paper!
@@ -1178,7 +1180,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
 
             return boundExpression;
          });
-         auto mapName = createMapName();
+         auto mapName = context->getUniqueScope("map");
 
          for (auto& parsedExpression: boundExtensions) {
             //TODO very similar to the logic in Select. Maybe combine both
@@ -1215,7 +1217,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                   if (resultType.useZeroInsteadOfNull) {
                      resultType.isNullable = false;
                   }
-                  auto n = std::make_shared<ast::NamedResult>(scope, resultType , createTmpScope());
+                  auto n = std::make_shared<ast::NamedResult>(scope, resultType ,  context->getUniqueScope("tmp_attr"));
                   n->displayName = parsedExpression->alias.empty() ? "" : parsedExpression->alias;
                   context->mapAttribute(resolverScope, parsedExpression->alias.empty() ? n->name : parsedExpression->alias, n);
                   if (extendNode->hidden) {
@@ -1570,7 +1572,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableRef(std::share
             return t;
          });
          std::vector<std::shared_ptr<ast::NamedResult>> namedResults{};
-         auto scope = createTmpScope();
+         auto scope = context->getUniqueScope("tmp_attr");
          for (size_t i = 0; i < commonTypes.size(); i++) {
             auto name = "const_" + std::to_string(i);
             auto namedResult = std::make_shared<ast::NamedResult>(scope, commonTypes[i], name);
@@ -1873,7 +1875,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
          auto function = std::static_pointer_cast<ast::FunctionExpression>(rootNode);
          std::vector<std::shared_ptr<ast::BoundExpression>> boundArguments{};
          if (rootNode->type == ast::ExpressionType::AGGREGATE) {
-            auto scope = createTmpScope();
+            auto scope =  context->getUniqueScope("tmp_attr");
             auto fName = function->alias.empty() ? function->functionName : function->alias;
             std::ranges::transform(function->functionName, function->functionName.begin(), ::toupper);
             std::shared_ptr<ast::BoundFunctionExpression> boundFunctionExpression = nullptr;
@@ -1988,7 +1990,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
             return boundFunctionExpression;
          }
          std::ranges::transform(function->functionName, function->functionName.begin(), ::toupper);
-         auto scope = createTmpScope();
+         auto scope =  context->getUniqueScope("tmp_attr");
          auto fName = function->alias.empty() ? function->functionName : function->alias;
          std::shared_ptr<ast::BoundFunctionExpression> boundFunctionExpression = nullptr;
          catalog::NullableType resultType{catalog::Type::noneType()};
@@ -2473,7 +2475,7 @@ std::shared_ptr<ast::BoundColumnRefExpression> SQLQueryAnalyzer::analyzeColumnRe
       error("Column not found", columnRef->loc);
    }
    found->displayName = columnRef->alias.empty() ? found->displayName : columnRef->alias;
-   return drv.nf.node<ast::BoundColumnRefExpression>(columnRef->loc, found->scope, found->resultType, found, columnRef->alias);
+   return drv.nf.node<ast::BoundColumnRefExpression>(columnRef->loc, found->resultType, found, columnRef->alias);
 }
 
 /*

@@ -34,8 +34,6 @@ add_library(sql-frontend-new
         ast/aggregation_node.cpp
         ast/result_modifier.cpp
         ast/extend_node.cpp
-        ast/select_node.cpp
-        ast/cte_node.cpp
         ast/create_node.cpp
         ast/constraint.cpp
         ast/insert_node.cpp
