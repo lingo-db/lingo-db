@@ -39,17 +39,11 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                //Transform where_clause
                if (selectNode->where_clause) {
                   auto pipe = drv.nf.node<ast::PipeOperator>(selectNode->where_clause->loc, ast::PipeOperatorType::WHERE, selectNode->where_clause);
-                  auto transFormededWhereClause = canonicalizeCast<ast::PipeOperator>(pipe, context);
-                  transFormededWhereClause->input = transformed;
+                  pipe->input = transformed;
                   selectNode->where_clause = nullptr;
-                  transformed = transFormededWhereClause;
+                  transformed = pipe;
                }
 
-
-
-               auto extendPipeOp = drv.nf.node<ast::PipeOperator>(selectNode->select_list->loc, ast::PipeOperatorType::EXTEND, context->currentScope->extendNodeBeforeAggregation);
-               extendPipeOp->input = transformed;
-               transformed = extendPipeOp;
 
                //Transform Group by
                if (selectNode->groups) {
@@ -57,61 +51,46 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                }
 
                auto aggPipeNode = drv.nf.node<ast::PipeOperator>(selectNode->loc, ast::PipeOperatorType::AGGREGATE, context->currentScope->aggregationNode);
-               auto transFormedAggregation = canonicalizeCast<ast::PipeOperator>(aggPipeNode, context);
-               transFormedAggregation->input = transformed;
-               transformed = transFormedAggregation;
+               aggPipeNode->input = transformed;
+               transformed = aggPipeNode;
 
                auto extendPipeOp3 = drv.nf.node<ast::PipeOperator>(selectNode->select_list->loc, ast::PipeOperatorType::EXTEND, context->currentScope->extendNodeBeforeWindowFunctions);
                extendPipeOp3->input = transformed;
                transformed = extendPipeOp3;
 
-
-               auto aggPipeNodeForWindow = drv.nf.node<ast::PipeOperator>(selectNode->loc, ast::PipeOperatorType::AGGREGATE, context->currentScope->aggregationNodeForWindowFunctions);
-               auto transFormedAggregationForWindow = canonicalizeCast<ast::PipeOperator>(aggPipeNodeForWindow, context);
-               transFormedAggregationForWindow->input = transformed;
-               transformed = transFormedAggregationForWindow;
-
-               auto extendPipeOp2 = drv.nf.node<ast::PipeOperator>(selectNode->select_list->loc, ast::PipeOperatorType::EXTEND, context->currentScope->extendNodeAfterAggregations);
-               extendPipeOp2->input = transformed;
-               transformed = extendPipeOp2;
-
-
-
-
+               auto aggPipeNodeForWindow = drv.nf.node<ast::PipeOperator>(selectNode->loc, ast::PipeOperatorType::EXTEND, context->currentScope->extendNodeForWindowFunctions);
+               aggPipeNodeForWindow->input = transformed;
+               transformed = aggPipeNodeForWindow;
 
 
                //Transform target selection
-               std::shared_ptr<ast::PipeOperator> transformedSelect = nullptr;
                if (selectNode->select_list) {
                   auto pipe = drv.nf.node<ast::PipeOperator>(selectNode->select_list->loc, ast::PipeOperatorType::SELECT, selectNode->select_list);
-                  transformedSelect = canonicalizeCast<ast::PipeOperator>(pipe, context);
-                  transformedSelect->input = transformed;
-                  transformed = transformedSelect;
+                  pipe->input = transformed;
+
+                  transformed = pipe;
                   selectNode->select_list = nullptr;
                }
 
                if (selectNode->having) {
                   auto pipe = drv.nf.node<ast::PipeOperator>(selectNode->having->loc, ast::PipeOperatorType::WHERE, selectNode->having);
-                  auto transformedHaving = canonicalizeCast<ast::PipeOperator>(pipe, context);
-                  transformedHaving->input = transformed;
-                  transformed = transformedHaving;
+                  pipe->input = transformed;
+
+                  transformed = pipe;
                   selectNode->having = nullptr;
                }
-
-               auto extendPipeOpBeforeResultModifier = drv.nf.node<ast::PipeOperator>(selectNode->loc, ast::PipeOperatorType::EXTEND, context->currentScope->extendNodeBeforeOrderBy);
-               extendPipeOpBeforeResultModifier->input = transformed;
-               transformed = extendPipeOpBeforeResultModifier;
 
 
 
                //Transform modifiers
                for (auto modifier : selectNode->modifiers) {
+                  modifier->input = transformed;
                   auto transformedModifier = canonicalizeCast<ast::ResultModifier>(modifier, context);
-                  transformedModifier->input = transformed;
+
                   transformed = transformedModifier;
                }
                selectNode->modifiers.clear();
-
+               transformed = canonicalize(transformed, context);
 
 
                return transformed;
@@ -163,31 +142,39 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
          switch (pipeOp->pipeOpType) {
             case ast::PipeOperatorType::SELECT: {
                auto selectNode = std::static_pointer_cast<ast::TargetsExpression>(pipeOp->node);
+               auto extendNode = drv.nf.node<ast::ExtendNode>(selectNode->loc, true);
+               auto extendPipeOp = drv.nf.node<ast::PipeOperator>(selectNode->loc, ast::PipeOperatorType::EXTEND, extendNode);
                //Extract AggFunctions
                std::vector<std::pair<std::string, std::shared_ptr<ast::ParsedExpression>>> toRemove{};
                int i = 0;
                //Canonicalize target expressions
                std::ranges::transform(selectNode->targets, selectNode->targets.begin(), [&](std::shared_ptr<ast::ParsedExpression>& target) {
-                  return canonicalizeParsedExpression(target, context, true, context->currentScope->extendNodeAfterAggregations);
+                  return canonicalizeParsedExpression(target, context, true, extendNode);
                });
                //Canonicalize distinct expressions list
                if (selectNode->distinctExpressions.has_value()) {
                   std::ranges::transform(selectNode->distinctExpressions.value(), selectNode->distinctExpressions->begin(), [&](auto& target) {
-                     return canonicalizeParsedExpression(target, context, true, context->currentScope->extendNodeAfterAggregations);
+                     return canonicalizeParsedExpression(target, context, true, extendNode);
                   });
                }
+               extendPipeOp->input = pipeOp->input;
+               pipeOp->input = extendPipeOp;
               break;
             }
             case ast::PipeOperatorType::WHERE: {
                assert(pipeOp->node->nodeType == ast::NodeType::EXPRESSION);
-               pipeOp->node = canonicalizeParsedExpression(std::static_pointer_cast<ast::ParsedExpression>(pipeOp->node), context, false);
+               pipeOp->node = canonicalizeParsedExpression(std::static_pointer_cast<ast::ParsedExpression>(pipeOp->node), context, false, nullptr);
                break;
             }
             case ast::PipeOperatorType::AGGREGATE: {
                auto aggNode = std::dynamic_pointer_cast<ast::AggregationNode>(pipeOp->node);
+               auto extendNode = drv.nf.node<ast::ExtendNode>(aggNode->loc, true);
+               auto extendPipeOp = drv.nf.node<ast::PipeOperator>(aggNode->loc, ast::PipeOperatorType::EXTEND, extendNode);
                assert(aggNode);
                std::vector<std::shared_ptr<ast::ParsedExpression>> newGroupByExpressions{};
                if (aggNode->groupByNode) {
+                  //TODO remove this line
+                  aggNode->groupByNode->groupingSet.clear();
                   if (aggNode->groupByNode->rollup) {
                      for (size_t i = 0; i <= aggNode->groupByNode->groupByExpressions.size(); i++) {
                         size_t n = aggNode->groupByNode->groupByExpressions.size() - i;
@@ -200,27 +187,31 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
 
                   }
                   for (auto e : aggNode->groupByNode->groupByExpressions) {
-                     auto canonicalized = canonicalizeParsedExpression(e, context, true, context->currentScope->extendNodeBeforeAggregation);
+                     auto canonicalized = canonicalizeParsedExpression(e, context, true, extendNode);
                      newGroupByExpressions.emplace_back(canonicalized);
                      context->currentScope->groupedByExpressions.emplace(e);
                   }
                   aggNode->groupByNode->groupByExpressions = std::move(newGroupByExpressions);
                }
+               extendPipeOp->input = pipeOp->input;
+               pipeOp->input = extendPipeOp;
 
                break;
             }
 
             case ast::PipeOperatorType::RESULT_MODIFIER: {
                auto resultModifier = std::static_pointer_cast<ast::ResultModifier>(pipeOp->node);
-               //TODO Support more complex modifiers
                resultModifier->input = pipeOp->input;
                return resultModifier;
             }
             case ast::PipeOperatorType::EXTEND: {
                auto extendNode = std::static_pointer_cast<ast::ExtendNode>(pipeOp->node);
-               for (auto expr : extendNode->extensions) {
-                  canonicalizeParsedExpression(expr, context, false);
-               }
+               std::ranges::transform(extendNode->extensions, extendNode->extensions.begin(), [&](auto& expr) {
+                  if (expr->exprClass == ast::ExpressionClass::WINDOW) {
+                     return expr;
+                  }
+                  return canonicalizeParsedExpression(expr, context, false, extendNode);
+               });
                return pipeOp;
 
 
@@ -269,7 +260,7 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                auto expressionListRef = std::static_pointer_cast<ast::ExpressionListRef>(tableRef);
                for (auto exprList : expressionListRef->values) {
                   std::ranges::transform(exprList, exprList.begin(), [&](auto& value) {
-                     return canonicalizeParsedExpression(value, context, false);
+                     return canonicalizeParsedExpression(value, context, false, nullptr);
                   });
                }
                return expressionListRef;
@@ -281,11 +272,13 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
          auto resultModifier = std::static_pointer_cast<ast::ResultModifier>(rootNode);
          if (resultModifier->input)
             resultModifier->input = canonicalize(resultModifier->input, context);
+         auto extendNode = drv.nf.node<ast::ExtendNode>(resultModifier->loc, true);
+         auto extendPipeOp = drv.nf.node<ast::PipeOperator>(resultModifier->loc, ast::PipeOperatorType::EXTEND, extendNode);
          switch (resultModifier->modifierType) {
             case ast::ResultModifierType::ORDER_BY: {
                auto orderBy = std::static_pointer_cast<ast::OrderByModifier>(resultModifier);
                for (auto expr : orderBy->orderByElements) {
-                  auto canonicalized = canonicalizeParsedExpression(expr->expression, context, expr->expression->exprClass != ast::ExpressionClass::CONSTANT, context->currentScope->extendNodeBeforeOrderBy);
+                  auto canonicalized = canonicalizeParsedExpression(expr->expression, context, expr->expression->exprClass != ast::ExpressionClass::CONSTANT, extendNode);
                   context->currentScope->groupedByExpressions.emplace(expr->expression);
                   expr->expression = canonicalized;
                }
@@ -294,6 +287,8 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
             }
             default:;
          }
+         extendPipeOp->input = resultModifier->input;
+         resultModifier->input = extendPipeOp;
 
          return resultModifier;
       }
@@ -312,7 +307,7 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
          subqueryExpr->subquery = canacolizedSubquery;
          assert(subqueryExpr->subquery->nodeType == ast::NodeType::PIPE_OP && "Should not happen");
          if (subqueryExpr->testExpr) {
-            subqueryExpr->testExpr = canonicalizeParsedExpression(subqueryExpr->testExpr, context, true, context->currentScope->extendNodeBeforeAggregation);
+           subqueryExpr->testExpr = canonicalizeParsedExpression(subqueryExpr->testExpr, context, true, extendNode);
          }
 
          std::string alias = subqueryExpr->alias.empty() ? "" : subqueryExpr->alias;
@@ -340,7 +335,7 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
          auto operatorExpr = std::static_pointer_cast<ast::OperatorExpression>(rootNode);
 
          std::ranges::transform(operatorExpr->children, operatorExpr->children.begin(), [&](auto& child) {
-            return canonicalizeParsedExpression(child, context, false);
+            return canonicalizeParsedExpression(child, context, false, extendNode);
          });
          std::string alias = operatorExpr->alias.empty() ? "" : operatorExpr->alias;
          if (extend) {
@@ -368,7 +363,7 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
          auto conjunctionExpr = std::static_pointer_cast<ast::ConjunctionExpression>(rootNode);
 
          std::ranges::transform(conjunctionExpr->children, conjunctionExpr->children.begin(), [&](auto& child) {
-            return canonicalizeParsedExpression(child, context, false);
+            return canonicalizeParsedExpression(child, context, false, extendNode);
          });
          //TODO move to extend
          if (extend) {
@@ -379,10 +374,10 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
       case ast::ExpressionClass::COMPARISON: {
          auto comparisonExpr = std::static_pointer_cast<ast::ComparisonExpression>(rootNode);
          if (comparisonExpr->left) {
-            comparisonExpr->left = canonicalizeParsedExpression(comparisonExpr->left, context, false);
+            comparisonExpr->left = canonicalizeParsedExpression(comparisonExpr->left, context, false, extendNode);
          }
          std::ranges::transform(comparisonExpr->rightChildren, comparisonExpr->rightChildren.begin(), [&](auto& child) {
-            return canonicalizeParsedExpression(child, context, false);
+            return canonicalizeParsedExpression(child, context, false, extendNode);
          });
          //TODO move to extend
          if (extend) {
@@ -470,27 +465,31 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
             });
          }
          if (windowExpr->startExpr) {
-            windowExpr->startExpr = canonicalizeParsedExpression(windowExpr->startExpr, context, false);
+            windowExpr->startExpr = canonicalizeParsedExpression(windowExpr->startExpr, context, false, extendNode);
          }
          if (windowExpr->endExpr) {
-            windowExpr->endExpr = canonicalizeParsedExpression(windowExpr->endExpr, context, false);
+            windowExpr->endExpr = canonicalizeParsedExpression(windowExpr->endExpr, context, false, extendNode);
          }
          if (windowExpr->offsetExpr) {
-            windowExpr->offsetExpr = canonicalizeParsedExpression(windowExpr->offsetExpr, context, false);
+            windowExpr->offsetExpr = canonicalizeParsedExpression(windowExpr->offsetExpr, context, false, extendNode);
          }
          if (windowExpr->defaultExpr) {
-            windowExpr->defaultExpr = canonicalizeParsedExpression(windowExpr->defaultExpr, context, false);
+            windowExpr->defaultExpr = canonicalizeParsedExpression(windowExpr->defaultExpr, context, false, extendNode);
          }
 
          std::string alias = windowExpr->alias.empty() ? windowExpr->functionExpression->functionName : windowExpr->alias;
 
-         windowExpr->alias = windowExpr->functionExpression->functionName + "_" + std::to_string(i);
+         windowExpr->alias = windowExpr->alias.empty() ? windowExpr->functionExpression->functionName + "_" + std::to_string(i) : windowExpr->alias;
          i++;
 
          auto columnRef = drv.nf.node<ast::ColumnRefExpression>(windowExpr->loc, windowExpr->alias);
          columnRef->alias = alias;
-         context->currentScope->aggregationNodeForWindowFunctions->windowFunctions.push_back(windowExpr);
+         context->currentScope->extendNodeForWindowFunctions->extensions.push_back(windowExpr);
          return columnRef;
+
+
+
+
 
          return windowExpr;
 
@@ -500,15 +499,15 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
          auto caseExpr = std::static_pointer_cast<ast::CaseExpression>(rootNode);
 
          for (auto& caseCheck : caseExpr->caseChecks) {
-            caseCheck.thenExpr = canonicalizeParsedExpression(caseCheck.thenExpr, context, false);
-            caseCheck.whenExpr = canonicalizeParsedExpression(caseCheck.whenExpr, context, false);
+            caseCheck.thenExpr = canonicalizeParsedExpression(caseCheck.thenExpr, context, false, extendNode);
+            caseCheck.whenExpr = canonicalizeParsedExpression(caseCheck.whenExpr, context, false, extendNode);
          }
          if (!caseExpr->elseExpr) {
             auto constExpr = drv.nf.node<ast::ConstantExpression>(caseExpr->loc);
             constExpr->value = std::make_shared<ast::NullValue>();
             caseExpr->elseExpr = constExpr;
          }
-         caseExpr->elseExpr = canonicalizeParsedExpression(caseExpr->elseExpr, context, false);
+         caseExpr->elseExpr = canonicalizeParsedExpression(caseExpr->elseExpr, context, false, extendNode);
          std::string alias = caseExpr->alias.empty() ? "" : caseExpr->alias;
          if (extend) {
             auto find = context->currentScope->groupedByExpressions.find(caseExpr);
@@ -534,7 +533,7 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
       }
       case ast::ExpressionClass::CAST: {
          auto castExpr = std::static_pointer_cast<ast::CastExpression>(rootNode);
-         castExpr->child = canonicalizeParsedExpression(castExpr->child, context, false);
+         castExpr->child = canonicalizeParsedExpression(castExpr->child, context, false, extendNode);
          std::string alias = castExpr->alias.empty() ? "" : castExpr->alias;
          if (extend) {
             auto find = context->currentScope->groupedByExpressions.find(castExpr);
@@ -581,9 +580,9 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
       }
       case ast::ExpressionClass::BETWEEN: {
          auto betweenExpr = std::static_pointer_cast<ast::BetweenExpression>(rootNode);
-         betweenExpr->input = canonicalizeParsedExpression(betweenExpr->input, context, false);
-         betweenExpr->upper = canonicalizeParsedExpression(betweenExpr->upper, context, false);
-         betweenExpr->lower = canonicalizeParsedExpression(betweenExpr->lower, context, false);
+         betweenExpr->input = canonicalizeParsedExpression(betweenExpr->input, context, false, extendNode);
+         betweenExpr->upper = canonicalizeParsedExpression(betweenExpr->upper, context, false, extendNode);
+         betweenExpr->lower = canonicalizeParsedExpression(betweenExpr->lower, context, false, extendNode);
          return betweenExpr;
       }
       default: return rootNode;
@@ -999,16 +998,10 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                boundAggr->resultType->isNullable = boundAggr->functionName != "COUNT";
             }
          }
-         std::vector<std::shared_ptr<ast::BoundWindowExpression>> boundWindowFunctions;
-         std::ranges::transform(aggregationNode->windowFunctions, std::back_inserter(boundWindowFunctions), [&](std::shared_ptr<ast::WindowExpression> expr) {
-            auto tmp = analyzeExpression(expr, context, resolverScope);
-            assert(tmp->exprClass == ast::ExpressionClass::BOUND_WINDOW);
-            return std::static_pointer_cast<ast::BoundWindowExpression>(tmp);
-         });
+
 
 
          auto boundAggrNode = drv.nf.node<ast::BoundAggregationNode>(pipeOperator->loc, boundGroupByNode, boundAggregationExpressions, toMap, mapName, evalBeforeAggr);
-         boundAggrNode->windowFunctions = boundWindowFunctions;
          boundAstNode = boundAggrNode;
 
          if (aggregationNode->groupByNode && !aggregationNode->groupByNode->groupingSet.empty()) {
@@ -1172,6 +1165,9 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
             return boundExpression;
          });
          auto mapName = context->getUniqueScope("map");
+         //TODO Find cleaner solution
+         std::vector<std::shared_ptr<ast::BoundExpression>> boundExpressions;
+         std::vector<std::shared_ptr<ast::BoundWindowExpression>> boundWindowExpressions;
 
          for (auto& parsedExpression: boundExtensions) {
             //TODO very similar to the logic in Select. Maybe combine both
@@ -1194,7 +1190,25 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                   } else {
                      context->currentScope->targetInfo.add(parsedExpression->namedResult.value());
                   }
+                  boundExpressions.emplace_back(function);
+                  break;
+               }
 
+               case ast::ExpressionClass::BOUND_WINDOW: {
+                  assert(parsedExpression->resultType.has_value() && parsedExpression->namedResult.has_value());
+                  auto window = std::static_pointer_cast<ast::BoundWindowExpression>(parsedExpression);
+
+
+
+                  auto fName = window->alias;
+                  context->mapAttribute(resolverScope, fName, window->namedResult.value());
+                  if (extendNode->hidden) {
+                     //TODO better
+                     context->definedAttributes.top().pop_back();
+                  } else {
+                     context->currentScope->targetInfo.add(parsedExpression->namedResult.value());
+                  }
+                  boundWindowExpressions.emplace_back(window);
                   break;
                }
                case ast::ExpressionClass::BOUND_CONSTANT:
@@ -1222,7 +1236,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
 
                   parsedExpression->namedResult = n;
 
-
+                  boundExpressions.emplace_back(parsedExpression);
                   break;
                }
 
@@ -1230,8 +1244,9 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                default: error("Extend: Not implemented", parsedExpression->loc);
             }
          }
-
-         boundAstNode = drv.nf.node<ast::BoundExtendNode>(extendNode->loc, mapName, std::move(boundExtensions));
+         auto boundExtendNode = drv.nf.node<ast::BoundExtendNode>(extendNode->loc, mapName, std::move(boundExpressions));
+         boundExtendNode->windowExpressions = boundWindowExpressions;
+         boundAstNode = boundExtendNode;
          break;
       }
       case ast::PipeOperatorType::UNION_ALL:
@@ -1563,9 +1578,9 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableRef(std::share
             return t;
          });
          std::vector<std::shared_ptr<ast::NamedResult>> namedResults{};
-         auto scope = context->getUniqueScope("tmp_attr");
+         auto scope = context->getUniqueScope("constantTable");
          for (size_t i = 0; i < commonTypes.size(); i++) {
-            auto name = "const_" + std::to_string(i);
+            auto name = context->getUniqueScope("const");
             auto namedResult = std::make_shared<ast::NamedResult>(scope, commonTypes[i], name);
             namedResults.push_back(namedResult);
             context->currentScope->targetInfo.add(namedResult);
