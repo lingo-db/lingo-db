@@ -16,27 +16,7 @@
 namespace lingodb::analyzer {
 using ResolverScope = llvm::ScopedHashTable<std::string, std::shared_ptr<ast::NamedResult>, StringInfo>::ScopeTy;
 
-bool StackGuard::check() {
-   static void* startFameAddress = nullptr;
-   rlimit rlp{};
-   auto suc = getrlimit(RLIMIT_STACK, &rlp);
-   if (startFameAddress == nullptr) {
-      startFameAddress = __builtin_frame_address(0);
-      return false;
-   }
-   void* currentFrameAddress = __builtin_frame_address(0);
-   if (currentFrameAddress>startFameAddress) {
-      startFameAddress = currentFrameAddress;
-      return false;
-   }
-   size_t size = reinterpret_cast<size_t>(startFameAddress) - reinterpret_cast<size_t>(currentFrameAddress);
 
-   if (size > 90000) {
-
-      return true;
-   }
-   return false;
-}
 
 /*
     * SQLCanonicalizer
@@ -611,6 +591,7 @@ std::shared_ptr<T> SQLCanonicalizer::canonicalizeCast(std::shared_ptr<ast::Table
 SQLQueryAnalyzer::SQLQueryAnalyzer(std::shared_ptr<catalog::Catalog> catalog) : catalog(std::move(catalog)) {
 }
 std::shared_ptr<ast::AstNode> SQLQueryAnalyzer::canonicalizeAndAnalyze(std::shared_ptr<ast::AstNode> astRootNode, std::shared_ptr<SQLContext> context) {
+   stackGuard.reset();
    auto startCanonicalizeAndAnalyze = std::chrono::high_resolution_clock::now();
 
    auto rootNode = std::dynamic_pointer_cast<ast::TableProducer>(astRootNode);
@@ -1662,7 +1643,7 @@ size_t get_stack_size() {
 }
 
 std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::shared_ptr<ast::ParsedExpression> rootNode, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope) {
-   if (StackGuard::check()) {
+   if (stackGuard.check()) {
       throw std::runtime_error("Stack overflow");
    }
 
