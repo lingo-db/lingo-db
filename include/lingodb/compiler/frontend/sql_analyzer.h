@@ -5,9 +5,10 @@
 #include "lingodb/compiler/frontend/ast/query_node.h"
 #include "lingodb/compiler/frontend/driver.h"
 #include "sql_context.h"
-#define DEBUG true
+#define DEBUG false
 
 #include <functional>
+#include <sys/resource.h>
 namespace lingodb::analyzer {
 using ResolverScope = llvm::ScopedHashTable<std::string, std::shared_ptr<ast::NamedResult>, StringInfo>::ScopeTy;
 #define error(message, loc)                       \
@@ -17,7 +18,12 @@ using ResolverScope = llvm::ScopedHashTable<std::string, std::shared_ptr<ast::Na
       throw std::runtime_error(s.str());          \
    }
 
-class Analyzer;
+class StackGuard {
+   public:
+   static bool check();
+
+};
+
 class SQLCanonicalizer {
    public:
    /**
@@ -72,6 +78,7 @@ class SQLCanonicalizer {
 
    driver drv{};
 };
+
 class SQLQueryAnalyzer {
    public:
    SQLQueryAnalyzer(std::shared_ptr<catalog::Catalog> catalog);
@@ -82,10 +89,15 @@ class SQLQueryAnalyzer {
    std::shared_ptr<ast::CreateNode> analyzeCreateNode(std::shared_ptr<ast::CreateNode> createNode, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope);
    std::shared_ptr<ast::BoundInsertNode> analyzeInsertNode(std::shared_ptr<ast::InsertNode> insertNode, std::shared_ptr<SQLContext> context, SQLContext::ResolverScope& resolverScope);
 
+   double getTiming() {
+      return totalTime;
+   }
+
    private:
    std::shared_ptr<catalog::Catalog> catalog;
    driver drv{};
    SQLCanonicalizer sqlCanonicalizer{};
+   double totalTime;
 
    private:
    std::shared_ptr<ast::TableProducer> analyzePipeOperator(std::shared_ptr<ast::PipeOperator> pipeOperator, std::shared_ptr<SQLContext>& context, ResolverScope& resolverScope);
