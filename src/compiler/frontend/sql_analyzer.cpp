@@ -1372,6 +1372,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableRef(std::share
                }
                {
                   auto rightContext = std::make_shared<SQLContext>();
+                  rightContext->scopeUnifier = context->scopeUnifier;
                   //Create new context
                   rightContext->pushNewScope();
                   rightContext->ctes = context->ctes;
@@ -1379,6 +1380,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableRef(std::share
                   right = analyzeTableProducer(join->right, rightContext, rightResolverScope);
                   rightScope = rightContext->currentScope;
                   mapping = rightContext->getTopDefinedColumns();
+                  context->scopeUnifier = rightContext->scopeUnifier;
                }
 
 
