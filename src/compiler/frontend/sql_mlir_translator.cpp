@@ -348,10 +348,11 @@ mlir::Value SQLMlirTranslator::translatePipeOperator(mlir::OpBuilder& builder, s
       }
       case ast::PipeOperatorType::EXTEND: {
          auto extendNode = std::static_pointer_cast<ast::BoundExtendNode>(pipeOperator->node);
-         tree = createMap(builder, extendNode->mapName, extendNode->extensions, context, tree);
          for (auto window: extendNode->windowExpressions) {
             tree = translateWindowExpression(builder, tree, window, context);
          }
+         tree = createMap(builder, extendNode->mapName, extendNode->extensions, context, tree);
+
          return tree;
       }
       case ast::PipeOperatorType::UNION_ALL:
