@@ -31,7 +31,7 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                std::shared_ptr<ast::TableProducer> transformed = nullptr;
                //Transform from_clause
                if (selectNode->from_clause) {
-                  auto transformedFrom = canonicalizeCast<ast::TableRef>(selectNode->from_clause, context);
+                  auto transformedFrom = selectNode->from_clause;
 
                   selectNode->from_clause = nullptr;
                   transformed = transformedFrom;
@@ -85,7 +85,7 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                //Transform modifiers
                for (auto modifier : selectNode->modifiers) {
                   modifier->input = transformed;
-                  auto transformedModifier = canonicalizeCast<ast::ResultModifier>(modifier, context);
+                  auto transformedModifier = modifier;
 
                   transformed = transformedModifier;
                }
