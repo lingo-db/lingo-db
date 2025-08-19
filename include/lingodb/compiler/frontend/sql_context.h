@@ -24,14 +24,14 @@ struct StringInfo {
 };
 class ASTTransformScope {
    public:
-   ASTTransformScope() : aggregationNode(std::make_shared<ast::AggregationNode>()), extendNodeBeforeWindowFunctions(std::make_shared<ast::ExtendNode>(true)), extendNodeForWindowFunctions(std::make_shared<ast::ExtendNode>()) {}
+   ASTTransformScope() : aggregationNode(std::make_shared<ast::AggregationNode>()), extendNodeBeforeWindowFunctions(std::make_shared<ast::ExtendNode>(true)) {}
    std::shared_ptr<ast::AggregationNode> aggregationNode;
-   std::shared_ptr<ast::ExtendNode> extendNodeForWindowFunctions;
-
    std::shared_ptr<ast::ExtendNode> extendNodeBeforeWindowFunctions;
    std::unordered_map<std::shared_ptr<ast::ParsedExpression>, std::shared_ptr<ast::ColumnRefExpression>, ast::ParsedExprPtrHash, ast::ParsedExprPtrEqual> alreadyExtendedExpression;
    /// Container for GROUP BY expressions that ensures uniqueness, reuse in the canonicalization step
    std::unordered_set<std::shared_ptr<ast::ParsedExpression>, ast::ParsedExprPtrHash, ast::ParsedExprPtrEqual> groupedByExpressions;
+
+   bool classicalSelect = false;
 };
 class ASTTransformContext {
    public:
