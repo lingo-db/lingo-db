@@ -9,6 +9,7 @@
 #include "lingodb/compiler/frontend/ast/bound/bound_query_node.h"
 #include "lingodb/compiler/frontend/ast/bound/bound_tableref.h"
 #include "lingodb/runtime/RecordBatchInfo.h"
+#include <boost/context/fiber_fcontext.hpp>
 #include <cctype>
 #include <chrono>
 #include <ranges>
@@ -301,7 +302,27 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
 }
 
 std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpression(std::shared_ptr<ast::ParsedExpression> rootNode, std::shared_ptr<ASTTransformContext> context, bool extend, std::shared_ptr<ast::ExtendNode> extendNode ) {
+   if (stackGuard->newStackNeeded()) {
+      boost::context::fixedsize_stack salloc(1024*1024);
+      boost::context::stack_context sctx = salloc.allocate();
+      auto sGuard = stackGuard;
+      stackGuard = std::make_shared<StackGuardFiber>(sctx);
+      void * sp=static_cast<char*>(sctx.sp);
+      std::size_t size=sctx.size;
+      std::shared_ptr<ast::ParsedExpression> expression;
+
+      boost::context::fiber f(std::allocator_arg, boost::context::preallocated(sp, size, sctx),salloc, [&](boost::context::fiber&& sink) {
+         expression = canonicalizeParsedExpression(rootNode, context, extend, extendNode);
+         return std::move(sink);
+      });
+
+      f = std::move(f).resume();
+      stackGuard = sGuard;
+
+      return expression;
+   }
    static int i = 0;
+
 
    switch (rootNode->exprClass) {
       case ast::ExpressionClass::SUBQUERY: {
@@ -601,10 +622,11 @@ std::shared_ptr<T> SQLCanonicalizer::canonicalizeCast(std::shared_ptr<ast::Table
 /*
     * SQLQueryAnalyzer
     */
-SQLQueryAnalyzer::SQLQueryAnalyzer(std::shared_ptr<catalog::Catalog> catalog) : catalog(std::move(catalog)) {
+SQLQueryAnalyzer::SQLQueryAnalyzer(std::shared_ptr<catalog::Catalog> catalog) : catalog(std::move(catalog)){
+   stackGuard = std::make_shared<StackGuardNormal>();
 }
 std::shared_ptr<ast::AstNode> SQLQueryAnalyzer::canonicalizeAndAnalyze(std::shared_ptr<ast::AstNode> astRootNode, std::shared_ptr<SQLContext> context) {
-   stackGuard.reset();
+   stackGuard->reset();
    auto startCanonicalizeAndAnalyze = std::chrono::high_resolution_clock::now();
 
    auto rootNode = std::dynamic_pointer_cast<ast::TableProducer>(astRootNode);
@@ -1674,8 +1696,24 @@ size_t get_stack_size() {
 }
 
 std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::shared_ptr<ast::ParsedExpression> rootNode, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope) {
-   if (stackGuard.check()) {
-      throw std::runtime_error("Stack overflow");
+   if (stackGuard->newStackNeeded()) {
+      boost::context::fixedsize_stack salloc(1024*1024);
+      boost::context::stack_context sctx = salloc.allocate();
+      auto sGuard = stackGuard;
+      stackGuard = std::make_shared<StackGuardFiber>(sctx);
+      void * sp=static_cast<char*>(sctx.sp);
+      std::size_t size=sctx.size;
+      std::shared_ptr<ast::BoundExpression> boundExpression;
+
+      boost::context::fiber f(std::allocator_arg, boost::context::preallocated(sp, size, sctx),salloc, [&](boost::context::fiber&& sink) {
+         boundExpression = analyzeExpression(rootNode, context, resolverScope);
+         return std::move(sink);
+      });
+
+      f = std::move(f).resume();
+      stackGuard = sGuard;
+
+      return boundExpression;
    }
 
 
