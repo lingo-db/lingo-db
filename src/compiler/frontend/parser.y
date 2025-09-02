@@ -231,6 +231,8 @@
 %type<std::shared_ptr<lingodb::ast::ParsedExpression>>  having_clause target_el a_expr c_expr b_expr  where_clause group_by_item
                                                         func_arg_expr select_limit_value case_expr case_default cast_expr
 
+%type<std::shared_ptr<lingodb::ast::ConjunctionExpression>> and_a_expr or_a_expr
+
 %type<lingodb::ast::ExpressionType> basicComparisonType
 
 %type<std::shared_ptr<lingodb::ast::WindowExpression>> over_clause window_specification
@@ -328,6 +330,8 @@
 /* Precedence: lowest to highest */
 %left		UNION EXCEPT
 %left		INTERSECT
+%left AND_PRIORITY
+%left OR_PRIORITY
 %left		OR
 %left		AND
 %right		NOT
@@ -511,13 +515,7 @@ pipe_sql_no_parens:
     {
 
         auto pipeOp = std::static_pointer_cast<lingodb::ast::PipeOperator>($pipe_operator);
-        if(pipeOp->pipeOpType == lingodb::ast::PipeOperatorType::JOIN) {
-            auto join = std::static_pointer_cast<lingodb::ast::JoinRef>(pipeOp->node);
-            join->left = $parens;
-        } else {
-            $pipe_operator->input = $parens;
-        }
-
+        $pipe_operator->input = $parens;
 
         $$ = $pipe_operator;
 
@@ -1224,13 +1222,13 @@ a_expr:
     {
         $$ = mkNode<lingodb::ast::ComparisonExpression>(@$, lingodb::ast::ExpressionType::COMPARE_NOTEQUAL, $1, $3 );
     }
-    | a_expr AND a_expr
+    | and_a_expr
     {
-       $$ = mkNode<lingodb::ast::ConjunctionExpression>(@$, lingodb::ast::ExpressionType::CONJUNCTION_AND , $1, $3);
+       $$ = $1;
     }
-    | a_expr OR a_expr
+    | or_a_expr
     {
-        $$ = mkNode<lingodb::ast::ConjunctionExpression>(@$, lingodb::ast::ExpressionType::CONJUNCTION_OR, $1, $3);
+        $$ = $1;
     }
     | NOT a_expr
     {
@@ -1277,13 +1275,13 @@ a_expr:
             $$ = node;
         }
     }
-    | a_expr[input] BETWEEN opt_asymmetric b_expr[lower] AND a_expr[upper] //%prec BETWEEN
+    | a_expr[input] BETWEEN opt_asymmetric b_expr[lower] AND a_expr[upper] %prec BETWEEN
     {
         auto node = mkNode<lingodb::ast::BetweenExpression>(@$, lingodb::ast::ExpressionType::COMPARE_BETWEEN, $input, $lower, $upper);
         node->asymmetric = $opt_asymmetric;
         $$ = node;
     }
-    | a_expr[input] NOT BETWEEN opt_asymmetric b_expr[lower] AND a_expr[upper] //%prec BETWEEN
+    | a_expr[input] NOT BETWEEN opt_asymmetric b_expr[lower] AND a_expr[upper] %prec BETWEEN
     {
         auto node = mkNode<lingodb::ast::BetweenExpression>(@$, lingodb::ast::ExpressionType::COMPARE_NOT_BETWEEN, $input, $lower, $upper);
         node->asymmetric = $opt_asymmetric;
@@ -1309,6 +1307,19 @@ a_expr:
        $$ = subQueryExpression;
     }
     ;
+and_a_expr:
+    a_expr AND a_expr
+    {
+       $$ = mkNode<lingodb::ast::ConjunctionExpression>(@$, lingodb::ast::ExpressionType::CONJUNCTION_AND , $1, $3);
+    }
+    ;
+or_a_expr:
+    a_expr OR a_expr
+    {
+       $$ = mkNode<lingodb::ast::ConjunctionExpression>(@$, lingodb::ast::ExpressionType::CONJUNCTION_OR , $1, $3);
+    }
+    ;
+
 b_expr:
     c_expr { $$ = $c_expr;}
     | b_expr PLUS b_expr
