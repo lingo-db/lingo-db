@@ -7,6 +7,8 @@
 #include "sql_context.h"
 #define DEBUG false
 
+#include <boost/context/detail/disable_overload.hpp>
+#include <boost/context/stack_context.hpp>
 #include <functional>
 #include <sys/resource.h>
 namespace lingodb::analyzer {
@@ -17,33 +19,41 @@ using ResolverScope = llvm::ScopedHashTable<std::string, std::shared_ptr<ast::Na
       s << message << " at " << loc << std::endl; \
       throw std::runtime_error(s.str());          \
    }
-
 class StackGuard {
    public:
-   StackGuard() {
+   StackGuard() = default;
+   /**
+    * Resets the stack guard
+    * Exact behavior depends on implementation (normal stack or fiber)
+    */
+   virtual void reset() = 0;
+   /**
+    * @return true if stack limit is exceeded
+    */
+   virtual bool newStackNeeded() = 0;
+};
+/**
+ * StackGuard for normal stack usage (no fiber)
+ */
+class StackGuardNormal : public StackGuard {
+   public:
+   StackGuardNormal() : StackGuard() {
       rlimit rlp{};
       auto suc = getrlimit(RLIMIT_STACK, &rlp);
       if (suc != 0) {
         limit = 0;
       }
-      limit = 0.09*rlp.rlim_cur;
-
+      limit = 0.095*rlp.rlim_cur;
+      startFameAddress = __builtin_frame_address(0);
    }
    void reset() {
-      startFameAddress = nullptr;
+      startFameAddress = __builtin_frame_address(0);
    }
-   bool check() {
+   bool newStackNeeded() {
       rlimit rlp{};
       auto suc = getrlimit(RLIMIT_STACK, &rlp);
-      if (startFameAddress == nullptr) {
-         startFameAddress = __builtin_frame_address(0);
-         return false;
-      }
+      assert(suc==0);
       void* currentFrameAddress = __builtin_frame_address(0);
-      if (currentFrameAddress>startFameAddress) {
-         startFameAddress = currentFrameAddress;
-         return false;
-      }
       size_t size = reinterpret_cast<size_t>(startFameAddress) - reinterpret_cast<size_t>(currentFrameAddress);
 
       if (size > limit) {
@@ -55,6 +65,35 @@ class StackGuard {
    private:
    void* startFameAddress;
    size_t limit;
+
+};
+
+/**
+ * StackGuard for fiber stack usage (see https://www.boost.org/doc/libs/1_89_0/libs/context/doc/html/index.html)
+ */
+class StackGuardFiber : public StackGuard {
+   public:
+   StackGuardFiber(boost::context::stack_context& stackContext) : StackGuard(), stackContext(stackContext) {
+      rlimit rlp{};
+      startFameAddress = stackContext.sp;
+      limit = stackContext.size*0.65;
+   }
+   void reset() {
+      startFameAddress = stackContext.sp;
+   }
+   bool newStackNeeded() {
+      void* currentFrameAddress = __builtin_frame_address(0);
+      size_t size = reinterpret_cast<size_t>(startFameAddress) - reinterpret_cast<size_t>(currentFrameAddress);
+      if (size > limit) {
+         std::cerr << "Fiber: StackLimit: " << stackContext.size << " recorded size: " << size << " Perc: " << ((size*1.0)/stackContext.size) * 100 << std::endl;
+         return true;
+      }
+      return false;
+   }
+   private:
+   size_t limit;
+   void* startFameAddress;
+   boost::context::stack_context& stackContext;
 
 };
 
@@ -111,13 +150,15 @@ class SQLCanonicalizer {
    std::shared_ptr<T> canonicalizeCast(std::shared_ptr<ast::TableProducer> rootNode, std::shared_ptr<ASTTransformContext> context);
 
    driver drv{};
+   std::shared_ptr<StackGuard> stackGuard = std::make_shared<StackGuardNormal>();
 };
 
 class SQLQueryAnalyzer {
    public:
-   StackGuard stackGuard{};
+
    SQLQueryAnalyzer(std::shared_ptr<catalog::Catalog> catalog);
    std::shared_ptr<SQLContext> context = std::make_shared<SQLContext>();
+   std::shared_ptr<StackGuard> stackGuard = std::make_shared<StackGuardNormal>();
 
    std::shared_ptr<ast::AstNode> canonicalizeAndAnalyze(std::shared_ptr<ast::AstNode> rootNode, std::shared_ptr<SQLContext> context);
 
