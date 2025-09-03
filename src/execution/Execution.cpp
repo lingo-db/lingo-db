@@ -269,6 +269,8 @@ class DefaultQueryExecuter : public QueryExecuter {
          std::cerr << "Must provide file or string!" << std::endl;
          exit(1);
       }
+      handleTiming(frontend.getTiming());
+
       auto serializationState = std::make_shared<SnapshotState>();
       serializationState->serialize = true;
 
