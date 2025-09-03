@@ -329,6 +329,11 @@ struct Parser {
    std::pair<mlir::Value, dialect::tuples::ColumnRefAttr> mapExpressionToAttribute(mlir::Value tree, TranslationContext& context, mlir::OpBuilder& builder, ResolverScope& scope, Node* expression);
    std::tuple<mlir::Value, std::unordered_map<std::string, dialect::tuples::Column*>> performAggregation(mlir::OpBuilder& builder, std::vector<mlir::Attribute> groupByAttrs, const ReplaceState& replaceState, TranslationContext& context, mlir::Value tree);
    ~Parser();
+
+   double timing;
+   double getTiming() {
+      return timing;
+   }
 };
 } // end namespace lingodb::compiler::frontend::sql
 #endif // LINGODB_COMPILER_FRONTEND_SQL_PARSER_H

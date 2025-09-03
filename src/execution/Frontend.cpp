@@ -128,6 +128,7 @@ class SQLFrontend : public lingodb::execution::Frontend {
       funcOp.getBody().push_back(queryBlock);
       module = moduleOp;
       parallismAllowed = translator.isParallelismAllowed();
+      timing.emplace("frontEnd", translator.getTiming());
    }
    void loadFromFile(std::string fileName) override {
       std::ifstream istream{fileName};
@@ -155,11 +156,14 @@ class NewSQLFrontend : public lingodb::execution::Frontend {
    mlir::OwningOpRef<mlir::ModuleOp> module;
    bool parallismAllowed;
    void loadFromString(std::string sql) override {
+
       sql = ":" + sql;
       lingodb::execution::initializeContext(context);
       driver drv;
+
       if (!drv.parse(sql)) {
          auto results = drv.result;
+
          if (results.empty() || results.size() > 1) {
             error.emit() << "Error during parsing";
          }
@@ -189,10 +193,7 @@ class NewSQLFrontend : public lingodb::execution::Frontend {
          funcOp.getBody().push_back(queryBlock);
          module = moduleOp;
          parallismAllowed = false;
-
-
-
-
+         timing.emplace("frontEnd", sqlAnalyzer.getTiming() + translator.getTiming());
 
       } else {
          error.emit() << "Error during parsing";
