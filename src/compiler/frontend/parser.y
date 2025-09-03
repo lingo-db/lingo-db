@@ -227,7 +227,8 @@
 %type<std::shared_ptr<lingodb::ast::TargetsExpression>> opt_target_list
 
 %type<std::shared_ptr<lingodb::ast::ParsedExpression>>  having_clause target_el a_expr c_expr b_expr  where_clause group_by_item
-                                                        func_arg_expr select_limit_value case_expr case_default cast_expr
+                                                        func_arg_expr select_limit_value case_expr case_default cast_expr offset_clause 
+                                                        select_offset_value
 
 %type<std::shared_ptr<lingodb::ast::ConjunctionExpression>> and_a_expr or_a_expr
 
@@ -1074,7 +1075,15 @@ sortby:
 
 select_limit:
     limit_clause offset_clause
+    {
+        $limit_clause->offset = $offset_clause;
+        $$ = $limit_clause;
+    }
     | offset_clause limit_clause
+    {
+        $limit_clause->offset = $offset_clause;
+        $$ = $limit_clause;
+    }
     | limit_clause {$$ = $1;}
     | offset_clause
     ;
@@ -1091,6 +1100,9 @@ limit_clause:
 //TODO missing rules
 offset_clause:
     OFFSET select_offset_value
+    {
+        $$ = $2;
+    }
     ;
 
 select_limit_value:
@@ -1099,7 +1111,7 @@ select_limit_value:
     ;
 
 select_offset_value:
-    a_expr
+    a_expr {$$=$1;}
     ;
 
 /*
@@ -1692,6 +1704,12 @@ extract_arg:
     {
         auto constant = mkNode<lingodb::ast::ConstantExpression>(@$);
         constant->value = std::make_shared<lingodb::ast::StringValue>("day");
+        $$ = constant;
+    }
+    | MINUTE_P
+    {
+        auto constant = mkNode<lingodb::ast::ConstantExpression>(@$);
+        constant->value = std::make_shared<lingodb::ast::StringValue>("minute");
         $$ = constant;
     }
     ;

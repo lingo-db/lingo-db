@@ -50,14 +50,15 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                if (selectNode->groups) {
                   context->currentScope->aggregationNode->groupByNode = std::move(selectNode->groups);
                }
-
                auto aggPipeNode = drv.nf.node<ast::PipeOperator>(selectNode->loc, ast::PipeOperatorType::AGGREGATE, context->currentScope->aggregationNode);
                aggPipeNode->input = transformed;
                transformed = aggPipeNode;
 
-               auto extendPipeOp3 = drv.nf.node<ast::PipeOperator>(selectNode->select_list->loc, ast::PipeOperatorType::EXTEND, context->currentScope->extendNodeBeforeWindowFunctions);
-               extendPipeOp3->input = transformed;
-               transformed = extendPipeOp3;
+
+
+               auto extendBeforeWindowPipeOp = drv.nf.node<ast::PipeOperator>(selectNode->select_list->loc, ast::PipeOperatorType::EXTEND, context->currentScope->extendNodeBeforeWindowFunctions);
+               extendBeforeWindowPipeOp->input = transformed;
+               transformed = extendBeforeWindowPipeOp;
 
 
 
@@ -158,6 +159,8 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                }
                extendPipeOp->input = pipeOp->input;
                pipeOp->input = extendPipeOp;
+
+
               break;
             }
             case ast::PipeOperatorType::WHERE: {
@@ -441,7 +444,9 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
             columnRef->alias = columnAlias;
             context->currentScope->aggregationNode->aggregations.push_back(functionExpr);
 
+
             return columnRef;
+
          } else {
             i++;
             std::string upperCaseName = functionExpr->functionName;
@@ -1707,13 +1712,17 @@ std::shared_ptr<ast::BoundResultModifier> SQLQueryAnalyzer::analyzeResultModifie
       case ast::ResultModifierType::LIMIT: {
          auto limitModifier = std::static_pointer_cast<ast::LimitModifier>(resultModifier);
          auto limitExpression = analyzeExpression(limitModifier->limitExpression, context, resolverScope);
+         auto offset = limitModifier->offset == nullptr ? nullptr : analyzeExpression(limitModifier->offset, context, resolverScope);
          if (limitExpression->exprClass != ast::ExpressionClass::BOUND_CONSTANT) {
             error("Limit expression must be a constant expression", limitModifier->loc);
          }
          if (limitExpression->resultType->type.getTypeId() != catalog::LogicalTypeId::INT) {
             error("Limit expression must be of type INT", limitModifier->loc);
          }
-         return drv.nf.node<ast::BoundLimitModifier>(limitModifier->loc, limitExpression, resultModifier->input);
+         if (offset != nullptr) {
+            std::cerr << "Note: " << "Offset in limit is not supported yet and is ignored for now" << std::endl;
+         }
+         return drv.nf.node<ast::BoundLimitModifier>(limitModifier->loc, limitExpression, offset, resultModifier->input);
       }
       default: error("Not implemented", resultModifier->loc);
    }
@@ -2118,10 +2127,27 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
             }
             auto arg1 = analyzeExpression(function->arguments[0], context, resolverScope);
             auto arg2 = analyzeExpression(function->arguments[1], context, resolverScope);
-            if (arg2->resultType.has_value() && arg2->resultType.value().type.getTypeId() != catalog::LogicalTypeId::DATE && arg2->resultType.value().type.getTypeId() != catalog::LogicalTypeId::INTERVAL) {
-               error("Function extract needs second argument of type date or interval", function->loc);
+            if (arg2->resultType.has_value() && arg2->resultType.value().type.getTypeId() != catalog::LogicalTypeId::DATE &&  arg2->resultType.value().type.getTypeId() != catalog::LogicalTypeId::TIMESTAMP && arg2->resultType.value().type.getTypeId() != catalog::LogicalTypeId::INTERVAL) {
+               error("Function extract needs second argument of type date, interval or timestamp", function->loc);
             }
             resultType = catalog::NullableType{catalog::Type::int64(), arg2->resultType->isNullable};
+
+            boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, std::vector{arg1, arg2});
+
+         } else if (function->functionName == "DATE_TRUNC") {
+            if (function->arguments.size() != 2) {
+               error("Function DATE_TRUNC needs exactly two arguments", function->loc);
+            }
+            auto arg1 = analyzeExpression(function->arguments[0], context, resolverScope);
+            auto arg2 = analyzeExpression(function->arguments[1], context, resolverScope);
+            if (arg1->resultType.has_value() && arg1->resultType.value().type.getTypeId() != catalog::LogicalTypeId::STRING && arg1->resultType.value().type.getTypeId() != catalog::LogicalTypeId::CHAR) {
+               error("Function DATE_TRUNC needs first argument of type string", function->loc);
+            }
+            if (arg2->resultType.has_value() && arg2->resultType.value().type.getTypeId() != catalog::LogicalTypeId::DATE &&  arg2->resultType.value().type.getTypeId() != catalog::LogicalTypeId::TIMESTAMP && arg2->resultType.value().type.getTypeId() != catalog::LogicalTypeId::INTERVAL) {
+               error("Function DATE_TRUNC needs second argument of type date, interval or timestamp", function->loc);
+            }
+            //TODO wrong resulttype
+            resultType = catalog::Type::int64();
 
             boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, std::vector{arg1, arg2});
 
@@ -2235,6 +2261,37 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
             resultType = catalog::Type::int64();
             boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, std::vector{arg});
 
+         } else if (function->functionName == "LENGTH") {
+            if (function->arguments.size() != 1) {
+               error("Function LENGTH needs exactly one argument", function->loc);
+            }
+            if (function->arguments[0]->type != ast::ExpressionType::COLUMN_REF) {
+               error("Function LENGTH needs argument of type column", function->loc);
+            }
+            auto arg = analyzeExpression(function->arguments[0], context, resolverScope);
+            if (arg->exprClass != ast::ExpressionClass::BOUND_COLUMN_REF) {
+               error("Function grouping needs argument of type column", function->loc);
+            }
+            resultType = catalog::Type::int64();
+            boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, std::vector{arg});
+         } else if (function->functionName == "REGEXP_REPLACE") {
+            if (function->arguments.size() != 3) {
+               error("Function REGEXP_REPLACE needs exactly 3 arguments", function->loc);
+            }
+            auto text = analyzeExpression(function->arguments[0], context, resolverScope);
+            auto pattern = analyzeExpression(function->arguments[1], context, resolverScope);
+            auto replace = analyzeExpression(function->arguments[2], context, resolverScope);
+            if (text->resultType.value().type.getTypeId() != catalog::LogicalTypeId::STRING ) {
+               error("Function REGEXP_REPLACE needs text of type string", text->loc);
+            }
+            if (pattern->resultType.value().type.getTypeId() != catalog::LogicalTypeId::STRING && pattern->resultType.value().type.getTypeId() != catalog::LogicalTypeId::CHAR) {
+               error("Function REGEXP_REPLACE needs pattern of type string or char", text->loc);
+            }
+            if (replace->resultType.value().type.getTypeId() != catalog::LogicalTypeId::STRING && replace->resultType.value().type.getTypeId() != catalog::LogicalTypeId::CHAR) {
+               error("Function REGEXP_REPLACE needs replacement of type string or char", text->loc);
+            }
+            resultType = text->resultType.value();
+            boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, std::vector{text, pattern, replace});
          }
 
          if (boundFunctionExpression == nullptr) {
