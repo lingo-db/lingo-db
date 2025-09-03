@@ -1284,6 +1284,7 @@ void frontend::sql::Parser::translateVariableSetStatement(mlir::OpBuilder& build
    }
 }
 std::optional<mlir::Value> frontend::sql::Parser::translate(mlir::OpBuilder& builder) {
+   auto startTranslator = std::chrono::high_resolution_clock::now();
    if (result.tree && result.tree->length == 1) {
       auto* statement = static_cast<Node*>(result.tree->head->data.ptr_value);
       switch (statement->type) {
@@ -1330,6 +1331,8 @@ std::optional<mlir::Value> frontend::sql::Parser::translate(mlir::OpBuilder& bui
             relalg::QueryOp queryOp = builder.create<relalg::QueryOp>(builder.getUnknownLoc(), mlir::TypeRange{localTableType}, mlir::ValueRange{});
             queryOp.getQueryOps().getBlocks().clear();
             queryOp.getQueryOps().push_back(block);
+            auto endTranslator = std::chrono::high_resolution_clock::now();
+            this->timing = std::chrono::duration_cast<std::chrono::microseconds>(endTranslator - startTranslator).count() / 1000.0;
             return queryOp.getResults()[0];
          }
          case T_InsertStmt: {
@@ -1340,6 +1343,8 @@ std::optional<mlir::Value> frontend::sql::Parser::translate(mlir::OpBuilder& bui
             throw std::runtime_error("unsupported statement type");
       }
    }
+   auto endTranslator = std::chrono::high_resolution_clock::now();
+   this->timing = std::chrono::duration_cast<std::chrono::microseconds>(endTranslator - startTranslator).count() / 1000.0;
    return {};
 }
 
