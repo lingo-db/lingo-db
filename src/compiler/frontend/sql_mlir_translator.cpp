@@ -634,6 +634,21 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
             return translateCoalesceExpression(builder,function->resultType.value(), function->arguments, context);
 
          }
+         if (function->functionName == "LENGTH") {
+            auto str = translateExpression(builder, function->arguments[0], context);
+            return builder.create<db::RuntimeCall>(builder.getUnknownLoc(), builder.getI64Type(), "StringLength", str).getRes();
+         }
+         if (function->functionName == "REGEXP_REPLACE") {
+            auto text = translateExpression(builder, function->arguments[0], context);
+            auto pattern = translateExpression(builder, function->arguments[1], context);
+            auto replace = translateExpression(builder, function->arguments[2], context);
+            return builder.create<db::RuntimeCall>(builder.getUnknownLoc(), text.getType(), "RegexpReplace", mlir::ValueRange({text, pattern, replace})).getRes();
+         }
+         if (function->functionName  == "DATE_TRUNC") {
+            auto part = translateExpression(builder, function->arguments[0], context);
+            auto arg2 = translateExpression(builder, function->arguments[1], context);
+            return builder.create<db::RuntimeCall>(builder.getUnknownLoc(), wrapNullableType(builder.getContext(), builder.getI64Type(), {part, arg2}), "DateTrunc", mlir::ValueRange({part, arg2})).getRes();
+         }
          error("Function '" << function->functionName << "' not implemented", expression->loc);
       }
       case ast::ExpressionClass::BOUND_SUBQUERY: {

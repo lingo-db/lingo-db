@@ -30,8 +30,11 @@ std::string PipeOperator::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
       case PipeOperatorType::WHERE:
          dot += "WHERE";
          break;
+      case PipeOperatorType::EXTEND:
+         dot += "EXTEND";
+         break;
       default:
-         dot += "UNKNOWN";
+         dot += "UNKNOWN " + std::to_string(static_cast<int>(pipeOpType));
    }
    dot += ">>";
    dot += "\"];\n";
