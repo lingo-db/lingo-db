@@ -408,7 +408,7 @@ std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfigWithNewFrontend(
       config->executionBackend = createDefaultLLVMBackend();
    }
    config->resultProcessor = execution::createTablePrinter();
-   if (runMode == ExecutionMode::SPEED || runMode == ExecutionMode::EXTREME_CHEAP) {
+   if (runMode == ExecutionMode::SPEED || runMode == ExecutionMode::BASELINE_SPEED) {
       config->queryOptimizer->disableVerification();
       config->executionBackend->disableVerification();
       for (auto& loweringStep : config->loweringSteps) {

@@ -1,6 +1,5 @@
 #include "lingodb/compiler/frontend/sql_context.h"
 
-#include "lingodb/runtime/RecordBatchInfo.h"
 
 #include <iostream>
 namespace lingodb::analyzer {
@@ -57,9 +56,9 @@ std::vector<std::shared_ptr<ast::NamedResult>> SQLContext::mapAttribute(Resolver
    for (auto c : tableCatalogEntry->getColumns()) {
       auto columnInfo = std::make_shared<ast::NamedResult>(uniqueScope, c);
 
-      mapAttribute(scope, sqlScopeName + "." + c.getColumnName(), columnInfo);
-
-      mapAttribute(scope, c.getColumnName(), columnInfo);
+      mapAttribute(scope, sqlScopeName + "." + std::string(c.getColumnName()), columnInfo);
+      //TODO use string_view instead
+      mapAttribute(scope, std::string(c.getColumnName()), columnInfo);
       result.push_back(columnInfo);
    }
    return result;
