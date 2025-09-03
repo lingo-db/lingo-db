@@ -63,6 +63,7 @@ class LimitModifier : public ResultModifier {
    public:
    explicit LimitModifier(std::shared_ptr<ParsedExpression> limitExpression) : ResultModifier(ResultModifierType::LIMIT), limitExpression(std::move(limitExpression)) {}
    std::shared_ptr<ParsedExpression> limitExpression;
+   std::shared_ptr<ParsedExpression> offset;
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
    // ... implementation ...

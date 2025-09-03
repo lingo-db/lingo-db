@@ -46,9 +46,10 @@ class BoundOrderByModifier : public BoundResultModifier {
 
 class BoundLimitModifier : public BoundResultModifier {
    public:
-   BoundLimitModifier(std::shared_ptr<BoundExpression> limitExpression, std::shared_ptr<TableProducer> input) : BoundResultModifier(ResultModifierType::BOUND_LIMIT, input), limitExpression(limitExpression) {}
+   BoundLimitModifier(std::shared_ptr<BoundExpression> limitExpression, std::shared_ptr<BoundExpression> offset, std::shared_ptr<TableProducer> input) : BoundResultModifier(ResultModifierType::BOUND_LIMIT, input), limitExpression(limitExpression), offset(offset){}
 
    std::shared_ptr<BoundExpression> limitExpression;
+   std::shared_ptr<BoundExpression> offset;
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };

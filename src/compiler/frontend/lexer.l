@@ -116,7 +116,7 @@ identifier      {ident_start}{ident_cont}*
 quoted_identifier   \"([^\"]|\"\")*\"
 squote			\'
 dquote			\"
-strChars ({ident_cont}|,|\(|\)|\[|\]|\:)
+strChars ([^'])
 str       {squote}({strChars}|{op_chars}|[ ])*{squote}
 
 operator		{op_chars}+
@@ -215,6 +215,7 @@ boolean [fF][aA][lL][sS][eE]
 [lL][iI][kK][eE]                      { MAKE_KEYWORD(LIKE); }
 [lL][iI][mM][iI][tT]                  { MAKE_KEYWORD(LIMIT); }
 
+[mM][iI][nN][uU][tT][eE]              { MAKE_KEYWORD(MINUTE_P); }
 [mM][oO][nN][tT][hH]                  { MAKE_KEYWORD(MONTH_P); }
 
 [nN][aA][tT][uU][rR][aA][lL]          { MAKE_KEYWORD(NATURAL); }
@@ -222,6 +223,7 @@ boolean [fF][aA][lL][sS][eE]
 [nN][uU][lL][lL]                      { MAKE_KEYWORD(NULL_P); }
 [nN][uU][mM][eE][rR][iI][cC]          { MAKE_KEYWORD(NUMERIC); }
 
+[oO][fF][fF][sS][eE][tT]              { MAKE_KEYWORD(OFFSET); }
 [oO][nN]                              { MAKE_KEYWORD(ON); }
 [oO][rR]                              { MAKE_KEYWORD(OR); }
 [oO][rR][dD][eE][rR]                  { MAKE_KEYWORD(ORDER); }
