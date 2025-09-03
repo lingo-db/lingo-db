@@ -218,7 +218,7 @@
 
 %type<std::vector<std::shared_ptr<lingodb::ast::ParsedExpression>>> target_list group_by_list func_arg_list func_arg_list_opt
                                                                     extract_list expr_list expr_list_with_alias substr_list distinct_clause
-                                                                    opt_partition_clause rollup_clause
+                                                                    opt_partition_clause rollup_clause group_by_list_with_alias
 
 
 /*
@@ -228,7 +228,7 @@
 
 %type<std::shared_ptr<lingodb::ast::TargetsExpression>> opt_target_list
 
-%type<std::shared_ptr<lingodb::ast::ParsedExpression>>  having_clause target_el a_expr c_expr b_expr  where_clause group_by_item
+%type<std::shared_ptr<lingodb::ast::ParsedExpression>>  having_clause target_el a_expr c_expr b_expr  where_clause group_by_item group_by_item_with_alias
                                                         func_arg_expr select_limit_value case_expr case_default cast_expr offset_clause 
                                                         select_offset_value
 
@@ -268,7 +268,7 @@
 
 %type<std::shared_ptr<lingodb::ast::ParsedExpression>> Iconst SignedIconst AexprConst  Sconst Bconst Fconst
 
-%type<std::shared_ptr<lingodb::ast::GroupByNode>> group_clause
+%type<std::shared_ptr<lingodb::ast::GroupByNode>> group_clause group_clause_with_alias
 
 %type<std::shared_ptr<lingodb::ast::PipeOperator>> pipe_operator pipe_start
 
@@ -803,6 +803,25 @@ group_clause:
     }
     | %empty
     ;
+group_clause_with_alias:
+    GROUP_P BY set_quantifier group_by_list_with_alias
+    {
+        auto node = mkNode<lingodb::ast::GroupByNode>(@$);
+        node->groupByExpressions = $group_by_list_with_alias;
+        $$ = node;
+        //TODO Support set_quantifier
+    }
+    //TODO find a better solution
+    | GROUP_P BY set_quantifier rollup_clause %prec ROLLUP_PRIORITY
+    {
+        auto node = mkNode<lingodb::ast::GroupByNode>(@$);
+        node->groupByExpressions = $rollup_clause;
+        node->rollup = true;
+        $$ = node;
+    }
+    | %empty
+    ;
+
 
 group_by_list:
     group_by_item
@@ -817,6 +836,19 @@ group_by_list:
         $$ = $list;
     }
     ;
+group_by_list_with_alias:
+    group_by_item_with_alias
+    {
+        auto list = mkListShared<lingodb::ast::ParsedExpression>();
+        list.emplace_back($group_by_item_with_alias);
+        $$ = list;
+    }
+    | group_by_list[list] COMMA group_by_item_with_alias
+    {
+        $list.emplace_back($group_by_item_with_alias);
+        $$ = $list;
+    }
+    ;
 rollup_clause:
     ROLLUP LP expr_list RP
     {
@@ -825,6 +857,13 @@ rollup_clause:
 //TODO Add missing rules
 group_by_item:
     a_expr {$$ = $1;}
+    | empty_grouping_set {}
+    /*| cube_clause */
+    /*| grouping_sets_clause*/
+    ;
+group_by_item_with_alias:
+    a_expr {$$ = $1;}
+    | a_expr AS ColId {$1->alias = $ColId; $$ = $1;}
     | empty_grouping_set {}
     /*| cube_clause */
     /*| grouping_sets_clause*/
@@ -3141,10 +3180,10 @@ pipe_operator:
     ;
 
 agg_expr: 
-    func_expr_list group_clause 
+    func_expr_list group_clause_with_alias 
     {
         auto aggNode = mkNode<lingodb::ast::AggregationNode>(@$);
-        aggNode->groupByNode = $group_clause;
+        aggNode->groupByNode = $group_clause_with_alias;
         aggNode->aggregations = $func_expr_list;
         $$ = aggNode;
       
