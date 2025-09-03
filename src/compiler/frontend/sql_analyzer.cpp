@@ -66,6 +66,12 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                //Transform target selection
                if (selectNode->select_list) {
                   auto pipe = drv.nf.node<ast::PipeOperator>(selectNode->select_list->loc, ast::PipeOperatorType::SELECT, selectNode->select_list);
+                  for (auto& target : selectNode->select_list->targets) {
+                     if (target->alias.empty()) {
+                        continue;
+                     }
+                     context->currentScope->selectSymbolList.emplace(target->alias, target);
+                  }
                   pipe->input = transformed;
 
                   transformed = pipe;
@@ -189,9 +195,23 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
 
                   }
                   for (auto e : aggNode->groupByNode->groupByExpressions) {
-                     auto canonicalized = canonicalizeParsedExpression(e, context, true, extendNode);
-                     newGroupByExpressions.emplace_back(canonicalized);
-                     context->currentScope->groupedByExpressions.emplace(e);
+
+                     if (e->type == ast::ExpressionType::COLUMN_REF) {
+                        auto columnRef = std::static_pointer_cast<ast::ColumnRefExpression>(e);
+                        auto name = columnRef->columnNames.size() == 1 ? columnRef->columnNames[0] : columnRef->columnNames[0] + "." + columnRef->columnNames[1];
+                        auto found = context->currentScope->selectSymbolList.find(name);
+                        if (found != context->currentScope->selectSymbolList.end()) {
+                           newGroupByExpressions.emplace_back(canonicalizeParsedExpression(found->second, context, true, extendNode));
+                           context->currentScope->groupedByExpressions.emplace(found->second);
+                        } else {
+                           auto canonicalized = canonicalizeParsedExpression(e, context, true, extendNode);
+                           newGroupByExpressions.emplace_back(canonicalized);
+                           context->currentScope->groupedByExpressions.emplace(e);
+                        }
+
+
+                     }
+
                   }
                   aggNode->groupByNode->groupByExpressions = std::move(newGroupByExpressions);
                }
