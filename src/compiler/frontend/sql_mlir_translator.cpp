@@ -78,26 +78,20 @@ std::optional<mlir::Value> SQLMlirTranslator::translateStart(mlir::OpBuilder& bu
 
          std::vector<mlir::Attribute> attrs;
          std::vector<mlir::Attribute> names;
-         std::vector<mlir::Attribute> colMemberNames;
+         llvm::SmallVector<subop::Member> members;
          std::vector<mlir::Attribute> colTypes;
          auto& memberManager = builder.getContext()->getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager();
 
          for (auto& named : context->currentScope->targetInfo.targetColumns) {
             names.push_back(builder.getStringAttr(named->displayName));
-            auto colMemberName = memberManager.getUniqueMember(named->name);
-            colMemberNames.push_back(builder.getStringAttr(colMemberName));
+
+            members.push_back(memberManager.createMember(named->name.empty() ? "unnamed" : named->name, named->resultType.toMlirType(builder.getContext())));
             colTypes.push_back(mlir::TypeAttr::get(named->resultType.toMlirType(builder.getContext())));
             auto attrDef = named->createRef(builder, attrManager);
             attrs.push_back(attrDef);
          }
 
-         localTableType = subop::LocalTableType::get(
-            builder.getContext(),
-            subop::StateMembersAttr::get(
-               builder.getContext(),
-               builder.getArrayAttr(colMemberNames),
-               builder.getArrayAttr(colTypes)),
-            builder.getArrayAttr(names));
+         localTableType = subop::LocalTableType::get(builder.getContext(), subop::StateMembersAttr::get(builder.getContext(), members), builder.getArrayAttr(names));
 
          mlir::Value result = builder.create<relalg::MaterializeOp>(
             builder.getUnknownLoc(),
@@ -239,20 +233,21 @@ void SQLMlirTranslator::translateInsertNode(mlir::OpBuilder& builder, std::share
       mapOp.getPredicate().push_back(block);
       mapBuilder.create<tuples::ReturnOp>(builder.getUnknownLoc(), createdValues);
 
-      std::vector<mlir::Attribute> colMemberNames;
+      llvm::SmallVector<subop::Member> members;
       std::vector<mlir::Attribute> orderedColNamesAttrs;
       std::vector<mlir::Attribute> orderedColAttrs;
       std::vector<mlir::Attribute> colTypes;
       auto& memberManager = builder.getContext()->getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager();
 
       for (auto x : rel->getColumnNames()) {
-         colMemberNames.push_back(builder.getStringAttr(memberManager.getUniqueMember(x)));
+         mlir::Type type = mlir::cast<tuples::ColumnRefAttr>(insertedCols.at(x)).getColumn().type;
+         members.push_back(memberManager.createMember(x, type));
          orderedColNamesAttrs.push_back(builder.getStringAttr(x));
          orderedColAttrs.push_back(insertedCols.at(x));
-         colTypes.push_back(mlir::TypeAttr::get(mlir::cast<tuples::ColumnRefAttr>(insertedCols.at(x)).getColumn().type));
+         colTypes.push_back(mlir::TypeAttr::get(type));
       }
 
-      localTableType = subop::LocalTableType::get(builder.getContext(), subop::StateMembersAttr::get(builder.getContext(), builder.getArrayAttr(colMemberNames), builder.getArrayAttr(colTypes)), builder.getArrayAttr(orderedColNamesAttrs));
+      localTableType = subop::LocalTableType::get(builder.getContext(), subop::StateMembersAttr::get(builder.getContext(), members), builder.getArrayAttr(orderedColNamesAttrs));
       mlir::Value newRows = builder.create<relalg::MaterializeOp>(builder.getUnknownLoc(), localTableType, mapOp.getResult(), builder.getArrayAttr(orderedColAttrs), builder.getArrayAttr(orderedColNamesAttrs));
       builder.create<relalg::QueryReturnOp>(builder.getUnknownLoc(), newRows);
    }
