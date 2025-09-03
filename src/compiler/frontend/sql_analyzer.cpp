@@ -8,7 +8,6 @@
 #include "lingodb/compiler/frontend/ast/bound/bound_pipe_operator.h"
 #include "lingodb/compiler/frontend/ast/bound/bound_query_node.h"
 #include "lingodb/compiler/frontend/ast/bound/bound_tableref.h"
-#include "lingodb/runtime/RecordBatchInfo.h"
 #include <boost/context/fiber_fcontext.hpp>
 #include <cctype>
 #include <chrono>
@@ -2134,7 +2133,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
             auto fromArg = function->arguments[1] ? analyzeExpression(function->arguments[1], context, resolverScope) : nullptr;
             auto forArg = function->arguments[2] ? analyzeExpression(function->arguments[2], context, resolverScope) : nullptr;
 
-            if (!stringArg->resultType.has_value() || stringArg->resultType->type.getTypeId() != catalog::LogicalTypeId::STRING) {
+            if (!stringArg->resultType.has_value() || (stringArg->resultType->type.getTypeId() != catalog::LogicalTypeId::STRING && stringArg->resultType->type.getTypeId() != catalog::LogicalTypeId::CHAR)) {
                error("The first argument of the SUBSTRING function must have a result type of STRING", stringArg->loc);
             }
             if (!fromArg->resultType.has_value() || fromArg->resultType->type.getTypeId() != catalog::LogicalTypeId::INT) {
@@ -2144,7 +2143,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
                error("The second argument of the SUBSTRING function must have a result type of INT", forArg->loc);
             }
 
-            resultType = catalog::NullableType{catalog::Type::stringType(), stringArg->resultType->isNullable};
+            resultType = stringArg->resultType.value();
 
             auto boundArgs = std::vector{stringArg};
             if (fromArg) {
