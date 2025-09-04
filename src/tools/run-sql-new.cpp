@@ -100,10 +100,6 @@ int main(int argc, char* argv[]) {
          lingodb::compiler::support::eval::init();
          lingodb::execution::ExecutionMode runMode = lingodb::execution::getExecutionMode();
          auto queryExecutionConfig = lingodb::execution::createQueryExecutionConfig(runMode, false);
-         if (std::getenv("LINGODB_BACKEND_ONLY")) {
-            queryExecutionConfig->queryOptimizer = {};
-            queryExecutionConfig->loweringSteps.clear();
-         }
          //queryExecutionConfig->timingProcessor = std::make_unique<execution::TimingPrinter>(inputFileName);
          auto scheduler = lingodb::scheduler::startScheduler();
          auto executer = lingodb::execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), *session);
