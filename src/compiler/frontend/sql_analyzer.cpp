@@ -203,14 +203,14 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                         if (found != context->currentScope->selectSymbolList.end()) {
                            newGroupByExpressions.emplace_back(canonicalizeParsedExpression(found->second, context, true, extendNode));
                            context->currentScope->groupedByExpressions.emplace(found->second);
-                        } else {
-                           auto canonicalized = canonicalizeParsedExpression(e, context, true, extendNode);
-                           newGroupByExpressions.emplace_back(canonicalized);
-                           context->currentScope->groupedByExpressions.emplace(e);
+                           continue;
                         }
 
 
                      }
+                     auto canonicalized = canonicalizeParsedExpression(e, context, true, extendNode);
+                     newGroupByExpressions.emplace_back(canonicalized);
+                     context->currentScope->groupedByExpressions.emplace(e);
 
                   }
                   aggNode->groupByNode->groupByExpressions = std::move(newGroupByExpressions);
