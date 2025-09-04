@@ -213,7 +213,7 @@
 %token		FORMAT_LA NOT_LA NULLS_LA WITH_LA WITHOUT_LA
 %type <std::vector<std::shared_ptr<lingodb::ast::AstNode>>> stmtmulti
 %type <std::shared_ptr<lingodb::ast::AstNode>> toplevel_stmt stmt
-%type <std::shared_ptr<lingodb::ast::TableProducer>>  SelectStmt  PreparableStmt PipeSQLStmt classic_select_and_pipe_sql_with_parens pipe_sql_with_parens pipe_sql_no_parens 
+%type <std::shared_ptr<lingodb::ast::TableProducer>>  SelectStmt  PreparableStmt PipeSQLStmt classic_select_and_pipe_sql_with_parens pipe_sql_with_parens pipe_sql_no_parens pipe_or_select_clause
 %type <std::shared_ptr<lingodb::ast::QueryNode>> simple_select select_clause select_no_parens with_clause select_with_parens cte_list common_table_expr
 
 %type<std::vector<std::shared_ptr<lingodb::ast::ParsedExpression>>> target_list group_by_list func_arg_list func_arg_list_opt
@@ -534,6 +534,10 @@ pipe_start:
     {
 
     }
+    ;
+pipe_or_select_clause:
+    pipe_start {$$ = $1;}
+    | select_clause {$$ = $1;}
     ;
 select_clause:
     simple_select {$$ = $1;}
@@ -3220,6 +3224,24 @@ pipe_operator:
         auto extendNode = mkNode<lingodb::ast::ExtendNode>(@$, false);
         extendNode->extensions = $expr_list_with_alias;
         $$ = mkNode<lingodb::ast::PipeOperator>(@$, lingodb::ast::PipeOperatorType::EXTEND, extendNode);
+    }
+    | UNION set_quantifier pipe_or_select_clause
+    {
+        auto setOpNode = mkNode<lingodb::ast::SetOperationNode>(@$, lingodb::ast::SetOperationType::UNION, nullptr, $pipe_or_select_clause);
+        setOpNode->setOpAll = $set_quantifier;
+        $$ = mkNode<lingodb::ast::PipeOperator>(@$, lingodb::ast::PipeOperatorType::SET_OPERATION, setOpNode);
+    }
+    | INTERSECT set_quantifier pipe_or_select_clause
+    {
+        auto setOpNode = mkNode<lingodb::ast::SetOperationNode>(@$, lingodb::ast::SetOperationType::INTERSECT, nullptr, $pipe_or_select_clause);
+        setOpNode->setOpAll = $set_quantifier;
+        $$ = mkNode<lingodb::ast::PipeOperator>(@$, lingodb::ast::PipeOperatorType::SET_OPERATION, setOpNode);
+    }
+    | EXCEPT set_quantifier pipe_or_select_clause
+    {
+        auto setOpNode = mkNode<lingodb::ast::SetOperationNode>(@$, lingodb::ast::SetOperationType::EXCEPT, nullptr, $pipe_or_select_clause);
+        setOpNode->setOpAll = $set_quantifier;
+        $$ = mkNode<lingodb::ast::PipeOperator>(@$, lingodb::ast::PipeOperatorType::SET_OPERATION, setOpNode);
     }
    
     //...

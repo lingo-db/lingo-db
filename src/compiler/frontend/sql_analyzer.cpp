@@ -251,9 +251,12 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                join->left = pipeOp->input;
                return join;
             }
-            case ast::PipeOperatorType::UNION:
-            case ast::PipeOperatorType::UNION_ALL: {
-               throw std::runtime_error("Not yet impleted. Transform into SetOperationNode");
+            case ast::PipeOperatorType::SET_OPERATION: {
+               auto setOperationNode = std::static_pointer_cast<ast::SetOperationNode>(pipeOp->node);
+               assert(!setOperationNode->left);
+               setOperationNode->right = canonicalize(setOperationNode->right, std::make_shared<ASTTransformContext>());
+               setOperationNode->left = pipeOp->input;
+               return setOperationNode;
             }
 
             default: return pipeOp;
@@ -1328,8 +1331,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
          boundAstNode = boundExtendNode;
          break;
       }
-      case ast::PipeOperatorType::UNION_ALL:
-      case ast::PipeOperatorType::UNION: {
+      case ast::PipeOperatorType::SET_OPERATION: {
          error("Should not happen", pipeOperator->loc);
       }
       default: error("Not implemented", pipeOperator->loc);
