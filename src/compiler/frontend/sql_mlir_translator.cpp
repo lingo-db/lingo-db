@@ -296,6 +296,16 @@ catalog::CreateTableDef SQLMlirTranslator::translateTableElements(mlir::OpBuilde
 }
 
 mlir::Value SQLMlirTranslator::translatePipeOperator(mlir::OpBuilder& builder, std::shared_ptr<ast::PipeOperator> pipeOperator, std::shared_ptr<analyzer::SQLContext> context, mlir::Value tree) {
+   /*
+    * handle the case where input is null, e.g., in the case of select without from
+    */
+   if (!tree) {
+      auto dummyAttr = attrManager.createDef(attrManager.getUniqueScope("dummyScope"), "dummyName");
+      dummyAttr.getColumn().type = builder.getI32Type();
+      std::vector<mlir::Attribute> columns{dummyAttr};
+      std::vector<mlir::Attribute> rows{builder.getArrayAttr({builder.getI64IntegerAttr(0)})};
+      tree = builder.create<relalg::ConstRelationOp>(builder.getUnknownLoc(), builder.getArrayAttr(columns), builder.getArrayAttr(rows));
+   }
    switch (pipeOperator->pipeOpType) {
       case ast::PipeOperatorType::SELECT: {
          auto selectList = std::static_pointer_cast<ast::BoundTargetsExpression>(pipeOperator->node);
