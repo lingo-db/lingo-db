@@ -360,8 +360,7 @@ mlir::Value SQLMlirTranslator::translatePipeOperator(mlir::OpBuilder& builder, s
 
          return tree;
       }
-      case ast::PipeOperatorType::UNION_ALL:
-      case ast::PipeOperatorType::UNION: {
+      case ast::PipeOperatorType::SET_OPERATION: {
          error("Should not happen", pipeOperator->loc);
       }
       default: error("Not implememted", pipeOperator->loc);
