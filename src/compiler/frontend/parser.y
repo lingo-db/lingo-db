@@ -301,7 +301,7 @@
 
 %type<std::shared_ptr<lingodb::ast::CreateNode>> CreateStmt
 %type<bool> OptTemp opt_varying
-%type<lingodb::ast::LogicalTypeWithMods> Numeric SimpleType Type CharacterWithoutLength character Bit Character CharacterWithLength ConstDatetime Typename
+%type<lingodb::ast::LogicalTypeWithMods> Numeric SimpleType Type CharacterWithoutLength character Bit ConstCharacter Character CharacterWithLength ConstDatetime Typename ConstTypename
 %type<std::shared_ptr<lingodb::ast::TableElement>> TableElement columnElement TableConstraint
 %type<std::vector<std::shared_ptr<lingodb::ast::TableElement>>> TableElementList OptTableElementList
 %type<std::shared_ptr<lingodb::ast::Constraint>> ColConstraint ColConstraintElem ConstraintElem
@@ -1350,6 +1350,10 @@ a_expr:
     {
         $$ = mkNode<lingodb::ast::OperatorExpression>(@$, $2, $left, $right);
     }
+    | qual_Op a_expr[right]  %prec QUAL_OP
+    {
+        $$ = mkNode<lingodb::ast::OperatorExpression>(@$, $qual_Op, nullptr, $right);
+    }
     | a_expr[left] basicComparisonType sub_type select_with_parens  %prec Op
     {
        auto subQueryExpression = mkNode<lingodb::ast::SubqueryExpression>(@$, $sub_type, std::static_pointer_cast<lingodb::ast::SelectNode>($select_with_parens));
@@ -2013,7 +2017,7 @@ ColId:
 /* Type/function identifier --- names that can be type or function names.*/
 type_function_name: 
     IDENTIFIER {$$=$1;}
-    //TODO | unreserved_keyword
+    | unreserved_keyword {$$=$1;}
     | type_func_name_keyword 
     | DATE_P {$$="date";}
 
@@ -2850,7 +2854,24 @@ type_modifier:
         $$ = value;
     }
     ;
-    
+/* We have a separate ConstTypename to allow defaulting fixed-length
+ * types such as CHAR() and BIT() to an unspecified length.
+ * SQL9x requires that these default to a length of one, but this
+ * makes no sense for constructs like CHAR 'hi' and BIT '0101',
+ * where there is an obvious better choice to make.
+ * Note that ConstInterval is not included here since it must
+ * be pushed up higher in the rules to accommodate the postfix
+ * options (e.g. INTERVAL '1' YEAR). Likewise, we have to handle
+ * the generic-type-name case in AexprConst to avoid premature
+ * reduce/reduce conflicts against function names.
+ */
+//TODO add missing rules
+ConstTypename:
+    Numeric {$$ = $1;}
+    | ConstCharacter {$$ = $1;}
+    | ConstDatetime {$$ = $1;}
+    ;
+
 
 Numeric:
     INT_P
@@ -2907,6 +2928,23 @@ Character:
         $$ =$1;
     }
     ;
+ConstCharacter: 
+    CharacterWithLength
+    {
+        /* Length was not specified so allow to be unrestricted.
+        * This handles problems with fixed-length (bpchar) strings
+        * which in column definitions must default to a length
+        * of one, but should not be constrained if the length
+        * was not specified.
+        */
+        $CharacterWithLength.typeModifiers.clear();
+        $$ =$1;
+    }
+    | CharacterWithoutLength
+    {
+        $$ =$1;
+    }
+    ;    
 CharacterWithLength:
     character LP type_modifier RP
     {
@@ -2940,6 +2978,10 @@ character:
         $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::CHAR);
     }
     | TEXT_P
+    {
+        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::STRING);
+    }
+    | STRING_P
     {
         $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::STRING);
     }
@@ -3063,6 +3105,11 @@ AexprConst:
         auto interval = mkNode<lingodb::ast::CastExpression>(@$, lingodb::ast::LogicalType::INTERVAL, $Sconst);
         interval->optInterval = $opt_interval;
         $$ = interval;
+    }
+    | ConstTypename Sconst 
+    {
+        auto dateExpr = mkNode<lingodb::ast::CastExpression>(@$, $ConstTypename, $Sconst);
+        $$ = dateExpr;
     }
     | NULL_P {
         auto t = mkNode<lingodb::ast::ConstantExpression>(@$); t->value=std::make_shared<lingodb::ast::NullValue>(); $$=t; 
