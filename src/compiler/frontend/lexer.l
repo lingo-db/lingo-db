@@ -241,6 +241,7 @@ boolean [fF][aA][lL][sS][eE]
 [rR][oO][wW][sS]                      { MAKE_KEYWORD(ROWS); }
 
 [sS][eE][lL][eE][cC][tT]              { MAKE_KEYWORD(SELECT); }
+[sS][eE][tT]                          { MAKE_KEYWORD(SET); }
 [sS][oO][mM][eE]                      { MAKE_KEYWORD(SOME); }
 [sS][tT][rR][iI][nN][gG]              { MAKE_KEYWORD(STRING_P); }
 [sS][uU][bB][sS][tT][rR][iI][nN][gG]  { MAKE_KEYWORD(SUBSTRING); }

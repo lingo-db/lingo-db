@@ -299,6 +299,14 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                setOperationNode->left = pipeOp->input;
                return setOperationNode;
             }
+            case ast::PipeOperatorType::SET: {
+               auto setExpression = std::static_pointer_cast<ast::SetExpression>(pipeOp->node);
+               assert(setExpression->type == ast::ExpressionType::SET);
+               std::ranges::transform(setExpression->sets, setExpression->sets.begin(), [&](auto& pair) {
+                    return std::pair(pair.first, canonicalizeParsedExpression(pair.second, context, false, nullptr));
+               });
+               return pipeOp;
+            }
 
             default: return pipeOp;
          }
@@ -1364,6 +1372,26 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
             });
          }
          return pipeOperator->input;
+
+
+      }
+      case ast::PipeOperatorType::SET: {
+         auto setExpression = std::static_pointer_cast<ast::SetExpression>(pipeOperator->node);
+         std::vector<std::shared_ptr<ast::BoundExpression>> boundExpressions{};
+         for (auto [columnRef, expr]: setExpression->sets) {
+            auto boundExpression = analyzeExpression(expr, context, resolverScope);
+            auto boundColumnRef = analyzeExpression(columnRef, context, resolverScope);
+
+            assert(boundColumnRef->namedResult.has_value());
+            context->mapAttribute(resolverScope, boundColumnRef->namedResult.value()->name, boundColumnRef->namedResult.value());
+            boundExpressions.emplace_back(boundExpression);
+            boundExpression->namedResult = boundColumnRef->namedResult.value();
+            boundColumnRef->namedResult.value()->resultType = boundExpression->resultType.value();
+         }
+         boundAstNode = drv.nf.node<ast::BoundSetExpression>(setExpression->loc,  context->getUniqueScope("setMap"),boundExpressions);
+
+         break;
+
 
 
       }

@@ -18,6 +18,7 @@ enum class PipeOperatorType : uint8_t {
    AGGREGATE = 12,
    EXTEND = 13,
    DROP = 14,
+   SET = 15,
 
 };
 class PipeOperator : public TableProducer {

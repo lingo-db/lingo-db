@@ -364,6 +364,14 @@ mlir::Value SQLMlirTranslator::translatePipeOperator(mlir::OpBuilder& builder, s
       case ast::PipeOperatorType::SET_OPERATION: {
          error("Should not happen", pipeOperator->loc);
       }
+      case ast::PipeOperatorType::SET: {
+         auto setNode = std::static_pointer_cast<ast::BoundSetExpression>(pipeOperator->node);
+
+         tree = createMap(builder, "set", setNode->sets, context, tree);
+
+         return tree;
+      }
+
 
       default: error("Not implememted", pipeOperator->loc);
    }
