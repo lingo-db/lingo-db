@@ -37,31 +37,9 @@ class StackGuard {
  */
 class StackGuardNormal : public StackGuard {
    public:
-   StackGuardNormal() : StackGuard() {
-      rlimit rlp{};
-      auto suc = getrlimit(RLIMIT_STACK, &rlp);
-      if (suc != 0) {
-        limit = 0;
-      }
-      limit = 0.095*rlp.rlim_cur;
-      startFameAddress = __builtin_frame_address(0);
-   }
-   void reset() {
-      startFameAddress = __builtin_frame_address(0);
-   }
-   bool newStackNeeded() {
-      rlimit rlp{};
-      auto suc = getrlimit(RLIMIT_STACK, &rlp);
-      assert(suc==0);
-      void* currentFrameAddress = __builtin_frame_address(0);
-      size_t size = reinterpret_cast<size_t>(startFameAddress) - reinterpret_cast<size_t>(currentFrameAddress);
-
-      if (size > limit) {
-         std::cerr << "StackLimit: " << rlp.rlim_cur << " Max: " << rlp.rlim_max << " recorded size: " << size << " Perc: " << ((size*1.0)/rlp.rlim_cur) * 100 << std::endl;
-         return true;
-      }
-      return false;
-   }
+   StackGuardNormal();
+   void reset() override;
+   bool newStackNeeded() override;
    private:
    void* startFameAddress;
    size_t limit;
@@ -73,23 +51,9 @@ class StackGuardNormal : public StackGuard {
  */
 class StackGuardFiber : public StackGuard {
    public:
-   StackGuardFiber(boost::context::stack_context& stackContext) : StackGuard(), stackContext(stackContext) {
-      rlimit rlp{};
-      startFameAddress = stackContext.sp;
-      limit = stackContext.size*0.65;
-   }
-   void reset() {
-      startFameAddress = stackContext.sp;
-   }
-   bool newStackNeeded() {
-      void* currentFrameAddress = __builtin_frame_address(0);
-      size_t size = reinterpret_cast<size_t>(startFameAddress) - reinterpret_cast<size_t>(currentFrameAddress);
-      if (size > limit) {
-         std::cerr << "Fiber: StackLimit: " << stackContext.size << " recorded size: " << size << " Perc: " << ((size*1.0)/stackContext.size) * 100 << std::endl;
-         return true;
-      }
-      return false;
-   }
+   StackGuardFiber(boost::context::stack_context& stackContext);
+   void reset() override;
+   bool newStackNeeded() override;
    private:
    size_t limit;
    void* startFameAddress;
@@ -105,7 +69,7 @@ class SQLCanonicalizer {
     *
     * Key transformations:
     * - SELECT node is converted into a pipeline of operations:
-    *   FROM -> WHERE -> AGGREGATE -> EXTEND -> SELECT -> HAVING -> MODIFIERS
+    *   FROM -> WHERE -> EXTEND -> AGGREGATE -> EXTEND -> SELECT -> HAVING -> MODIFIERS
     *   Functions inside SELECT are moved to the corresponding EXTEND/AGGREGATE PIPE
     * - Handles SET operations (UNION, etc.) by canonicalizing both branches
     * - Processes CTEs by canonicalizing both the CTE query and its child
