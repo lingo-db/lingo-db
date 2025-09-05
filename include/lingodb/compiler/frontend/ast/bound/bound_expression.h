@@ -213,4 +213,15 @@ class BoundCaseExpression : public BoundExpression {
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
+
+class BoundSetExpression : public BoundExpression {
+   public:
+   static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_SET;
+   BoundSetExpression( std::string mapName, std::vector<std::shared_ptr<BoundExpression>> sets);
+
+   std::string mapName;
+   std::vector<std::shared_ptr<BoundExpression>> sets;
+
+   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
+};
 } // namespace lingodb::ast

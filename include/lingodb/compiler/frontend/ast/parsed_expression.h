@@ -204,6 +204,8 @@ enum class ExpressionType : uint8_t {
    BOUND_EXPANDED = 234,
    TARGETS = 240,
    BOUND_TARGETS = 241,
+   SET = 242,
+   BOUND_SET = 243,
 
 };
 
@@ -260,6 +262,8 @@ enum class ExpressionClass : uint8_t {
    BOUND_EXPANDED = 51,
    TARGETS = 52,
    BOUND_TARGETS = 53,
+   SET = 54,
+   BOUND_SET = 55,
 
 };
 
@@ -600,6 +604,18 @@ class CaseExpression : public ParsedExpression {
    std::vector<CaseCheck> caseChecks;
    std::optional<std::shared_ptr<ParsedExpression>> caseExpr;
    std::shared_ptr<ParsedExpression> elseExpr;
+
+   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
+   size_t hash() override;
+   bool operator==(ParsedExpression& other) override;
+};
+//TODO Maybe should be changed afterwards during UPDATE implemantation
+class SetExpression : public ParsedExpression {
+   public:
+   static constexpr const ExpressionClass TYPE = ExpressionClass::SET;
+   SetExpression(std::vector<std::pair<std::shared_ptr<ColumnRefExpression>, std::shared_ptr<ParsedExpression>>> sets);
+
+   std::vector<std::pair<std::shared_ptr<ColumnRefExpression>,std::shared_ptr<ParsedExpression> >> sets;
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
    size_t hash() override;

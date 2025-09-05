@@ -121,10 +121,22 @@ BoundSubqueryExpression::BoundSubqueryExpression(SubqueryType subqueryType, cata
 std::string BoundSubqueryExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    return "";
 }
-
+/*
+ * BoundCaseExpression
+ */
 BoundCaseExpression::BoundCaseExpression(catalog::NullableType resultType, std::string alias, std::optional<std::shared_ptr<ast::BoundExpression>> caseExpr, std::vector<BoundCaseCheck> caseChecks, std::shared_ptr<BoundExpression> elseExpr) : BoundExpression(TYPE, ExpressionType::CASE_EXPR, resultType, alias), caseExpr(caseExpr),  caseChecks(std::move(caseChecks)), elseExpr(std::move(elseExpr)) {
 }
 std::string BoundCaseExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    return "";
 }
+
+/*
+ * BoundSetExpression
+ */
+BoundSetExpression::BoundSetExpression(std::string mapName, std::vector<std::shared_ptr<BoundExpression>> sets) : BoundExpression(TYPE, ExpressionType::SET, ""), mapName(mapName), sets(std::move(sets)){
+}
+std::string BoundSetExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
+   return "";
+}
+
 } // namespace lingodb::ast
