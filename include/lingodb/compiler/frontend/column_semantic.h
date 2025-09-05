@@ -17,6 +17,10 @@ class NamedResult {
    NamedResult(std::string scope, catalog::NullableType resultType, std::string name) : scope(scope), resultType(resultType), name(name) {}
    NamedResult(std::string scope, catalog::Column c) : scope(scope), resultType(catalog::NullableType(c.getLogicalType(), c.getIsNullable())), name(c.getColumnName()), displayName(c.getColumnName()) {}
 
+   bool operator==(const NamedResult& other) const {
+      return other.name == name && other.scope == scope && other.displayName == displayName;
+   }
+
 
 
    virtual compiler::dialect::tuples::ColumnRefAttr createRef(mlir::OpBuilder& builder, compiler::dialect::tuples::ColumnManager& attrManager) {

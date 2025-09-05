@@ -196,6 +196,8 @@
 
     EQUAL NOT_EQUAL PLUS MINUS STAR SLASH LESS LESS_EQUAL GREATER_EQUAL GREATER TYPECAST
 
+
+
 %token AGGREGATE
 /*
  * The grammar thinks these are keywords, but they are not in the kwlist.h
@@ -252,7 +254,8 @@
 /*
 * Columnref or Starexpression for instance
 */
-%type<std::shared_ptr<lingodb::ast::ParsedExpression>> columnref indirection indirection_el
+%type<std::shared_ptr<lingodb::ast::ParsedExpression>>  columnref indirection indirection_el
+%type<std::vector<std::shared_ptr<lingodb::ast::ParsedExpression>>> columnref_list
 
 %type<std::shared_ptr<lingodb::ast::TableRef>> from_clause opt_from_clause table_ref from_list joined_table
 %type<std::shared_ptr<lingodb::ast::ExpressionListRef>>  values_clause
@@ -1529,6 +1532,19 @@ case_arg:
     | %empty {$$=std::nullopt;}
     ;
 
+columnref_list:
+    columnref
+    {
+        auto list = mkListShared<lingodb::ast::ParsedExpression>();
+        list.emplace_back($columnref);
+        $$ = list;
+    }
+    | columnref_list[list] COMMA columnref
+    {
+        $list.emplace_back($columnref);
+        $$ = $list;
+    }
+    ;
 
 columnref:
     ColId {$$ = mkNode<lingodb::ast::ColumnRefExpression>(@$, $ColId);}
@@ -3240,6 +3256,12 @@ pipe_operator:
         auto setOpNode = mkNode<lingodb::ast::SetOperationNode>(@$, lingodb::ast::SetOperationType::EXCEPT, nullptr, $pipe_or_select_clause);
         setOpNode->setOpAll = $set_quantifier;
         $$ = mkNode<lingodb::ast::PipeOperator>(@$, lingodb::ast::PipeOperatorType::SET_OPERATION, setOpNode);
+    }
+    | DROP columnref_list
+    {
+        auto node = mkNode<lingodb::ast::TargetsExpression>(@$);
+        node->targets = std::move($columnref_list);
+        $$ = mkNode<lingodb::ast::PipeOperator>(@$, lingodb::ast::PipeOperatorType::DROP, node);
     }
    
     //...

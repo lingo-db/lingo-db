@@ -1350,6 +1350,23 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
       case ast::PipeOperatorType::SET_OPERATION: {
          error("Should not happen", pipeOperator->loc);
       }
+      case ast::PipeOperatorType::DROP: {
+         assert(pipeOperator->node->nodeType == ast::NodeType::EXPRESSION && std::static_pointer_cast<ast::ParsedExpression>(pipeOperator->node)->exprClass == ast::ExpressionClass::TARGETS);
+         auto targets = std::static_pointer_cast<ast::TargetsExpression>(pipeOperator->node);
+         for (auto& target : targets->targets) {
+            if (target->exprClass != ast::ExpressionClass::COLUMN_REF) {
+               error("Only column references are allowed in DROP", target->loc);
+            }
+            auto boundExpression = analyzeExpression(target, context, resolverScope);
+            assert(boundExpression->namedResult.has_value());
+            std::erase_if(context->currentScope->targetInfo.targetColumns,[&](const std::shared_ptr<ast::NamedResult>& other) {
+               return *other == *boundExpression->namedResult.value();
+            });
+         }
+         return pipeOperator->input;
+
+
+      }
       default: error("Not implemented", pipeOperator->loc);
    }
    pipeOperator->node = boundAstNode;
