@@ -571,7 +571,6 @@ bool TargetsExpression::operator==(ParsedExpression& other) {
    return true;
 }
 
-
 OperatorExpression::OperatorExpression(ExpressionType type, std::shared_ptr<ParsedExpression> left) : ParsedExpression(type, TYPE), children(std::vector{left}) {
 }
 OperatorExpression::OperatorExpression(ExpressionType type, std::shared_ptr<ParsedExpression> left, std::shared_ptr<ParsedExpression> right) : ParsedExpression(type, TYPE), children(std::vector{left, right}) {
@@ -1347,5 +1346,73 @@ bool CaseExpression::operator==(ParsedExpression& other) {
 
     return true;
 }
+
+SetExpression::SetExpression(std::vector<std::pair<std::shared_ptr<ColumnRefExpression>, std::shared_ptr<ParsedExpression>>> sets) : ParsedExpression(ExpressionType::SET, TYPE) , sets(std::move(sets)){
+
+}
+std::string SetExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
+   return "Not implemented";
+}
+// ... existing code ...
+size_t SetExpression::hash() {
+   size_t result = ParsedExpression::hash();
+
+   // Combine hash for each (column, expression) pair in order
+   for (const auto& kv : sets) {
+      const auto& col = kv.first;
+      const auto& expr = kv.second;
+
+      size_t pair_hash = 0;
+      if (col) {
+         pair_hash ^= col->hash() + 0x9e3779b9 + (pair_hash << 6) + (pair_hash >> 2);
+      } else {
+         // Distinguish null column positions
+         pair_hash ^= 0x517cc1b7 + (pair_hash << 6) + (pair_hash >> 2);
+      }
+
+      if (expr) {
+         pair_hash ^= expr->hash() + 0x9e3779b9 + (pair_hash << 6) + (pair_hash >> 2);
+      } else {
+         // Distinguish null expression positions
+         pair_hash ^= 0x85ebca6b + (pair_hash << 6) + (pair_hash >> 2);
+      }
+
+      // Mix into the running result
+      result ^= pair_hash + 0x9e3779b9 + (result << 6) + (result >> 2);
+   }
+
+   return result;
+}
+bool SetExpression::operator==(ParsedExpression& other) {
+   if (!ParsedExpression::operator==(other)) {
+      return false;
+   }
+
+   auto* otherSet = dynamic_cast<SetExpression*>(&other);
+   if (!otherSet) {
+      return false;
+   }
+
+   if (sets.size() != otherSet->sets.size()) {
+      return false;
+   }
+
+   for (size_t i = 0; i < sets.size(); ++i) {
+      const auto& [colA, exprA] = sets[i];
+      const auto& [colB, exprB] = otherSet->sets[i];
+
+      // Compare columns (allow nulls and pointer equality)
+      if (!(colA == colB || (colA && colB && *colA == *colB))) {
+         return false;
+      }
+      // Compare expressions (allow nulls and pointer equality)
+      if (!(exprA == exprB || (exprA && exprB && *exprA == *exprB))) {
+         return false;
+      }
+   }
+
+   return true;
+}
+
 
 } // namespace lingodb::ast
