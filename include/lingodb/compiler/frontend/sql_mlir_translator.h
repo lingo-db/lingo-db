@@ -78,6 +78,8 @@ class SQLMlirTranslator {
       return builder.create<compiler::dialect::util::CreateConstVarLen>(builder.getUnknownLoc(), compiler::dialect::util::VarLen32Type::get(builder.getContext()), builder.getStringAttr(str));
    }
 
+   mlir::Location getLocationFromBison(const location& loc, mlir::MLIRContext* ctx);
+
    public:
    /*
    * Helper functions
