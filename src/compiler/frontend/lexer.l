@@ -179,6 +179,7 @@ boolean [fF][aA][lL][sS][eE]
 [dD][eE][cC][iI][mM][aA][lL]          { MAKE_KEYWORD(DECIMAL_P); }
 [dD][eE][sS][cC]                      { MAKE_KEYWORD(DESC); }
 [dD][iI][sS][tT][iI][nN][cC][tT]      { MAKE_KEYWORD(DISTINCT); }
+[dD][rR][oO][pP]                      { MAKE_KEYWORD(DROP); }
 
 [eE][lL][sS][eE]                      { MAKE_KEYWORD(ELSE); }
 [eE][nN][dD]                          { MAKE_KEYWORD(END_P); }
