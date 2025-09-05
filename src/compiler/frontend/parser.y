@@ -315,6 +315,7 @@
 %type<std::shared_ptr<lingodb::ast::InsertNode>> InsertStmt insert_rest
 %type<std::string> insert_target insert_column_item
 %type<std::vector<std::string>> insert_column_list
+%type<std::shared_ptr<lingodb::ast::SetExpression>> set_list
 
 /*%type <nodes::RelExpression>		simple_select
 %type <std::shared_ptr<nodes::Query>> select_no_parens
@@ -3265,7 +3266,12 @@ pipe_operator:
         node->targets = std::move($columnref_list);
         $$ = mkNode<lingodb::ast::PipeOperator>(@$, lingodb::ast::PipeOperatorType::DROP, node);
     }
-   
+    | SET set_list
+    {
+
+        $$ = mkNode<lingodb::ast::PipeOperator>(@$, lingodb::ast::PipeOperatorType::SET, $set_list);
+    }
+
     //...
 
     ;
@@ -3306,7 +3312,19 @@ func_expr_list:
     }
     ;
 
-
+set_list: 
+    ColId EQUAL a_expr
+    {
+        auto columnRef = mkNode<lingodb::ast::ColumnRefExpression>(@$, $ColId);
+        auto setNode = mkNode<lingodb::ast::SetExpression>(@$, std::vector<std::pair<std::shared_ptr<lingodb::ast::ColumnRefExpression>, std::shared_ptr<lingodb::ast::ParsedExpression>>>{std::pair(columnRef, $a_expr)});
+        $$ = setNode;
+    }
+    | set_list[list] COMMA ColId EQUAL a_expr
+    {
+        auto columnRef = mkNode<lingodb::ast::ColumnRefExpression>(@$, $ColId);
+        $list->sets.emplace_back(std::pair(columnRef, $a_expr));
+        $$ = $list;
+    }
 %%
 void
 lingodb::parser::error (const location_type& l, const std::string& m)
