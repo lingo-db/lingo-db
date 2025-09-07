@@ -9,7 +9,7 @@
 
 #include <filesystem>
 
-#include <arrow/ipc/json_simple.h>
+#include <arrow/builder.h>
 #include <arrow/ipc/reader.h>
 using namespace lingodb::utility;
 using namespace lingodb::catalog;

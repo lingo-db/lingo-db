@@ -1,0 +1,19 @@
+diff --git a/tools/python/bridge/create_package.macos.sh b/tools/python/bridge/create_package.macos.sh
+index 9151838e..31f52585 100755
+--- a/tools/python/bridge/create_package.macos.sh
++++ b/tools/python/bridge/create_package.macos.sh
+@@ -40,7 +40,7 @@ else
+ fi
+ 
+ /opt/homebrew/bin/python3 -m venv $BASE_PATH/build/venv
+-$BASE_PATH/build/venv/bin/python3 -m pip install build pyarrow===20.0.0
++$BASE_PATH/build/venv/bin/python3 -m pip install build pyarrow===21.0.0
+ $BASE_PATH/build/venv/bin/python3 -c "import pyarrow; pyarrow.create_library_symlinks()"
+ 
+ # Build LingoDB
+@@ -86,4 +86,4 @@ $BASE_PATH/build/venv/bin/python3 -m build --wheel --config-setting cmake.define
+ 
+ # Install delocate if not already installed
+ $BASE_PATH/build/venv/bin/python3 -m pip install delocate
+-$BASE_PATH/build/venv/bin/delocate-wheel -v dist/*.whl -e libarrow_python.2000.dylib -e libarrow.2000.dylib -w ./build-packages --ignore-missing-dependencies
++$BASE_PATH/build/venv/bin/delocate-wheel -v dist/*.whl -e libarrow_python.2100.dylib -e libarrow.2100.dylib -w ./build-packages --ignore-missing-dependencies

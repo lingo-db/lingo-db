@@ -52,6 +52,7 @@ struct ResultHasher : public execution::ResultProcessor {
       options.indent_size = 0;
       options.window = 1000000;
       options.container_window = 1000000;
+      options.element_size_limit = 10000;
       std::vector<bool> convertHex;
       std::vector<bool> isFloat;
       for (auto c : table->columns()) {

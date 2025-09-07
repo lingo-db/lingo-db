@@ -4,6 +4,7 @@
 #include <arrow/api.h>
 #include <arrow/compute/api.h>
 #include <arrow/compute/api_scalar.h>
+#include <arrow/compute/initialize.h>
 namespace {
 using namespace lingodb::compiler;
 struct ArrowExpr : public support::eval::Expr {
@@ -21,7 +22,10 @@ std::unique_ptr<support::eval::expr> pack(arrow::compute::Expression expr) {
 namespace lingodb::compiler::support::eval {
 
 void init() {
-   arrow::compute::GetFunctionRegistry();
+   auto status = arrow::compute::Initialize();
+   if (!status.ok()) {
+      throw std::runtime_error("Failed to initialize Arrow compute: " + status.ToString());
+   }
 }
 std::optional<size_t> countResults(std::shared_ptr<arrow::RecordBatch> batch, std::unique_ptr<expr> filter) {
    if (!filter) return {};

@@ -26,7 +26,6 @@ jobs:
         with:
           path: ~/.ccache
           key: ccache-${{ matrix.build_type }}-build-macos-15
-
       - name: Cache Homebrew packages
         id: cache-brew
         uses: actions/cache@v4
@@ -41,15 +40,13 @@ jobs:
       - name: Install dependencies with Homebrew
         run: |
           brew update
-          brew install ccache cmake ninja llvm@20 catch2 lit bzip2 libffi libedit libxml2 brotli zlib
-          brew link --force ccache cmake ninja llvm@20 catch2 lit bzip2 libffi libedit libxml2 brotli zlib
-          brew tap lingo-db/homebrew https://github.com/lingo-db/homebrew.git
-          brew install lingo-db/homebrew/apache-arrow@20
+          brew install ccache cmake ninja llvm@20 catch2 lit bzip2 libffi libedit libxml2 brotli zlib apache-arrow boost
+          brew link --force ccache cmake ninja llvm@20 catch2 lit bzip2 libffi libedit libxml2 brotli zlib apache-arrow boost
 
       - name: Build
         env:
-          CXX: "ccache /opt/homebrew/opt/llvm/bin/clang++"
-          CC: "ccache /opt/homebrew/opt/llvm/bin/clang"
+          CXX: "ccache /opt/homebrew/opt/llvm@20/bin/clang++"
+          CC: "ccache /opt/homebrew/opt/llvm@20/bin/clang"
           CCACHE_DIR: "~/.ccache"
           CMAKE_PREFIX_PATH: "/opt/homebrew/"
         run: |
@@ -77,7 +74,11 @@ jobs:
         with:
           name: ${{ matrix.build_type }}-build-macos
           path: build/lingodb-${{ matrix.build_type }}
-
+      - name: Resolve Homebrew tap conflict (uninstall cmake & untap local/pinned if present)
+        shell: bash
+        run: |
+          brew uninstall cmake || true
+          brew untap local/pinned || true
       - name: Cache Homebrew packages
         id: cache-brew
         uses: actions/cache@v3

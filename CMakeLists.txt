@@ -34,8 +34,8 @@ include(FindZLIB)
 message("Using ZLIB: ${ZLIB_INCLUDE_DIRS}")
 message("Using Python3: ${Python3_EXECUTABLE}")
 
-find_package(Arrow 20 REQUIRED)
-
+find_package(Arrow 21 REQUIRED)
+find_package(ArrowCompute 21 REQUIRED)
 option(ENABLE_GPU_BACKEND "enable GPU backend" OFF)
 option(ENABLE_BASELINE_BACKEND "enable tpde baseline backend" OFF)
 option(ENABLE_TESTS "enable tests" ON)
