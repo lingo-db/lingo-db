@@ -5,7 +5,7 @@
 #include "lingodb/catalog/Types.h"
 #include "lingodb/utility/Serialization.h"
 
-#include <arrow/ipc/json_simple.h>
+#include <arrow/builder.h>
 #include <arrow/ipc/reader.h>
 #include <lingodb/catalog/Column.h>
 #include <lingodb/catalog/MetaData.h>

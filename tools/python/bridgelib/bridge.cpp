@@ -5,6 +5,7 @@
 #include "mlir/CAPI/IR.h"
 
 #include "lingodb/catalog/TableCatalogEntry.h"
+#include "lingodb/compiler/mlir-support/eval.h"
 #include "lingodb/runtime/RelationHelper.h"
 #include "lingodb/runtime/storage/TableStorage.h"
 #include <arrow/table.h>
@@ -35,6 +36,7 @@ class Connection {
 
    public:
    Connection(std::shared_ptr<runtime::Session> session) : session(session) {
+      lingodb::compiler::support::eval::init();
       scheduler = lingodb::scheduler::startScheduler();
    }
    runtime::Session& getSession() {

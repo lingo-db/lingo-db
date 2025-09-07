@@ -45,6 +45,7 @@ void printTable(const std::shared_ptr<arrow::Table>& table) {
    arrow::PrettyPrintOptions options;
    options.indent_size = 0;
    options.window = 100;
+   options.element_size_limit = 10000;
    std::cout << "|";
    std::string rowSep = "-";
    std::vector<bool> convertHex;

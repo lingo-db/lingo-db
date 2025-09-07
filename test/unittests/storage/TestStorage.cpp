@@ -15,7 +15,7 @@
 
 #include <filesystem>
 
-#include <arrow/ipc/json_simple.h>
+#include <arrow/builder.h>
 #include <arrow/ipc/reader.h>
 #include <arrow/table.h>
 
@@ -35,8 +35,19 @@ auto createIndexEntry() {
 }
 auto createTableData() {
    auto schema = arrow::schema({arrow::field("col1", arrow::int8()), arrow::field("col2", arrow::utf8())});
-   auto x = arrow::ipc::internal::json::ArrayFromJSON(arrow::int8(), "[1, 2]").ValueOrDie();
-   auto y = arrow::ipc::internal::json::ArrayFromJSON(arrow::utf8(), R"(["a", "b"])").ValueOrDie();
+
+   // Create int8 array [1, 2]
+   arrow::Int8Builder intBuilder;
+   REQUIRE(intBuilder.Append(1).ok());
+   REQUIRE(intBuilder.Append(2).ok());
+   auto x = intBuilder.Finish().ValueOrDie();
+
+   // Create string array ["a", "b"]
+   arrow::StringBuilder stringBuilder;
+   REQUIRE(stringBuilder.Append("a").ok());
+   REQUIRE(stringBuilder.Append("b").ok());
+   auto y = stringBuilder.Finish().ValueOrDie();
+
    return arrow::RecordBatch::Make(schema, 2, std::vector<std::shared_ptr<arrow::Array>>{x, y});
 }
 auto createTableDataAsTable() {

@@ -2,7 +2,7 @@
 #include "lingodb/catalog/Types.h"
 #include "lingodb/utility/Serialization.h"
 
-#include <arrow/ipc/json_simple.h>
+#include <arrow/builder.h>
 #include <arrow/ipc/reader.h>
 #include <lingodb/catalog/Column.h>
 #include <lingodb/catalog/MetaData.h>
@@ -46,8 +46,18 @@ TEST_CASE("MetaData:ColumnStatistics") {
 TEST_CASE("MetaData:Sample") {
    // First create a sample (arrow record batch) with 2 rows and 2 columns
    auto schema = arrow::schema({arrow::field("a", arrow::int32()), arrow::field("b", arrow::float64())});
-   auto x = arrow::ipc::internal::json::ArrayFromJSON(arrow::int32(), "[1, 2]").ValueOrDie();
-   auto y = arrow::ipc::internal::json::ArrayFromJSON(arrow::float64(), "[3.0, 4.0]").ValueOrDie();
+
+   // Create int32 array [1, 2]
+   arrow::Int32Builder intBuilder;
+   REQUIRE(intBuilder.Append(1).ok());
+   REQUIRE(intBuilder.Append(2).ok());
+   auto x = intBuilder.Finish().ValueOrDie();
+
+   // Create float64 array [3.0, 4.0]
+   arrow::DoubleBuilder doubleBuilder;
+   REQUIRE(doubleBuilder.Append(3.0).ok());
+   REQUIRE(doubleBuilder.Append(4.0).ok());
+   auto y = doubleBuilder.Finish().ValueOrDie();
    auto batch = arrow::RecordBatch::Make(schema, 2, std::vector<std::shared_ptr<arrow::Array>>{x, y});
    Sample sample(batch);
    SimpleByteWriter writer;
@@ -87,8 +97,18 @@ class MockTableMetaDataProvider : public TableMetaDataProvider {
 };
 TEST_CASE("MetaData:TableMetaDataProvider") {
    auto schema = arrow::schema({arrow::field("a", arrow::int32()), arrow::field("b", arrow::float64())});
-   auto x = arrow::ipc::internal::json::ArrayFromJSON(arrow::int32(), "[1, 2]").ValueOrDie();
-   auto y = arrow::ipc::internal::json::ArrayFromJSON(arrow::float64(), "[3.0, 4.0]").ValueOrDie();
+
+   // Create int32 array [1, 2]
+   arrow::Int32Builder intBuilder;
+   REQUIRE(intBuilder.Append(1).ok());
+   REQUIRE(intBuilder.Append(2).ok());
+   auto x = intBuilder.Finish().ValueOrDie();
+
+   // Create float64 array [3.0, 4.0]
+   arrow::DoubleBuilder doubleBuilder;
+   REQUIRE(doubleBuilder.Append(3.0).ok());
+   REQUIRE(doubleBuilder.Append(4.0).ok());
+   auto y = doubleBuilder.Finish().ValueOrDie();
    auto batch = arrow::RecordBatch::Make(schema, 2, std::vector<std::shared_ptr<arrow::Array>>{x, y});
    Sample sample(batch);
    size_t numRows = 2;
