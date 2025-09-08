@@ -57,7 +57,6 @@ std::vector<std::shared_ptr<ast::NamedResult>> SQLContext::mapAttribute(Resolver
       auto columnInfo = std::make_shared<ast::NamedResult>(uniqueScope, c);
 
       mapAttribute(scope, sqlScopeName + "." + std::string(c.getColumnName()), columnInfo);
-      //TODO use string_view instead
       mapAttribute(scope, std::string(c.getColumnName()), columnInfo);
       result.push_back(columnInfo);
    }
@@ -85,10 +84,8 @@ std::shared_ptr<ast::NamedResult> SQLContext::getNamedResultInfo(location loc, s
 }
 
 void SQLContext::replace(ResolverScope& scope, std::shared_ptr<ast::NamedResult> old, std::shared_ptr<ast::NamedResult> value) {
-   //TODO make faster
    std::vector<std::pair<std::string, std::shared_ptr<ast::NamedResult>>> toReplace;
    std::ranges::copy_if(definedAttributes.top(), std::back_inserter(toReplace), [&](auto& p) { return p.second == old; });
-
    for (auto& c: toReplace) {
       mapAttribute(scope, c.first, value);
    }
