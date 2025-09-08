@@ -47,11 +47,6 @@ std::string BoundConstantExpression::toDotGraph(uint32_t depth, NodeIdGenerator&
  * BoundTargetsExpression
 */
 BoundTargetsExpression::BoundTargetsExpression(std::string alias, std::vector<std::shared_ptr<BoundExpression>> targets, std::optional<std::vector<std::shared_ptr<BoundExpression>>> distinctExpressions, std::vector<std::shared_ptr<NamedResult>> targetColumns) : BoundExpression(TYPE, ExpressionType::BOUND_TARGETS, alias), targets(std::move(targets)), distinctExpressions(std::move(distinctExpressions)), targetColumns(std::move(targetColumns)) {
-   for (const auto& target : this->targets) {
-      if (target->type == ExpressionType::AGGREGATE && target->exprClass == ExpressionClass::FUNCTION) {
-         //TODO handle aggregation
-      }
-   }
 }
 std::string BoundTargetsExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    return "";
@@ -69,7 +64,7 @@ std::string BoundFunctionExpression::toDotGraph(uint32_t depth, NodeIdGenerator&
 /*
  * BoundStarExpression
 */
-BoundStarExpression::BoundStarExpression(std::string relationName, std::vector<std::pair<std::string, std::shared_ptr<NamedResult>>> namedResults) : BoundExpression(TYPE, ExpressionType::STAR, ""), relationName(relationName), namedResults(std::move(namedResults)) {
+BoundStarExpression::BoundStarExpression(std::string relationName, std::vector<std::shared_ptr<NamedResult>> namedResults) : BoundExpression(TYPE, ExpressionType::STAR, ""), relationName(relationName), namedResults(std::move(namedResults)) {
 }
 std::string BoundStarExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    return "";
