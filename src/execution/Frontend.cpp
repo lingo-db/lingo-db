@@ -170,6 +170,7 @@ class NewSQLFrontend : public lingodb::execution::Frontend {
          auto cShared = std::make_shared<lingodb::catalog::Catalog>(*catalog);
          lingodb::analyzer::SQLQueryAnalyzer sqlAnalyzer{cShared};
          auto sqlContext = std::make_shared<lingodb::analyzer::SQLContext>();
+         sqlContext->catalog = cShared;
          lingodb::analyzer::SQLQueryAnalyzer analyzer{cShared};
          drv.result[0] = analyzer.canonicalizeAndAnalyze(drv.result[0], sqlContext);
 
