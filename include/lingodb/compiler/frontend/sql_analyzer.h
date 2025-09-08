@@ -4,6 +4,7 @@
 #include "lingodb/compiler/frontend/ast/bound/bound_resultmodifier.h"
 #include "lingodb/compiler/frontend/ast/query_node.h"
 #include "lingodb/compiler/frontend/driver.h"
+#include "lingodb/compiler/frontend/frontend_error.h"
 #include "sql_context.h"
 #define DEBUG false
 
@@ -14,10 +15,10 @@
 namespace lingodb::analyzer {
 using ResolverScope = llvm::ScopedHashTable<std::string, std::shared_ptr<ast::NamedResult>, StringInfo>::ScopeTy;
 #define error(message, loc)                       \
-   {                                              \
+   {                                               \
       std::ostringstream s{};                     \
-      s << message << " at " << loc << std::endl; \
-      throw std::runtime_error(s.str());          \
+      s << message; \
+      throw frontend_error(s.str(), loc);          \
    }
 class StackGuard {
    public:
