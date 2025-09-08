@@ -484,10 +484,6 @@ select_no_parens:
         current->child = $select_clause;
         $$ = $with_clause;
     }
-    | values_clause
-    {
-        $$ = mkNode<lingodb::ast::ValuesQueryNode>(@$, $1);
-    }
     | with_clause select_clause opt_sort_clause  opt_select_limit
     {
         if ($opt_sort_clause.has_value()) {
@@ -634,6 +630,10 @@ simple_select:
         auto setOpNode = mkNode<lingodb::ast::SetOperationNode>(@$, lingodb::ast::SetOperationType::EXCEPT, $clause1, $clause2);
         setOpNode->setOpAll = $set_quantifier;
         $$ = setOpNode;
+    }
+    | values_clause
+    {
+        $$ = mkNode<lingodb::ast::ValuesQueryNode>(@$, $1);
     }
     ;
 //TODO Add missing rules
