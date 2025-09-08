@@ -955,7 +955,6 @@ std::shared_ptr<ast::BoundInsertNode> SQLQueryAnalyzer::analyzeInsertNode(std::s
       error("Table " << insertNode->tableName << " does not exist", insertNode->loc);
    }
    auto boundTableProducer = analyzeTableProducer(insertNode->producer, context, resolverScope);
-   //TODO Maybe add BoundTableProducer which has a produced columns and their type
    if (boundTableProducer->nodeType != ast::NodeType::QUERY_NODE || std::static_pointer_cast<ast::QueryNode>(boundTableProducer)->type != ast::QueryNodeType::BOUND_VALUES) {
       error("Table producer type for insert node not yet supported", boundTableProducer->loc);
    }
