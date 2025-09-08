@@ -15,6 +15,7 @@
 #include "lingodb/compiler/frontend/ast/bound/bound_tableref.h"
 #include "lingodb/compiler/frontend/ast/create_node.h"
 #include "lingodb/compiler/frontend/ast/insert_node.h"
+#include "lingodb/compiler/frontend/ast/set_node.h"
 #include "lingodb/compiler/old-frontend/SQL/Parser.h"
 
 #include "lingodb/utility/Serialization.h"
@@ -54,6 +55,11 @@ std::optional<mlir::Value> SQLMlirTranslator::translateStart(mlir::OpBuilder& bu
          case ast::NodeType::BOUND_INSERT_NODE: {
             auto insertNode = std::static_pointer_cast<ast::BoundInsertNode>(astNode);
             translateInsertNode(builder, insertNode, context);
+            return std::nullopt;
+         }
+         case ast::NodeType::SET_NODE: {
+            auto setNode = std::static_pointer_cast<ast::SetNode>(astNode);
+            translateSetNode(builder, setNode, context);
             return std::nullopt;
          }
          default: error("Invalid root node type", astNode->loc);
@@ -266,6 +272,28 @@ void SQLMlirTranslator::translateInsertNode(mlir::OpBuilder& builder, std::share
 
    compiler::runtime::RelationHelper::appendTableFromResult(builder, location)(mlir::ValueRange{tableNameValue, resultIdValue});
    compiler::runtime::ExecutionContext::clearResult(builder, location)({resultIdValue});
+}
+
+void SQLMlirTranslator::translateSetNode(mlir::OpBuilder& builder, std::shared_ptr<ast::SetNode> insertNode, std::shared_ptr<analyzer::SQLContext> context) {
+   auto location = getLocationFromBison(insertNode->loc, builder.getContext());
+   switch (insertNode->setType) {
+      case ast::SetType::SET: {
+         auto setVariableOperation = std::static_pointer_cast<ast::SetVariableStatement>(insertNode);
+         if (setVariableOperation->name == "persist") {
+            assert(setVariableOperation->values.size() == 1 && setVariableOperation->values[0]->nodeType == ast::NodeType::EXPRESSION && std::static_pointer_cast<ast::ParsedExpression>(setVariableOperation->values[0])->exprClass == ast::ExpressionClass::CONSTANT);
+            auto constant = std::static_pointer_cast<ast::ConstantExpression>(setVariableOperation->values[0]);
+            if (constant->value->type != ast::ConstantType::INT) {
+               error("Persist value must be an integer", setVariableOperation->loc);
+            }
+            auto iValue= std::static_pointer_cast<ast::IntValue>(constant->value);
+            auto persistValue = builder.create<mlir::arith::ConstantIntOp>(location, iValue->iVal, 1);
+            compiler::runtime::RelationHelper::setPersist(builder, location)({persistValue});
+
+         }
+         break;
+      }
+      default: error("Not implemented", insertNode->loc);
+   }
 }
 
 catalog::CreateTableDef SQLMlirTranslator::translateTableElements(mlir::OpBuilder& builder, std::vector<std::shared_ptr<ast::TableElement>> tableElements, std::shared_ptr<analyzer::SQLContext> context) {

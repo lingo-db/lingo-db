@@ -38,6 +38,7 @@ add_library(sql-frontend-new
         ast/constraint.cpp
         ast/insert_node.cpp
         ast/query_node.cpp
+        ast/set_node.cpp
 #common
         frontend_error.cpp
 
