@@ -736,7 +736,14 @@ std::shared_ptr<ast::AstNode> SQLQueryAnalyzer::canonicalizeAndAnalyze(std::shar
             this->totalTime = std::chrono::duration_cast<std::chrono::microseconds>(endCanonicalizeAndAnalyze - startCanonicalizeAndAnalyze).count() / 1000.0;
             return i;
          }
-         default: throw std::runtime_error("Invalid root node type");
+         case ast::NodeType::SET_NODE: {
+            auto setNode = std::static_pointer_cast<ast::SetNode>(astRootNode);
+            auto scope = context->createResolverScope();
+            setNode = analyzeSetNode(setNode, context, scope);
+
+            return setNode;
+         }
+         default: error("Invalid root node type", astRootNode->loc);
       }
 
    } else {
@@ -972,6 +979,26 @@ std::shared_ptr<ast::BoundInsertNode> SQLQueryAnalyzer::analyzeInsertNode(std::s
 
    return drv.nf.node<ast::BoundInsertNode>(insertNode->loc, insertNode->schema, insertNode->tableName, exprListTableRef, insertNode->columns, allCollumnTypes);
 }
+std::shared_ptr<ast::SetNode> SQLQueryAnalyzer::analyzeSetNode(std::shared_ptr<ast::SetNode> setNode, std::shared_ptr<SQLContext> context, SQLContext::ResolverScope& resolverScope) {
+   switch (setNode->setType) {
+      case ast::SetType::SET: {
+         auto setVariableOperation = std::static_pointer_cast<ast::SetVariableStatement>(setNode);
+         if (setVariableOperation->values.size() != 1) {
+            error("Only one value is supported for SET (for now)", setVariableOperation->loc);
+         }
+         if (setVariableOperation->values[0]->nodeType != ast::NodeType::EXPRESSION && std::static_pointer_cast<ast::ParsedExpression>(setVariableOperation->values[0])->exprClass != ast::ExpressionClass::CONSTANT) {
+            error("Only constant expressions are supported for SET (for now)", setVariableOperation->loc);
+         }
+         return setVariableOperation;
+      }
+      case ast::SetType::RESET: {
+         error("Reset not yet supported", setNode->loc);
+      }
+      default:error("Set type not supported", setNode->loc);
+   }
+
+}
+
 std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::shared_ptr<ast::PipeOperator> pipeOperator, std::shared_ptr<SQLContext>& context, ResolverScope& resolverScope) {
    std::shared_ptr<ast::AstNode> boundAstNode = pipeOperator->node;
    switch (pipeOperator->pipeOpType) {
