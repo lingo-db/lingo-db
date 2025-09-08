@@ -1589,6 +1589,8 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableRef(std::share
 
                {
                   auto rightContext = std::make_shared<SQLContext>();
+                  //TODO find better way to share scope unifier
+                  rightContext->scopeUnifier = context->scopeUnifier;
                   //Create new context
                   rightContext->pushNewScope();
                   rightContext->ctes = context->ctes;
@@ -1597,10 +1599,13 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableRef(std::share
                   rightScope = rightContext->currentScope;
                   auto localMapping = rightContext->getTopDefinedColumns();
                   mapping.insert(mapping.end(), localMapping.begin(), localMapping.end());
+                  context->scopeUnifier = rightContext->scopeUnifier;
                }
 
                {
                   auto leftContext = std::make_shared<SQLContext>();
+                  //TODO find better way to share scope unifier
+                  leftContext->scopeUnifier = context->scopeUnifier;
                   //Create new context
                   leftContext->pushNewScope();
                   leftContext->ctes = context->ctes;
@@ -1609,6 +1614,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableRef(std::share
                   leftScope = leftContext->currentScope;
                   auto localMapping = leftContext->getTopDefinedColumns();
                   mapping.insert(mapping.end(), localMapping.begin(), localMapping.end());
+                  context->scopeUnifier = leftContext->scopeUnifier;
                }
 
                std::shared_ptr<ast::BoundExpression> boundCondition;
