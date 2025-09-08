@@ -892,11 +892,9 @@ std::shared_ptr<ast::CreateNode> SQLQueryAnalyzer::analyzeCreateNode(std::shared
    switch (createNode->createInfo->type) {
       case ast::CatalogType::TABLE_ENTRY: {
          auto createTableInfo = std::static_pointer_cast<ast::CreateTableInfo>(createNode->createInfo);
-         //TODO check
          if (catalog->getEntry(createTableInfo->tableName).has_value()) {
             error("Table " + createTableInfo->tableName + " already exists", createNode->loc);
          }
-
          std::vector<std::shared_ptr<ast::TableElement>> boundTableElements{};
          for (auto& tableElement : createTableInfo->tableElements) {
             switch (tableElement->type) {
@@ -909,7 +907,6 @@ std::shared_ptr<ast::CreateNode> SQLQueryAnalyzer::analyzeCreateNode(std::shared
                   catalog::NullableType nullableType = SQLTypeUtils::typemodsToCatalogType(columnElement->logicalTypeWithMods.logicalType, columnElement->logicalTypeWithMods.typeModifiers);
                   nullableType.isNullable = true;
                   bool primary = false;
-                  //TODO constraints
                   for (auto& constraint : columnElement->constraints) {
                      switch (constraint->type) {
                         case ast::ConstraintType::NOT_NULL: {
@@ -941,8 +938,6 @@ std::shared_ptr<ast::CreateNode> SQLQueryAnalyzer::analyzeCreateNode(std::shared
          }
 
          createTableInfo->tableElements = std::move(boundTableElements);
-
-         //TODO check for catalog and shema
          return createNode;
       }
       default: error("Not implemented", createNode->loc);
@@ -1015,8 +1010,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                   std::vector<catalog::Catalog> catalogs;
                   std::string scope;
                   std::vector<catalog::Column> columns;
-                  //TODO implement x.*
-                  for (auto [scope, namedResult] : star->namedResults) {
+                  for (auto& namedResult : star->namedResults) {
                      targetColumns.emplace_back(namedResult);
                      context->currentScope->targetInfo.add(namedResult);
                   }
@@ -1031,7 +1025,6 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
          break;
       }
       case ast::PipeOperatorType::WHERE: {
-         //TODO check if correct
          auto whereResolverScope = context->createResolverScope();
          auto whereClause = std::static_pointer_cast<ast::ParsedExpression>(pipeOperator->node);
          boundAstNode = analyzeExpression(whereClause, context, whereResolverScope);
@@ -1201,7 +1194,6 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
 
 
             }
-            //TODO better!
             for (size_t i = 0; i < boundAggrNode->groupByNode->groupNamedResults.size(); i++) {
                auto old = boundAggrNode->groupByNode->groupNamedResults[i];
                auto newN = boundAggrNode->groupByNode->unionNamedResults.back().at(i);
@@ -1250,30 +1242,26 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
       }
 
       case ast::PipeOperatorType::EXTEND: {
-         //TODO cleanup
          assert(pipeOperator->node->nodeType == ast::NodeType::EXTEND_NODE);
          auto extendNode = std::static_pointer_cast<ast::ExtendNode>(pipeOperator->node);
          std::vector<std::shared_ptr<ast::BoundExpression>> boundExtensions;
 
          std::ranges::transform(extendNode->extensions, std::back_inserter(boundExtensions), [&](auto& expr) {
             auto boundExpression = analyzeExpression(expr, context, resolverScope);
-
             return boundExpression;
          });
          auto mapName = context->getUniqueScope("map");
-         //TODO Find cleaner solution
+         //TODO: Refactor to unify storage of window expressions and other extensions, avoiding separate handling.
          std::vector<std::shared_ptr<ast::BoundExpression>> boundExpressions;
          std::vector<std::shared_ptr<ast::BoundWindowExpression>> boundWindowExpressions;
 
          for (auto& parsedExpression: boundExtensions) {
-            //TODO very similar to the logic in Select. Maybe combine both
             switch (parsedExpression->exprClass) {
                case ast::ExpressionClass::BOUND_STAR:
                case ast::ExpressionClass::BOUND_COLUMN_REF: {
                   assert(parsedExpression->namedResult.has_value());
                   context->mapAttribute(resolverScope, parsedExpression->namedResult.value()->displayName, parsedExpression->namedResult.value());
                   if (extendNode->hidden) {
-                     //TODO better
                      context->definedAttributes.top().pop_back();
                   } else {
                      context->currentScope->targetInfo.add(parsedExpression->namedResult.value());
@@ -1285,12 +1273,9 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                   assert(parsedExpression->resultType.has_value() && parsedExpression->namedResult.has_value());
                   auto function = std::static_pointer_cast<ast::BoundFunctionExpression>(parsedExpression);
 
-
-
                   auto fName = function->alias.empty() ? function->functionName : function->alias;
                   context->mapAttribute(resolverScope, fName, function->namedResult.value());
                   if (extendNode->hidden) {
-                     //TODO better
                      context->definedAttributes.top().pop_back();
                   } else {
                      context->currentScope->targetInfo.add(parsedExpression->namedResult.value());
@@ -1308,7 +1293,6 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                   auto fName = window->alias;
                   context->mapAttribute(resolverScope, fName, window->namedResult.value());
                   if (extendNode->hidden) {
-                     //TODO better
                      context->definedAttributes.top().pop_back();
                   } else {
                      context->currentScope->targetInfo.add(parsedExpression->namedResult.value());
@@ -1916,13 +1900,19 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
          std::string relationName = star->relationName;
          std::vector<std::pair<std::string, catalog::Column>> columns{};
          auto topDefinedColumnsAll = context->getTopDefinedColumns();
-         std::vector<std::pair<std::string, std::shared_ptr<ast::NamedResult>>> topDefinedColumnsWithoutDuplicates;
-         //TODO find better solution!
-         for (auto [scope, namedResult] : topDefinedColumnsAll) {
-            if (std::find_if(topDefinedColumnsWithoutDuplicates.begin(), topDefinedColumnsWithoutDuplicates.end(), [&](std::pair<std::string, std::shared_ptr<ast::NamedResult>> p) {
-                   return p.second->name == namedResult->name && namedResult->scope == p.second->scope;
+         std::vector<std::shared_ptr<ast::NamedResult>> topDefinedColumnsWithoutDuplicates;
+
+         /**
+          * TODO: Find a more elegant solution to this problem
+          * Why is this elimination of duplactes needed:
+          * The context stores each column (of a table) in definedAttributes with two keys: columnName and tableName.columnName
+          * Therefore you must elimniate these duplactes for statements like Select * ....
+          */
+         for (auto& [scope, namedResult] : topDefinedColumnsAll) {
+            if (std::find_if(topDefinedColumnsWithoutDuplicates.begin(), topDefinedColumnsWithoutDuplicates.end(), [&](std::shared_ptr<ast::NamedResult> p) {
+                   return p->name == namedResult->name && namedResult->scope == p->scope;
                 }) == topDefinedColumnsWithoutDuplicates.end()) {
-               topDefinedColumnsWithoutDuplicates.emplace_back(std::pair{scope, namedResult});
+               topDefinedColumnsWithoutDuplicates.emplace_back(namedResult);
             }
          }
 
@@ -2015,7 +2005,6 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
             }
             return c;
          });
-         //TODO handle types for different operations better
          catalog::NullableType resultType = SQLTypeUtils::getCommonBaseType(castValues, operatorExpr->type);
          switch (operatorExpr->type) {
             case ast::ExpressionType::OPERATOR_IS_NOT_NULL:
@@ -2108,7 +2097,6 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
                boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, boundArguments);
             }
             if (function->functionName == "RANK" || function->functionName == "ROW_NUMBER") {
-               //TODO check if is inside window function
                if (!function->arguments.empty()) {
                   error("RANK and ROW_NUMBER do not support any arguments", function->loc);
                }
@@ -2232,6 +2220,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
             //TODO wrong resulttype
             resultType = catalog::Type::int64();
 
+
             boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, std::vector{arg1, arg2});
 
          } else if (function->functionName == "SUBSTRING" || function->functionName == "SUBSTR") {
@@ -2289,7 +2278,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
                error("Function with more than one argument not supported", function->loc);
             }
             auto arg1 = analyzeExpression(function->arguments[0], context, resolverScope);
-            //TODO check for string
+
             if (!arg1->resultType.has_value() || ( arg1->resultType.value().type.getTypeId() != catalog::LogicalTypeId::STRING && arg1->resultType.value().type.getTypeId() != catalog::LogicalTypeId::CHAR)) {
                error("Argument of aggregation function has not a valid return type", arg1->loc);
             }

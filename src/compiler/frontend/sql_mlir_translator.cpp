@@ -442,7 +442,6 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
             case ast::ConstantType::FLOAT: {
                auto value = std::static_pointer_cast<ast::FloatValue>(constExpr->value);
                assert(constExpr->resultType.has_value());
-               //TODO support only decimal, without the need for string, see old parser
                return builder.create<db::ConstantOp>(exprLocation, constExpr->resultType.value().type.getMLIRTypeCreator()->createType(mlirContext), builder.getStringAttr(value->fVal));
             }
             case ast::ConstantType::NULL_P: {
@@ -514,9 +513,6 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
                break;
             default: throw std::runtime_error("not implemented");
          }
-         //TODO replace
-         //TODO discuss: move cast into analyzer
-         //std::vector ct = {comparisonExpr->comparisonType.castValueToThisType(builder,left, comparisonExpr->left->resultType->isNullable), comparisonExpr->comparisonType.castValueToThisType(builder,right, comparisonExpr->rightChildren[0]->resultType->isNullable)};
 
          return builder.create<db::CmpOp>(exprLocation, pred, ctLeft, ctRight);
       }
@@ -637,7 +633,8 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
          if (function->functionName == "ABS") {
             auto val = translateExpression(builder, function->arguments[0], context);
             //TODO move type logic to analyzer
-            return builder.create<db::RuntimeCall>(exprLocation, val.getType(), mlir::isa<db::DecimalType>(getBaseType(val.getType())) ? "AbsDecimal" : "AbsInt", val).getRes();
+            std::string typeString = function->arguments[0]->resultType.value().type.getTypeId() == catalog::LogicalTypeId::DECIMAL ? "AbsDecimal" : "AbsInt";
+            return builder.create<db::RuntimeCall>(exprLocation, val.getType(), typeString, val).getRes();
          }
          if (function->functionName == "COALESCE") {
             return translateCoalesceExpression(builder,function->resultType.value(), function->arguments, context);
@@ -656,7 +653,7 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
          if (function->functionName  == "DATE_TRUNC") {
             auto part = translateExpression(builder, function->arguments[0], context);
             auto arg2 = translateExpression(builder, function->arguments[1], context);
-            return builder.create<db::RuntimeCall>(exprLocation, wrapNullableType(mlirContext, builder.getI64Type(), {part, arg2}), "DateTrunc", mlir::ValueRange({part, arg2})).getRes();
+            return  builder.create<db::RuntimeCall>(exprLocation, wrapNullableType(mlirContext, builder.getI64Type(), {part, arg2}), "DateTrunc", mlir::ValueRange({part, arg2})).getRes();
          }
          error("Function '" << function->functionName << "' not implemented", expression->loc);
       }
@@ -701,7 +698,7 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
                auto mlirType = subquery->namedResult.value()->resultType.toMlirType(mlirContext);
                assert(subquery->namedResultForSubquery);
                mlir::Value colVal = predBuilder.create<tuples::GetColumnOp>(exprLocation, mlirType, subquery->namedResultForSubquery->createRef(builder, attrManager), block->getArgument(0));
-               //TODO remove
+
                auto ctCol = subquery->namedResult.value()->resultType.castValue(builder, colVal);
                auto ctExpr = subquery->testExpr->resultType->castValue(builder, expr);
 
@@ -775,7 +772,6 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
                auto mlirType = subquery->namedResult.value()->resultType.toMlirType(mlirContext);
                assert(subquery->namedResultForSubquery);
                mlir::Value colVal = predBuilder.create<tuples::GetColumnOp>(exprLocation, mlirType, subquery->namedResultForSubquery->createRef(builder, attrManager), block->getArgument(0));
-               //TODO remove
                auto ctCol = subquery->namedResult.value()->resultType.castValue(builder, colVal);
                auto ctExpr = subquery->testExpr->resultType->castValue(builder, expr);
 
@@ -844,7 +840,6 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
       }
       case ast::ExpressionClass::BOUND_CASE: {
          auto boundCase = std::static_pointer_cast<ast::BoundCaseExpression>(expression);
-         //TODO translate arg
          std::optional<mlir::Value> caseExprTranslated = std::nullopt;
          if (boundCase->caseExpr.has_value()) {
             caseExprTranslated = translateExpression(builder, boundCase->caseExpr.value(), context);
@@ -1099,7 +1094,6 @@ mlir::Value SQLMlirTranslator::translateTableRef(mlir::OpBuilder& builder, std::
 
                pred = translatePredicate(builder, std::get<std::shared_ptr<ast::BoundExpression>>(boundJoin->condition), context);
 
-               //TODO translate predicate
                auto joinOp = builder.create<relalg::InnerJoinOp>(location, tuples::TupleStreamType::get(mlirContext), left, right);
                joinOp.getPredicate().push_back(pred);
 
@@ -1258,7 +1252,7 @@ mlir::Value SQLMlirTranslator::translateSetOperation(mlir::OpBuilder& builder, s
       auto leftResult = boundSetOp->leftScope->targetInfo.targetColumns[i];
       auto rightResult = boundSetOp->rightScope->targetInfo.targetColumns[i];
       auto commonType = context->currentScope->targetInfo.targetColumns[i]->resultType;
-      //TODO move logic to analyzer
+      //TODO maybe move this logic into analyzer (could be tricky)
       if (rightResult->resultType != commonType) {
          auto attrDef = attrManager.createDef(rightMapScope, std::string("set_op") + std::to_string(i));
          auto attrRef = rightResult->createRef(builder, attrManager);
@@ -1271,7 +1265,7 @@ mlir::Value SQLMlirTranslator::translateSetOperation(mlir::OpBuilder& builder, s
          rightResult->scope = rightMapScope;
          rightResult->name = "set_op" + std::to_string(i);
       }
-      //TODO move logic to analyzer
+      //TODO maybe move this logic into analyzer (could be tricky)
       if (leftResult->resultType != commonType) {
          auto attrDef = attrManager.createDef(leftMapScope, std::string("set_op") + std::to_string(i));
          auto attrRef = leftResult->createRef(builder, attrManager);
@@ -1442,9 +1436,6 @@ mlir::Value SQLMlirTranslator::translateGroupByAttributesAndAggregate(mlir::OpBu
 mlir::Value SQLMlirTranslator::translateAggregation(mlir::OpBuilder& builder, std::shared_ptr<ast::BoundAggregationNode> aggregation, std::shared_ptr<analyzer::SQLContext> context, mlir::Value tree) {
    auto *mlirContext = builder.getContext();
    auto location = getLocationFromBison(aggregation->loc, mlirContext);
-   /*
-   * TODO: refine location
-   */
    auto mapToNullable = [this, &location, &mlirContext](mlir::OpBuilder& builder, std::vector<std::shared_ptr<ast::NamedResult>> toMap, std::vector<std::shared_ptr<ast::NamedResult>> mapTo, mlir::Value tree) {
       if (toMap.empty()) return tree;
       auto* block = new mlir::Block;
@@ -1670,8 +1661,8 @@ mlir::Value SQLMlirTranslator::createMap(mlir::OpBuilder& builder, mlir::Locatio
    for (auto p : toMap) {
       mlir::Value expr = translateExpression(mapBuilder, p, context);
       assert(p->namedResult.has_value());
-      //TODO maybe possible to move this kind of login to analyzer?
-      p->namedResult.value()->scope = mapName;
+      //TODO: Evaluate if setting the scope here is necessary. All current tests pass without it
+      //p->namedResult.value()->scope = mapName;
       auto attrDef = p->namedResult.value()->createDef(builder, attrManager);
 
       attrDef.getColumn().type = expr.getType();
