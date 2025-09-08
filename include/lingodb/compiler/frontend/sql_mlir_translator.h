@@ -7,6 +7,7 @@
 #include "lingodb/compiler/frontend/ast/bound/bound_resultmodifier.h"
 #include "lingodb/compiler/frontend/ast/bound/bound_tableref.h"
 #include "lingodb/compiler/frontend/ast/parsed_expression.h"
+#include "lingodb/compiler/frontend/frontend_error.h"
 #include "lingodb/compiler/frontend/sql_context.h"
 #include "lingodb/compiler/frontend/translation_context.h"
 
@@ -23,8 +24,8 @@ namespace lingodb::translator {
 #define error(message, loc)                                         \
    {                                                                \
       std::ostringstream s{};                                       \
-      s << "Translator: " << message << " at " << loc << std::endl; \
-      throw std::runtime_error(s.str());                            \
+      s << message; \
+      throw frontend_error(s.str(), loc);                            \
    }
 class SQLMlirTranslator {
    public:
