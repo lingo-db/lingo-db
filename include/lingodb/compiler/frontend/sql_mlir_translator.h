@@ -7,6 +7,7 @@
 #include "lingodb/compiler/frontend/ast/bound/bound_resultmodifier.h"
 #include "lingodb/compiler/frontend/ast/bound/bound_tableref.h"
 #include "lingodb/compiler/frontend/ast/parsed_expression.h"
+#include "lingodb/compiler/frontend/ast/set_node.h"
 #include "lingodb/compiler/frontend/frontend_error.h"
 #include "lingodb/compiler/frontend/sql_context.h"
 #include "lingodb/compiler/frontend/translation_context.h"
@@ -47,6 +48,7 @@ class SQLMlirTranslator {
 
    void translateCreateNode(mlir::OpBuilder& builder, std::shared_ptr<ast::CreateNode> createNode, std::shared_ptr<analyzer::SQLContext> context);
    void translateInsertNode(mlir::OpBuilder& builder, std::shared_ptr<ast::BoundInsertNode> insertNode, std::shared_ptr<analyzer::SQLContext> context);
+   void translateSetNode(mlir::OpBuilder& builder, std::shared_ptr<ast::SetNode> insertNode, std::shared_ptr<analyzer::SQLContext> context);
    catalog::CreateTableDef translateTableElements(mlir::OpBuilder& builder, std::vector<std::shared_ptr<ast::TableElement>> tableElements, std::shared_ptr<analyzer::SQLContext> context);
 
    mlir::Value translatePipeOperator(mlir::OpBuilder& builder, std::shared_ptr<ast::PipeOperator> pipeOperator, std::shared_ptr<analyzer::SQLContext> context, mlir::Value tree);
