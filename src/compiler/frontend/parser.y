@@ -27,6 +27,7 @@
   #include "lingodb/compiler/frontend/ast/constant_value.h"
   #include "lingodb/compiler/frontend/ast/constraint.h"
   #include "lingodb/compiler/frontend/ast/extend_node.h"
+  #include "lingodb/compiler/frontend/ast/set_node.h"
   class driver;
 }
 
@@ -58,6 +59,7 @@
 %token <int> ICONST
 %token <uint64_t>	    INTEGER_VALUE	"integer_value"
 %token <std::string>	FCONST
+%token <std::string>     IDENT
 %token <std::string>	IDENTIFIER	"identifier"
 %token <std::string>	STRING_VALUE
 %token <std::string>	BIT_VALUE	"bit_string"
@@ -264,12 +266,13 @@
 
 %type<std::string>  ColId ColLabel BareColLabel attr_name
                     qualified_name relation_expr
-                    name type_function_name func_name col_name_keyword unreserved_keyword reserved_keyword all_Op qual_Op MathOp subquery_op any_operator
+                    name type_function_name func_name col_name_keyword unreserved_keyword reserved_keyword all_Op qual_Op MathOp subquery_op any_operator NonReservedWord type_func_name_keyword
 %type<std::pair<std::string, std::vector<std::string>>> alias_clause opt_alias_clause
 
 %type<std::vector<std::string>> name_list opt_name_list qualified_name_list
 
-%type<std::shared_ptr<lingodb::ast::ParsedExpression>> Iconst SignedIconst AexprConst  Sconst Bconst Fconst
+%type<std::shared_ptr<lingodb::ast::ParsedExpression>> Iconst SignedIconst AexprConst Sconst Bconst Fconst NumericOnly NonReservedWord_or_Sconst opt_boolean_or_string var_value
+%type<std::vector<std::shared_ptr<lingodb::ast::ParsedExpression>>> var_list
 
 %type<std::shared_ptr<lingodb::ast::GroupByNode>> group_clause group_clause_with_alias
 
@@ -330,7 +333,8 @@
 //%token <int> NUMBER "number"
 //%nterm <int> exp
 
-
+%type<std::shared_ptr<ast::SetVariableStatement>> VariableSetStmt set_rest set_rest_more generic_set
+%type<std::string> var_name
 
 /* Precedence: lowest to highest */
 %left		UNION EXCEPT
@@ -423,6 +427,7 @@ stmt:
  | CreateStmt {$$=$1;}
  | InsertStmt {$$=$1;}
  | PipeSQLStmt {$$=$1;}
+ | VariableSetStmt {$$=$1;}
  ;
 
  SelectStmt:
@@ -551,7 +556,114 @@ PreparableStmt:
     {
         $$ = $1;
     }
+    ;
+VariableSetStmt: 
+    SET set_rest
+    {
+        $$ = $set_rest;
+    }
+    | SET LOCAL set_rest
+    | SET SESSION set_rest
+    ;
+//TODO missing rules
+set_rest:
+    set_rest_more
+    {
+        $$ = $1;
+    }
+    ;
+generic_set:
+    var_name TO var_list
+    {
+       $$ = mkNode<lingodb::ast::SetVariableStatement>(@$, $var_name, $var_list);
+    }
+    | var_name EQUAL var_list
+    {
+         $$ = mkNode<lingodb::ast::SetVariableStatement>(@$, $var_name, $var_list);
+    }
+    ;
+//TODO add missing rules
+set_rest_more:
+    generic_set 
+    {
+        $$ =$1;
+    }
+    ;
 
+var_name:
+    ColId
+    {
+        $$ = $1;
+    }
+    | var_name[name] DOT ColId
+    {
+        $$ = $name + "." + $ColId;
+    }
+    ;
+var_list:
+    var_value
+    {
+        auto list = mkListShared<lingodb::ast::ParsedExpression>();
+        list.emplace_back($var_value);
+        $$ = list;
+    }
+    | var_list[list] COMMA var_value
+    {
+        $list.emplace_back($var_value);
+        $$ = $list;
+    }
+    ;
+var_value:
+    opt_boolean_or_string
+    {
+        $$ = $1;
+    }
+    | NumericOnly 
+    {
+        $$ = $1;
+    }
+    ;
+opt_boolean_or_string:
+    TRUE_P
+    {
+        auto t = mkNode<lingodb::ast::ConstantExpression>(@$);
+        t->value=std::make_shared<lingodb::ast::BoolValue>(true);
+        $$=t;
+    }
+    | FALSE_P
+    {
+        auto t = mkNode<lingodb::ast::ConstantExpression>(@$);
+        t->value=std::make_shared<lingodb::ast::BoolValue>(false);
+        $$=t;
+    }
+    | ON 
+    {
+        auto t = mkNode<lingodb::ast::ConstantExpression>(@$);
+        t->value=std::make_shared<lingodb::ast::StringValue>("on");
+        $$=t;
+    }
+    | NonReservedWord_or_Sconst
+    {
+        $$ = $1;
+    }
+    ;
+NonReservedWord_or_Sconst:
+	NonReservedWord
+    { 
+        auto t = mkNode<lingodb::ast::ConstantExpression>(@$);
+        t->value=std::make_shared<lingodb::ast::StringValue>($1);
+        $$=t;
+    }
+	| Sconst    
+    { 
+        $$ = $1; 
+    }
+    ;
+NonReservedWord:	
+IDENT							{ $$ = $1; }
+			| unreserved_keyword					{ $$ = $1; }
+			| col_name_keyword						{ $$ = $1; }
+			| type_func_name_keyword				{ $$ = $1; }
 
 /*
  * This rule parses SELECT statements that can appear within set operations,
@@ -2893,6 +3005,10 @@ ConstTypename:
     | ConstDatetime {$$ = $1;}
     ;
 
+NumericOnly:
+    Fconst {$$ = $1;}
+    | SignedIconst {$$ = $SignedIconst;}
+    ;
 
 Numeric:
     INT_P
