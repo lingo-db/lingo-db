@@ -233,7 +233,7 @@ boolean [fF][aA][lL][sS][eE]
 
 [pP][aA][rR][tT][iI][tT][iI][oO][nN]  { MAKE_KEYWORD(PARTITION); }
 [pP][rR][eE][cC][eE][dD][iI][nN][gG]  { MAKE_KEYWORD(PRECEDING); }
-[pP][rR][iI][mM][aR][yY]              { MAKE_KEYWORD(PRIMARY); }
+[pP][rR][iI][mM][aA][rR][yY]          { MAKE_KEYWORD(PRIMARY); }
 
 [rR][iI][gG][hH][tT]                  { MAKE_KEYWORD(RIGHT); }
 [rR][oO][lL][lL][uU][pP]              { MAKE_KEYWORD(ROLLUP); }
