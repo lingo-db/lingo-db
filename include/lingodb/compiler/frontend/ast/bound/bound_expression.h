@@ -110,10 +110,10 @@ class BoundFunctionExpression : public BoundExpression {
 class BoundStarExpression : public BoundExpression {
    public:
    static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_STAR;
-   explicit BoundStarExpression(std::string relationName, std::vector<std::pair<std::string, std::shared_ptr<NamedResult>>> namedResults);
+   explicit BoundStarExpression(std::string relationName, std::vector<std::shared_ptr<NamedResult>> namedResults);
 
    std::string relationName;
-   std::vector<std::pair<std::string, std::shared_ptr<NamedResult>>> namedResults{};
+   std::vector<std::shared_ptr<NamedResult>> namedResults{};
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
