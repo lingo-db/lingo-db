@@ -63,10 +63,10 @@ class SQLMlirTranslator {
 
    mlir::Value translateSetOperation(mlir::OpBuilder& builder, std::shared_ptr<ast::BoundSetOperationNode> boundSetOp, std::shared_ptr<analyzer::SQLContext> context);
    mlir::Value translateAggregationFunction(mlir::OpBuilder& builder, std::string mapName, std::vector<mlir::Attribute> groupByAttrs, mlir::Value relation, mlir::OpBuilder functionBuilder, std::shared_ptr<ast::BoundFunctionExpression> aggrFunction, mlir::Value& expr, compiler::dialect::tuples::ColumnDefAttr& attrDef);
-   mlir::Value translateGroupByAttributesAndAggregate(mlir::OpBuilder& builder, mlir::Value tree, std::vector<std::shared_ptr<ast::NamedResult>> groupNamedResults, std::vector<std::shared_ptr<ast::BoundFunctionExpression>> aggregations, std::string mapName);
+   mlir::Value translateGroupByAttributesAndAggregate(mlir::OpBuilder& builder, mlir::Value tree, mlir::Location loc, std::vector<std::shared_ptr<ast::NamedResult>> groupNamedResults, std::vector<std::shared_ptr<ast::BoundFunctionExpression>> aggregations, std::string mapName);
 
    mlir::Value translateAggregation(mlir::OpBuilder& builder, std::shared_ptr<ast::BoundAggregationNode> aggregation, std::shared_ptr<analyzer::SQLContext> context, mlir::Value tree);
-   mlir::Value createMap(mlir::OpBuilder& builder, std::string mapName, std::vector<std::shared_ptr<ast::BoundExpression>> toMap, std::shared_ptr<analyzer::SQLContext> context, mlir::Value tree);
+   mlir::Value createMap(mlir::OpBuilder& builder, mlir::Location loc, std::string mapName, std::vector<std::shared_ptr<ast::BoundExpression>> toMap, std::shared_ptr<analyzer::SQLContext> context, mlir::Value tree);
 
    /*
     * Utility
