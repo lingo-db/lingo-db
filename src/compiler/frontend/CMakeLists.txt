@@ -38,6 +38,8 @@ add_library(sql-frontend-new
         ast/constraint.cpp
         ast/insert_node.cpp
         ast/query_node.cpp
+#common
+        frontend_error.cpp
 
         ${BISON_parser_OUTPUTS}
         ${FLEX_lexer_OUTPUTS}
