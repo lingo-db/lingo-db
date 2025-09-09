@@ -96,14 +96,13 @@
 %}
 
 
-space				[ \t\n\r\f\v]
-non_newline_space	[ \t\f\v]
+space				[ \t\n\r\f\v]+
 newline				[\n\r]
 non_newline			[^\n\r]
 
 comment			("--"{non_newline}*)
 
-whitespace		({comment})
+whitespace		({comment}|{space})+
 
 decdigit        [0-9]
 decinteger		{decdigit}+
