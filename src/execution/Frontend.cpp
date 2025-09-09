@@ -165,19 +165,18 @@ class NewSQLFrontend : public lingodb::execution::Frontend {
          auto results = drv.result;
 
          if (results.empty() || results.size() > 1) {
-            error.emit() << "Error during parsing";
+            error.emit() << "Error during parsing: Only one statement allowed";
+            return;
          }
-         auto cShared = std::make_shared<lingodb::catalog::Catalog>(*catalog);
-         lingodb::analyzer::SQLQueryAnalyzer sqlAnalyzer{cShared};
          auto sqlContext = std::make_shared<lingodb::analyzer::SQLContext>();
-         sqlContext->catalog = cShared;
-         lingodb::analyzer::SQLQueryAnalyzer analyzer{cShared};
+         sqlContext->catalog = catalog;
+         lingodb::analyzer::SQLQueryAnalyzer analyzer{catalog};
          drv.result[0] = analyzer.canonicalizeAndAnalyze(drv.result[0], sqlContext);
 
          mlir::OpBuilder builder(&context);
 
          mlir::ModuleOp moduleOp = builder.create<mlir::ModuleOp>(builder.getUnknownLoc());
-         lingodb::translator::SQLMlirTranslator translator{moduleOp, cShared};
+         lingodb::translator::SQLMlirTranslator translator{moduleOp, catalog};
          builder.setInsertionPointToStart(moduleOp.getBody());
          auto* queryBlock = new mlir::Block;
          std::vector<mlir::Type> returnTypes;
@@ -194,7 +193,7 @@ class NewSQLFrontend : public lingodb::execution::Frontend {
          funcOp.getBody().push_back(queryBlock);
          module = moduleOp;
          parallismAllowed = false;
-         timing.emplace("frontEnd", sqlAnalyzer.getTiming() + translator.getTiming());
+         timing.emplace("frontEnd", analyzer.getTiming() + translator.getTiming());
 
       } else {
          error.emit() << "Error during parsing";

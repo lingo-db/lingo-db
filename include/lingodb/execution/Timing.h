@@ -45,7 +45,7 @@ class TimingPrinter : public TimingProcessor {
       }
       timing["total"] = total;
       std::vector<std::string> printOrder = {
-         "frontEnd", "QOpt", "lowerRelAlg", "lowerSubOp", "lowerDB", "lowerArrow", "lowerToLLVM", "baselineLowering",
+          "QOpt", "lowerRelAlg", "lowerSubOp", "lowerDB", "lowerArrow", "lowerToLLVM", "baselineLowering",
          "toLLVMIR",
          "llvmOptimize", "llvmCodeGen", "baselineCodeGen", "baselineEmit", "executionTime", "total"};
       const unsigned headerLen = std::ranges::max_element(
