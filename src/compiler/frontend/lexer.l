@@ -96,7 +96,7 @@
 %}
 
 
-space				[ \t\n\r\f\v]+
+space				[ \t\f\v]+
 newline				[\n\r]
 non_newline			[^\n\r]
 
