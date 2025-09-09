@@ -1899,14 +1899,6 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
       return boundExpression;
    }
 
-
-
-
-
-
-
-
-
    switch (rootNode->exprClass) {
       case ast::ExpressionClass::CONSTANT: {
          auto constExpr = std::static_pointer_cast<ast::ConstantExpression>(rootNode);
@@ -2038,494 +2030,15 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
       }
       case ast::ExpressionClass::OPERATOR: {
          auto operatorExpr = std::static_pointer_cast<ast::OperatorExpression>(rootNode);
-         if (operatorExpr->type == ast::ExpressionType::OPERATOR_UNKNOWN) {
-            operatorExpr->type = stringToExpressionType(operatorExpr->opString);
-            if (operatorExpr->type == ast::ExpressionType::OPERATOR_UNKNOWN) {
-               error("Unknown operator: " << operatorExpr->opString, operatorExpr->loc);
-            }
-
-         }
-
-         if (operatorExpr->children.size() == 0) {
-            error("Operator expression has no children", operatorExpr->loc);
-         }
-         std::vector<std::shared_ptr<ast::BoundExpression>> boundChildren{};
-         std::ranges::transform(operatorExpr->children, std::back_inserter(boundChildren), [&](auto c) {
-            return analyzeExpression(c, context, resolverScope);
-         });
-         auto it = std::find_if(boundChildren.begin(), boundChildren.end(), [](auto c) {
-            return !c->resultType.has_value();
-         });
-         if (it != boundChildren.end()) {
-            error("Operator expression has children with different types", boundChildren[0]->loc);
-         }
-         //Get common type
-         std::vector<catalog::NullableType> types{};
-         std::ranges::transform(boundChildren, std::back_inserter(types), [](auto c) {
-            return c->resultType.value();
-         });
-
-         auto commonNumbers = SQLTypeUtils::toCommonNumber(types);
-         std::vector<catalog::NullableType> castValues{};
-         std::ranges::transform(commonNumbers, std::back_inserter(castValues), [](auto c) {
-            if (c.castType) {
-               return *c.castType;
-            }
-            return c;
-         });
-         catalog::NullableType resultType = SQLTypeUtils::getCommonBaseType(castValues, operatorExpr->type);
-         switch (operatorExpr->type) {
-            case ast::ExpressionType::OPERATOR_IS_NOT_NULL:
-            case ast::ExpressionType::OPERATOR_IS_NULL: {
-               if (!resultType.isNullable) {
-                  return drv.nf.node<ast::BoundConstantExpression>(operatorExpr->loc, catalog::Type::boolean(), std::make_shared<ast::BoolValue>(operatorExpr->type == ast::ExpressionType::OPERATOR_IS_NOT_NULL), operatorExpr->alias);
-               }
-               resultType = catalog::Type::boolean();
-               break;
-            }
-            case ast::ExpressionType::OPERATOR_CONCAT: {
-               resultType = catalog::NullableType(catalog::Type::stringType(), resultType.isNullable);
-
-               break;
-            }
-            case ast::ExpressionType::OPERATOR_NOT: {
-               resultType = catalog::NullableType(catalog::Type::boolean());
-               if (boundChildren.size() != 1) {
-                  error("Operator NOT expects exactly one child", operatorExpr->loc);
-               }
-               if (boundChildren[0]->resultType->type.getTypeId() != catalog::LogicalTypeId::BOOLEAN) {
-                  error("Operator NOT expects child of type BOOLEAN", boundChildren[0]->loc);
-               }
-               break;
-            }
-            default:;
-         }
-
-         size_t t = 0;
-         for (auto boundChild : boundChildren) {
-            boundChild->resultType = commonNumbers[t];
-            t++;
-         }
-
-         return drv.nf.node<ast::BoundOperatorExpression>(operatorExpr->loc, operatorExpr->type, resultType, operatorExpr->alias, boundChildren);
+         return analyzeOperatorExpression(operatorExpr, context, resolverScope);
       }
       case ast::ExpressionClass::FUNCTION: {
          auto function = std::static_pointer_cast<ast::FunctionExpression>(rootNode);
-         std::vector<std::shared_ptr<ast::BoundExpression>> boundArguments{};
-         if (rootNode->type == ast::ExpressionType::AGGREGATE) {
-            auto scope =  context->getUniqueScope("tmp_attr");
-            auto fName = function->alias.empty() ? function->functionName : function->alias;
-            std::ranges::transform(function->functionName, function->functionName.begin(), ::toupper);
-            std::shared_ptr<ast::BoundFunctionExpression> boundFunctionExpression = nullptr;
-            catalog::NullableType resultType{catalog::Type::noneType()};
-
-            if (function->arguments.size() > 1) {
-               error("Aggregation with more than one argument not supported", function->loc);
-            }
-            for (auto arg : function->arguments) {
-               auto boundArg = analyzeExpression(arg, context, resolverScope);
-               boundArguments.push_back(boundArg);
-            }
-
-            /**
-                * SUM, AVG, MIN, MAX
-                */
-            if (function->functionName == "SUM" || function->functionName == "AVG" || function->functionName == "MIN" || function->functionName == "MAX") {
-               if (function->arguments.size() > 1) {
-                  error("Aggregation with more than one argument not supported", function->loc);
-               }
-               if (!boundArguments[0]->resultType.has_value() && !function->star) {
-                  error("Argument of aggregation function is not a valid expression", boundArguments[0]->loc);
-               }
-               if ((function->functionName == "SUM" || function->functionName == "AVG") && boundArguments[0]->resultType.value().type.getTypeId() != catalog::LogicalTypeId::INT &&
-                   boundArguments[0]->resultType.value().type.getTypeId() != catalog::LogicalTypeId::FLOAT &&
-                   boundArguments[0]->resultType.value().type.getTypeId() != catalog::LogicalTypeId::DECIMAL &&
-                   boundArguments[0]->resultType.value().type.getTypeId() != catalog::LogicalTypeId::DOUBLE) {
-
-
-               }
-
-               //Find correct resultType
-               resultType = boundArguments[0]->resultType.value();
-
-               /**
-                    * AVG
-                */
-               if (function->functionName == "AVG") {
-                  if (resultType.type.getTypeId() == catalog::LogicalTypeId::INT) {
-                     resultType = SQLTypeUtils::getCommonTypeAfterOperation(catalog::Type::decimal(19, 0), catalog::Type::decimal(19, 0), ast::ExpressionType::OPERATOR_DIVIDE);
-                  } else if (resultType.type.getTypeId() == catalog::LogicalTypeId::DECIMAL) {
-                     resultType = SQLTypeUtils::getCommonTypeAfterOperation(resultType, catalog::Type::decimal(19, 0), ast::ExpressionType::OPERATOR_DIVIDE);
-                  }
-                  resultType.isNullable = true;
-                  //else keep type
-               }
-               resultType.isNullable = true;
-
-               boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, boundArguments);
-            }
-            if (function->functionName == "RANK" || function->functionName == "ROW_NUMBER") {
-               if (!function->arguments.empty()) {
-                  error("RANK and ROW_NUMBER do not support any arguments", function->loc);
-               }
-               resultType = catalog::Type::int64();
-
-               boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, boundArguments);
-
-            }
-
-            /*
-                * COUNT
-                */
-            if (function->functionName == "COUNT") {
-
-               if (function->arguments.size() > 1) {
-                  error("Aggregation with more than one argument not supported", function->loc);
-               }
-               if (function->arguments.size() == 0 && !function->star) {
-                  error("Argument of aggregation function is not a valid expression", boundArguments[0]->loc);
-               }
-                 if (function->arguments.size() == 1 && !function->star && boundArguments[0]->exprClass != ast::ExpressionClass::BOUND_COLUMN_REF && boundArguments[0]->exprClass != ast::ExpressionClass::BOUND_CONSTANT) {
-                    error("Argument of count must be a column reference or a constant", boundArguments[0]->loc);
-                 }
-               resultType = catalog::Type::int64();
-               if (function->star) {
-                  function->functionName = function->functionName + "*";
-                  resultType.useZeroInsteadOfNull = true;
-
-
-               }
-
-
-
-
-
-
-
-
-
-               boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, boundArguments);
-            }
-
-            /*
-            * STDDEV_SAMP
-            */
-            if (function->functionName == "STDDEV_SAMP") {
-               if (boundArguments.size() != 1) {
-                  error("Aggregation with more than one argument not supported", function->loc);
-               }
-               if (!boundArguments[0]->resultType.has_value() || !boundArguments[0]->resultType->isNumeric()) {
-                  error("Argument of aggregation function has not a valid return type", boundArguments[0]->loc);
-               }
-               resultType = catalog::Type::f64();
-               resultType.isNullable = boundArguments[0]->resultType->isNullable;
-
-               boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, boundArguments);
-            }
-            if (boundFunctionExpression == nullptr) {
-               error("Not implemented", rootNode->loc);
-            }
-
-            auto fInfo = std::make_shared<ast::NamedResult>(scope, resultType, fName);
-
-            fInfo->displayName = function->alias;
-            context->mapAttribute(resolverScope, fName, fInfo);
-            boundFunctionExpression->namedResult = fInfo;
-
-            return boundFunctionExpression;
-         }
-         std::ranges::transform(function->functionName, function->functionName.begin(), ::toupper);
-         auto scope =  context->getUniqueScope("tmp_attr");
-         auto fName = function->alias.empty() ? function->functionName : function->alias;
-         std::shared_ptr<ast::BoundFunctionExpression> boundFunctionExpression = nullptr;
-         catalog::NullableType resultType{catalog::Type::noneType()};
-
-         if (function->functionName == "DATE") {
-            if (function->arguments.size() != 1) {
-               error("Function date needs exactly one argument", function->loc);
-            }
-            auto arg = analyzeExpression(function->arguments[0], context, resolverScope);
-            if (arg->resultType.has_value() && arg->resultType.value().type.getTypeId() != catalog::Type::stringType().getTypeId()) {
-               error("Function date needs argument of type string", function->loc);
-            }
-            resultType = catalog::Type(catalog::LogicalTypeId::DATE, std::make_shared<catalog::DateTypeInfo>(catalog::DateTypeInfo::DateUnit::DAY));
-            boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, "", function->alias, function->distinct, std::vector{arg});
-
-         } else if (function->functionName == "COUNT") {
-            if (function->arguments.size() != 1 && !function->star) {
-               error("Function count needs exactly one argument", function->loc);
-            }
-            if (!function->star && (function->arguments[0]->type != ast::ExpressionType::COLUMN_REF && function->arguments[0]->type != ast::ExpressionType::STAR)) {
-               error("Function count needs argument of type column or star", function->loc);
-            }
-
-            resultType = catalog::Type::int64();
-
-            if (function->star) {
-               return drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName + "*", "", function->alias, function->distinct, std::vector<std::shared_ptr<ast::BoundExpression>>{});
-            }
-            auto arg = analyzeExpression(function->arguments[0], context, resolverScope);
-
-            boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, "", function->alias, function->distinct, std::vector{arg});
-
-         } else if (function->functionName == "EXTRACT") {
-            if (function->arguments.size() != 2) {
-               error("Function extract needs exactly two arguments", function->loc);
-            }
-            auto arg1 = analyzeExpression(function->arguments[0], context, resolverScope);
-            auto arg2 = analyzeExpression(function->arguments[1], context, resolverScope);
-            if (arg2->resultType.has_value() && arg2->resultType.value().type.getTypeId() != catalog::LogicalTypeId::DATE &&  arg2->resultType.value().type.getTypeId() != catalog::LogicalTypeId::TIMESTAMP && arg2->resultType.value().type.getTypeId() != catalog::LogicalTypeId::INTERVAL) {
-               error("Function extract needs second argument of type date, interval or timestamp", function->loc);
-            }
-            resultType = catalog::NullableType{catalog::Type::int64(), arg2->resultType->isNullable};
-
-            boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, std::vector{arg1, arg2});
-
-         } else if (function->functionName == "DATE_TRUNC") {
-            if (function->arguments.size() != 2) {
-               error("Function DATE_TRUNC needs exactly two arguments", function->loc);
-            }
-            auto arg1 = analyzeExpression(function->arguments[0], context, resolverScope);
-            auto arg2 = analyzeExpression(function->arguments[1], context, resolverScope);
-            if (arg1->resultType.has_value() && arg1->resultType.value().type.getTypeId() != catalog::LogicalTypeId::STRING && arg1->resultType.value().type.getTypeId() != catalog::LogicalTypeId::CHAR) {
-               error("Function DATE_TRUNC needs first argument of type string", function->loc);
-            }
-            if (arg2->resultType.has_value() && arg2->resultType.value().type.getTypeId() != catalog::LogicalTypeId::DATE &&  arg2->resultType.value().type.getTypeId() != catalog::LogicalTypeId::TIMESTAMP && arg2->resultType.value().type.getTypeId() != catalog::LogicalTypeId::INTERVAL) {
-               error("Function DATE_TRUNC needs second argument of type date, interval or timestamp", function->loc);
-            }
-            //TODO wrong resulttype
-            resultType = catalog::Type::int64();
-
-
-            boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, std::vector{arg1, arg2});
-
-         } else if (function->functionName == "SUBSTRING" || function->functionName == "SUBSTR") {
-            if (function->arguments.size() < 1 && function->arguments.size() >= 4) {
-               error("Function extract needs one,two or three arguments", function->loc);
-            }
-            auto stringArg = analyzeExpression(function->arguments[0], context, resolverScope);
-            auto fromArg = function->arguments[1] ? analyzeExpression(function->arguments[1], context, resolverScope) : nullptr;
-            auto forArg = function->arguments[2] ? analyzeExpression(function->arguments[2], context, resolverScope) : nullptr;
-
-            if (!stringArg->resultType.has_value() || (stringArg->resultType->type.getTypeId() != catalog::LogicalTypeId::STRING && stringArg->resultType->type.getTypeId() != catalog::LogicalTypeId::CHAR)) {
-               error("The first argument of the SUBSTRING function must have a result type of STRING", stringArg->loc);
-            }
-            if (!fromArg->resultType.has_value() || fromArg->resultType->type.getTypeId() != catalog::LogicalTypeId::INT) {
-               error("The second argument of the SUBSTRING function must have a result type of INT", fromArg->loc);
-            }
-            if (!forArg->resultType.has_value() || forArg->resultType->type.getTypeId() != catalog::LogicalTypeId::INT) {
-               error("The second argument of the SUBSTRING function must have a result type of INT", forArg->loc);
-            }
-
-            resultType = stringArg->resultType.value();
-
-            auto boundArgs = std::vector{stringArg};
-            if (fromArg) {
-               boundArgs.emplace_back(fromArg);
-            }
-            if (forArg) {
-               boundArgs.emplace_back(forArg);
-            }
-            boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, boundArgs);
-
-         } else if (function->functionName == "ROUND") {
-            if (function->arguments.size() != 2) {
-               error("Function extract needs two arguments", function->loc);
-            }
-            auto numberArg = analyzeExpression(function->arguments[0], context, resolverScope);
-            auto decimalsArg = analyzeExpression(function->arguments[1], context, resolverScope);
-            if (decimalsArg->exprClass != ast::ExpressionClass::BOUND_CONSTANT) {
-               error("The second argument of the round function must be a constant", decimalsArg->loc);
-            }
-            if (decimalsArg->resultType.has_value() && decimalsArg->resultType->type.getTypeId() != catalog::LogicalTypeId::INT) {
-               error("The second argument of the round function must have a result type of INT", decimalsArg->loc);
-            }
-            if (!numberArg->resultType.has_value() || !numberArg->resultType->isNumeric()) {
-               error("The first argument of the round function must have a numeric type", numberArg->loc);
-            }
-            //Get resultType after round
-            resultType = numberArg->resultType.value();
-            resultType.isNullable = true;
-
-            auto boundArgs = std::vector{numberArg, decimalsArg};
-            boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, boundArgs);
-         } else if (function->functionName == "UPPER") {
-            if (function->arguments.size() != 1) {
-               error("Function with more than one argument not supported", function->loc);
-            }
-            auto arg1 = analyzeExpression(function->arguments[0], context, resolverScope);
-
-            if (!arg1->resultType.has_value() || ( arg1->resultType.value().type.getTypeId() != catalog::LogicalTypeId::STRING && arg1->resultType.value().type.getTypeId() != catalog::LogicalTypeId::CHAR)) {
-               error("Argument of aggregation function has not a valid return type", arg1->loc);
-            }
-            resultType = arg1->resultType.value();
-
-            boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, std::vector{arg1});
-         } else if (function->functionName == "ABS") {
-            if (function->arguments.size() != 1) {
-               error("Function with more than one argument not supported", function->loc);
-            }
-            auto arg1 = analyzeExpression(function->arguments[0], context, resolverScope);
-            if (!arg1->resultType.has_value() || !arg1->resultType->isNumeric()) {
-               error("Argument of function has not a valid return type", arg1->loc);
-            }
-            resultType = arg1->resultType.value();
-
-            boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, std::vector{arg1});
-
-         } else if (function->functionName == "COALESCE") {
-
-            if (function->arguments.size() < 2) {
-               error("Function with less than two argument not supported", function->loc);
-            }
-
-            std::vector<std::shared_ptr<ast::BoundExpression>> boundArgs{};
-            std::vector<catalog::NullableType> types{};
-            std::ranges::transform(function->arguments, std::back_inserter(boundArgs), [&](auto c) {
-               auto e = analyzeExpression(c, context, resolverScope);
-               types.push_back(e->resultType.value());
-               return e;
-            });
-
-            resultType = SQLTypeUtils::getCommonBaseType(types);
-            resultType.isNullable = true;
-
-
-            boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, boundArgs);
-
-         } else if (function->functionName == "GROUPING") {
-            if (function->arguments.size() != 1) {
-               error("Function grouping needs exactly one argument", function->loc);
-            }
-            if (function->arguments[0]->type != ast::ExpressionType::COLUMN_REF) {
-               error("Function grouping needs argument of type column", function->loc);
-            }
-            auto arg = analyzeExpression(function->arguments[0], context, resolverScope);
-            if (arg->exprClass != ast::ExpressionClass::BOUND_COLUMN_REF) {
-               error("Function grouping needs argument of type column", function->loc);
-            }
-
-            resultType = catalog::Type::int64();
-            boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, std::vector{arg});
-
-         } else if (function->functionName == "LENGTH") {
-            if (function->arguments.size() != 1) {
-               error("Function LENGTH needs exactly one argument", function->loc);
-            }
-            if (function->arguments[0]->type != ast::ExpressionType::COLUMN_REF) {
-               error("Function LENGTH needs argument of type column", function->loc);
-            }
-            auto arg = analyzeExpression(function->arguments[0], context, resolverScope);
-            if (arg->exprClass != ast::ExpressionClass::BOUND_COLUMN_REF) {
-               error("Function grouping needs argument of type column", function->loc);
-            }
-            resultType = catalog::Type::int64();
-            boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, std::vector{arg});
-         } else if (function->functionName == "REGEXP_REPLACE") {
-            if (function->arguments.size() != 3) {
-               error("Function REGEXP_REPLACE needs exactly 3 arguments", function->loc);
-            }
-            auto text = analyzeExpression(function->arguments[0], context, resolverScope);
-            auto pattern = analyzeExpression(function->arguments[1], context, resolverScope);
-            auto replace = analyzeExpression(function->arguments[2], context, resolverScope);
-            if (text->resultType.value().type.getTypeId() != catalog::LogicalTypeId::STRING ) {
-               error("Function REGEXP_REPLACE needs text of type string", text->loc);
-            }
-            if (pattern->resultType.value().type.getTypeId() != catalog::LogicalTypeId::STRING && pattern->resultType.value().type.getTypeId() != catalog::LogicalTypeId::CHAR) {
-               error("Function REGEXP_REPLACE needs pattern of type string or char", text->loc);
-            }
-            if (replace->resultType.value().type.getTypeId() != catalog::LogicalTypeId::STRING && replace->resultType.value().type.getTypeId() != catalog::LogicalTypeId::CHAR) {
-               error("Function REGEXP_REPLACE needs replacement of type string or char", text->loc);
-            }
-            resultType = text->resultType.value();
-            boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, std::vector{text, pattern, replace});
-         }
-
-         if (boundFunctionExpression == nullptr) {
-            error("Function '" << function->functionName << "' not implemented", function->loc);
-         }
-         auto fInfo = std::make_shared<ast::NamedResult>(scope, resultType, fName);
-
-
-         boundFunctionExpression->namedResult = fInfo;
-
-         return boundFunctionExpression;
+         return analyzeFunctionExpression(function, context, resolverScope);
       }
       case ast::ExpressionClass::CAST: {
          auto castExpr = std::static_pointer_cast<ast::CastExpression>(rootNode);
-         auto boundChild = analyzeExpression(castExpr->child, context, resolverScope);
-         if (!castExpr->logicalTypeWithMods.has_value()) {
-            error("Cast expression must have logicalType", castExpr->loc);
-         }
-         switch (castExpr->logicalTypeWithMods.value().logicalType) {
-            case ast::DATE: {
-               switch (boundChild->type) {
-                  case ast::ExpressionType::VALUE_CONSTANT: {
-                     auto constExpr = std::static_pointer_cast<ast::BoundConstantExpression>(boundChild);
-                     if (constExpr->value->type != ast::ConstantType::STRING) {
-                        error("Cannot cast " + constExpr->value->toString() + " to date", constExpr->loc);
-                     }
-                     std::string stringRep = std::static_pointer_cast<ast::StringValue>(constExpr->value)->sVal;
-                     stringRep += "days";
-                     return drv.nf.node<ast::BoundCastExpression>(castExpr->loc, catalog::Type(catalog::LogicalTypeId::DATE, std::make_shared<catalog::DateTypeInfo>(catalog::DateTypeInfo::DateUnit::DAY)), castExpr->alias, boundChild, castExpr->logicalTypeWithMods, stringRep);
-                  }
-                  case ast::ExpressionType::BOUND_COLUMN_REF: {
-                     auto boundColRef = std::static_pointer_cast<ast::BoundColumnRefExpression>(boundChild);
-                     assert(boundColRef->resultType.has_value());
-                     if (boundColRef->resultType.value().type.getTypeId() == catalog::LogicalTypeId::DATE) {
-                        return boundColRef;
-                     }
-                     if (boundColRef->resultType.value().type.getTypeId() != catalog::LogicalTypeId::STRING) {
-                        error("Cannot cast " + boundColRef->alias + " to date", boundColRef->loc);
-                     }
-                  }
-                  default: error("Cast not implemented", rootNode->loc);
-               }
-            }
-            case ast::LogicalType::INTERVAL: {
-               auto constExpr = std::static_pointer_cast<ast::BoundConstantExpression>(boundChild);
-               if (constExpr->value->type != ast::ConstantType::STRING) {
-                  error("Cannot cast " + constExpr->value->toString() + " to date", constExpr->loc);
-               }
-               //!Shortcutted here, implement different interval types later
-               auto resultType = catalog::Type::intervalDaytime();
-               std::string stringRepresentation = std::static_pointer_cast<ast::StringValue>(constExpr->value)->sVal;
-               if (castExpr->optInterval.has_value()) {
-                  switch (castExpr->optInterval.value()) {
-                     case ast::LogicalType::YEARS: {
-                        resultType = catalog::Type::intervalMonths();
-                        stringRepresentation = std::to_string(std::stol(stringRepresentation) * 12);
-                        break;
-                     }
-                     case ast::LogicalType::MONTHS: {
-                        resultType = catalog::Type::intervalMonths();
-                        break;
-                     }
-                     default: stringRepresentation += "days";
-                  }
-               } else {
-                  if (stringRepresentation.ends_with("years")) {
-                     resultType = catalog::Type::intervalMonths();
-                  } else if (stringRepresentation.ends_with("days")) {
-                  } else {
-                     error("Cast for strRep: " << stringRepresentation << " not implemented", boundChild->loc);
-                  }
-               }
-               auto boundCast = drv.nf.node<ast::BoundCastExpression>(castExpr->loc, resultType, castExpr->alias, boundChild, castExpr->logicalTypeWithMods, stringRepresentation);
-
-               return boundCast;
-            }
-
-            default: {
-               auto castType = SQLTypeUtils::typemodsToCatalogType(castExpr->logicalTypeWithMods.value().logicalType, castExpr->logicalTypeWithMods.value().typeModifiers);
-               if (castType != boundChild->resultType.value()) {
-                  castType.isNullable = boundChild->resultType.value().isNullable;
-                  return drv.nf.node<ast::BoundCastExpression>(castExpr->loc, castType, castExpr->alias, boundChild, castExpr->logicalTypeWithMods, "");
-               } else {
-                  return boundChild;
-               }
-            };
-         }
+         return analyzeCastExpression(castExpr, context, resolverScope);
       }
       case ast::ExpressionClass::BETWEEN: {
          auto between = std::static_pointer_cast<ast::BetweenExpression>(rootNode);
@@ -2631,116 +2144,582 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
       }
       case ast::ExpressionClass::WINDOW: {
          auto windowExpr = std::static_pointer_cast<ast::WindowExpression>(rootNode);
-         std::vector<std::shared_ptr<ast::BoundExpression>> boundPartitions;
-         std::optional<std::shared_ptr<ast::BoundOrderByModifier>> boundOrderByModifier;
-         std::shared_ptr<ast::BoundFunctionExpression> boundFunction;
-         auto tmp = analyzeExpression(windowExpr->functionExpression, context, resolverScope);
-         assert(tmp->exprClass == ast::ExpressionClass::BOUND_FUNCTION);
-         if (tmp->type != ast::ExpressionType::AGGREGATE) {
-            error("Window function must be aggregate", windowExpr->loc);
-         }
-         boundFunction = std::static_pointer_cast<ast::BoundFunctionExpression>(tmp);
-         std::ranges::transform(windowExpr->partitions, std::back_inserter(boundPartitions), [&](auto& partition) {
-            return analyzeExpression(partition, context, resolverScope);
-         });
-
-
-         if (windowExpr->order.has_value()) {
-            auto boundRModifier = analyzeResultModifier(windowExpr->order.value(), context);
-            assert(boundRModifier->modifierType == ast::ResultModifierType::BOUND_ORDER_BY);
-            boundOrderByModifier = std::static_pointer_cast<ast::BoundOrderByModifier>(boundRModifier);
-         }
-         auto boundWindowBoundary = std::make_shared<ast::BoundWindowBoundary>();
-
-         if (!windowExpr->windowBoundary) {
-            windowExpr->windowBoundary = drv.nf.node<ast::WindowBoundary>(windowExpr->loc, ast::WindowBoundaryType::UNBOUNDED_PRECEDING);
-            if (windowExpr->order.has_value()) {
-               windowExpr->windowBoundary->end = ast::WindowBoundaryType::CURRENT_ROW;
-            } else {
-               windowExpr->windowBoundary->end = ast::WindowBoundaryType::UNBOUNDED_FOLLOWING;
-            }
-
-            windowExpr->windowBoundary->windowMode = ast::WindowMode::ROWS;
-
-         }
-
-         boundWindowBoundary->loc = windowExpr->windowBoundary->loc;
-         boundWindowBoundary->windowMode = windowExpr->windowBoundary->windowMode;
-         //Start
-         switch (windowExpr->windowBoundary->start) {
-            case ast::WindowBoundaryType::CURRENT_ROW: {
-               boundWindowBoundary->start = 0;
-               break;
-            }
-            case ast::WindowBoundaryType::EXPR_PRECEDING:
-            case ast::WindowBoundaryType::EXPR_FOLLOWING: {
-               assert(windowExpr->windowBoundary->startExpr);
-               assert(windowExpr->windowBoundary->startExpr->exprClass == ast::ExpressionClass::CONSTANT);
-
-               auto constantExpr = std::static_pointer_cast<ast::BoundConstantExpression>(analyzeExpression(windowExpr->windowBoundary->startExpr, context, resolverScope));
-               if (constantExpr->value->type != ast::ConstantType::INT) {
-                  error("unsupported window start specification", boundWindowBoundary->loc);
-               }
-               boundWindowBoundary->start = std::static_pointer_cast<ast::IntValue>(constantExpr->value)->iVal;
-               if (windowExpr->windowBoundary->start == ast::WindowBoundaryType::EXPR_PRECEDING) {
-                  boundWindowBoundary->start = -boundWindowBoundary->start;
-               }
-            }
-
-            case ast::WindowBoundaryType::INVALID: {
-               error("Invalid boundary type", boundWindowBoundary->loc)
-               break;
-            }
-               default: ;
-
-         }
-         //End
-         switch (windowExpr->windowBoundary->end) {
-            case ast::WindowBoundaryType::CURRENT_ROW: {
-               boundWindowBoundary->end = 0;
-               break;
-            }
-            case ast::WindowBoundaryType::EXPR_PRECEDING:
-            case ast::WindowBoundaryType::EXPR_FOLLOWING: {
-               assert(windowExpr->windowBoundary->endExpr);
-               assert(windowExpr->windowBoundary->endExpr->exprClass == ast::ExpressionClass::CONSTANT);
-
-               auto constantExpr = std::static_pointer_cast<ast::BoundConstantExpression>(analyzeExpression(windowExpr->windowBoundary->endExpr, context, resolverScope));
-               if (constantExpr->value->type != ast::ConstantType::INT) {
-                  error("unsupported window start specification", boundWindowBoundary->loc);
-               }
-               boundWindowBoundary->end = std::static_pointer_cast<ast::IntValue>(constantExpr->value)->iVal;
-               if (windowExpr->windowBoundary->end == ast::WindowBoundaryType::EXPR_PRECEDING) {
-                  boundWindowBoundary->end = -boundWindowBoundary->end;
-               }
-            }
-
-            case ast::WindowBoundaryType::INVALID: {
-               error("Invalid boundary type", boundWindowBoundary->loc)
-               break;
-            }
-            default: ;
-
-         }
-
-
-         ast::ExpressionType windowType = ast::ExpressionType::WINDOW_AGGREGATE;
-         catalog::Type resultType = catalog::Type::int64();
-
-
-         boundFunction->namedResult.value()->displayName = windowExpr->alias;
-         context->mapAttribute(resolverScope, windowExpr->alias, boundFunction->namedResult.value());
-
-
-
-         auto boundWindowExpression =  drv.nf.node<ast::BoundWindowExpression>(windowExpr->loc, windowExpr->type, windowExpr->alias, resultType, boundFunction, boundPartitions, boundOrderByModifier, boundWindowBoundary);
-         boundWindowExpression->namedResult = boundFunction->namedResult;
-         return boundWindowExpression;
+         return analyzeWindowExpression(windowExpr, context, resolverScope);
 
 
       }
       default: error("Expression type not implemented", rootNode->loc);
    }
+}
+
+std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeOperatorExpression(std::shared_ptr<ast::OperatorExpression> operatorExpr, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope) {
+   if (operatorExpr->type == ast::ExpressionType::OPERATOR_UNKNOWN) {
+      operatorExpr->type = stringToExpressionType(operatorExpr->opString);
+      if (operatorExpr->type == ast::ExpressionType::OPERATOR_UNKNOWN) {
+         error("Unknown operator: " << operatorExpr->opString, operatorExpr->loc);
+      }
+   }
+
+   if (operatorExpr->children.size() == 0) {
+      error("Operator expression has no children", operatorExpr->loc);
+   }
+   std::vector<std::shared_ptr<ast::BoundExpression>> boundChildren{};
+   std::ranges::transform(operatorExpr->children, std::back_inserter(boundChildren), [&](auto c) {
+      return analyzeExpression(c, context, resolverScope);
+   });
+   auto it = std::find_if(boundChildren.begin(), boundChildren.end(), [](auto c) {
+      return !c->resultType.has_value();
+   });
+   if (it != boundChildren.end()) {
+      error("Operator expression has children with different types", boundChildren[0]->loc);
+   }
+   //Get common type
+   std::vector<catalog::NullableType> types{};
+   std::ranges::transform(boundChildren, std::back_inserter(types), [](auto c) {
+      return c->resultType.value();
+   });
+
+   auto commonNumbers = SQLTypeUtils::toCommonNumber(types);
+   std::vector<catalog::NullableType> castValues{};
+   std::ranges::transform(commonNumbers, std::back_inserter(castValues), [](auto c) {
+      if (c.castType) {
+         return *c.castType;
+      }
+      return c;
+   });
+   catalog::NullableType resultType = SQLTypeUtils::getCommonBaseType(castValues, operatorExpr->type);
+   switch (operatorExpr->type) {
+      case ast::ExpressionType::OPERATOR_IS_NOT_NULL:
+      case ast::ExpressionType::OPERATOR_IS_NULL: {
+         if (!resultType.isNullable) {
+            return drv.nf.node<ast::BoundConstantExpression>(operatorExpr->loc, catalog::Type::boolean(), std::make_shared<ast::BoolValue>(operatorExpr->type == ast::ExpressionType::OPERATOR_IS_NOT_NULL), operatorExpr->alias);
+         }
+         resultType = catalog::Type::boolean();
+         break;
+      }
+      case ast::ExpressionType::OPERATOR_CONCAT: {
+         resultType = catalog::NullableType(catalog::Type::stringType(), resultType.isNullable);
+
+         break;
+      }
+      case ast::ExpressionType::OPERATOR_NOT: {
+         resultType = catalog::NullableType(catalog::Type::boolean());
+         if (boundChildren.size() != 1) {
+            error("Operator NOT expects exactly one child", operatorExpr->loc);
+         }
+         if (boundChildren[0]->resultType->type.getTypeId() != catalog::LogicalTypeId::BOOLEAN) {
+            error("Operator NOT expects child of type BOOLEAN", boundChildren[0]->loc);
+         }
+         break;
+      }
+      default:;
+   }
+
+   size_t t = 0;
+   for (auto boundChild : boundChildren) {
+      boundChild->resultType = commonNumbers[t];
+      t++;
+   }
+
+   return drv.nf.node<ast::BoundOperatorExpression>(operatorExpr->loc, operatorExpr->type, resultType, operatorExpr->alias, boundChildren);
+}
+
+std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeWindowExpression(std::shared_ptr<ast::WindowExpression> windowExpr, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope) {
+   std::vector<std::shared_ptr<ast::BoundExpression>> boundPartitions;
+   std::optional<std::shared_ptr<ast::BoundOrderByModifier>> boundOrderByModifier;
+   std::shared_ptr<ast::BoundFunctionExpression> boundFunction;
+   auto tmp = analyzeExpression(windowExpr->functionExpression, context, resolverScope);
+   assert(tmp->exprClass == ast::ExpressionClass::BOUND_FUNCTION);
+   if (tmp->type != ast::ExpressionType::AGGREGATE) {
+      error("Window function must be aggregate", windowExpr->loc);
+   }
+   boundFunction = std::static_pointer_cast<ast::BoundFunctionExpression>(tmp);
+   std::ranges::transform(windowExpr->partitions, std::back_inserter(boundPartitions), [&](auto& partition) {
+      return analyzeExpression(partition, context, resolverScope);
+   });
+
+   if (windowExpr->order.has_value()) {
+      auto boundRModifier = analyzeResultModifier(windowExpr->order.value(), context);
+      assert(boundRModifier->modifierType == ast::ResultModifierType::BOUND_ORDER_BY);
+      boundOrderByModifier = std::static_pointer_cast<ast::BoundOrderByModifier>(boundRModifier);
+   }
+   auto boundWindowBoundary = std::make_shared<ast::BoundWindowBoundary>();
+
+   if (!windowExpr->windowBoundary) {
+      windowExpr->windowBoundary = drv.nf.node<ast::WindowBoundary>(windowExpr->loc, ast::WindowBoundaryType::UNBOUNDED_PRECEDING);
+      if (windowExpr->order.has_value()) {
+         windowExpr->windowBoundary->end = ast::WindowBoundaryType::CURRENT_ROW;
+      } else {
+         windowExpr->windowBoundary->end = ast::WindowBoundaryType::UNBOUNDED_FOLLOWING;
+      }
+
+      windowExpr->windowBoundary->windowMode = ast::WindowMode::ROWS;
+   }
+
+   boundWindowBoundary->loc = windowExpr->windowBoundary->loc;
+   boundWindowBoundary->windowMode = windowExpr->windowBoundary->windowMode;
+   //Start
+   switch (windowExpr->windowBoundary->start) {
+      case ast::WindowBoundaryType::CURRENT_ROW: {
+         boundWindowBoundary->start = 0;
+         break;
+      }
+      case ast::WindowBoundaryType::EXPR_PRECEDING:
+      case ast::WindowBoundaryType::EXPR_FOLLOWING: {
+         assert(windowExpr->windowBoundary->startExpr);
+         assert(windowExpr->windowBoundary->startExpr->exprClass == ast::ExpressionClass::CONSTANT);
+
+         auto constantExpr = std::static_pointer_cast<ast::BoundConstantExpression>(analyzeExpression(windowExpr->windowBoundary->startExpr, context, resolverScope));
+         if (constantExpr->value->type != ast::ConstantType::INT) {
+            error("unsupported window start specification", boundWindowBoundary->loc);
+         }
+         boundWindowBoundary->start = std::static_pointer_cast<ast::IntValue>(constantExpr->value)->iVal;
+         if (windowExpr->windowBoundary->start == ast::WindowBoundaryType::EXPR_PRECEDING) {
+            boundWindowBoundary->start = -boundWindowBoundary->start;
+         }
+      }
+
+      case ast::WindowBoundaryType::INVALID: {
+         error("Invalid boundary type", boundWindowBoundary->loc) break;
+      }
+      default:;
+   }
+   //End
+   switch (windowExpr->windowBoundary->end) {
+      case ast::WindowBoundaryType::CURRENT_ROW: {
+         boundWindowBoundary->end = 0;
+         break;
+      }
+      case ast::WindowBoundaryType::EXPR_PRECEDING:
+      case ast::WindowBoundaryType::EXPR_FOLLOWING: {
+         assert(windowExpr->windowBoundary->endExpr);
+         assert(windowExpr->windowBoundary->endExpr->exprClass == ast::ExpressionClass::CONSTANT);
+
+         auto constantExpr = std::static_pointer_cast<ast::BoundConstantExpression>(analyzeExpression(windowExpr->windowBoundary->endExpr, context, resolverScope));
+         if (constantExpr->value->type != ast::ConstantType::INT) {
+            error("unsupported window start specification", boundWindowBoundary->loc);
+         }
+         boundWindowBoundary->end = std::static_pointer_cast<ast::IntValue>(constantExpr->value)->iVal;
+         if (windowExpr->windowBoundary->end == ast::WindowBoundaryType::EXPR_PRECEDING) {
+            boundWindowBoundary->end = -boundWindowBoundary->end;
+         }
+      }
+
+      case ast::WindowBoundaryType::INVALID: {
+         error("Invalid boundary type", boundWindowBoundary->loc) break;
+      }
+      default:;
+   }
+
+   ast::ExpressionType windowType = ast::ExpressionType::WINDOW_AGGREGATE;
+   catalog::Type resultType = catalog::Type::int64();
+
+   boundFunction->namedResult.value()->displayName = windowExpr->alias;
+   context->mapAttribute(resolverScope, windowExpr->alias, boundFunction->namedResult.value());
+
+   auto boundWindowExpression = drv.nf.node<ast::BoundWindowExpression>(windowExpr->loc, windowExpr->type, windowExpr->alias, resultType, boundFunction, boundPartitions, boundOrderByModifier, boundWindowBoundary);
+   boundWindowExpression->namedResult = boundFunction->namedResult;
+   return boundWindowExpression;
+}
+
+std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeCastExpression(std::shared_ptr<ast::CastExpression> castExpr, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope) {
+   auto boundChild = analyzeExpression(castExpr->child, context, resolverScope);
+   if (!castExpr->logicalTypeWithMods.has_value()) {
+      error("Cast expression must have logicalType", castExpr->loc);
+   }
+   switch (castExpr->logicalTypeWithMods.value().logicalType) {
+      case ast::DATE: {
+         switch (boundChild->type) {
+            case ast::ExpressionType::VALUE_CONSTANT: {
+               auto constExpr = std::static_pointer_cast<ast::BoundConstantExpression>(boundChild);
+               if (constExpr->value->type != ast::ConstantType::STRING) {
+                  error("Cannot cast " + constExpr->value->toString() + " to date", constExpr->loc);
+               }
+               std::string stringRep = std::static_pointer_cast<ast::StringValue>(constExpr->value)->sVal;
+               stringRep += "days";
+               return drv.nf.node<ast::BoundCastExpression>(castExpr->loc, catalog::Type(catalog::LogicalTypeId::DATE, std::make_shared<catalog::DateTypeInfo>(catalog::DateTypeInfo::DateUnit::DAY)), castExpr->alias, boundChild, castExpr->logicalTypeWithMods, stringRep);
+            }
+            case ast::ExpressionType::BOUND_COLUMN_REF: {
+               auto boundColRef = std::static_pointer_cast<ast::BoundColumnRefExpression>(boundChild);
+               assert(boundColRef->resultType.has_value());
+               if (boundColRef->resultType.value().type.getTypeId() == catalog::LogicalTypeId::DATE) {
+                  return boundColRef;
+               }
+               if (boundColRef->resultType.value().type.getTypeId() != catalog::LogicalTypeId::STRING) {
+                  error("Cannot cast " + boundColRef->alias + " to date", boundColRef->loc);
+               }
+            }
+            default: error("Cast not implemented", castExpr->loc);
+         }
+      }
+      case ast::LogicalType::INTERVAL: {
+         auto constExpr = std::static_pointer_cast<ast::BoundConstantExpression>(boundChild);
+         if (constExpr->value->type != ast::ConstantType::STRING) {
+            error("Cannot cast " + constExpr->value->toString() + " to date", constExpr->loc);
+         }
+         //!Shortcutted here, implement different interval types later
+         auto resultType = catalog::Type::intervalDaytime();
+         std::string stringRepresentation = std::static_pointer_cast<ast::StringValue>(constExpr->value)->sVal;
+         if (castExpr->optInterval.has_value()) {
+            switch (castExpr->optInterval.value()) {
+               case ast::LogicalType::YEARS: {
+                  resultType = catalog::Type::intervalMonths();
+                  stringRepresentation = std::to_string(std::stol(stringRepresentation) * 12);
+                  break;
+               }
+               case ast::LogicalType::MONTHS: {
+                  resultType = catalog::Type::intervalMonths();
+                  break;
+               }
+               default: stringRepresentation += "days";
+            }
+         } else {
+            if (stringRepresentation.ends_with("years")) {
+               resultType = catalog::Type::intervalMonths();
+            } else if (stringRepresentation.ends_with("days")) {
+            } else {
+               error("Cast for strRep: " << stringRepresentation << " not implemented", boundChild->loc);
+            }
+         }
+         auto boundCast = drv.nf.node<ast::BoundCastExpression>(castExpr->loc, resultType, castExpr->alias, boundChild, castExpr->logicalTypeWithMods, stringRepresentation);
+
+         return boundCast;
+      }
+
+      default: {
+         auto castType = SQLTypeUtils::typemodsToCatalogType(castExpr->logicalTypeWithMods.value().logicalType, castExpr->logicalTypeWithMods.value().typeModifiers);
+         if (castType != boundChild->resultType.value()) {
+            castType.isNullable = boundChild->resultType.value().isNullable;
+            return drv.nf.node<ast::BoundCastExpression>(castExpr->loc, castType, castExpr->alias, boundChild, castExpr->logicalTypeWithMods, "");
+         } else {
+            return boundChild;
+         }
+      };
+   }
+}
+
+std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeFunctionExpression(std::shared_ptr<ast::FunctionExpression> function, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope) {
+   std::vector<std::shared_ptr<ast::BoundExpression>> boundArguments{};
+   if (function->type == ast::ExpressionType::AGGREGATE) {
+      auto scope = context->getUniqueScope("tmp_attr");
+      auto fName = function->alias.empty() ? function->functionName : function->alias;
+      std::ranges::transform(function->functionName, function->functionName.begin(), ::toupper);
+      std::shared_ptr<ast::BoundFunctionExpression> boundFunctionExpression = nullptr;
+      catalog::NullableType resultType{catalog::Type::noneType()};
+
+      if (function->arguments.size() > 1) {
+         error("Aggregation with more than one argument not supported", function->loc);
+      }
+      for (auto arg : function->arguments) {
+         auto boundArg = analyzeExpression(arg, context, resolverScope);
+         boundArguments.push_back(boundArg);
+      }
+
+      /**
+                * SUM, AVG, MIN, MAX
+                */
+      if (function->functionName == "SUM" || function->functionName == "AVG" || function->functionName == "MIN" || function->functionName == "MAX") {
+         if (function->arguments.size() > 1) {
+            error("Aggregation with more than one argument not supported", function->loc);
+         }
+         if (!boundArguments[0]->resultType.has_value() && !function->star) {
+            error("Argument of aggregation function is not a valid expression", boundArguments[0]->loc);
+         }
+         if ((function->functionName == "SUM" || function->functionName == "AVG") && boundArguments[0]->resultType.value().type.getTypeId() != catalog::LogicalTypeId::INT &&
+             boundArguments[0]->resultType.value().type.getTypeId() != catalog::LogicalTypeId::FLOAT &&
+             boundArguments[0]->resultType.value().type.getTypeId() != catalog::LogicalTypeId::DECIMAL &&
+             boundArguments[0]->resultType.value().type.getTypeId() != catalog::LogicalTypeId::DOUBLE) {
+         }
+
+         //Find correct resultType
+         resultType = boundArguments[0]->resultType.value();
+
+         /**
+                    * AVG
+                */
+         if (function->functionName == "AVG") {
+            if (resultType.type.getTypeId() == catalog::LogicalTypeId::INT) {
+               resultType = SQLTypeUtils::getCommonTypeAfterOperation(catalog::Type::decimal(19, 0), catalog::Type::decimal(19, 0), ast::ExpressionType::OPERATOR_DIVIDE);
+            } else if (resultType.type.getTypeId() == catalog::LogicalTypeId::DECIMAL) {
+               resultType = SQLTypeUtils::getCommonTypeAfterOperation(resultType, catalog::Type::decimal(19, 0), ast::ExpressionType::OPERATOR_DIVIDE);
+            }
+            resultType.isNullable = true;
+            //else keep type
+         }
+         resultType.isNullable = true;
+
+         boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, boundArguments);
+      }
+      if (function->functionName == "RANK" || function->functionName == "ROW_NUMBER") {
+         if (!function->arguments.empty()) {
+            error("RANK and ROW_NUMBER do not support any arguments", function->loc);
+         }
+         resultType = catalog::Type::int64();
+
+         boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, boundArguments);
+      }
+
+      /*
+                * COUNT
+                */
+      if (function->functionName == "COUNT") {
+         if (function->arguments.size() > 1) {
+            error("Aggregation with more than one argument not supported", function->loc);
+         }
+         if (function->arguments.size() == 0 && !function->star) {
+            error("Argument of aggregation function is not a valid expression", boundArguments[0]->loc);
+         }
+         if (function->arguments.size() == 1 && !function->star && boundArguments[0]->exprClass != ast::ExpressionClass::BOUND_COLUMN_REF && boundArguments[0]->exprClass != ast::ExpressionClass::BOUND_CONSTANT) {
+            error("Argument of count must be a column reference or a constant", boundArguments[0]->loc);
+         }
+         resultType = catalog::Type::int64();
+         if (function->star) {
+            function->functionName = function->functionName + "*";
+            resultType.useZeroInsteadOfNull = true;
+         }
+
+         boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, boundArguments);
+      }
+
+      /*
+            * STDDEV_SAMP
+            */
+      if (function->functionName == "STDDEV_SAMP") {
+         if (boundArguments.size() != 1) {
+            error("Aggregation with more than one argument not supported", function->loc);
+         }
+         if (!boundArguments[0]->resultType.has_value() || !boundArguments[0]->resultType->isNumeric()) {
+            error("Argument of aggregation function has not a valid return type", boundArguments[0]->loc);
+         }
+         resultType = catalog::Type::f64();
+         resultType.isNullable = boundArguments[0]->resultType->isNullable;
+
+         boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, boundArguments);
+      }
+      if (boundFunctionExpression == nullptr) {
+         error("Not implemented", function->loc);
+      }
+
+      auto fInfo = std::make_shared<ast::NamedResult>(scope, resultType, fName);
+
+      fInfo->displayName = function->alias;
+      context->mapAttribute(resolverScope, fName, fInfo);
+      boundFunctionExpression->namedResult = fInfo;
+
+      return boundFunctionExpression;
+   }
+   std::ranges::transform(function->functionName, function->functionName.begin(), ::toupper);
+   auto scope = context->getUniqueScope("tmp_attr");
+   auto fName = function->alias.empty() ? function->functionName : function->alias;
+   std::shared_ptr<ast::BoundFunctionExpression> boundFunctionExpression = nullptr;
+   catalog::NullableType resultType{catalog::Type::noneType()};
+
+   if (function->functionName == "DATE") {
+      if (function->arguments.size() != 1) {
+         error("Function date needs exactly one argument", function->loc);
+      }
+      auto arg = analyzeExpression(function->arguments[0], context, resolverScope);
+      if (arg->resultType.has_value() && arg->resultType.value().type.getTypeId() != catalog::Type::stringType().getTypeId()) {
+         error("Function date needs argument of type string", function->loc);
+      }
+      resultType = catalog::Type(catalog::LogicalTypeId::DATE, std::make_shared<catalog::DateTypeInfo>(catalog::DateTypeInfo::DateUnit::DAY));
+      boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, "", function->alias, function->distinct, std::vector{arg});
+
+   } else if (function->functionName == "COUNT") {
+      if (function->arguments.size() != 1 && !function->star) {
+         error("Function count needs exactly one argument", function->loc);
+      }
+      if (!function->star && (function->arguments[0]->type != ast::ExpressionType::COLUMN_REF && function->arguments[0]->type != ast::ExpressionType::STAR)) {
+         error("Function count needs argument of type column or star", function->loc);
+      }
+
+      resultType = catalog::Type::int64();
+
+      if (function->star) {
+         return drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName + "*", "", function->alias, function->distinct, std::vector<std::shared_ptr<ast::BoundExpression>>{});
+      }
+      auto arg = analyzeExpression(function->arguments[0], context, resolverScope);
+
+      boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, "", function->alias, function->distinct, std::vector{arg});
+
+   } else if (function->functionName == "EXTRACT") {
+      if (function->arguments.size() != 2) {
+         error("Function extract needs exactly two arguments", function->loc);
+      }
+      auto arg1 = analyzeExpression(function->arguments[0], context, resolverScope);
+      auto arg2 = analyzeExpression(function->arguments[1], context, resolverScope);
+      if (arg2->resultType.has_value() && arg2->resultType.value().type.getTypeId() != catalog::LogicalTypeId::DATE && arg2->resultType.value().type.getTypeId() != catalog::LogicalTypeId::TIMESTAMP && arg2->resultType.value().type.getTypeId() != catalog::LogicalTypeId::INTERVAL) {
+         error("Function extract needs second argument of type date, interval or timestamp", function->loc);
+      }
+      resultType = catalog::NullableType{catalog::Type::int64(), arg2->resultType->isNullable};
+
+      boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, std::vector{arg1, arg2});
+
+   } else if (function->functionName == "DATE_TRUNC") {
+      if (function->arguments.size() != 2) {
+         error("Function DATE_TRUNC needs exactly two arguments", function->loc);
+      }
+      auto arg1 = analyzeExpression(function->arguments[0], context, resolverScope);
+      auto arg2 = analyzeExpression(function->arguments[1], context, resolverScope);
+      if (arg1->resultType.has_value() && arg1->resultType.value().type.getTypeId() != catalog::LogicalTypeId::STRING && arg1->resultType.value().type.getTypeId() != catalog::LogicalTypeId::CHAR) {
+         error("Function DATE_TRUNC needs first argument of type string", function->loc);
+      }
+      if (arg2->resultType.has_value() && arg2->resultType.value().type.getTypeId() != catalog::LogicalTypeId::DATE && arg2->resultType.value().type.getTypeId() != catalog::LogicalTypeId::TIMESTAMP && arg2->resultType.value().type.getTypeId() != catalog::LogicalTypeId::INTERVAL) {
+         error("Function DATE_TRUNC needs second argument of type date, interval or timestamp", function->loc);
+      }
+      //TODO wrong resulttype
+      resultType = catalog::Type::int64();
+
+      boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, std::vector{arg1, arg2});
+
+   } else if (function->functionName == "SUBSTRING" || function->functionName == "SUBSTR") {
+      if (function->arguments.size() < 1 && function->arguments.size() >= 4) {
+         error("Function extract needs one,two or three arguments", function->loc);
+      }
+      auto stringArg = analyzeExpression(function->arguments[0], context, resolverScope);
+      auto fromArg = function->arguments[1] ? analyzeExpression(function->arguments[1], context, resolverScope) : nullptr;
+      auto forArg = function->arguments[2] ? analyzeExpression(function->arguments[2], context, resolverScope) : nullptr;
+
+      if (!stringArg->resultType.has_value() || (stringArg->resultType->type.getTypeId() != catalog::LogicalTypeId::STRING && stringArg->resultType->type.getTypeId() != catalog::LogicalTypeId::CHAR)) {
+         error("The first argument of the SUBSTRING function must have a result type of STRING", stringArg->loc);
+      }
+      if (!fromArg->resultType.has_value() || fromArg->resultType->type.getTypeId() != catalog::LogicalTypeId::INT) {
+         error("The second argument of the SUBSTRING function must have a result type of INT", fromArg->loc);
+      }
+      if (!forArg->resultType.has_value() || forArg->resultType->type.getTypeId() != catalog::LogicalTypeId::INT) {
+         error("The second argument of the SUBSTRING function must have a result type of INT", forArg->loc);
+      }
+
+      resultType = stringArg->resultType.value();
+
+      auto boundArgs = std::vector{stringArg};
+      if (fromArg) {
+         boundArgs.emplace_back(fromArg);
+      }
+      if (forArg) {
+         boundArgs.emplace_back(forArg);
+      }
+      boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, boundArgs);
+
+   } else if (function->functionName == "ROUND") {
+      if (function->arguments.size() != 2) {
+         error("Function extract needs two arguments", function->loc);
+      }
+      auto numberArg = analyzeExpression(function->arguments[0], context, resolverScope);
+      auto decimalsArg = analyzeExpression(function->arguments[1], context, resolverScope);
+      if (decimalsArg->exprClass != ast::ExpressionClass::BOUND_CONSTANT) {
+         error("The second argument of the round function must be a constant", decimalsArg->loc);
+      }
+      if (decimalsArg->resultType.has_value() && decimalsArg->resultType->type.getTypeId() != catalog::LogicalTypeId::INT) {
+         error("The second argument of the round function must have a result type of INT", decimalsArg->loc);
+      }
+      if (!numberArg->resultType.has_value() || !numberArg->resultType->isNumeric()) {
+         error("The first argument of the round function must have a numeric type", numberArg->loc);
+      }
+      //Get resultType after round
+      resultType = numberArg->resultType.value();
+      resultType.isNullable = true;
+
+      auto boundArgs = std::vector{numberArg, decimalsArg};
+      boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, boundArgs);
+   } else if (function->functionName == "UPPER") {
+      if (function->arguments.size() != 1) {
+         error("Function with more than one argument not supported", function->loc);
+      }
+      auto arg1 = analyzeExpression(function->arguments[0], context, resolverScope);
+
+      if (!arg1->resultType.has_value() || (arg1->resultType.value().type.getTypeId() != catalog::LogicalTypeId::STRING && arg1->resultType.value().type.getTypeId() != catalog::LogicalTypeId::CHAR)) {
+         error("Argument of aggregation function has not a valid return type", arg1->loc);
+      }
+      resultType = arg1->resultType.value();
+
+      boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, std::vector{arg1});
+   } else if (function->functionName == "ABS") {
+      if (function->arguments.size() != 1) {
+         error("Function with more than one argument not supported", function->loc);
+      }
+      auto arg1 = analyzeExpression(function->arguments[0], context, resolverScope);
+      if (!arg1->resultType.has_value() || !arg1->resultType->isNumeric()) {
+         error("Argument of function has not a valid return type", arg1->loc);
+      }
+      resultType = arg1->resultType.value();
+
+      boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, std::vector{arg1});
+
+   } else if (function->functionName == "COALESCE") {
+      if (function->arguments.size() < 2) {
+         error("Function with less than two argument not supported", function->loc);
+      }
+
+      std::vector<std::shared_ptr<ast::BoundExpression>> boundArgs{};
+      std::vector<catalog::NullableType> types{};
+      std::ranges::transform(function->arguments, std::back_inserter(boundArgs), [&](auto c) {
+         auto e = analyzeExpression(c, context, resolverScope);
+         types.push_back(e->resultType.value());
+         return e;
+      });
+
+      resultType = SQLTypeUtils::getCommonBaseType(types);
+      resultType.isNullable = true;
+
+      boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, boundArgs);
+
+   } else if (function->functionName == "GROUPING") {
+      if (function->arguments.size() != 1) {
+         error("Function grouping needs exactly one argument", function->loc);
+      }
+      if (function->arguments[0]->type != ast::ExpressionType::COLUMN_REF) {
+         error("Function grouping needs argument of type column", function->loc);
+      }
+      auto arg = analyzeExpression(function->arguments[0], context, resolverScope);
+      if (arg->exprClass != ast::ExpressionClass::BOUND_COLUMN_REF) {
+         error("Function grouping needs argument of type column", function->loc);
+      }
+
+      resultType = catalog::Type::int64();
+      boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, std::vector{arg});
+
+   } else if (function->functionName == "LENGTH") {
+      if (function->arguments.size() != 1) {
+         error("Function LENGTH needs exactly one argument", function->loc);
+      }
+      if (function->arguments[0]->type != ast::ExpressionType::COLUMN_REF) {
+         error("Function LENGTH needs argument of type column", function->loc);
+      }
+      auto arg = analyzeExpression(function->arguments[0], context, resolverScope);
+      if (arg->exprClass != ast::ExpressionClass::BOUND_COLUMN_REF) {
+         error("Function grouping needs argument of type column", function->loc);
+      }
+      resultType = catalog::Type::int64();
+      boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, std::vector{arg});
+   } else if (function->functionName == "REGEXP_REPLACE") {
+      if (function->arguments.size() != 3) {
+         error("Function REGEXP_REPLACE needs exactly 3 arguments", function->loc);
+      }
+      auto text = analyzeExpression(function->arguments[0], context, resolverScope);
+      auto pattern = analyzeExpression(function->arguments[1], context, resolverScope);
+      auto replace = analyzeExpression(function->arguments[2], context, resolverScope);
+      if (text->resultType.value().type.getTypeId() != catalog::LogicalTypeId::STRING) {
+         error("Function REGEXP_REPLACE needs text of type string", text->loc);
+      }
+      if (pattern->resultType.value().type.getTypeId() != catalog::LogicalTypeId::STRING && pattern->resultType.value().type.getTypeId() != catalog::LogicalTypeId::CHAR) {
+         error("Function REGEXP_REPLACE needs pattern of type string or char", text->loc);
+      }
+      if (replace->resultType.value().type.getTypeId() != catalog::LogicalTypeId::STRING && replace->resultType.value().type.getTypeId() != catalog::LogicalTypeId::CHAR) {
+         error("Function REGEXP_REPLACE needs replacement of type string or char", text->loc);
+      }
+      resultType = text->resultType.value();
+      boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, std::vector{text, pattern, replace});
+   }
+
+   if (boundFunctionExpression == nullptr) {
+      error("Function '" << function->functionName << "' not implemented", function->loc);
+   }
+   auto fInfo = std::make_shared<ast::NamedResult>(scope, resultType, fName);
+
+   boundFunctionExpression->namedResult = fInfo;
+
+   return boundFunctionExpression;
 }
 
 std::shared_ptr<ast::BoundColumnRefExpression> SQLQueryAnalyzer::analyzeColumnRefExpression(std::shared_ptr<ast::ColumnRefExpression> columnRef, std::shared_ptr<SQLContext> context) {
