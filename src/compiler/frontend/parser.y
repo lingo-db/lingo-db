@@ -3284,7 +3284,18 @@ Sconst:
     STRING_VALUE { auto t = mkNode<lingodb::ast::ConstantExpression>(@$); t->value=std::make_shared<lingodb::ast::StringValue>($1); $$=t; };
 
 Bconst: 
-    BCONST {error(@$, "Boolean constants are not supported yet!");};
+    TRUE_P 
+    {
+        auto t = mkNode<lingodb::ast::ConstantExpression>(@$);
+        t->value=std::make_shared<lingodb::ast::BoolValue>(true);
+        $$=t;
+     };
+    | FALSE_P 
+    {
+        auto t = mkNode<lingodb::ast::ConstantExpression>(@$);
+        t->value=std::make_shared<lingodb::ast::BoolValue>(false);
+        $$=t;
+    }
 
 ConstInterval:
     | INTERVAL
