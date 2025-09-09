@@ -28,6 +28,7 @@
   #include "lingodb/compiler/frontend/ast/constraint.h"
   #include "lingodb/compiler/frontend/ast/extend_node.h"
   #include "lingodb/compiler/frontend/ast/set_node.h"
+  #include "lingodb/compiler/frontend/frontend_error.h"
   class driver;
 }
 
@@ -3445,5 +3446,5 @@ set_list:
 void
 lingodb::parser::error (const location_type& l, const std::string& m)
 {
-  std::cerr << l << ": " << m << '\n';
+  throw lingodb::syntax_error(m, l);
 }
