@@ -218,6 +218,7 @@ std::string ConstantExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGe
    label.append("Constant\\n");
 
    label.append(value->toString());
+   label.append("\n" + alias);
 
    // Create the node
    dot.append(nodeId);

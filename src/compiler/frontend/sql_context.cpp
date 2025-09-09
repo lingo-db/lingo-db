@@ -1,5 +1,6 @@
 #include "lingodb/compiler/frontend/sql_context.h"
 
+#include "lingodb/compiler/frontend/frontend_error.h"
 
 #include <iostream>
 namespace lingodb::analyzer {
@@ -76,8 +77,8 @@ void SQLContext::mapAttribute(ResolverScope& scope, std::string name, std::vecto
 std::shared_ptr<ast::NamedResult> SQLContext::getNamedResultInfo(location loc, std::string name) {
    if (!resolver.count(name)) {
       std::stringstream ss;
-      ss << "could not resolve '" << name << "' at " << loc;
-      throw std::runtime_error(ss.str());
+
+      throw frontend_error("Could not resolve: " + name, loc);
    }
    const auto res = resolver.lookup(name);
    return res;

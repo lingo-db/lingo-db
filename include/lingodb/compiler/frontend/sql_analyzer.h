@@ -127,10 +127,10 @@ class SQLQueryAnalyzer {
 
    std::shared_ptr<ast::AstNode> canonicalizeAndAnalyze(std::shared_ptr<ast::AstNode> rootNode, std::shared_ptr<SQLContext> context);
 
-
    double getTiming() {
       return totalTime;
    }
+   bool parallelismAllowed;
 
    private:
    std::shared_ptr<ast::TableProducer> analyzeTableProducer(std::shared_ptr<ast::TableProducer> rootNode, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope);
