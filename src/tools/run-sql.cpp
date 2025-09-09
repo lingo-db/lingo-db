@@ -24,7 +24,7 @@ int main(int argc, char** argv) {
 
    lingodb::compiler::support::eval::init();
    execution::ExecutionMode runMode = execution::getExecutionMode();
-   auto queryExecutionConfig = execution::createQueryExecutionConfig(runMode, true);
+   auto queryExecutionConfig = execution::createQueryExecutionConfigWithNewFrontend(runMode, true);
    unsetenv("PERF_BUILDID_DIR");
    queryExecutionConfig->timingProcessor = std::make_unique<execution::TimingPrinter>(inputFileName);
 
