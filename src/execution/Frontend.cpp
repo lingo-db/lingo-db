@@ -155,13 +155,11 @@ class NewSQLFrontend : public lingodb::execution::Frontend {
    mlir::MLIRContext context;
    mlir::OwningOpRef<mlir::ModuleOp> module;
    bool parallismAllowed;
-   void loadFromString(std::string sql) override {
-
-      sql = ":" + sql;
+   void load(std::string fileOrDirect) {
       lingodb::execution::initializeContext(context);
       driver drv;
 
-      if (!drv.parse(sql)) {
+      if (!drv.parse(fileOrDirect)) {
          auto results = drv.result;
 
          if (results.empty() || results.size() > 1) {
@@ -198,19 +196,17 @@ class NewSQLFrontend : public lingodb::execution::Frontend {
       } else {
          error.emit() << "Error during parsing";
       }
+   }
 
-
+   void loadFromString(std::string sql) override {
+      sql = ":" + sql;
+      load(sql);
    }
    void loadFromFile(std::string fileName) override {
-      std::ifstream istream{fileName};
-      if (!istream) {
-         error.emit() << "Error can't load file " << fileName;
-      }
-      std::stringstream buffer;
-      buffer << istream.rdbuf();
-      std::string sqlQuery = buffer.str();
-      loadFromString(sqlQuery);
+      load(fileName);
    }
+
+
    mlir::ModuleOp* getModule() override {
       assert(module);
       return module.operator->();
