@@ -308,7 +308,7 @@
 
 %type<std::shared_ptr<lingodb::ast::CreateNode>> CreateStmt
 %type<bool> OptTemp opt_varying
-%type<lingodb::ast::LogicalTypeWithMods> Numeric SimpleType Type CharacterWithoutLength character Bit ConstCharacter Character CharacterWithLength ConstDatetime Typename ConstTypename
+%type<lingodb::ast::LogicalTypeWithMods> Numeric SimpleType Type CharacterWithoutLength character Bit ConstCharacter Character CharacterWithLength ConstDatetime Typename ConstTypename Numeric_with_opt_lenghth
 %type<std::shared_ptr<lingodb::ast::TableElement>> TableElement columnElement TableConstraint
 %type<std::vector<std::shared_ptr<lingodb::ast::TableElement>>> TableElementList OptTableElementList
 %type<std::shared_ptr<lingodb::ast::Constraint>> ColConstraint ColConstraintElem ConstraintElem
@@ -2943,7 +2943,7 @@ Type:
     ;
 SimpleType: 
      //GenericType
-    Numeric {$$ = $Numeric;}
+    Numeric_with_opt_lenghth {$$ = $Numeric_with_opt_lenghth;}
    //TODO | Bit
     | Character
     {
@@ -3010,6 +3010,17 @@ NumericOnly:
     Fconst {$$ = $1;}
     | SignedIconst {$$ = $SignedIconst;}
     ;
+Numeric_with_opt_lenghth:
+    Numeric 
+    {
+        $$ = $1;
+    }
+    | Numeric LP type_modifier RP
+    {
+        $Numeric.typeModifiers.emplace_back($type_modifier);
+        $$ = $Numeric;
+    }
+    ;
 
 Numeric:
     INT_P
@@ -3056,6 +3067,7 @@ Numeric:
         $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::BOOLEAN);
     }
     ;
+
 Character:
     CharacterWithLength
     {
