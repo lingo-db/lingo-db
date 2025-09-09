@@ -162,8 +162,10 @@ boolean [fF][aA][lL][sS][eE]
 [aA][sS]                              { MAKE_KEYWORD(AS); }
 [aA][sS][cC]                          { MAKE_KEYWORD(ASC); }
 [aA][nN][yY]                          { MAKE_KEYWORD(ANY); }
+
 [bB][eE][tT][wW][eE][eE][nN]          { MAKE_KEYWORD(BETWEEN); }
 [bB][iI][gG][iI][nN][tT]              { MAKE_KEYWORD(BIGINT); }
+[bB][oO][oO][lL]                      { MAKE_KEYWORD(BOOLEAN_P); }
 [bB][yY]                              { MAKE_KEYWORD(BY); }
 
 [cC][aA][sS][eE]                      { MAKE_KEYWORD(CASE); }
