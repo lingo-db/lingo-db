@@ -25,7 +25,6 @@ SELECT sum(c) FROM groupjoin;
 ----
 6
 
-statement ok
 
 query tsv
 WITH set AS (SELECT DISTINCT i FROM ints),
