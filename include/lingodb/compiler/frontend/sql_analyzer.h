@@ -121,7 +121,7 @@ class SQLCanonicalizer {
 class SQLQueryAnalyzer {
    public:
 
-   SQLQueryAnalyzer(std::shared_ptr<catalog::Catalog> catalog);
+   SQLQueryAnalyzer(catalog::Catalog* catalog);
    std::shared_ptr<SQLContext> context = std::make_shared<SQLContext>();
    std::shared_ptr<StackGuard> stackGuard = std::make_shared<StackGuardNormal>();
 
@@ -154,7 +154,7 @@ class SQLQueryAnalyzer {
          .Default(ast::ExpressionType::OPERATOR_UNKNOWN);
    }
 
-   std::shared_ptr<catalog::Catalog> catalog;
+   catalog::Catalog* catalog;
    driver drv{};
    SQLCanonicalizer sqlCanonicalizer{};
    double totalTime;
