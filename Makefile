@@ -108,7 +108,7 @@ test-no-rebuild-sqlite: build/lingodb-$(SQLITE_TEST_BUILD_TYPE)/.buildstamp
 .PHONY: test-coverage
 test-coverage: build/lingodb-debug-coverage/.stamp resources/data/test/.stamp resources/data/uni/.stamp
 	cmake --build $(dir $<) --target mlir-db-opt run-mlir run-sql sql-to-mlir tester -- -j${NPROCS}
-	${LLVM_LIT_BINARY} -v --per-test-coverage  $(dir $<)/test/lit
+	${LLVM_LIT_BINARY} -v --per-test-coverage  $(dir $<)/test/lit -j 1
 	LLVM_PROFILE_FILE=$(dir $<)/tester.profraw ./build/lingodb-debug-coverage/tester
 	find $(dir $<) -type f -name "*.profraw" > $(dir $<)/profraw-files
 	echo $(dir $<)/tester.profraw >> $(dir $<)/profraw-files
