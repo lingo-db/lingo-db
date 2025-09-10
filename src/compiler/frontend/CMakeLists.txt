@@ -6,7 +6,7 @@ FLEX_TARGET(lexer ${FLEX_INPUT_FILE} ${GEN_OUTPUT_DIR}/lexer.cpp)
 
 ADD_FLEX_BISON_DEPENDENCY(lexer parser)
 include_directories(lingo-db-sql-translator ${GEN_OUTPUT_DIR})
-add_library(sql-frontend-new
+add_library(MLIRSQLFrontend
         #analyzer
         sql_analyzer.cpp
         sql_context.cpp
@@ -46,4 +46,13 @@ add_library(sql-frontend-new
         ${BISON_parser_OUTPUTS}
         ${FLEX_lexer_OUTPUTS}
 
+)
+
+add_dependencies(MLIRSQLFrontend ec-rt-defs)
+target_link_libraries(MLIRSQLFrontend PUBLIC ${dialect_libs}
+        ${conversion_libs}
+        ${translation_libs}
+        runtime_funcs_ptr
+        utility
+        catalog
 )
