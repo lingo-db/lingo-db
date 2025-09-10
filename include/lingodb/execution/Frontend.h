@@ -33,7 +33,6 @@ class Frontend {
 };
 std::unique_ptr<Frontend> createMLIRFrontend();
 std::unique_ptr<Frontend> createSQLFrontend();
-std::unique_ptr<Frontend> createNewSQLFrontend();
 void initializeContext(mlir::MLIRContext& context);
 
 } //namespace lingodb::execution

@@ -17,7 +17,6 @@
 #include "lingodb/compiler/frontend/ast/create_node.h"
 #include "lingodb/compiler/frontend/ast/insert_node.h"
 #include "lingodb/compiler/frontend/ast/set_node.h"
-#include "lingodb/compiler/old-frontend/SQL/Parser.h"
 
 #include "lingodb/utility/Serialization.h"
 
