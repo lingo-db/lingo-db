@@ -30,6 +30,7 @@ std::shared_ptr<MLIRTypeCreator> createIntervalTypeCreator(std::shared_ptr<catal
 std::shared_ptr<MLIRTypeCreator> createCharTypeCreator(std::shared_ptr<catalog::CharTypeInfo> info);
 std::shared_ptr<MLIRTypeCreator> createStringTypeCreator(std::shared_ptr<catalog::StringTypeInfo> info);
 std::shared_ptr<MLIRTypeCreator> createNoneTypeCreator();
+std::shared_ptr<MLIRTypeCreator> createIndexTypeCreator();
 } // namespace lingodb::catalog
 
 #endif //LINGODB_CATALOG_MLIRTYPES_H
