@@ -2705,11 +2705,20 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeFunctionExpressio
       if (pattern->resultType.value().type.getTypeId() != catalog::LogicalTypeId::STRING && pattern->resultType.value().type.getTypeId() != catalog::LogicalTypeId::CHAR) {
          error("Function REGEXP_REPLACE needs pattern of type string or char", text->loc);
       }
+
       if (replace->resultType.value().type.getTypeId() != catalog::LogicalTypeId::STRING && replace->resultType.value().type.getTypeId() != catalog::LogicalTypeId::CHAR) {
          error("Function REGEXP_REPLACE needs replacement of type string or char", text->loc);
       }
       resultType = text->resultType.value();
       boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, std::vector{text, pattern, replace});
+   } else if (function->functionName == "HASH") {
+      std::vector<std::shared_ptr<ast::BoundExpression>> boundArgs{};
+      std::ranges::transform(function->arguments, std::back_inserter(boundArgs), [&](auto c) {
+         return analyzeExpression(c, context, resolverScope);
+      });
+      resultType = catalog::Type::index();
+      boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, boundArgs);
+
    }
 
    if (boundFunctionExpression == nullptr) {
