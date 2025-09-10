@@ -30,6 +30,7 @@ enum class LogicalTypeId : uint8_t {
    CHAR = 10,
    STRING = 11,
    NONE = 12,
+   INDEX = 13,
 };
 class TypeInfo {
    protected:
@@ -82,6 +83,7 @@ class Type {
    static Type intervalDaytime();
    static Type intervalMonths();
    static Type noneType();
+   static Type index();
 };
 class NullableType {
    public:

@@ -683,7 +683,16 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
             auto arg2 = translateExpression(builder, function->arguments[1], context);
             return  builder.create<db::RuntimeCall>(exprLocation, wrapNullableType(mlirContext, builder.getI64Type(), {part, arg2}), "DateTrunc", mlir::ValueRange({part, arg2})).getRes();
          }
-         error("Function '" << function->functionName << "' not implemented", expression->loc);
+         if (function->functionName == "HASH") {
+            std::vector<mlir::Value> values;
+            for (auto arg: function->arguments) {
+               values.push_back(translateExpression(builder, arg, context));
+            }
+
+            auto packed = builder.create<util::PackOp>(exprLocation, values);
+            return builder.create<db::Hash>(exprLocation, builder.getIndexType(), packed);
+         }
+         error("Fdunction '" << function->functionName << "' not implemented", expression->loc);
       }
       case ast::ExpressionClass::BOUND_SUBQUERY: {
          auto subquery = std::static_pointer_cast<ast::BoundSubqueryExpression>(expression);
