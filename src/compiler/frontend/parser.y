@@ -15,6 +15,7 @@
   #include <iostream>
   #include <memory>
   #include <vector>
+  #include <utility>
 
   #include "lingodb/compiler/frontend/ast/table_producer.h"
   #include "lingodb/compiler/frontend/ast/create_node.h"
@@ -28,6 +29,7 @@
   #include "lingodb/compiler/frontend/ast/constraint.h"
   #include "lingodb/compiler/frontend/ast/extend_node.h"
   #include "lingodb/compiler/frontend/ast/set_node.h"
+  #include "lingodb/compiler/frontend/ast/copy_node.h"
   #include "lingodb/compiler/frontend/frontend_error.h"
   class driver;
 }
@@ -337,6 +339,11 @@
 %type<std::shared_ptr<ast::SetVariableStatement>> VariableSetStmt set_rest set_rest_more generic_set
 %type<std::string> var_name
 
+
+%type<std::shared_ptr<ast::CopyNode>> CopyStmt
+%type<std::string> copy_file_name copy_delimiter
+%type<std::vector<std::pair<std::string, std::string>>> copy_options copy_opt_list
+%type<std::pair<std::string, std::string>> copy_opt_item
 /* Precedence: lowest to highest */
 %left		UNION EXCEPT
 %left		INTERSECT
@@ -429,6 +436,7 @@ stmt:
  | InsertStmt {$$=$1;}
  | PipeSQLStmt {$$=$1;}
  | VariableSetStmt {$$=$1;}
+ | CopyStmt {$$=$1;}
  ;
 
  SelectStmt:
@@ -558,6 +566,73 @@ PreparableStmt:
         $$ = $1;
     }
     ;
+//TODO add missing rules    
+CopyStmt: 
+    COPY qualified_name copy_from copy_file_name copy_options copy_delimiter
+    {
+        auto node = mkNode<lingodb::ast::CopyNode>(@$);
+        node->copyInfo->table = $qualified_name;
+        node->copyInfo->fromFileName = $copy_file_name;
+        node->copyInfo->options = $copy_options;
+        $$ = node;
+    }
+    ;
+//TODO add missing rules    
+copy_from:
+    FROM
+    ;
+//TODO Add missing rules
+copy_file_name:
+    STRING_VALUE
+    {
+        $$ = $1;
+    }
+    ;
+//TODO Add missing rules
+copy_options:
+    copy_opt_list
+    {
+        $$ = $1;
+    }
+    ;
+copy_opt_list:
+    copy_opt_list[list] copy_opt_item
+    {
+        $list.emplace_back($copy_opt_item);
+        $$ = $list;
+    }
+    | %empty
+    {
+        $$ = mkList<std::pair<std::string,std::string>>();
+    }
+    ;    
+copy_opt_item: 
+    DELIMITER  STRING_VALUE
+    {
+        std::string str = $STRING_VALUE;
+        $$ = std::pair<std::string, std::string>("DELIMITER", str);
+    }
+    | NULL_P  STRING_VALUE
+    {
+        std::string str = $STRING_VALUE;
+        $$ = std::pair<std::string, std::string>("NULL", str);
+    }
+    | CSV 
+    {
+        $$ = std::pair<std::string, std::string>("FORMAT", "csv");
+    }
+    | ESCAPE STRING_VALUE
+    {
+        std::string str = $STRING_VALUE;
+        $$ = std::pair<std::string, std::string>("ESCAPE", str);
+    }
+    ;
+copy_delimiter:
+    DELIMITERS Sconst
+    ;
+    | %empty
+    ;
+
 VariableSetStmt: 
     SET set_rest
     {
