@@ -15,6 +15,7 @@ enum class NodeType : uint8_t {
    CREATE_NODE = 9,
    INSERT_NODE = 10,
    SET_NODE = 11,
+   COPY_NODE = 12,
 
    //Bound
    BOUND_TABLE_REF = 20,
