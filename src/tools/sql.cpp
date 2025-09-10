@@ -30,7 +30,7 @@ class ConciseTimingPrinter : public execution::TimingProcessor {
    }
 };
 void handleQuery(runtime::Session& session, std::string sqlQuery, bool reportTimes) {
-   auto queryExecutionConfig = execution::createQueryExecutionConfigWithNewFrontend(execution::getExecutionMode(), true);
+   auto queryExecutionConfig = execution::createQueryExecutionConfig(execution::getExecutionMode(), true);
    if (reportTimes) {
       queryExecutionConfig->timingProcessor = std::make_unique<ConciseTimingPrinter>();
    }

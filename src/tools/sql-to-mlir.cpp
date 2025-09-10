@@ -1,13 +1,20 @@
+#include "lingodb/runtime/Session.h"
 #include "lingodb/compiler/Dialect/DB/IR/DBDialect.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorDialect.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
-#include "lingodb/compiler/Dialect/TupleStream/TupleStreamDialect.h"
+
 #include "lingodb/compiler/Dialect/util/UtilDialect.h"
-#include "lingodb/compiler/old-frontend/SQL/Parser.h"
-#include "lingodb/runtime/Session.h"
+#include "lingodb/compiler/frontend/driver.h"
+#include "lingodb/compiler/frontend/sql_analyzer.h"
+#include "lingodb/compiler/frontend/sql_mlir_translator.h"
 
 #include "mlir/IR/BuiltinDialect.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
+
+#include <fstream>
 
 namespace {
 using namespace lingodb::compiler::dialect;
@@ -31,14 +38,33 @@ void printMLIR(std::string sql, std::shared_ptr<lingodb::catalog::Catalog> catal
    context.loadDialect<relalg::RelAlgDialect>();
    mlir::OpBuilder builder(&context);
    mlir::ModuleOp moduleOp = builder.create<mlir::ModuleOp>(builder.getUnknownLoc());
-   lingodb::compiler::frontend::sql::Parser translator(sql, *catalog, moduleOp);
 
    builder.setInsertionPointToStart(moduleOp.getBody());
    auto* queryBlock = new mlir::Block;
    {
+      driver drv;
+      lingodb::analyzer::SQLQueryAnalyzer analyzer{catalog.get()};
+      lingodb::translator::SQLMlirTranslator translator{moduleOp, catalog.get()};
+      auto sqlContext = std::make_shared<lingodb::analyzer::SQLContext>();
+      sqlContext->catalog = catalog.get();
+      if (!drv.parse(":" + sql)) {
+         auto results = drv.result;
+         if (results.size() > 1) {
+            throw std::runtime_error("Only one statement allowed");
+         }
+         drv.result[0] = analyzer.canonicalizeAndAnalyze(drv.result[0], sqlContext);
+         auto val = translator.translateStart(builder, drv.result[0], sqlContext);
+      } else {
+         throw std::runtime_error("Something went wrong");
+      }
+
+
       mlir::OpBuilder::InsertionGuard guard(builder);
       builder.setInsertionPointToStart(queryBlock);
-      auto val = translator.translate(builder);
+
+
+
+      auto val = translator.translateStart(builder, drv.result[0], sqlContext);
       if (val.has_value()) {
          builder.create<subop::SetResultOp>(builder.getUnknownLoc(), 0, val.value());
       }

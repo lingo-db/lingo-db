@@ -252,7 +252,7 @@ void runStatement(runtime::Session& session, const std::vector<std::string>& lin
    if (statement.starts_with("CREATE INDEX")) {
       return;
    }
-   auto queryExecutionConfig = execution::createQueryExecutionConfigWithNewFrontend(execution::ExecutionMode::DEFAULT, true);
+   auto queryExecutionConfig = execution::createQueryExecutionConfig(execution::ExecutionMode::DEFAULT, true);
    queryExecutionConfig->resultProcessor = std::unique_ptr<execution::ResultProcessor>();
    auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), session);
    executer->fromData(statement);
@@ -356,7 +356,7 @@ void runQuery(runtime::Session& session, const std::vector<std::string>& lines, 
       expectedResult += lines[line] + "\n";
       line++;
    }
-   auto queryExecutionConfig = execution::createQueryExecutionConfigWithNewFrontend(execution::getExecutionMode(), true);
+   auto queryExecutionConfig = execution::createQueryExecutionConfig(execution::getExecutionMode(), true);
    auto resultHasher = std::make_unique<ResultHasher>();
    auto& resultHasherRef = *resultHasher;
    resultHasher->sortMode = sort;
