@@ -39,6 +39,7 @@ add_library(sql-frontend-new
         ast/insert_node.cpp
         ast/query_node.cpp
         ast/set_node.cpp
+        ast/copy_node.cpp
 #common
         frontend_error.cpp
 
