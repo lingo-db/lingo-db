@@ -118,6 +118,10 @@ std::shared_ptr<MLIRTypeCreator> createStringTypeCreator(std::shared_ptr<catalog
 std::shared_ptr<MLIRTypeCreator> createNoneTypeCreator() {
    return std::make_shared<NoneTypeCreator>();
 }
+std::shared_ptr<MLIRTypeCreator> createIndexTypeCreator() {
+   return std::make_shared<GenericTypeCreator<mlir::IndexType>>();
+}
+
 } // namespace lingodb::catalog
 #else
 namespace lingodb::catalog {

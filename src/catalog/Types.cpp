@@ -43,6 +43,8 @@ Type::Type(lingodb::catalog::LogicalTypeId id, std::shared_ptr<TypeInfo> infoInp
       case LogicalTypeId::NONE:
          mlirTypeCreator = lingodb::catalog::createNoneTypeCreator();
          break;
+      case LogicalTypeId::INDEX:
+         mlirTypeCreator = lingodb::catalog::createIndexTypeCreator();
    }
 }
 void Type::serialize(utility::Serializer& serializer) const {
@@ -369,5 +371,8 @@ Type Type::intervalMonths() {
 }
 Type Type::noneType() {
    return Type(LogicalTypeId::NONE, nullptr);
+}
+Type Type::index() {
+   return Type(LogicalTypeId::INDEX, nullptr);
 }
 } //end namespace lingodb::catalog
