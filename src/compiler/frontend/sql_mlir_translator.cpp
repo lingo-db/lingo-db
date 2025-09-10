@@ -13,6 +13,7 @@
 #include "lingodb/compiler/frontend/ast/bound/bound_insert_node.h"
 #include "lingodb/compiler/frontend/ast/bound/bound_query_node.h"
 #include "lingodb/compiler/frontend/ast/bound/bound_tableref.h"
+#include "lingodb/compiler/frontend/ast/copy_node.h"
 #include "lingodb/compiler/frontend/ast/create_node.h"
 #include "lingodb/compiler/frontend/ast/insert_node.h"
 #include "lingodb/compiler/frontend/ast/set_node.h"
@@ -60,6 +61,11 @@ std::optional<mlir::Value> SQLMlirTranslator::translateStart(mlir::OpBuilder& bu
          case ast::NodeType::SET_NODE: {
             auto setNode = std::static_pointer_cast<ast::SetNode>(astNode);
             translateSetNode(builder, setNode, context);
+            return std::nullopt;
+         }
+         case ast::NodeType::COPY_NODE: {
+            auto copyNode = std::static_pointer_cast<ast::CopyNode>(astNode);
+            translateCopyNode(builder, copyNode, context);
             return std::nullopt;
          }
          default: error("Invalid root node type", astNode->loc);
@@ -294,6 +300,34 @@ void SQLMlirTranslator::translateSetNode(mlir::OpBuilder& builder, std::shared_p
       }
       default: error("Not implemented", insertNode->loc);
    }
+}
+
+void SQLMlirTranslator::translateCopyNode(mlir::OpBuilder& builder, std::shared_ptr<ast::CopyNode> copyStmt, std::shared_ptr<analyzer::SQLContext> context) {
+   std::string fileName = copyStmt->copyInfo->fromFileName;
+   std::string tableName = copyStmt->copyInfo->table;
+   std::string delimiter = ",";
+   std::string escape = "";
+   for (auto [optionName, optionValue] : copyStmt->copyInfo->options) {
+      if (optionName == "DELIMITER") {
+         delimiter = optionValue;
+      } else if (optionName == "ESCAPE") {
+         escape = optionValue;
+      } else if (optionName == "FORMAT") {
+         std::string format = optionValue;
+         if (format != "csv") {
+            throw std::runtime_error("copy only supports csv");
+         }
+
+      } else if (optionName == "NULL") {
+      } else {
+         error(optionName <<  "option not implemented", copyStmt->loc);
+      }
+   }
+   auto tableNameValue = createStringValue(builder, tableName);
+   auto fileNameValue = createStringValue(builder, fileName);
+   auto delimiterValue = createStringValue(builder, delimiter);
+   auto escapeValue = createStringValue(builder, escape);
+   compiler::runtime::RelationHelper::copyFromIntoTable(builder, builder.getUnknownLoc())(mlir::ValueRange{tableNameValue, fileNameValue, delimiterValue, escapeValue});
 }
 
 catalog::CreateTableDef SQLMlirTranslator::translateTableElements(mlir::OpBuilder& builder, std::vector<std::shared_ptr<ast::TableElement>> tableElements, std::shared_ptr<analyzer::SQLContext> context) {
