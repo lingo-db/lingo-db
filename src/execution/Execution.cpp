@@ -329,58 +329,11 @@ class DefaultQueryExecuter : public QueryExecuter {
       }
    }
 };
+
 std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(execution::ExecutionMode runMode, bool sqlInput) {
    auto config = std::make_unique<QueryExecutionConfig>();
    if (sqlInput) {
       config->frontend = createSQLFrontend();
-   } else {
-      config->frontend = createMLIRFrontend();
-   }
-   config->queryOptimizer = std::make_unique<DefaultQueryOptimizer>();
-   config->loweringSteps.emplace_back(std::make_unique<RelAlgLoweringStep>());
-   config->loweringSteps.emplace_back(std::make_unique<SubOpLoweringStep>());
-   config->loweringSteps.emplace_back(std::make_unique<DefaultImperativeLowering>());
-#if defined(ASAN_ACTIVE)
-   if (runMode == ExecutionMode::DEBUGGING) {
-      std::cerr << "ASAN is not supported in DEBUGGING mode. Switching to C mode" << std::endl;
-      runMode = ExecutionMode::C;
-   }
-#endif
-   if (runMode == ExecutionMode::DEBUGGING) {
-      config->executionBackend = createLLVMDebugBackend();
-   } else if (runMode == ExecutionMode::C) {
-      config->executionBackend = createCBackend();
-   } else if (runMode == ExecutionMode::PERF) {
-      config->executionBackend = createLLVMProfilingBackend();
-   } else if (runMode == ExecutionMode::GPU) {
-#if GPU_ENABLED == 1
-      config->executionBackend = createGPULLVMBackend();
-#endif
-   } else if (runMode == ExecutionMode::BASELINE || runMode == ExecutionMode::BASELINE_SPEED) {
-#if BASELINE_ENABLED == 1
-      config->executionBackend = createBaselineBackend();
-#else
-      std::cerr << "Baseline mode is not enabled in this build" << std::endl;
-#endif
-   } else if (runMode != ExecutionMode::NONE) {
-      config->executionBackend = createDefaultLLVMBackend();
-   }
-   config->resultProcessor = execution::createTablePrinter();
-   if (runMode == ExecutionMode::SPEED || runMode == ExecutionMode::BASELINE_SPEED) {
-      config->queryOptimizer->disableVerification();
-      config->executionBackend->disableVerification();
-      for (auto& loweringStep : config->loweringSteps) {
-         loweringStep->disableVerification();
-      }
-      config->executionBackend->disableVerification();
-   }
-   return config;
-}
-
-std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfigWithNewFrontend(execution::ExecutionMode runMode, bool sqlInput) {
-   auto config = std::make_unique<QueryExecutionConfig>();
-   if (sqlInput) {
-      config->frontend = createNewSQLFrontend();
    } else {
       config->frontend = createMLIRFrontend();
    }
