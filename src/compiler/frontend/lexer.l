@@ -174,6 +174,8 @@ boolean [fF][aA][lL][sS][eE]
 [cC][hH][aA][rR][aA][cC][tT][eE][rR]  { MAKE_KEYWORD(CHARACTER); }
 [cC][rR][eE][aA][tT][eE]              { MAKE_KEYWORD(CREATE); }
 [cC][uU][rR][rR][eE][nN][tT]          { MAKE_KEYWORD(CURRENT_P); }
+[cC][oO][pP][yY]                      { MAKE_KEYWORD(COPY); }
+[cC][sS][vV]                          { MAKE_KEYWORD(CSV); }  
 
 [dD][aA][tT][eE]                      { MAKE_KEYWORD(DATE_P); }
 [dD][aA][yY]                          { MAKE_KEYWORD(DAY_P); }
@@ -181,6 +183,7 @@ boolean [fF][aA][lL][sS][eE]
 [dD][eE][sS][cC]                      { MAKE_KEYWORD(DESC); }
 [dD][iI][sS][tT][iI][nN][cC][tT]      { MAKE_KEYWORD(DISTINCT); }
 [dD][rR][oO][pP]                      { MAKE_KEYWORD(DROP); }
+[dD][eE][lL][iI][mM][iI][tT][eE][rR]  {MAKE_KEYWORD(DELIMITER); }
 
 [eE][lL][sS][eE]                      { MAKE_KEYWORD(ELSE); }
 [eE][nN][dD]                          { MAKE_KEYWORD(END_P); }
@@ -188,6 +191,7 @@ boolean [fF][aA][lL][sS][eE]
 [eE][xX][iI][sS][tT][sS]              { MAKE_KEYWORD(EXISTS); }
 [eE][xX][tT][eE][nN][dD]              { MAKE_KEYWORD(EXTEND); }
 [eE][xX][tT][rR][aA][cC][tT]          { MAKE_KEYWORD(EXTRACT); }
+[eE][sS][cC][aA][pP][eE]              { MAKE_KEYWORD(ESCAPE); }
 
 [fF][aA][lL][sS][eE]                  { MAKE_KEYWORD(FALSE_P); }
 [fF][lL][oO][aA][tT]                  { MAKE_KEYWORD(FLOAT_P); }

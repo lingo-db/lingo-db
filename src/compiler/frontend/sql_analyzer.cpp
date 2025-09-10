@@ -770,6 +770,10 @@ std::shared_ptr<ast::AstNode> SQLQueryAnalyzer::canonicalizeAndAnalyze(std::shar
 
             return setNode;
          }
+         case ast::NodeType::COPY_NODE: {
+            auto copyNode = std::static_pointer_cast<ast::CopyNode>(astRootNode);
+            return copyNode;
+         }
          default: error("Invalid root node type", astRootNode->loc);
       }
 
