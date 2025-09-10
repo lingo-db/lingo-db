@@ -29,7 +29,7 @@ target_compile_definitions(mlir-db-opt PRIVATE ${COMPILE_DEFS})
 
 # sql-to-mlir
 add_executable(sql-to-mlir sql-to-mlir.cpp)
-target_link_libraries(sql-to-mlir PUBLIC ${LIBS} MLIRSQLFrontend pg_query::pg_query runtime utility runner scheduler)
+target_link_libraries(sql-to-mlir PUBLIC ${LIBS} MLIRSQLFrontend runtime utility runner scheduler)
 set_target_properties(sql-to-mlir PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 target_compile_definitions(sql-to-mlir PRIVATE ${COMPILE_DEFS})
 
