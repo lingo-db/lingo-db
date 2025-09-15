@@ -277,7 +277,7 @@ std::shared_ptr<db::RuntimeFunctionRegistry> db::RuntimeFunctionRegistry::getBui
    builtinRegistry->add("StringFind").implementedAs(StringRuntime::findNext).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike, RuntimeFunction::intLike}, resTypeIsI64);
    builtinRegistry->add("StringLength").implementedAs(StringRuntime::len).matchesTypes({RuntimeFunction::stringLike}, resTypeIsI64);
 
-   builtinRegistry->add("ToUpper").implementedAs(StringRuntime::toUpper).matchesTypes({RuntimeFunction::stringLike}, RuntimeFunction::matchesArgument());
+   builtinRegistry->add( "ToUpper").implementedAs(StringRuntime::toUpper).matchesTypes({RuntimeFunction::stringLike}, RuntimeFunction::matchesArgument());
    builtinRegistry->add("Concatenate").implementedAs(StringRuntime::concat).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike}, RuntimeFunction::matchesArgument());
 
    builtinRegistry->add("RegexpReplace").implementedAs(StringRuntime::regexpReplace).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike, RuntimeFunction::stringLike}, RuntimeFunction::matchesArgument());

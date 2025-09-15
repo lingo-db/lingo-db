@@ -1,8 +1,7 @@
 #include "lingodb/runtime/RelationHelper.h"
 
-#include <iostream>
-
 #include "json.h"
+#include "lingodb/catalog/FunctionCatalogEntry.h"
 
 #include "lingodb/catalog/IndexCatalogEntry.h"
 #include "lingodb/catalog/TableCatalogEntry.h"
@@ -13,8 +12,6 @@
 #include <arrow/csv/api.h>
 #include <arrow/io/api.h>
 #include <lingodb/catalog/Defs.h>
-
-#include <lingodb/runtime/storage/LingoDBTable.h>
 namespace lingodb::runtime {
 void RelationHelper::createTable(lingodb::runtime::VarLen32 meta) {
    auto* context = getCurrentExecutionContext();
@@ -28,6 +25,15 @@ void RelationHelper::createTable(lingodb::runtime::VarLen32 meta) {
       catalog->insertEntry(index);
       relation->addIndex(index->getName());
    }
+   catalog->persist();
+}
+void RelationHelper::createFunction(runtime::VarLen32 meta) {
+   auto* context = getCurrentExecutionContext();
+   auto& session = context->getSession();
+   auto catalog = session.getCatalog();
+   auto def = utility::deserializeFromHexString<lingodb::catalog::CreateFunctionDef>(meta.str());
+   auto func = std::make_shared<lingodb::catalog::CFunctionCatalogEntry>(def.name, def.code, def.returnType, def.argumentTypes);
+   catalog->insertEntry(func, true);
    catalog->persist();
 }
 void RelationHelper::appendToTable(runtime::Session& session, std::string tableName, std::shared_ptr<arrow::Table> table) {

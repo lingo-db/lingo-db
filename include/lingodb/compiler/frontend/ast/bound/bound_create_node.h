@@ -1,6 +1,7 @@
 #ifndef LINGODB_COMPILER_FRONTEND_AST_BOUND_BOUND_CREATE_NODE_H
 #define LINGODB_COMPILER_FRONTEND_AST_BOUND_BOUND_CREATE_NODE_H
 
+#include "lingodb/catalog/Catalog.h"
 #include "lingodb/compiler/frontend/ast/create_node.h"
 
 namespace lingodb::ast {
@@ -23,7 +24,7 @@ class BoundColumnElement : public TableElement {
 class BoundCreateFunctionInfo : public CreateInfo {
    public:
    BoundCreateFunctionInfo(std::string functionName, bool replace, NullableType returnType)
-      : CreateInfo(TableElementType::C, std::move(""), std::move(""), false), functionName(functionName), replace(replace), returnType(returnType) {}
+      : CreateInfo(catalog::CatalogEntry::CatalogEntryType::C_FUNCTION_ENTRY, std::move(""), std::move(""), false), functionName(functionName), replace(replace), returnType(returnType) {}
 
    std::string functionName;
    bool replace;

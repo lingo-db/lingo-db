@@ -17,6 +17,7 @@ class CatalogEntry {
       INVALID_ENTRY = 0,
       LINGODB_TABLE_ENTRY = 1,
       LINGODB_HASH_INDEX_ENTRY = 2,
+      C_FUNCTION_ENTRY = 3,
    };
 
    protected:
@@ -78,7 +79,7 @@ class Catalog {
       }
    }
 
-   void insertEntry(std::shared_ptr<CatalogEntry> entry);
+   void insertEntry(std::shared_ptr<CatalogEntry> entry, bool replace = false);
    static std::shared_ptr<Catalog> create(std::string dbDir, bool eagerLoading);
    static std::shared_ptr<Catalog> createEmpty();
    ~Catalog() {

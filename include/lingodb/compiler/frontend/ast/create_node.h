@@ -87,7 +87,7 @@ class FunctionArgument {
 class CreateFunctionInfo : public CreateInfo {
    public:
    CreateFunctionInfo(std::string functionName, bool replace)
-      : CreateInfo(CatalogType::TABLE_FUNCTION_ENTRY, std::move(""), std::move(""), false), functionName(functionName), replace(replace) {}
+      : CreateInfo(catalog::CatalogEntry::CatalogEntryType::C_FUNCTION_ENTRY, std::move(""), std::move(""), false), functionName(functionName), replace(replace) {}
 
    std::string functionName;
    bool replace;
