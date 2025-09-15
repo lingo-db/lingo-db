@@ -1,6 +1,6 @@
 #pragma once
 
-#include <tpde/ElfMapper.hpp>
+#include "tpde/ElfMapper.hpp"
 
 #include <cstdio>
 #include <filesystem>
@@ -23,16 +23,15 @@ class DynamicLoader {
    }
 
    virtual mainFnType getMainFunction() { return nullptr; }
-   bool has_error = false;
+   bool hasError = false;
 };
 
-template <typename Assembler>
 class InMemoryLoader final : public DynamicLoader {
    tpde::ElfMapper mapper;
    tpde::SymRef mainFunc;
 
    public:
-   InMemoryLoader(Assembler& assembler, Error& error, const tpde::SymRef mainFunc)
+   InMemoryLoader(tpde::AssemblerElf& assembler, Error& error, const tpde::SymRef mainFunc)
       : DynamicLoader(error),
         mainFunc(mainFunc) {
       mapper.map(assembler, [](const std::string_view name) {
@@ -58,24 +57,24 @@ class DebugLoader final : public DynamicLoader {
       auto* outFile = std::fopen((std::string{outFileName} + ".o").c_str(), "wb");
       if (!outFile) {
          error.emit() << "Could not open output file for baseline object: " << objFileName << " (" << strerror(errno) << ")\n";
-         has_error = true;
+         hasError = true;
          return;
       }
       if (std::fwrite(objFile.data(), 1, objFile.size(), outFile) != objFile.size()) {
          error.emit() << "Could not write object file to output file: " << objFileName << " (" << strerror(errno)
                       << ")\n";
-         has_error = true;
+         hasError = true;
          return;
       }
       if (std::fclose(outFile) != 0) {
          error.emit() << "Could not close output file: " << objFileName << " (" << strerror(errno) << ")\n";
-         has_error = true;
+         hasError = true;
          return;
       }
       std::string cmd = std::string("cc -shared -o ") + linkedFileName + " " + objFileName;
       auto* pPipe = ::popen(cmd.c_str(), "r");
       if (pPipe == nullptr) {
-         has_error = true;
+         hasError = true;
          error.emit() << "Could not compile query module statically (Pipe could not be opened)";
          return;
       }
@@ -87,13 +86,13 @@ class DebugLoader final : public DynamicLoader {
       }
       auto rc = ::pclose(pPipe);
       if (WEXITSTATUS(rc)) {
-         has_error = true;
+         hasError = true;
          error.emit() << "Could not compile query module statically (Pipe could not be closed)";
          return;
       }
       handle = dlopen(linkedFileName.c_str(), RTLD_LAZY);
       if (const char* dlsymError = dlerror()) {
-         has_error = true;
+         hasError = true;
          error.emit() << "Cannot open object file: " << std::string(dlsymError) << "\nerror: " << strerror(errno) << "\n";
          return;
       }
@@ -104,7 +103,7 @@ class DebugLoader final : public DynamicLoader {
       if (const char* dlsymError = dlerror()) {
          error.emit() << "Could not load symbol for main function: " << std::string(dlsymError) << "\nerror:"
                       << strerror(errno) << "\n";
-         has_error = true;
+         hasError = true;
          return nullptr;
       }
       return mainFunc;
