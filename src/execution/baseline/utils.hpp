@@ -48,16 +48,16 @@ namespace lingodb::execution::baseline {
         }
 
         void exit() {
-            std::lock_guard lock(mutex);
-            assert(current_listeners > 0 && "SpdLogSpoof::exit called without matching enter");
-            current_listeners--;
-            if (current_listeners == 0) {
-                spdlog::set_default_logger(old_logger);
-                ostream_sink.reset();
-                old_logger.reset();
-                logger.reset();
-                oss.clear();
-            }
+           std::lock_guard lock(mutex);
+           assert(current_listeners > 0 && "SpdLogSpoof::exit called without matching enter");
+           current_listeners--;
+           if (current_listeners == 0) {
+              spdlog::set_default_logger(old_logger);
+              ostream_sink.reset();
+              old_logger.reset();
+              logger.reset();
+              oss.clear();
+           }
         }
 
         std::string logs() {

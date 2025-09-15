@@ -82,12 +82,11 @@ class BaselineBackend : public ExecutionBackend {
             error.emit() << "Main function index out of bounds: " << mainFuncIdx << " >= " << compiler.func_syms.size() << "\n";
             return;
          }
-         loader = std::make_unique<InMemoryLoader<IRCompilerX64::Assembler>>(
-            compiler.assembler, error, compiler.func_syms[mainFuncIdx]);
+         loader = std::make_unique<InMemoryLoader>(compiler.assembler, error, compiler.func_syms[mainFuncIdx]);
       }
-      if (loader->has_error) return;
+      if (loader->hasError) return;
       auto mainFunc = loader->getMainFunction();
-      if (loader->has_error) return;
+      if (loader->hasError) return;
       const auto baselineEmitEnd = std::chrono::high_resolution_clock::now();
 
       utility::Tracer::Event execution("Execution", "run");
