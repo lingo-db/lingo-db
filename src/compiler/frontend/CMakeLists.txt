@@ -4,6 +4,10 @@ BISON_TARGET(parser ${BISON_INPUT_FILE} ${GEN_OUTPUT_DIR}/parser.cpp)
 FLEX_TARGET(lexer ${FLEX_INPUT_FILE} ${GEN_OUTPUT_DIR}/lexer.cpp)
 
 
+set(Boost_USE_STATIC_LIBS ON)
+find_package(Boost 1.83.0 REQUIRED COMPONENTS context)
+include_directories(${Boost_INCLUDE_DIRS})
+
 ADD_FLEX_BISON_DEPENDENCY(lexer parser)
 include_directories(lingo-db-sql-translator ${GEN_OUTPUT_DIR})
 add_library(MLIRSQLFrontend
@@ -55,4 +59,7 @@ target_link_libraries(MLIRSQLFrontend PUBLIC ${dialect_libs}
         runtime_funcs_ptr
         utility
         catalog
+        Boost::context
+
+
 )

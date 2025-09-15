@@ -1,6 +1,6 @@
 FROM quay.io/pypa/manylinux_2_28_x86_64:2025.01.11-1 AS baseimg
 RUN yum install -y epel-release || sudo yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-$(cut -d: -f5 /etc/system-release-cpe | cut -d. -f1).noarch.rpm
-RUN yum install -y cmake unzip wget
+RUN yum install -y cmake unzip wget flex bison
 RUN wget https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-linux.zip && unzip ninja-linux.zip -d /usr/bin/ && rm ninja-linux.zip
 FROM baseimg AS buildllvm
 RUN mkdir /built-llvm
