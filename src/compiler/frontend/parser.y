@@ -1,6 +1,5 @@
 %skeleton "lalr1.cc" // -*- C++ -*-
-%require "3.8.2"
-%header
+%require "3.0.4"
 
 %define api.token.raw
 %define api.namespace    { lingodb }
