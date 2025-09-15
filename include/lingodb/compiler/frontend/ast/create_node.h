@@ -73,5 +73,31 @@ class TableConstraintElement : public TableElement {
 
    std::shared_ptr<Constraint> constraint;
 };
+
+class FunctionArgument {
+   public:
+   FunctionArgument() {}
+   std::string name;
+   LogicalTypeWithMods type;
+   std::shared_ptr<ParsedExpression> defaultValue;
+};
+
+
+
+class CreateFunctionInfo : public CreateInfo {
+   public:
+   CreateFunctionInfo(std::string functionName, bool replace)
+      : CreateInfo(CatalogType::TABLE_FUNCTION_ENTRY, std::move(""), std::move(""), false), functionName(functionName), replace(replace) {}
+
+   std::string functionName;
+   bool replace;
+   std::string aliasOf;
+   //Parameters with Default values if exists
+   std::vector<FunctionArgument> argumentTypes;
+   LogicalTypeWithMods returnType;
+   std::vector<std::pair<std::string, std::string>> options;
+
+
+};
 } // namespace lingodb::ast
 #endif

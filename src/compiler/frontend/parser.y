@@ -305,7 +305,7 @@
 
 %type<std::optional<std::shared_ptr<lingodb::ast::ParsedExpression>>> case_arg
 
-%type<std::shared_ptr<lingodb::ast::CreateNode>> CreateStmt
+%type<std::shared_ptr<lingodb::ast::CreateNode>> CreateStmt CreateFunctionStmt
 %type<bool> OptTemp opt_varying
 %type<lingodb::ast::LogicalTypeWithMods> Numeric SimpleType Type CharacterWithoutLength character Bit ConstCharacter Character CharacterWithLength ConstDatetime Typename ConstTypename Numeric_with_opt_lenghth ConstInterval
 %type<std::shared_ptr<lingodb::ast::TableElement>> TableElement columnElement TableConstraint
@@ -341,6 +341,20 @@
 %type<std::string> copy_file_name copy_delimiter
 %type<std::vector<std::pair<std::string, std::string>>> copy_options copy_opt_list
 %type<std::pair<std::string, std::string>> copy_opt_item
+%type<std::vector<std::pair<std::string, std::string>>> createfunc_opt_list opt_createfunc_opt_list
+%type<std::pair<std::string, std::string>> createfunc_opt_item common_func_opt_item
+
+
+/**
+* Testing for PL SQL
+*/
+%type<std::string> param_name func_as
+%type<bool> opt_or_replace
+%type<lingodb::ast::LogicalTypeWithMods> func_type func_return
+%type<std::vector<lingodb::ast::FunctionArgument>> func_args_with_defaults func_args_with_defaults_list
+%type<lingodb::ast::FunctionArgument> func_arg_with_default func_arg
+
+
 /* Precedence: lowest to highest */
 %left		UNION EXCEPT
 %left		INTERSECT
@@ -429,6 +443,7 @@ stmt:
  | PipeSQLStmt {$$=$1;}
  | VariableSetStmt {$$=$1;}
  | CopyStmt {$$=$1;}
+ | CreateFunctionStmt {$$=$1;}
  ;
 
  SelectStmt:
@@ -727,7 +742,7 @@ NonReservedWord_or_Sconst:
     }
     ;
 NonReservedWord:	
-IDENT							{ $$ = $1; }
+IDENTIFIER							{ $$ = $1; }
 			| unreserved_keyword					{ $$ = $1; }
 			| col_name_keyword						{ $$ = $1; }
 			| type_func_name_keyword				{ $$ = $1; }
@@ -3534,6 +3549,176 @@ set_list:
         $list->sets.emplace_back(std::pair(columnRef, $a_expr));
         $$ = $list;
     }
+
+
+
+/**
+* Testing for PL SQL
+*/
+CreateFunctionStmt:
+    CREATE opt_or_replace FUNCTION func_name func_args_with_defaults 
+    RETURNS func_return opt_createfunc_opt_list opt_routine_body
+    {
+        auto createFunctionInfo = std::make_shared<lingodb::ast::CreateFunctionInfo>($func_name, $opt_or_replace);
+        createFunctionInfo->returnType = $func_return;
+        createFunctionInfo->argumentTypes = $func_args_with_defaults;
+        createFunctionInfo->options = $opt_createfunc_opt_list;
+        $$ = mkNode<lingodb::ast::CreateNode>(@$, createFunctionInfo);
+        
+    }
+    ;
+
+opt_or_replace:
+    OR REPLACE {$$=true;}
+    | %empty {$$=false;}
+    ;
+//Not to confuse with func_arg_list
+func_args: 
+    LP func_args_list RP
+    | LP RP
+    ;
+func_args_list:
+    func_arg
+    | func_args_list[list] COMMA func_arg
+    ;
+
+func_args_with_defaults:
+    LP func_args_with_defaults_list RP
+    {
+        $$ = $2;
+    }
+    | LP RP
+    {
+        $$ = $$ = mkList<lingodb::ast::FunctionArgument>();
+    }
+    ;
+func_args_with_defaults_list:
+    func_arg_with_default
+    {
+        auto list = mkList<lingodb::ast::FunctionArgument>();
+        list.emplace_back($1);
+        $$ = list;
+    }
+    | func_args_with_defaults_list[list] COMMA func_arg_with_default
+    {
+        $list.emplace_back($func_arg_with_default);
+        $$ = $list;
+    }
+    ;
+//TODO add missing rules
+func_arg:
+    param_name func_type
+    {
+        lingodb::ast::FunctionArgument arg{};
+        arg.name = $param_name;
+        arg.type = $func_type;
+        $$ = arg;
+    }
+    ;
+
+param_name: 
+    ColId
+    {
+        $$ = $1;
+    }
+    ;
+
+func_return:
+    func_type 
+    {
+        $$ = $1;
+    }
+    ;
+
+func_type:
+    Typename
+    {
+        $$ = $1;
+    }
+    ;
+func_arg_with_default:
+    func_arg
+    {
+        $$ = $1;
+
+    }
+    | func_arg DEFAULT a_expr
+    {
+       $func_arg.defaultValue = $a_expr;
+       $$ = $func_arg;
+    }
+    | func_arg EQUAL a_expr
+    {
+        $func_arg.defaultValue = $a_expr;
+        $$ = $func_arg;
+    }
+    ;
+
+
+//For options like LANGUAGE 
+opt_createfunc_opt_list:
+    createfunc_opt_list
+    {
+        $$ = $1;
+    }
+    | %empty
+    {
+        $$ = mkList<std::pair<std::string, std::string>>();
+    }
+    ;
+//For options like LANGUAGE 
+createfunc_opt_list:
+    createfunc_opt_item
+    {
+        auto list = mkList<std::pair<std::string, std::string>>();
+        list.emplace_back($1);
+        $$ = list;
+    }
+    | createfunc_opt_list[list] createfunc_opt_item
+    {
+        $list.emplace_back($createfunc_opt_item);
+        $$ = $list;
+    }
+    ;
+/*
+ * TODO missing rules
+ * Options common to both CREATE FUNCTION and ALTER FUNCTION
+ */
+common_func_opt_item:
+    IMMUTABLE
+    ;
+//TODO missing rules
+createfunc_opt_item:
+    AS func_as
+    {
+        std::string funcAs = $func_as;
+        $$ = std::pair<std::string, std::string>("AS", funcAs);
+    }
+    //TODO chamhe to NonReservedWord_or_Sconst
+    | LANGUAGE IDENTIFIER
+    {
+        std::string lang = $IDENTIFIER;
+        $$ = std::pair<std::string, std::string>("LANGUAGE", lang);
+    }
+    | common_func_opt_item
+    {
+        $$ = $1;
+    }
+    ;
+func_as:
+    STRING_VALUE
+    {
+        $$ = $1;
+    }
+    | STRING_VALUE COMMA STRING_VALUE
+    ;
+
+//TODO missing rules
+opt_routine_body:
+    %empty
+    ;
+
+
 %%
 void
 lingodb::parser::error (const location_type& l, const std::string& m)

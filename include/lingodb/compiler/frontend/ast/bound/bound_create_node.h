@@ -20,5 +20,26 @@ class BoundColumnElement : public TableElement {
    bool primary;
 };
 
+class BoundCreateFunctionInfo : public CreateInfo {
+   public:
+   BoundCreateFunctionInfo(std::string functionName, bool replace, NullableType returnType)
+      : CreateInfo(TableElementType::C, std::move(""), std::move(""), false), functionName(functionName), replace(replace), returnType(returnType) {}
+
+   std::string functionName;
+   bool replace;
+   std::string aliasOf;
+
+   std::string filePath;
+   std::string language;
+   std::string code;
+   NullableType returnType;
+   std::vector<catalog::Type> argumentTypes;
+   std::vector<std::string> argumentNames;
+
+   std::vector<std::pair<std::string, std::string>> options;
+
+
+};
+
 } // namespace lingodb::ast
 #endif
