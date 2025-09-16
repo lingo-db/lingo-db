@@ -715,9 +715,27 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
       }
       case ast::ExpressionClass::BETWEEN: {
          auto betweenExpr = std::static_pointer_cast<ast::BetweenExpression>(rootNode);
+         std::string alias = betweenExpr->alias.empty() ? "" : betweenExpr->alias;
          betweenExpr->input = canonicalizeParsedExpression(betweenExpr->input, context, false, extendNode);
          betweenExpr->upper = canonicalizeParsedExpression(betweenExpr->upper, context, false, extendNode);
          betweenExpr->lower = canonicalizeParsedExpression(betweenExpr->lower, context, false, extendNode);
+         if (extend) {
+            auto find = context->currentScope->groupedByExpressions.find(betweenExpr);
+            if (find == context->currentScope->groupedByExpressions.end()) {
+               if (betweenExpr->alias.empty()) {
+                  betweenExpr->alias = "constant__" + std::to_string(i);
+               }
+               i++;
+               extendNode->extensions.push_back(betweenExpr);
+            } else {
+               betweenExpr->alias = find->get()->alias;
+            }
+
+            auto columnRef = drv.nf.node<ast::ColumnRefExpression>(betweenExpr->loc, betweenExpr->alias);
+            columnRef->alias = alias;
+            return columnRef;
+
+         }
          return betweenExpr;
       }
       default: return rootNode;
@@ -1367,6 +1385,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                   boundWindowExpressions.emplace_back(window);
                   break;
                }
+               case ast::ExpressionClass::BOUND_BETWEEN:
                case ast::ExpressionClass::BOUND_COMPARISON:
                case ast::ExpressionClass::BOUND_CONSTANT:
                case ast::ExpressionClass::BOUND_OPERATOR:
@@ -2281,6 +2300,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeWindowExpression(
          if (windowExpr->windowBoundary->start == ast::WindowBoundaryType::EXPR_PRECEDING) {
             boundWindowBoundary->start = -boundWindowBoundary->start;
          }
+         break;
       }
 
       case ast::WindowBoundaryType::INVALID: {
@@ -2307,6 +2327,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeWindowExpression(
          if (windowExpr->windowBoundary->end == ast::WindowBoundaryType::EXPR_PRECEDING) {
             boundWindowBoundary->end = -boundWindowBoundary->end;
          }
+         break;
       }
 
       case ast::WindowBoundaryType::INVALID: {
