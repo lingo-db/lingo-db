@@ -146,6 +146,7 @@ boolean [fF][aA][lL][sS][eE]
 "/"             { MAKE_KEYWORD(SLASH); }
 "*"             { MAKE_KEYWORD(STAR); }
 "="             { MAKE_KEYWORD(EQUAL); }
+"%"             { MAKE_KEYWORD(PERCENT); }
 "<>"            { MAKE_KEYWORD(NOT_EQUAL); }
 "!="            { MAKE_KEYWORD(NOT_EQUAL); }
 "<="            { MAKE_KEYWORD(LESS_EQUAL); }
@@ -198,6 +199,7 @@ boolean [fF][aA][lL][sS][eE]
 [fF][oO][rR]                          { MAKE_KEYWORD(FOR); }
 [fF][rR][oO][mM]                      { MAKE_KEYWORD(FROM); }
 [fF][uU][lL][lL]                      { MAKE_KEYWORD(FULL); }
+[fF][oO][lL][lL][oO][wW][iI][nN][gG]  { MAKE_KEYWORD(FOLLOWING); }
 
 [gG][rR][oO][uU][pP]                  { MAKE_KEYWORD(GROUP_P); }
 
