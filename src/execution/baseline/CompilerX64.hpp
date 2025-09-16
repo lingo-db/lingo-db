@@ -1,9 +1,9 @@
 #pragma once
 
-#include "snippet_encoders_x64.hpp"
 #include "Adaptor.hpp"
 #include "CompilerBase.hpp"
 #include "CompilerConfig.hpp"
+#include "snippet_encoders_x64.hpp"
 
 #include <tpde/ValueRef.hpp>
 #include <tpde/x64/CompilerX64.hpp>
