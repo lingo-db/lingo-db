@@ -199,12 +199,6 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                std::ranges::transform(selectNode->targets, selectNode->targets.begin(), [&](std::shared_ptr<ast::ParsedExpression>& target) {
                   return canonicalizeParsedExpression(target, context, true, extendNode);
                });
-               //Canonicalize distinct expressions list
-               if (selectNode->distinctExpressions.has_value()) {
-                  std::ranges::transform(selectNode->distinctExpressions.value(), selectNode->distinctExpressions->begin(), [&](auto& target) {
-                     return canonicalizeParsedExpression(target, context, true, extendNode);
-                  });
-               }
                extendPipeOp->input = pipeOp->input;
                pipeOp->input = extendPipeOp;
 
@@ -1055,17 +1049,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
       case ast::PipeOperatorType::SELECT: {
          assert(pipeOperator->node->nodeType == ast::NodeType::EXPRESSION);
          auto targetSelection = std::static_pointer_cast<ast::TargetsExpression>(pipeOperator->node);
-         std::vector<std::shared_ptr<ast::BoundExpression>> boundTargetExpressions{};
          std::vector<std::shared_ptr<ast::NamedResult>> targetColumns{};
-         std::optional<std::vector<std::shared_ptr<ast::BoundExpression>>> boundDistinctExpressions = std::nullopt;
-         //Check if distinct is set
-         if (targetSelection->distinctExpressions.has_value()) {
-
-            boundDistinctExpressions = std::vector<std::shared_ptr<ast::BoundExpression>>{};
-            std::ranges::transform(targetSelection->distinctExpressions.value(), std::back_inserter(boundDistinctExpressions.value()), [&](auto& expr) {
-               return analyzeExpression(expr, context, resolverScope);
-            });
-         }
          context->currentScope->targetInfo.targetColumns.clear();
 
          for (auto& target : targetSelection->targets) {
@@ -1099,7 +1083,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                default: error("Not implemented", target->loc);
             }
          }
-         boundAstNode = drv.nf.node<ast::BoundTargetsExpression>(targetSelection->loc, targetSelection->alias, boundTargetExpressions, boundDistinctExpressions, targetColumns);
+         boundAstNode = drv.nf.node<ast::BoundTargetsExpression>(targetSelection->loc, targetSelection->alias, targetSelection->distinct, targetColumns);
          break;
       }
       case ast::PipeOperatorType::WHERE: {
