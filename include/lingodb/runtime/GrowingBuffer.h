@@ -1,8 +1,8 @@
 #ifndef LINGODB_RUNTIME_GROWINGBUFFER_H
 #define LINGODB_RUNTIME_GROWINGBUFFER_H
+#include "Buffer.h"
 #include "ExecutionContext.h"
 #include "ThreadLocal.h"
-#include "lingodb/runtime/Buffer.h"
 namespace lingodb::runtime {
 
 class GrowingBuffer;
