@@ -76,18 +76,11 @@ class BoundConstantExpression : public BoundExpression {
 class BoundTargetsExpression : public BoundExpression {
    public:
    static constexpr ExpressionClass TYPE = ExpressionClass::BOUND_TARGETS;
-   //BoundTargetsExpression(std::vector<std::shared_ptr<BoundExpression>> targets, std::vector<std::pair<std::string, catalog::Column>> targetColumns);
-   BoundTargetsExpression(std::string alias, std::vector<std::shared_ptr<BoundExpression>> targets, std::optional<std::vector<std::shared_ptr<BoundExpression>>> distinctExpressions, std::vector<std::shared_ptr<NamedResult>> targetColumns);
+   BoundTargetsExpression(std::string alias, bool distinct, std::vector<std::shared_ptr<NamedResult>> targetColumns);
 
-   std::vector<std::shared_ptr<BoundExpression>> targets;
-   //std::vector<std::pair<std::string, catalog::Column>> targetColumns;
+   bool distinct = false;
    std::vector<std::shared_ptr<NamedResult>> targetColumns;
 
-   /**
-    *If set: DISTINCT keyword used
-    *If not set: not DISTINCT
-    */
-   std::optional<std::vector<std::shared_ptr<BoundExpression>>> distinctExpressions;
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
