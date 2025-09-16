@@ -17,6 +17,10 @@
 namespace lingodb::execution::baseline {
 using namespace compiler;
 
+// init IRAdaptor static vars
+IRAdaptor::IRFuncRef IRAdaptor::INVALID_FUNC_REF = nullptr;
+IRAdaptor::IRValueRef IRAdaptor::INVALID_VALUE_REF = mlir::Value();
+
 namespace {
 utility::GlobalSetting<std::string> baselineDebugFileOut("system.compilation.baseline_object_out", "");
 } // namespace
