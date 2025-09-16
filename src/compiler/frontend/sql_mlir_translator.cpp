@@ -378,10 +378,7 @@ mlir::Value SQLMlirTranslator::translatePipeOperator(mlir::OpBuilder& builder, s
    switch (pipeOperator->pipeOpType) {
       case ast::PipeOperatorType::SELECT: {
          auto selectList = std::static_pointer_cast<ast::BoundTargetsExpression>(pipeOperator->node);
-         if (selectList->distinctExpressions.has_value()) {
-            if (!selectList->distinctExpressions.value().empty()) {
-               error("Distinct clause with multiple elements not supported yet", selectList->distinctExpressions.value()[0]->loc);
-            }
+         if (selectList->distinct) {
             std::vector<mlir::Attribute> columns;
             for (auto x : context->currentScope->targetInfo.targetColumns) {
                columns.push_back(x->createRef(builder, attrManager));
