@@ -106,7 +106,6 @@ struct IRCompilerX64
          default: break;
       }
 
-      // TODO: check if the result can be fused with a subsequent br instruction
       auto lhs = this->val_ref(op.getLhs());
       auto rhs = this->val_ref(op.getRhs());
       ScratchReg res_scratch{this};
@@ -204,9 +203,42 @@ struct IRCompilerX64
       lhs.reset();
       rhs.reset();
 
+      const mlir::Operation* next = op->getNextNode();
+      if (auto br = mlir::dyn_cast_or_null<mlir::cf::CondBranchOp>(next);
+          br && br.getCondition() == op.getResult()) {
+         // br follows cmp immediately -> only materialize flags into register if cmp has multiple users
+         if (!op->hasOneUse()) {
+            (void) result_ref(op.getResult());
+            generate_raw_set(jump, result_ref(op.getResult()).part(0).alloc_reg(), /*zext=*/false);
+         }
+         auto* true_block = br.getTrueDest();
+         auto* false_block = br.getFalseDest();
+         generate_conditional_branch(jump, true_block, false_block);
+         this->adaptor->inst_set_fused(br, true);
+         return true;
+      }
+
+      if (op->hasOneUse() && *op->user_begin() == next) {
+         if (auto zext_op = mlir::dyn_cast_or_null<mlir::arith::ExtUIOp>(next); zext_op && zext_op.getResult().getType().getIntOrFloatBitWidth() < 64) {
+            // chain: cmp -> zext => immediately generate the zext set into target register
+            auto [_, res_ref] = result_ref_single(zext_op.getResult());
+            generate_raw_set(jump, res_ref.alloc_reg(), /*zext=*/true);
+            this->adaptor->inst_set_fused(zext_op, true);
+            return true;
+         }
+         if (auto sext_op = mlir::dyn_cast_or_null<mlir::arith::ExtSIOp>(next); sext_op && sext_op.getResult().getType().getIntOrFloatBitWidth() < 64) {
+            // chain: cmp -> sext => immediately generate the sext set into target register
+            auto [_, res_ref] = result_ref_single(sext_op.getResult());
+            generate_raw_mask(jump, res_ref.alloc_reg());
+            this->adaptor->inst_set_fused(sext_op, true);
+            return true;
+         }
+      }
+
+      // no fusion possible, just generate the set instruction
       auto [_, res_ref] = result_ref_single(op);
       generate_raw_set(jump, res_scratch.alloc_gp());
-      set_value(res_ref, res_scratch);
+      res_ref.set_value(std::move(res_scratch));
       return true;
    }
 
@@ -218,6 +250,10 @@ struct IRCompilerX64
       const auto cond_reg = cond_ref.load_to_reg();
       ASM(TEST32ri, cond_reg, 1);
 
+      return generate_conditional_branch(Jump::jne, true_block, false_block);
+   }
+
+   bool generate_conditional_branch(const Jump jmp, const IRBlockRef true_block, const IRBlockRef false_block) noexcept {
       auto* const next_block = this->analyzer.block_ref(this->next_block());
 
       const auto true_needs_split = this->branch_needs_split(true_block);
@@ -227,14 +263,14 @@ struct IRCompilerX64
       this->begin_branch_region();
 
       if (next_block == true_block || (next_block != false_block && true_needs_split)) {
-         generate_branch_to_block(Jump::je, false_block, false_needs_split, false);
+         generate_branch_to_block(invert_jump(jmp), false_block, false_needs_split, false);
          generate_branch_to_block(Jump::jmp, true_block, false, true);
       } else if (next_block == false_block) {
-         generate_branch_to_block(Jump::jne, true_block, true_needs_split, false);
+         generate_branch_to_block(jmp, true_block, true_needs_split, false);
          generate_branch_to_block(Jump::jmp, false_block, false, true);
       } else {
          assert(!true_needs_split);
-         this->generate_branch_to_block(Jump::jne, true_block, false, false);
+         this->generate_branch_to_block(jmp, true_block, false, false);
          this->generate_branch_to_block(Jump::jmp, false_block, false, true);
       }
       this->end_branch_region();
