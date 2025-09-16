@@ -30,7 +30,7 @@ struct IRAdaptor {
    using IRValueRef = mlir::Value;
 
    [[maybe_unused]] static IRFuncRef INVALID_FUNC_REF;
-   [[maybe_unused]] static constexpr IRBlockRef INVALID_BLOCK_REF = nullptr;
+   [[maybe_unused]] static constexpr mlir::Block* INVALID_BLOCK_REF = nullptr;
    [[maybe_unused]] static IRValueRef INVALID_VALUE_REF;
 
    [[maybe_unused]] static constexpr bool TPDE_PROVIDES_HIGHEST_VAL_IDX = true;
@@ -44,10 +44,12 @@ struct IRAdaptor {
 
    struct ValInfo {
       tpde::ValLocalIdx local_idx;
+      bool fused;
    };
 
    llvm::DenseMap<IRBlockRef, std::pair<uint32_t, uint32_t>> blockInfoMap;
    llvm::DenseMap<IRValueRef, ValInfo> values;
+   llvm::DenseSet<IRInstRef> fused_instr;
 
    IRAdaptor(mlir::ModuleOp* module, Error& error) : module(module), error(error) {
    }
@@ -297,12 +299,16 @@ struct IRAdaptor {
          });
    }
 
-   [[maybe_unused]] auto inst_results(IRInstRef inst) const noexcept {
+   [[maybe_unused]] static auto inst_results(const IRInstRef inst) noexcept {
       return inst->getResults();
    }
 
-   [[maybe_unused]] static bool inst_fused(IRInstRef) noexcept {
-      return false;
+   [[maybe_unused]] bool inst_fused(const IRInstRef inst) noexcept {
+      return fused_instr.contains(inst);
+   }
+
+   [[maybe_unused]] void inst_set_fused(const IRInstRef inst, const bool fused) noexcept {
+      fused_instr.insert(inst);
    }
 
    [[maybe_unused]] std::string inst_fmt_ref(IRInstRef inst) const noexcept {
@@ -320,14 +326,15 @@ struct IRAdaptor {
    [[maybe_unused]] bool switch_func(IRFuncRef func) noexcept {
       cur_func = func;
       values.clear();
+      fused_instr.clear();
       for (auto& block : func.getFunctionBody()) {
          for (auto arg : block.getArguments())
             values[arg] = ValInfo{
-               .local_idx = static_cast<tpde::ValLocalIdx>(values.size())};
+               .local_idx = static_cast<tpde::ValLocalIdx>(values.size()), .fused = false};
          for (auto& op : block) {
             for (auto result : op.getResults())
                values[result] = ValInfo{
-                  .local_idx = static_cast<tpde::ValLocalIdx>(values.size())};
+                  .local_idx = static_cast<tpde::ValLocalIdx>(values.size()), .fused = false};
          }
       }
       return true;
@@ -336,10 +343,8 @@ struct IRAdaptor {
    [[maybe_unused]] void reset() {
       cur_func = INVALID_FUNC_REF;
       values.clear();
+      fused_instr.clear();
    }
 };
-
 // NOLINTEND(readability-identifier-naming)
-IRAdaptor::IRFuncRef IRAdaptor::INVALID_FUNC_REF = nullptr;
-IRAdaptor::IRValueRef IRAdaptor::INVALID_VALUE_REF = mlir::Value();
 }
