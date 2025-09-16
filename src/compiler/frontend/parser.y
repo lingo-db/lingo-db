@@ -3092,7 +3092,6 @@ Numeric_with_opt_lenghth:
     }
     | Numeric LP type_modifier RP
     {
-        std::cout << "Num with modifier" << std::endl;
         $Numeric.typeModifiers.emplace_back($type_modifier);
         $$ = $Numeric;
     }
