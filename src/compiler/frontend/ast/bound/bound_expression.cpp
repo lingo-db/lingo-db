@@ -46,7 +46,7 @@ std::string BoundConstantExpression::toDotGraph(uint32_t depth, NodeIdGenerator&
 /*
  * BoundTargetsExpression
 */
-BoundTargetsExpression::BoundTargetsExpression(std::string alias, std::vector<std::shared_ptr<BoundExpression>> targets, std::optional<std::vector<std::shared_ptr<BoundExpression>>> distinctExpressions, std::vector<std::shared_ptr<NamedResult>> targetColumns) : BoundExpression(TYPE, ExpressionType::BOUND_TARGETS, alias), targets(std::move(targets)), distinctExpressions(std::move(distinctExpressions)), targetColumns(std::move(targetColumns)) {
+BoundTargetsExpression::BoundTargetsExpression(std::string alias, bool distinct, std::vector<std::shared_ptr<NamedResult>> targetColumns) : BoundExpression(TYPE, ExpressionType::BOUND_TARGETS, alias), distinct(std::move(distinct)), targetColumns(std::move(targetColumns)) {
 }
 std::string BoundTargetsExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    return "";

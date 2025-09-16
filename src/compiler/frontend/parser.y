@@ -1,5 +1,5 @@
 %skeleton "lalr1.cc" // -*- C++ -*-
-%require "3.0.4"
+%require "3.8.2"
 
 %define api.token.raw
 %define api.namespace    { lingodb }
@@ -223,7 +223,7 @@
 %type <std::shared_ptr<lingodb::ast::QueryNode>> simple_select select_clause select_no_parens with_clause select_with_parens cte_list common_table_expr
 
 %type<std::vector<std::shared_ptr<lingodb::ast::ParsedExpression>>> target_list group_by_list func_arg_list func_arg_list_opt
-                                                                    extract_list expr_list expr_list_with_alias substr_list distinct_clause
+                                                                    extract_list expr_list expr_list_with_alias substr_list
                                                                     opt_partition_clause rollup_clause group_by_list_with_alias
 
 
@@ -303,7 +303,7 @@
 %type<std::shared_ptr<lingodb::ast::LimitModifier>> select_limit limit_clause
 
 %type<std::optional<lingodb::ast::LogicalType>> opt_interval
-%type<bool> opt_asymmetric set_quantifier
+%type<bool> opt_asymmetric set_quantifier distinct_clause
 
 %type<std::optional<std::shared_ptr<lingodb::ast::ParsedExpression>>> case_arg
 
@@ -320,7 +320,7 @@
 %type<std::shared_ptr<lingodb::ast::InsertNode>> InsertStmt insert_rest
 %type<std::string> insert_target insert_column_item
 %type<std::vector<std::string>> insert_column_list
-%type<std::shared_ptr<lingodb::ast::SetExpression>> set_list
+%type<std::shared_ptr<lingodb::ast::SetColumnExpression>> set_list
 
 /*%type <nodes::RelExpression>		simple_select
 %type <std::shared_ptr<nodes::Query>> select_no_parens
@@ -789,7 +789,7 @@ simple_select:
         auto target_list = mkNode<lingodb::ast::TargetsExpression>(@$);
         target_list->targets = std::move($target_list);
 
-        target_list->distinctExpressions = $distinct_clause;
+        target_list->distinct = $distinct_clause;
         t->select_list = target_list;
         t->where_clause = $where_clause;
         t->from_clause = $from_clause;
@@ -836,11 +836,7 @@ with_clause:
     }
     ;
 distinct_clause:
-    DISTINCT {$$ = mkListShared<lingodb::ast::ParsedExpression>();}
-    | DISTINCT ON LP expr_list RP
-    {
-        $$ = $expr_list;
-    }
+    DISTINCT {$$ = true;}
     ;
 cte_list:
     common_table_expr
@@ -3531,7 +3527,7 @@ set_list:
     ColId EQUAL a_expr
     {
         auto columnRef = mkNode<lingodb::ast::ColumnRefExpression>(@$, $ColId);
-        auto setNode = mkNode<lingodb::ast::SetExpression>(@$, std::vector<std::pair<std::shared_ptr<lingodb::ast::ColumnRefExpression>, std::shared_ptr<lingodb::ast::ParsedExpression>>>{std::pair(columnRef, $a_expr)});
+        auto setNode = mkNode<lingodb::ast::SetColumnExpression>(@$, std::vector<std::pair<std::shared_ptr<lingodb::ast::ColumnRefExpression>, std::shared_ptr<lingodb::ast::ParsedExpression>>>{std::pair(columnRef, $a_expr)});
         $$ = setNode;
     }
     | set_list[list] COMMA ColId EQUAL a_expr

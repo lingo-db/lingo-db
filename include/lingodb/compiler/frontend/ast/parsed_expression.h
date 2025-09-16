@@ -433,8 +433,7 @@ class TargetsExpression : public ParsedExpression {
    TargetsExpression();
 
    std::vector<std::shared_ptr<ParsedExpression>> targets{};
-
-   std::optional<std::vector<std::shared_ptr<ParsedExpression>>> distinctExpressions = std::nullopt;
+   bool distinct = false;
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
    size_t hash() override;
