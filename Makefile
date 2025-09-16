@@ -146,7 +146,7 @@ lint: build/lingodb-debug/.stamp
 	python3 tools/scripts/run-clang-tidy.py -p $(dir $<) -quiet -header-filter="$(shell pwd)/include/.*" -exclude-header-filter="generated|vendored" -exclude="arrow|vendored" -clang-tidy-binary=clang-tidy-20
 
 format:
-	find include \( -name '*.cpp' -o -name '*.h' \) -exec clang-format-20 -i {} +
-	find src \( -name '*.cpp' -o -name '*.h' \) -exec clang-format-20 -i {} +
-	find tools \( -name '*.cpp' -o -name '*.h' \) -exec clang-format-20 -i {} +
-	find test \( -name '*.cpp' -o -name '*.h' \) -exec clang-format-20 -i {} +
+	find include \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \) -exec clang-format-20 -i {} +
+	find src \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \) -exec clang-format-20 -i {} +
+	find tools \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \) -exec clang-format-20 -i {} +
+	find test \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \) -exec clang-format-20 -i {} +
