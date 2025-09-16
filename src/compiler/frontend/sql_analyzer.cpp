@@ -2992,10 +2992,16 @@ catalog::NullableType SQLTypeUtils::typemodsToCatalogType(ast::LogicalType logic
       case ast::LogicalType::TIMESTAMP: {
          return catalog::Type::timestamp();
       }
-      case ast::LogicalType::FLOAT4: {
-         return catalog::Type::f32();
-      }
-      case ast::LogicalType::FLOAT8: {
+      case ast::LogicalType::FLOAT: {
+         if (typeModifiers.size() >= 1) {
+            auto sizeValue = typeModifiers.at(0);
+            if (sizeValue->type == ast::ConstantType::UINT) {
+               auto size = std::reinterpret_pointer_cast<ast::UnsignedIntValue>(sizeValue)->iVal;
+               if (size <= 2) {
+                  return catalog::Type::f32();
+               }
+            }
+         }
          return catalog::Type::f64();
       }
       default: throw std::runtime_error("Not implemented typeMods");

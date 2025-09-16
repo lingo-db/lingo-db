@@ -3091,6 +3091,7 @@ Numeric_with_opt_lenghth:
     }
     | Numeric LP type_modifier RP
     {
+        std::cout << "Num with modifier" << std::endl;
         $Numeric.typeModifiers.emplace_back($type_modifier);
         $$ = $Numeric;
     }
@@ -3114,13 +3115,14 @@ Numeric:
         $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::BIGINT);
     }
     | REAL
-    | FLOAT_P //TODO opt_float
+    | FLOAT_P 
     {
-        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::FLOAT8);
+        auto type = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::FLOAT);
+        $$ = type;
     }
     | DOUBLE_P PRECISION
     {
-        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::FLOAT8);
+        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::FLOAT);
     }
     | DECIMAL_P opt_type_modifiers
     {
