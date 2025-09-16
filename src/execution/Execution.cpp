@@ -357,6 +357,12 @@ std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(execution::Exec
 #if GPU_ENABLED == 1
       config->executionBackend = createGPULLVMBackend();
 #endif
+   } else if (runMode == ExecutionMode::BASELINE || runMode == ExecutionMode::BASELINE_SPEED) {
+#if BASELINE_ENABLED == 1
+      config->executionBackend = createBaselineBackend();
+#else
+      std::cerr << "Baseline mode is not enabled in this build" << std::endl;
+#endif
    } else if (runMode != ExecutionMode::NONE) {
       config->executionBackend = createDefaultLLVMBackend();
    }
