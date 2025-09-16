@@ -526,13 +526,6 @@ size_t TargetsExpression::hash() {
       result ^= target->hash() + 0x9e3779b9 + (result << 6) + (result >> 2);
    }
 
-   // Hash distinct expressions if they exist
-   if (distinctExpressions) {
-      for (const auto& distinct : *distinctExpressions) {
-         result ^= distinct->hash() + 0x9e3779b9 + (result << 6) + (result >> 2);
-      }
-   }
-
    return result;
 }
 
@@ -554,22 +547,9 @@ bool TargetsExpression::operator==(ParsedExpression& other) {
    }
 
    // Compare distinct expressions
-   if (distinctExpressions.has_value() != otherTargets.distinctExpressions.has_value()) {
-      return false;
-   }
 
-   if (distinctExpressions) {
-      if (distinctExpressions->size() != otherTargets.distinctExpressions->size()) {
-         return false;
-      }
-      for (size_t i = 0; i < distinctExpressions->size(); i++) {
-         if (!(*(*distinctExpressions)[i] == *(*otherTargets.distinctExpressions)[i])) {
-            return false;
-         }
-      }
-   }
 
-   return true;
+   return otherTargets.distinct == distinct;
 }
 
 OperatorExpression::OperatorExpression(ExpressionType type, std::shared_ptr<ParsedExpression> left) : ParsedExpression(type, TYPE), children(std::vector{left}) {
