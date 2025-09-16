@@ -53,7 +53,6 @@ void printMLIR(std::string sql, std::shared_ptr<lingodb::catalog::Catalog> catal
             throw std::runtime_error("Only one statement allowed");
          }
          drv.result[0] = analyzer.canonicalizeAndAnalyze(drv.result[0], sqlContext);
-         auto val = translator.translateStart(builder, drv.result[0], sqlContext);
       } else {
          throw std::runtime_error("Something went wrong");
       }
