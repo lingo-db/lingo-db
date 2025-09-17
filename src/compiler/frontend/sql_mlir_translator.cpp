@@ -1442,10 +1442,6 @@ mlir::Value SQLMlirTranslator::translateAggregationFunction(mlir::OpBuilder& bui
          assert(aggrFunction->arguments[0]->namedResult.has_value());
 
       }
-      if (relalgAggrFunc == relalg::AggrFunc::avg) {
-         assert(aggrFunction->namedResult.has_value());
-         aggrFunction->namedResult.value()->resultType.isNullable = true;
-      }
       if (mlir::isa<db::NullableType>(aggrResultType)) {
          assert(aggrFunction->namedResult.has_value());
          aggrFunction->namedResult.value()->resultType.isNullable = true;
