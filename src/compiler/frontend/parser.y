@@ -400,7 +400,6 @@ parse_toplevel:
 /*
  * Allows
  */
- //TODO Allow multiple
 stmtmulti:
     toplevel_stmt
     {
@@ -424,7 +423,6 @@ stmtmulti:
 toplevel_stmt:
     stmt {$$=$1;}
     | %empty
-  //TODO Add Later  | TransactionStmtLegacy
   ;
 /*
  * TODO Add the different Statement Types, like Create, Copy etc
@@ -1147,11 +1145,10 @@ alias_clause:
     | ColId
     {
         $$ = std::make_pair($ColId, std::vector<std::string>());
-    } //TODO Check if correct
+    }
     ;
 
 
-//TODO AST
 opt_nulls_order:
     NULLS_LA FIRST_P
     | NULLS_LA LAST_P
@@ -1293,7 +1290,6 @@ sortby_list:
     }
     ;
 sortby:
-    //TODO
     a_expr USING qual_all_Op opt_nulls_order
     | a_expr opt_asc_desc opt_nulls_order
     {
@@ -1376,9 +1372,9 @@ select_offset_value:
  *	expression grammar
  *
  *****************************************************************************/
- //TODO Add missing expressions, for instance func_expr
+ //TODO Add missing expressions
 /*
- * POSGRES
+ * POSTGRES
  * General expressions
  * This is the heart of the expression syntax.
  *

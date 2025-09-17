@@ -1,8 +1,6 @@
 #include "lingodb/catalog/Types.h"
 #include "lingodb/catalog/MLIRTypes.h"
 #include "lingodb/utility/Serialization.h"
-
-#include "lingodb/compiler/Dialect/DB/IR/RuntimeFunctions.h"
 namespace lingodb::catalog {
 Type::Type(lingodb::catalog::LogicalTypeId id, std::shared_ptr<TypeInfo> infoInput) : id(id), info(std::move(infoInput)) {
    switch (id) {

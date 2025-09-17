@@ -27,6 +27,10 @@ class BoundExpression : public AstNode {
 
    //If this expression is a column reference or (SELECT 2*d from t), it can be used to find the named result
    std::optional<std::shared_ptr<NamedResult>> namedResult;
+
+   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override {
+      return "";
+   };
 };
 
 class BoundColumnRefExpression : public BoundExpression {
@@ -35,9 +39,6 @@ class BoundColumnRefExpression : public BoundExpression {
 
    //! Specify both the column and table name
    BoundColumnRefExpression(catalog::NullableType resultType, std::shared_ptr<NamedResult> namedResult, std::string alias);
-
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 
 class BoundComparisonExpression : public BoundExpression {
@@ -48,8 +49,6 @@ class BoundComparisonExpression : public BoundExpression {
 
    std::shared_ptr<BoundExpression> left;
    std::vector<std::shared_ptr<BoundExpression>> rightChildren;
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 
 class BoundConjunctionExpression : public BoundExpression {
@@ -59,8 +58,6 @@ class BoundConjunctionExpression : public BoundExpression {
    BoundConjunctionExpression(ExpressionType type, std::string alias, std::vector<std::shared_ptr<BoundExpression>> children);
 
    std::vector<std::shared_ptr<BoundExpression>> children;
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 
 class BoundConstantExpression : public BoundExpression {
@@ -69,8 +66,6 @@ class BoundConstantExpression : public BoundExpression {
    BoundConstantExpression(catalog::NullableType resultType, std::shared_ptr<Value> value, std::string alias);
 
    std::shared_ptr<Value> value;
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 
 class BoundTargetsExpression : public BoundExpression {
@@ -80,9 +75,6 @@ class BoundTargetsExpression : public BoundExpression {
 
    bool distinct = false;
    std::vector<std::shared_ptr<NamedResult>> targetColumns;
-
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 
 class BoundFunctionExpression : public BoundExpression {
@@ -96,8 +88,6 @@ class BoundFunctionExpression : public BoundExpression {
 
 
    std::vector<std::shared_ptr<BoundExpression>> arguments;
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 
 class BoundStarExpression : public BoundExpression {
@@ -107,8 +97,6 @@ class BoundStarExpression : public BoundExpression {
 
    std::string relationName;
    std::vector<std::shared_ptr<NamedResult>> namedResults{};
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 
 class BoundOperatorExpression : public BoundExpression {
@@ -118,7 +106,6 @@ class BoundOperatorExpression : public BoundExpression {
    BoundOperatorExpression(ExpressionType type, catalog::NullableType resultType, std::string alias, std::shared_ptr<BoundExpression> left, std::shared_ptr<BoundExpression> right);
 
    std::vector<std::shared_ptr<BoundExpression>> children;
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 
 class BoundCastExpression : public BoundExpression {
@@ -129,18 +116,12 @@ class BoundCastExpression : public BoundExpression {
 
    std::string stringRepr;
    std::shared_ptr<BoundExpression> child;
-   //LogicalType logicalType;
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
-class BoundWindowBoundary {
-   public:
-
+struct BoundWindowBoundary {
    WindowMode windowMode = WindowMode::INVALID;
 
    size_t start = std::numeric_limits<int64_t>::min();
    size_t end = std::numeric_limits<int64_t>::max();
-
-
 
    location loc;
 };
@@ -153,8 +134,6 @@ class BoundWindowExpression : public BoundExpression {
    std::vector<std::shared_ptr<BoundExpression>> partitions;
    std::optional<std::shared_ptr<BoundOrderByModifier>> order;
    std::shared_ptr<BoundWindowBoundary> windowBoundary;
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 
 class BoundBetweenExpression : public BoundExpression {
@@ -167,8 +146,6 @@ class BoundBetweenExpression : public BoundExpression {
    std::shared_ptr<BoundExpression> lower;
    std::shared_ptr<BoundExpression> upper;
    bool asymmetric = false; // If true, the lower and upper bounds are not symmetric (e.g., BETWEEN x AND y vs. BETWEEN y AND x)
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 
 class BoundSubqueryExpression : public BoundExpression {
@@ -186,8 +163,6 @@ class BoundSubqueryExpression : public BoundExpression {
    std::shared_ptr<BoundExpression> testExpr;
    /// e.g. (x LIKE some(...))
    std::optional<ExpressionType> comparisonType = std::nullopt;
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 
 class BoundCaseExpression : public BoundExpression {
@@ -202,19 +177,18 @@ class BoundCaseExpression : public BoundExpression {
 
    std::optional<std::shared_ptr<BoundExpression>> caseExpr; //CASE expr ...
    std::vector<BoundCaseCheck> caseChecks; //CASE ... WHEN caseCheck
-   std::shared_ptr<BoundExpression> elseExpr; // CASE ... WHEN ...  ELSE expr
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
+   std::shared_ptr<BoundExpression> elseExpr; // CASE ... WHEN ...  ELSE elseExpr
 };
-
-class BoundSetExpression : public BoundExpression {
+/**
+ * Used for SET pipe operator:
+ * SET <column> = <expression>, ... : Same rows, with updated values for modified columns.
+ */
+class BoundSetColumnExpression : public BoundExpression {
    public:
    static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_SET;
-   BoundSetExpression( std::string mapName, std::vector<std::shared_ptr<BoundExpression>> sets);
+   BoundSetColumnExpression( std::string mapName, std::vector<std::shared_ptr<BoundExpression>> sets);
 
    std::string mapName;
    std::vector<std::shared_ptr<BoundExpression>> sets;
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 } // namespace lingodb::ast
