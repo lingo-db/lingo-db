@@ -1,0 +1,27 @@
+name: GPU Docker Job
+on: [push]
+
+jobs:
+  gpu-test:
+    runs-on: gpu
+    container:
+      image: ghcr.io/lingo-db/lingodb-gpu-dev:abfdb9a3e45d619c4c309caed9809f83f0c95791
+      options: --gpus all
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test GPU access
+        run: |
+          nvidia-smi
+          nvcc --version
+
+      - name: Build LingoDB with GPU support
+        run : |
+          mkdir -p build/lingodb-gpu
+          ln -sf /usr/bin/clang++-18 /usr/bin/clang++
+          cmake -G Ninja . -B build/lingodb-gpu -DCMAKE_BUILD_TYPE=Release -DENABLE_GPU_BACKEND=ON -DENABLE_TESTS=ON -DCMAKE_CXX_COMPILER=clang++-18 -DCMAKE_C_COMPILER=clang-18
+          cmake --build build/lingodb-gpu --target all -j $(nproc)
+          make resources/data/ssb_simplified-1/.stamp
+          LINGODB_EXECUTION_MODE=GPU build/lingodb-gpu/run-sql resources/sql/ssb_simplified/11.sql resources/data/ssb_simplified-1
+          LINGODB_EXECUTION_MODE=GPU build/lingodb-gpu/run-sql resources/sql/ssb_simplified/41.sql resources/data/ssb_simplified-1

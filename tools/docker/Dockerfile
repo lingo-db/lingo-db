@@ -9,14 +9,14 @@ ENV CC=clang-20 CXX=clang++-20
 RUN git clone https://github.com/lingo-db/llvmcov2html.git /llvmcov2html && cd /llvmcov2html && git checkout 34603a1 && make && cp bin/llvmcov2html /usr/bin/. && cd / && rm -rf /llvmcov2html
 
 
-FROM baseimg AS baseimg-gpu
+FROM devimg AS devimg-gpu
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get upgrade -y
 RUN apt-get clean && apt-get autoclean
-RUN wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb && \
+RUN wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb && \
     dpkg -i cuda-keyring_1.1-1_all.deb && \
     apt-get update && \
-    apt-get install -y cuda-toolkit-12-0 cuda-drivers-535
+    apt-get install -y cuda-toolkit-12-5 clang
 ENV PATH=/usr/local/cuda/bin${PATH:+:${PATH}}
 
 
