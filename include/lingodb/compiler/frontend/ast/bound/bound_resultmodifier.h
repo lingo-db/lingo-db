@@ -20,7 +20,9 @@ class BoundResultModifier : public TableProducer {
 
    virtual std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen);
 };
-
+/**
+ * GROUP BY <element>
+ */
 class BoundOrderByElement {
    public:
    BoundOrderByElement(OrderType type, OrderByNullType nullOrder, std::shared_ptr<NamedResult> namedResult) : type(type), nullOrder(nullOrder), namedResult(namedResult) {};
@@ -34,7 +36,9 @@ class BoundOrderByElement {
 
    location loc;
 };
-
+/**
+ * Complete GROUP BY node
+ */
 class BoundOrderByModifier : public BoundResultModifier {
    public:
    BoundOrderByModifier(std::vector<std::shared_ptr<BoundOrderByElement>> orderByElements, std::shared_ptr<TableProducer> input) : BoundResultModifier(ResultModifierType::BOUND_ORDER_BY, input), orderByElements(orderByElements) {}

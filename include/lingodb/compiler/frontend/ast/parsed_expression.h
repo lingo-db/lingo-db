@@ -307,6 +307,8 @@ class ColumnRefExpression : public ParsedExpression {
    //! The stack of names in order of which they appear (column_names[0].column_names[1].column_names[2]....)
    std::vector<std::string> columnNames;
 
+   bool forceToUseAlias = false;
+
    size_t hash() override;
    bool operator==(ParsedExpression& other) override;
 
@@ -332,7 +334,9 @@ class ComparisonExpression : public ParsedExpression {
    private:
    std::string typeToAscii(ExpressionType type) const;
 };
-
+/**
+ * For expression like ... AND ... / ... OR ...
+ */
 class ConjunctionExpression : public ParsedExpression {
    public:
    static constexpr const ExpressionClass TYPE = ExpressionClass::CONJUNCTION;
@@ -427,6 +431,7 @@ class StarExpression : public ParsedExpression {
 //List of targets
 //Used for the select_list
 //Select ...,...,...
+//TODO check TargetsExpression should be a ParsedExpression
 class TargetsExpression : public ParsedExpression {
    public:
    static constexpr ExpressionClass TYPE = ExpressionClass::TARGETS;
@@ -607,11 +612,14 @@ class CaseExpression : public ParsedExpression {
    size_t hash() override;
    bool operator==(ParsedExpression& other) override;
 };
-//TODO Maybe should be changed afterwards during UPDATE implemantation
-class SetExpression : public ParsedExpression {
+/**
+ * Used for SET pipe operator:
+ * SET <column> = <expression>, ... : Same rows, with updated values for modified columns.
+ */
+class SetColumnExpression : public ParsedExpression {
    public:
    static constexpr const ExpressionClass TYPE = ExpressionClass::SET;
-   SetExpression(std::vector<std::pair<std::shared_ptr<ColumnRefExpression>, std::shared_ptr<ParsedExpression>>> sets);
+   SetColumnExpression(std::vector<std::pair<std::shared_ptr<ColumnRefExpression>, std::shared_ptr<ParsedExpression>>> sets);
 
    std::vector<std::pair<std::shared_ptr<ColumnRefExpression>,std::shared_ptr<ParsedExpression> >> sets;
 

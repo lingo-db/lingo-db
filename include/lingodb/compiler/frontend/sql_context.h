@@ -103,10 +103,5 @@ class SQLContext {
    void replace(ResolverScope& scope, std::shared_ptr<ast::NamedResult> old, std::shared_ptr<ast::NamedResult> value);
 
    std::string getUniqueScope(std::string base);
-
-   //std::vector<std::pair<size_t, ast::ColumnInfo>> findColumn(const std::string& columnName) const;
-   //std::vector<std::pair<size_t, ast::ColumnInfo>> findColumn(const std::string& columnName, const std::string& alias) const;
-
-   std::string toString() const;
 };
 } // namespace lingodb::analyzer

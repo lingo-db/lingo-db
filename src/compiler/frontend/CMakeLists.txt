@@ -1,3 +1,4 @@
+set(GEN_OUTPUT_DIR ${CMAKE_BINARY_DIR}/include/lingodb/compiler/frontend/sql-parser/gen )
 set(BISON_INPUT_FILE ${CMAKE_SOURCE_DIR}/src/compiler/frontend/parser.y)
 set(FLEX_INPUT_FILE ${CMAKE_SOURCE_DIR}/src/compiler/frontend/lexer.l)
 BISON_TARGET(parser ${BISON_INPUT_FILE} ${GEN_OUTPUT_DIR}/parser.cpp)
