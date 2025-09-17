@@ -35,7 +35,9 @@ class ResultModifier : public TableProducer {
 
    virtual std::string toDotGraph(uint32_t depth);
 };
-
+/**
+ * GROUP BY <element>
+ */
 class OrderByElement {
    public:
    OrderByElement(OrderType type, OrderByNullType nullOrder) : type(type), nullOrder(nullOrder) {};
@@ -49,7 +51,9 @@ class OrderByElement {
 
    location loc;
 };
-
+/**
+ * Complete GROUP BY node with its orderby elements
+ */
 class OrderByModifier : public ResultModifier {
    public:
    OrderByModifier() : ResultModifier(ResultModifierType::ORDER_BY) {}

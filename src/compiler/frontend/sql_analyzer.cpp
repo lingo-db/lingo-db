@@ -178,7 +178,7 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                valuesNode->expressionListRef = canonicalizeCast<ast::ExpressionListRef>(valuesNode->expressionListRef, context);
                return valuesNode;
             }
-            default: error("Not implemented", queryNode->loc);
+            default: error("canonicalize: queryNode is not yet supported", queryNode->loc);
          }
       }
       case ast::NodeType::PIPE_OP: {
@@ -294,7 +294,7 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                return setOperationNode;
             }
             case ast::PipeOperatorType::SET: {
-               auto setExpression = std::static_pointer_cast<ast::SetExpression>(pipeOp->node);
+               auto setExpression = std::static_pointer_cast<ast::SetColumnExpression>(pipeOp->node);
                assert(setExpression->type == ast::ExpressionType::SET);
                std::ranges::transform(setExpression->sets, setExpression->sets.begin(), [&](auto& pair) {
                     return std::pair(pair.first, canonicalizeParsedExpression(pair.second, context, false, nullptr));
@@ -431,6 +431,7 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
             }
             auto columnRef = drv.nf.node<ast::ColumnRefExpression>(subqueryExpr->loc, subqueryExpr->alias);
             columnRef->alias = alias;
+            columnRef->forceToUseAlias = true;
             return columnRef;
          }
 
@@ -457,6 +458,7 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
 
             auto columnRef = drv.nf.node<ast::ColumnRefExpression>(operatorExpr->loc, operatorExpr->alias);
             columnRef->alias = alias;
+            columnRef->forceToUseAlias = true;
             return columnRef;
 
          }
@@ -469,12 +471,17 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
          std::vector<std::shared_ptr<ast::ParsedExpression>> combinedChildren;
          for (auto& child : conjunctionExpr->children) {
             child = canonicalizeParsedExpression(child, context, false, extendNode);
-            combinedChildren.emplace_back(child);
+            if (child->exprClass == ast::ExpressionClass::CONJUNCTION && child->type == conjunctionExpr->type) {
+               combinedChildren.insert(combinedChildren.end(), std::static_pointer_cast<ast::ConjunctionExpression>(child)->children.begin(), std::static_pointer_cast<ast::ConjunctionExpression>(child)->children.end());
+            } else {
+               combinedChildren.emplace_back(child);
+            }
+
          }
          conjunctionExpr->children = std::move(combinedChildren);
 
          if (extend) {
-            error("Not implemented", conjunctionExpr->loc);
+            error("Conjunction cannot be extended", conjunctionExpr->loc);
          }
          return conjunctionExpr;
       }
@@ -503,6 +510,7 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
 
             auto columnRef = drv.nf.node<ast::ColumnRefExpression>(comparisonExpr->loc, comparisonExpr->alias);
             columnRef->alias = alias;
+            columnRef->forceToUseAlias = true;
             return columnRef;
 
          }
@@ -654,6 +662,7 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
 
             auto columnRef = drv.nf.node<ast::ColumnRefExpression>(caseExpr->loc, caseExpr->alias);
             columnRef->alias = alias;
+            columnRef->forceToUseAlias = true;
             return columnRef;
 
          }
@@ -678,6 +687,7 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
 
             auto columnRef = drv.nf.node<ast::ColumnRefExpression>(castExpr->loc, castExpr->alias);
             columnRef->alias = alias;
+            columnRef->forceToUseAlias = true;
             return columnRef;
 
          }
@@ -701,6 +711,7 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
 
             auto columnRef = drv.nf.node<ast::ColumnRefExpression>(constantExpr->loc, constantExpr->alias);
             columnRef->alias = alias;
+            columnRef->forceToUseAlias = true;
             return columnRef;
 
          }
@@ -727,6 +738,7 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
 
             auto columnRef = drv.nf.node<ast::ColumnRefExpression>(betweenExpr->loc, betweenExpr->alias);
             columnRef->alias = alias;
+            columnRef->forceToUseAlias = true;
             return columnRef;
 
          }
@@ -770,7 +782,6 @@ std::shared_ptr<ast::AstNode> SQLQueryAnalyzer::canonicalizeAndAnalyze(std::shar
             auto scope = context->createResolverScope();
             insertNode->producer = sqlCanonicalizer.canonicalize(insertNode->producer, std::make_shared<ASTTransformContext>());
             auto i = analyzeInsertNode(insertNode, context, scope);
-            //context->popCurrentScope();
             auto endCanonicalizeAndAnalyze = std::chrono::high_resolution_clock::now();
             this->totalTime = std::chrono::duration_cast<std::chrono::microseconds>(endCanonicalizeAndAnalyze - startCanonicalizeAndAnalyze).count() / 1000.0;
             return i;
@@ -931,11 +942,11 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableProducer(std::
                return drv.nf.node<ast::BoundValuesQueryNode>(valuesNode->loc, valuesNode->alias, std::static_pointer_cast<ast::BoundExpressionListRef>(boundExpressionListRef));
             }
 
-            default: throw std::runtime_error("Not implemented");
+            default: throw std::runtime_error("QueryNodeType not implemented");
          }
       }
 
-      default: throw std::runtime_error("Not implemented");
+      default: throw std::runtime_error("Node type no implemented");
    }
 }
 
@@ -991,7 +1002,7 @@ std::shared_ptr<ast::CreateNode> SQLQueryAnalyzer::analyzeCreateNode(std::shared
          createTableInfo->tableElements = std::move(boundTableElements);
          return createNode;
       }
-      default: error("Not implemented", createNode->loc);
+      default: error("Create info not supported", createNode->loc);
    }
 }
 
@@ -1080,7 +1091,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                   break;
                }
                //NOTE: All other expressions should be moved into an ExtendNode or AggregationNode by canonicalize
-               default: error("Not implemented", target->loc);
+               default: error("Invalid expression inside select clause", target->loc);
             }
          }
          boundAstNode = drv.nf.node<ast::BoundTargetsExpression>(targetSelection->loc, targetSelection->alias, targetSelection->distinct, targetColumns);
@@ -1148,7 +1159,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                return boundExpression->namedResult.value();
             });
          }
-         auto boundGroupByNode = drv.nf.node<ast::BoundGroupByNode>(aggregationNode->groupByNode ? aggregationNode->groupByNode->loc : aggregationNode->loc, groupNamedResults, aggregationNode->groupByNode ? aggregationNode->groupByNode->groupingSet : std::vector<std::set<size_t>>{});
+         auto boundGroupByNode = drv.nf.node<ast::BoundGroupByNode>(aggregationNode->groupByNode ? aggregationNode->groupByNode->loc : aggregationNode->loc, groupNamedResults);
          std::vector<std::shared_ptr<ast::BoundExpression>> toMap{};
 
          /**
@@ -1193,9 +1204,8 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
 
                for (size_t j = 0; j < aggregationNode->groupByNode->groupByExpressions.size(); j++) {
                   if (groupingSet.contains(j)) {
-
                      localGroupBy.emplace_back(groupNamedResults[j]);
-                     auto mappedNamedResult = std::make_shared<ast::NamedResult>("groupingSet_" + std::to_string(groupingSetId), groupNamedResults[j]->resultType, "tmp_" + std::to_string(j));
+                     auto mappedNamedResult = std::make_shared<ast::NamedResult>("groupingSetMapToNull_" + std::to_string(groupingSetId), groupNamedResults[j]->resultType, "tmp_" + std::to_string(j));
                      mappedNamedResult->displayName = groupNamedResults[j]->displayName;
                      mapToNull.emplace_back(mappedNamedResult);
                      mappedNamedResult->resultType.isNullable = true;
@@ -1273,14 +1283,14 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
 
 
             }
-            for (size_t i = 0; i < boundAggrNode->groupByNode->groupNamedResults.size(); i++) {
-               auto old = boundAggrNode->groupByNode->groupNamedResults[i];
+            for (size_t i = 0; i < boundAggrNode->groupByNode->groupByNamedResults.size(); i++) {
+               auto old = boundAggrNode->groupByNode->groupByNamedResults[i];
                auto newN = boundAggrNode->groupByNode->unionNamedResults.back().at(i);
                context->replace(resolverScope, old, newN);
             }
             for (size_t i = 0; i < boundAggrNode->aggregations.size(); i++) {
                auto old = boundAggrNode->aggregations[i]->namedResult.value();
-               auto newN = boundAggrNode->groupByNode->unionNamedResults.back().at(boundAggrNode->groupByNode->groupNamedResults.size()+i);
+               auto newN = boundAggrNode->groupByNode->unionNamedResults.back().at(boundAggrNode->groupByNode->groupByNamedResults.size()+i);
                context->replace(resolverScope, old, newN);
             }
 
@@ -1295,9 +1305,8 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                assert(std::static_pointer_cast<ast::BoundFunctionExpression>(boundGroupingFunction)->arguments[0]->namedResult.has_value());
                auto functionArgNamedResult = std::static_pointer_cast<ast::BoundFunctionExpression>(boundGroupingFunction)->arguments[0];;
                size_t j = 0;
-               for (; j < boundAggrNode->groupByNode->groupNamedResults.size(); j++) {
+               for (; j < boundAggrNode->groupByNode->groupByNamedResults.size(); j++) {
                   auto groupNamedResult =  boundAggrNode->groupByNode->unionNamedResults.back().at(j);
-
                   if (groupNamedResult->name == functionArgNamedResult->namedResult.value()->name) {
                      break;
                   }
@@ -1306,12 +1315,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
 
                boundAggrNode->groupByNode->groupingFunctions.emplace_back(std::pair{j, boundGroupingFunction->namedResult.value()});
 
-
-
             }
-
-
-
 
             groupingSetId++;
          }
@@ -1410,7 +1414,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                }
 
 
-               default: error("Extend: Not implemented", boundExpression->loc);
+               default: error("Invalid expression", boundExpression->loc);
             }
          }
          auto boundExtendNode = drv.nf.node<ast::BoundExtendNode>(extendNode->loc, mapName, std::move(boundExpressions));
@@ -1439,7 +1443,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
 
       }
       case ast::PipeOperatorType::SET: {
-         auto setExpression = std::static_pointer_cast<ast::SetExpression>(pipeOperator->node);
+         auto setExpression = std::static_pointer_cast<ast::SetColumnExpression>(pipeOperator->node);
          std::vector<std::shared_ptr<ast::BoundExpression>> boundExpressions{};
          for (auto [columnRef, expr]: setExpression->sets) {
             auto boundExpression = analyzeExpression(expr, context, resolverScope);
@@ -1451,14 +1455,14 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
             boundExpression->namedResult = boundColumnRef->namedResult.value();
             boundColumnRef->namedResult.value()->resultType = boundExpression->resultType.value();
          }
-         boundAstNode = drv.nf.node<ast::BoundSetExpression>(setExpression->loc,  context->getUniqueScope("setMap"),boundExpressions);
+         boundAstNode = drv.nf.node<ast::BoundSetColumnExpression>(setExpression->loc,  context->getUniqueScope("setMap"),boundExpressions);
 
          break;
 
 
 
       }
-      default: error("Not implemented", pipeOperator->loc);
+      default: error("pipe operator not implemented", pipeOperator->loc);
    }
    pipeOperator->node = boundAstNode;
    return pipeOperator;
@@ -1560,7 +1564,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableRef(std::share
                {
                   auto predScope = context->createResolverScope();
                   if (!std::holds_alternative<std::shared_ptr<ast::ParsedExpression>>(join->condition)) {
-                     error("Not implemented", join->loc);
+                     error("Invalid join condition", join->loc);
                   }
                   if (std::get<std::shared_ptr<ast::ParsedExpression>>(join->condition)) {
                      boundCondition = analyzeExpression(std::get<std::shared_ptr<ast::ParsedExpression>>(join->condition), context, resolverScope);
@@ -1608,7 +1612,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableRef(std::share
                      context->mapAttribute(resolverScope, x.first, x.second);
                   }
                   if (!std::holds_alternative<std::shared_ptr<ast::ParsedExpression>>(join->condition)) {
-                     error("Not implemented", join->loc);
+                     error("Invalid join condition", join->loc);
                   }
 
                   boundCondition = analyzeExpression(std::get<std::shared_ptr<ast::ParsedExpression>>(join->condition), context, resolverScope);
@@ -1814,7 +1818,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableRef(std::share
          return drv.nf.node<ast::BoundExpressionListRef>(expressionListRef->loc, boundValues, namedResults);
       }
 
-      default: error("Not implemented", tableRef->loc);
+      default: error("Table reference not implemented", tableRef->loc);
    }
 }
 
@@ -1875,25 +1879,13 @@ std::shared_ptr<ast::BoundResultModifier> SQLQueryAnalyzer::analyzeResultModifie
          }
          return drv.nf.node<ast::BoundLimitModifier>(limitModifier->loc, limitExpression, offset, resultModifier->input);
       }
-      default: error("Not implemented", resultModifier->loc);
+      default: error("Result modifier not implemented", resultModifier->loc);
    }
 }
 
 /*
-    * Expressions
-    */
-size_t get_stack_size() {
-   pthread_attr_t attr;
-   pthread_getattr_np(pthread_self(), &attr);
-
-   void *stack_addr;
-   size_t stack_size;
-   pthread_attr_getstack(&attr, &stack_addr, &stack_size);
-
-   pthread_attr_destroy(&attr);
-   return stack_size;
-}
-
+* Expressions
+ */
 std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::shared_ptr<ast::ParsedExpression> rootNode, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope) {
    if (stackGuard->newStackNeeded()) {
       boost::context::fixedsize_stack salloc(1024*1024);
@@ -2003,7 +1995,6 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
                error("ComparisonExpression expects exactly one right child for type: " << std::to_string(static_cast<int>(comparison->type)), comparison->loc)
             }
 
-         } else {
          }
 
          auto left = analyzeExpression(comparison->left, context, resolverScope);
@@ -2038,7 +2029,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
             auto boundExpr = analyzeExpression(expr, context, resolverScope);
             boundChildren.push_back(boundExpr);
             if (!boundExpr->resultType.has_value() || boundExpr->resultType.value().type.getTypeId() != catalog::Type::boolean().getTypeId()) {
-               error("Conjunction is not possible with children of type boolean", expr->loc);
+               error("Conjunction is only possible with children of type boolean", expr->loc);
             }
          }
          return drv.nf.node<ast::BoundConjunctionExpression>(conjunction->loc, conjunction->type, conjunction->alias, boundChildren);
@@ -2161,8 +2152,6 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
       case ast::ExpressionClass::WINDOW: {
          auto windowExpr = std::static_pointer_cast<ast::WindowExpression>(rootNode);
          return analyzeWindowExpression(windowExpr, context, resolverScope);
-
-
       }
       default: error("Expression type not implemented", rootNode->loc);
    }
@@ -2329,14 +2318,14 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeWindowExpression(
       default:;
    }
 
-   ast::ExpressionType windowType = ast::ExpressionType::WINDOW_AGGREGATE;
    catalog::Type resultType = catalog::Type::int64();
 
    boundFunction->namedResult.value()->displayName = windowExpr->alias;
    context->mapAttribute(resolverScope, windowExpr->alias, boundFunction->namedResult.value());
 
    auto boundWindowExpression = drv.nf.node<ast::BoundWindowExpression>(windowExpr->loc, windowExpr->type, windowExpr->alias, resultType, boundFunction, boundPartitions, boundOrderByModifier, boundWindowBoundary);
-   boundWindowExpression->namedResult = boundFunction->namedResult;
+   boundWindowExpression->namedResult = std::make_shared<ast::NamedResult>(*boundFunction->namedResult.value().get());
+
    return boundWindowExpression;
 }
 
@@ -2367,7 +2356,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeCastExpression(st
                   error("Cannot cast " + boundColRef->alias + " to date", boundColRef->loc);
                }
             }
-            default: error("Cast not implemented", castExpr->loc);
+            default: error("Expression cannot be casted to date (unsupported type)", castExpr->loc);
          }
       }
       case ast::LogicalType::INTERVAL: {
@@ -2512,7 +2501,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeFunctionExpressio
          boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, boundArguments);
       }
       if (boundFunctionExpression == nullptr) {
-         error("Not implemented", function->loc);
+         error("aggregate function" << function->functionName << " not implemented", function->loc);
       }
 
       auto fInfo = std::make_shared<ast::NamedResult>(scope, resultType, fName);
@@ -2758,13 +2747,12 @@ std::shared_ptr<ast::BoundColumnRefExpression> SQLQueryAnalyzer::analyzeColumnRe
    } else if (columnRef->columnNames.size() == 1) {
       found = context->getNamedResultInfo(columnRef->loc, columnRef->columnNames[0]);
    } else {
-      throw std::runtime_error("Not implemented");
+      error("Invalid column reference: expected a structured reference (e.g. 'x'' or 'y.x'').", columnRef->loc);
    }
-
    if (!found) {
       error("Column not found", columnRef->loc);
    }
-   found->displayName = columnRef->alias.empty() ? found->displayName : columnRef->alias;
+   found->displayName = !columnRef->alias.empty() || columnRef->forceToUseAlias ?  columnRef->alias : found->displayName;
    return drv.nf.node<ast::BoundColumnRefExpression>(columnRef->loc, found->resultType, found, columnRef->alias);
 }
 
@@ -3015,7 +3003,7 @@ catalog::NullableType SQLTypeUtils::typemodsToCatalogType(ast::LogicalType logic
          }
          return catalog::Type::f64();
       }
-      default: throw std::runtime_error("Not implemented typeMods");
+      default: throw std::runtime_error("Typemod not implemented");
    }
 }
 

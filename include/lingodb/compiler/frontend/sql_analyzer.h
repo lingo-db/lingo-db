@@ -70,7 +70,7 @@ class SQLCanonicalizer {
     *
     * Key transformations:
     * - SELECT node is converted into a pipeline of operations:
-    *   FROM -> WHERE -> EXTEND -> AGGREGATE -> EXTEND -> SELECT -> HAVING -> MODIFIERS
+    *   FROM -> WHERE -> EXTEND -> AGGREGATE -> EXTEND -> SELECT -> WHERE -> MODIFIERS
     *   Functions inside SELECT are moved to the corresponding EXTEND/AGGREGATE PIPE
     * - Handles SET operations (UNION, etc.) by canonicalizing both branches
     * - Processes CTEs by canonicalizing both the CTE query and its child

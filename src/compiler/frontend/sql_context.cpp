@@ -102,31 +102,4 @@ std::string SQLContext::getUniqueScope(std::string base) {
    }
 }
 
-/*std::vector<std::pair<size_t, ast::ColumnInfo>> SQLContext::findColumn(const std::string& columnName) const {
-   std::vector<std::pair<size_t, ast::ColumnInfo>> columns{};
-   std::string foundTable;
-   auto current = currentScope;
-   while (current) {
-      for (auto t : current->columns) {
-         auto colsOfTable = t.second;
-         foundTable = t.first;
-         auto it = std::find_if(colsOfTable.begin(), colsOfTable.end(), [&columnName](std::pair<size_t, ast::ColumnInfo> col) {
-            const std::string& colName = col.second.column.getColumnName();
-            return colName.length() == columnName.length() &&
-               std::equal(colName.begin(), colName.end(), columnName.begin(),
-                          [](char a, char b) { return std::tolower(a) == std::tolower(b); });
-         });
-         if (it != colsOfTable.end()) {
-            columns.emplace_back(*it);
-         }
-      }
-      current = current->parent;
-   }
-   return columns;
-}*/
-
-std::string SQLContext::toString() const {
-   return "";
-}
-
 } // namespace lingodb::analyzer
