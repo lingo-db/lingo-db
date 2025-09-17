@@ -16,6 +16,11 @@
 #include <memory>
 
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 
 #include <lingodb/compiler/Dialect/util/UtilOps.h>
 
@@ -60,7 +65,7 @@ class SQLMlirTranslator {
    mlir::Value translateExpression(mlir::OpBuilder& builder, std::shared_ptr<ast::BoundExpression> expression, std::shared_ptr<analyzer::SQLContext> context);
    mlir::Value translateBinaryOperatorExpression(mlir::OpBuilder& builder, std::shared_ptr<ast::BoundOperatorExpression> expression, std::shared_ptr<analyzer::SQLContext> context, mlir::Value left, mlir::Value right);
    mlir::Value translateWindowExpression(mlir::OpBuilder& builder, mlir::Value tree, std::shared_ptr<ast::BoundWindowExpression> expression, std::shared_ptr<analyzer::SQLContext> context);
-   mlir::Value translateWhenCheks(mlir::OpBuilder& builder, std::shared_ptr<ast::BoundCaseExpression> boundCase, std::optional<mlir::Value> caseExprTranslated, std::vector<ast::BoundCaseExpression::BoundCaseCheck> caseChecks, std::shared_ptr<ast::BoundExpression> elseExpr, std::shared_ptr<analyzer::SQLContext> context);
+   mlir::Value translateWhenChecks(mlir::OpBuilder& builder, std::shared_ptr<ast::BoundCaseExpression> boundCase, std::optional<mlir::Value> caseExprTranslated, std::vector<ast::BoundCaseExpression::BoundCaseCheck> caseChecks, std::shared_ptr<ast::BoundExpression> elseExpr, std::shared_ptr<analyzer::SQLContext> context);
 
    mlir::Value translateCoalesceExpression(mlir::OpBuilder& builder, catalog::NullableType resultType, std::vector<std::shared_ptr<ast::BoundExpression>> expressions, std::shared_ptr<analyzer::SQLContext> context);
 

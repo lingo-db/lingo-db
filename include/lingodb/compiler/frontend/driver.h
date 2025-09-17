@@ -10,9 +10,8 @@ YY_DECL;
 class driver {
    public:
    driver();
-   ~driver() { //TODO cleanUP
+   ~driver() {
    };
-   //TODO result
    std::vector<std::shared_ptr<lingodb::ast::AstNode>> result;
    int parse(const std::string& f);
    void scan_begin();
