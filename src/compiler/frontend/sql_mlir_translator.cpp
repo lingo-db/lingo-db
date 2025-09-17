@@ -762,8 +762,8 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
                predBuilder.setInsertionPointToStart(block);
                mlir::Value expr = translateExpression(predBuilder, subquery->testExpr, context);
 
-               auto mlirType = subquery->namedResult.value()->resultType.toMlirType(mlirContext);
                assert(subquery->namedResultForSubquery);
+               auto mlirType = subquery->namedResultForSubquery->resultType.toMlirType(mlirContext);
                mlir::Value colVal = predBuilder.create<tuples::GetColumnOp>(exprLocation, mlirType, subquery->namedResultForSubquery->createRef(builder, attrManager), block->getArgument(0));
 
                auto ctCol = subquery->namedResult.value()->resultType.castValue(builder, colVal);
@@ -836,9 +836,10 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
                predBuilder.setInsertionPointToStart(block);
                mlir::Value expr = translateExpression(predBuilder, subquery->testExpr, context);
 
-               auto mlirType = subquery->namedResult.value()->resultType.toMlirType(mlirContext);
                assert(subquery->namedResultForSubquery);
+               auto mlirType = subquery->namedResultForSubquery->resultType.toMlirType(mlirContext);
                mlir::Value colVal = predBuilder.create<tuples::GetColumnOp>(exprLocation, mlirType, subquery->namedResultForSubquery->createRef(builder, attrManager), block->getArgument(0));
+               //TODO check if following line is correct, could break in some edge cases
                auto ctCol = subquery->namedResult.value()->resultType.castValue(builder, colVal);
                auto ctExpr = subquery->testExpr->resultType->castValue(builder, expr);
 
