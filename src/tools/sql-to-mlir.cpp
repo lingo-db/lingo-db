@@ -1,18 +1,14 @@
-#include "lingodb/runtime/Session.h"
 #include "lingodb/compiler/Dialect/DB/IR/DBDialect.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorDialect.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
-
+#include "lingodb/compiler/Dialect/TupleStream/TupleStreamDialect.h"
 #include "lingodb/compiler/Dialect/util/UtilDialect.h"
-#include "lingodb/compiler/frontend/driver.h"
 #include "lingodb/compiler/frontend/sql_analyzer.h"
 #include "lingodb/compiler/frontend/sql_mlir_translator.h"
+#include "lingodb/runtime/Session.h"
 
 #include "mlir/IR/BuiltinDialect.h"
-#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
-#include "mlir/Dialect/MemRef/IR/MemRef.h"
-#include "mlir/Dialect/SCF/IR/SCF.h"
 
 #include <fstream>
 

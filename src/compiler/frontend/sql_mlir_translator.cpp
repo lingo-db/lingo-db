@@ -20,11 +20,6 @@
 
 #include "lingodb/utility/Serialization.h"
 
-#include "mlir/Dialect/Arith/IR/Arith.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"
-#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
-#include "mlir/Dialect/MemRef/IR/MemRef.h"
-#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 
@@ -169,10 +164,10 @@ mlir::Value SQLMlirTranslator::translateTableProducer(mlir::OpBuilder& builder, 
                auto boundValuesNode = std::static_pointer_cast<ast::BoundValuesQueryNode>(tableProducer);
                return translateTableRef(builder, boundValuesNode->expressionListRef, context);
             }
-            default: error("Not implemented", tableProducer->loc);
+            default: error("QueryNode type not implemented", tableProducer->loc);
          }
       }
-      default: error("Not implemented", tableProducer->loc);
+      default: error("Node type not implemented", tableProducer->loc);
    }
 
    return tree;
@@ -297,7 +292,7 @@ void SQLMlirTranslator::translateSetNode(mlir::OpBuilder& builder, std::shared_p
          }
          break;
       }
-      default: error("Not implemented", insertNode->loc);
+      default: error("Could not set variable", insertNode->loc);
    }
 }
 
@@ -425,7 +420,7 @@ mlir::Value SQLMlirTranslator::translatePipeOperator(mlir::OpBuilder& builder, s
          error("Should not happen", pipeOperator->loc);
       }
       case ast::PipeOperatorType::SET: {
-         auto setNode = std::static_pointer_cast<ast::BoundSetExpression>(pipeOperator->node);
+         auto setNode = std::static_pointer_cast<ast::BoundSetColumnExpression>(pipeOperator->node);
 
          tree = createMap(builder, location, attrManager.getUniqueScope("set"), setNode->sets, context, tree);
 
@@ -433,7 +428,7 @@ mlir::Value SQLMlirTranslator::translatePipeOperator(mlir::OpBuilder& builder, s
       }
 
 
-      default: error("Not implememted", pipeOperator->loc);
+      default: error("Pipe operator not implemented", pipeOperator->loc);
    }
 }
 
@@ -511,7 +506,7 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
                return builder.create<db::ConstantOp>(exprLocation, builder.getI1Type(), builder.getIntegerAttr(builder.getI1Type(), value->bVal));
             }
 
-            default: error("Not implemented", expression->loc);
+            default: error("Constant type not implemented", expression->loc);
          }
       }
       case ast::ExpressionClass::BOUND_COMPARISON: {
@@ -569,7 +564,7 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
             case ast::ExpressionType::COMPARE_GREATERTHANOREQUALTO:
                pred = db::DBCmpPredicate::gte;
                break;
-            default: throw std::runtime_error("not implemented");
+            default: throw std::runtime_error("Compare not implemented");
          }
 
          return builder.create<db::CmpOp>(exprLocation, pred, ctLeft, ctRight);
@@ -587,7 +582,7 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
             case ast::ExpressionType::CONJUNCTION_OR: {
                return builder.create<db::OrOp>(exprLocation, values);
             }
-            default: throw std::runtime_error("not implemented");
+            default: throw std::runtime_error("CONJUNCTION not implemented");
          }
       }
       case ast::ExpressionClass::BOUND_OPERATOR: {
@@ -799,7 +794,7 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
                            dbCmpPred = db::DBCmpPredicate::gte;
                            break;
 
-                        default: error("Not implemented", expression->loc);
+                        default: error("Invalid compare", expression->loc);
                      }
 
                      pred = predBuilder.create<db::CmpOp>(exprLocation, dbCmpPred, ctExpr, ctCol);
@@ -872,7 +867,7 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
                            dbCmpPred = db::DBCmpPredicate::gte;
                            break;
 
-                        default: error("Not implemented", expression->loc);
+                        default: error("Invalid compare", expression->loc);
                      }
 
                      pred = predBuilder.create<db::CmpOp>(exprLocation, dbCmpPred, ctExpr, ctCol);
@@ -912,11 +907,11 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
          if (boundCase->caseExpr.has_value()) {
             caseExprTranslated = translateExpression(builder, boundCase->caseExpr.value(), context);
          }
-         return translateWhenCheks(builder, boundCase,caseExprTranslated, boundCase->caseChecks, boundCase->elseExpr, context);
+         return translateWhenChecks(builder, boundCase,caseExprTranslated, boundCase->caseChecks, boundCase->elseExpr, context);
       }
 
 
-      default: error("Not implemented", expression->loc);
+      default: error("Expression not implemented", expression->loc);
    }
 }
 
@@ -953,7 +948,7 @@ mlir::Value SQLMlirTranslator::translateBinaryOperatorExpression(mlir::OpBuilder
          auto ct = {expression->children[0]->resultType->castValue(builder, left), expression->children[1]->resultType->castValue(builder, right)};
          return builder.create<db::ModOp>(location, ct);
       }
-      default: error("Not implemented", expression->loc);
+      default: error("Binary operator not implemented", expression->loc);
    }
 }
 
@@ -1010,7 +1005,7 @@ mlir::Value SQLMlirTranslator::translateWindowExpression(mlir::OpBuilder& builde
 
 }
 
-mlir::Value SQLMlirTranslator::translateWhenCheks(mlir::OpBuilder& builder, std::shared_ptr<ast::BoundCaseExpression> boundCase, std::optional<mlir::Value> caseExprTranslated, std::vector<ast::BoundCaseExpression::BoundCaseCheck> caseChecks, std::shared_ptr<ast::BoundExpression> elseExpr, std::shared_ptr<analyzer::SQLContext> context) {
+mlir::Value SQLMlirTranslator::translateWhenChecks(mlir::OpBuilder& builder, std::shared_ptr<ast::BoundCaseExpression> boundCase, std::optional<mlir::Value> caseExprTranslated, std::vector<ast::BoundCaseExpression::BoundCaseCheck> caseChecks, std::shared_ptr<ast::BoundExpression> elseExpr, std::shared_ptr<analyzer::SQLContext> context) {
    auto *mlirContext = builder.getContext();
    auto boundCaseLocation = getLocationFromBison(boundCase->loc, mlirContext);
    if (caseChecks.empty()) {
@@ -1042,7 +1037,7 @@ mlir::Value SQLMlirTranslator::translateWhenCheks(mlir::OpBuilder& builder, std:
    mlir::Value elseTranslated;
    if (hasNextCheck) {
       std::vector<ast::BoundCaseExpression::BoundCaseCheck> nextChecks{caseChecks.begin() + 1, caseChecks.end()};
-      elseTranslated = translateWhenCheks(elseBuilder, boundCase, caseExprTranslated, nextChecks, elseExpr, context);
+      elseTranslated = translateWhenChecks(elseBuilder, boundCase, caseExprTranslated, nextChecks, elseExpr, context);
    } else {
       elseTranslated = translateExpression(elseBuilder, elseExpr, context);
    }
@@ -1157,7 +1152,7 @@ mlir::Value SQLMlirTranslator::translateTableRef(mlir::OpBuilder& builder, std::
             case ast::JoinType::INNER: {
                mlir::Block* pred;
                if (!std::holds_alternative<std::shared_ptr<ast::BoundExpression>>(boundJoin->condition)) {
-                  error("Not implemented", tableRef->loc);
+                  error("Invalid join condition", tableRef->loc);
                }
 
                pred = translatePredicate(builder, std::get<std::shared_ptr<ast::BoundExpression>>(boundJoin->condition), context);
@@ -1174,7 +1169,7 @@ mlir::Value SQLMlirTranslator::translateTableRef(mlir::OpBuilder& builder, std::
             case ast::JoinType::LEFT: {
                mlir::Block* pred;
                if (!std::holds_alternative<std::shared_ptr<ast::BoundExpression>>(boundJoin->condition)) {
-                  error("Not implemented", tableRef->loc);
+                  error("Invalid join condition", tableRef->loc);
                }
 
                pred = translatePredicate(builder, std::get<std::shared_ptr<ast::BoundExpression>>(boundJoin->condition), context);
@@ -1196,7 +1191,7 @@ mlir::Value SQLMlirTranslator::translateTableRef(mlir::OpBuilder& builder, std::
             case ast::JoinType::FULL: {
                mlir::Block* pred;
                if (!std::holds_alternative<std::shared_ptr<ast::BoundExpression>>(boundJoin->condition)) {
-                  error("Not implemented", tableRef->loc);
+                  error("Invalid join condition", tableRef->loc);
                }
                pred = translatePredicate(builder, std::get<std::shared_ptr<ast::BoundExpression>>(boundJoin->condition), context);
 
@@ -1216,7 +1211,7 @@ mlir::Value SQLMlirTranslator::translateTableRef(mlir::OpBuilder& builder, std::
                return join;
 
             }
-            default: error("Not implemented", tableRef->loc);
+            default: error("Invalid join type", tableRef->loc);
          }
 
          right = translateTableProducer(builder, boundJoin->right, context);
@@ -1262,7 +1257,7 @@ mlir::Value SQLMlirTranslator::translateTableRef(mlir::OpBuilder& builder, std::
                   }
 
 
-                  default: error("Not implemented", constExpr->loc);
+                  default: error("Invalid constant in expression list", constExpr->loc);
                }
                values.emplace_back(value);
                types.emplace_back(constExpr->resultType.value().toMlirType(mlirContext));
@@ -1281,7 +1276,7 @@ mlir::Value SQLMlirTranslator::translateTableRef(mlir::OpBuilder& builder, std::
       }
 
       default:
-         error("Not implemented", tableRef->loc);
+         error("Table reference not implemented", tableRef->loc);
    }
 }
 
@@ -1559,12 +1554,12 @@ mlir::Value SQLMlirTranslator::translateAggregation(mlir::OpBuilder& builder, st
    };
 
    //Ignore empty aggregations
-   if ((!aggregation->groupByNode || aggregation->groupByNode->groupNamedResults.empty()) && aggregation->aggregations.empty()) {
+   if ((!aggregation->groupByNode || aggregation->groupByNode->groupByNamedResults.empty()) && aggregation->aggregations.empty()) {
       return tree;
    }
    //create map
    tree = createMap(builder, location, aggregation->mapName, aggregation->toMapExpressions, context, tree);
-   if(aggregation->groupByNode && !aggregation->groupByNode->groupingSet.empty()) {
+   if(aggregation->groupByNode && !aggregation->groupByNode->localGroupByNamedResults.empty()) {
       auto asNullable = [](mlir::Type t) { return mlir::isa<db::NullableType>(t) ? t : db::NullableType::get(t.getContext(), t); };
       auto mapInt = [this, &location, &mlirContext](mlir::OpBuilder& builder, size_t intVal, std::shared_ptr<ast::NamedResult> namedResult, mlir::Value tree) -> mlir::Value {
          auto* block = new mlir::Block;
@@ -1637,7 +1632,7 @@ mlir::Value SQLMlirTranslator::translateAggregation(mlir::OpBuilder& builder, st
       auto scopeName = "rollup_" + std::to_string(rollupId);
       rollupId++;
 
-      for (size_t i = 0; i<aggregation->groupByNode->groupingSet.size(); i++) {
+      for (size_t i = 0; i<aggregation->groupByNode->localGroupByNamedResults.size(); i++) {
 
          std::vector<std::shared_ptr<ast::NamedResult>> localGroupByAttrs = aggregation->groupByNode->localGroupByNamedResults.at(i);
          std::vector<std::shared_ptr<ast::NamedResult>> localGroupByAttrsNullable = aggregation->groupByNode->localMapToNullNamedResults.at(i);
@@ -1656,7 +1651,6 @@ mlir::Value SQLMlirTranslator::translateAggregation(mlir::OpBuilder& builder, st
          tree2 = mapInt(builder, aggregation->groupByNode->localPresentIntval[i].first, aggregation->groupByNode->localPresentIntval[i].second, tree2);
 
          parts.push_back({ tree2, localGroupByAttrsNullable, notAvailable, computed, aggregation->groupByNode->localPresentIntval[i].second});
-
 
       }
       mlir::Value currTree = parts[0].tree;
@@ -1688,12 +1682,10 @@ mlir::Value SQLMlirTranslator::translateAggregation(mlir::OpBuilder& builder, st
          auto shiftAmount = element;
          auto tree2 = mapCheckBit(builder,  shiftAmount, namedResult,  currentAttributes.back(), tree);
          tree = tree2;
-
-
       }
 
    } else {
-      auto groupNamedResults = aggregation->groupByNode->groupNamedResults;
+      auto groupNamedResults = aggregation->groupByNode->groupByNamedResults;
       auto aggregations = aggregation->aggregations;
       std::string mapName = aggregation->mapName;
 
