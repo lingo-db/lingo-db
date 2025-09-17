@@ -2,7 +2,7 @@ set persist=1;
 create table test(
     str varchar(20),
     float32 float(2),
-    float64 float(40),
+    float64 float(4),
     decimal decimal(5, 2),
     int32 int,
     int64 bigint,
