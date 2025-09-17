@@ -127,6 +127,8 @@ boolean [fF][aA][lL][sS][eE]
   // Code run each time a pattern is matched.
   # define YY_USER_ACTION  loc.columns (yyleng);
 %}
+
+%option caseless
 %%
 %{
   // A handy shortcut to the location held by the driver.
@@ -157,120 +159,121 @@ boolean [fF][aA][lL][sS][eE]
 "::"            { MAKE_KEYWORD(TYPECAST); }
 {newline}              { loc.lines();}
 
-[aA][gG][gG][rR][eE][gG][aA][tT][eE]  { MAKE_KEYWORD(AGGREGATE); }
-[aA][lL][lL]                          { MAKE_KEYWORD(ALL); }
-[aA][nN][dD]                          { MAKE_KEYWORD(AND); }
-[aA][sS]                              { MAKE_KEYWORD(AS); }
-[aA][sS][cC]                          { MAKE_KEYWORD(ASC); }
-[aA][nN][yY]                          { MAKE_KEYWORD(ANY); }
+AGGREGATE   { MAKE_KEYWORD(AGGREGATE); }
+ALL         { MAKE_KEYWORD(ALL); }
+AND         { MAKE_KEYWORD(AND); }
+AS          { MAKE_KEYWORD(AS); }
+ASC         { MAKE_KEYWORD(ASC); }
+ANY         { MAKE_KEYWORD(ANY); }
 
-[bB][eE][tT][wW][eE][eE][nN]          { MAKE_KEYWORD(BETWEEN); }
-[bB][iI][gG][iI][nN][tT]              { MAKE_KEYWORD(BIGINT); }
-[bB][oO][oO][lL]                      { MAKE_KEYWORD(BOOLEAN_P); }
-[bB][yY]                              { MAKE_KEYWORD(BY); }
+BETWEEN     { MAKE_KEYWORD(BETWEEN); }
+BIGINT      { MAKE_KEYWORD(BIGINT); }
+BOOLEAN     { MAKE_KEYWORD(BOOLEAN_P); }
+BOOL        { MAKE_KEYWORD(BOOLEAN_P); }
+BY          { MAKE_KEYWORD(BY); }
 
-[cC][aA][sS][eE]                      { MAKE_KEYWORD(CASE); }
-[cC][aA][sS][tT]                      { MAKE_KEYWORD(CAST); }
-[cC][hH][aA][rR]                      { MAKE_KEYWORD(CHAR_P); }
-[cC][hH][aA][rR][aA][cC][tT][eE][rR]  { MAKE_KEYWORD(CHARACTER); }
-[cC][rR][eE][aA][tT][eE]              { MAKE_KEYWORD(CREATE); }
-[cC][uU][rR][rR][eE][nN][tT]          { MAKE_KEYWORD(CURRENT_P); }
-[cC][oO][pP][yY]                      { MAKE_KEYWORD(COPY); }
-[cC][sS][vV]                          { MAKE_KEYWORD(CSV); }  
+CASE        { MAKE_KEYWORD(CASE); }
+CAST        { MAKE_KEYWORD(CAST); }
+CHAR        { MAKE_KEYWORD(CHAR_P); }
+CHARACTER   { MAKE_KEYWORD(CHARACTER); }
+CREATE      { MAKE_KEYWORD(CREATE); }
+CURRENT     { MAKE_KEYWORD(CURRENT_P); }
+COPY        { MAKE_KEYWORD(COPY); }
+CSV         { MAKE_KEYWORD(CSV); }
 
-[dD][aA][tT][eE]                      { MAKE_KEYWORD(DATE_P); }
-[dD][aA][yY]                          { MAKE_KEYWORD(DAY_P); }
-[dD][eE][cC][iI][mM][aA][lL]          { MAKE_KEYWORD(DECIMAL_P); }
-[dD][eE][sS][cC]                      { MAKE_KEYWORD(DESC); }
-[dD][iI][sS][tT][iI][nN][cC][tT]      { MAKE_KEYWORD(DISTINCT); }
-[dD][rR][oO][pP]                      { MAKE_KEYWORD(DROP); }
-[dD][eE][lL][iI][mM][iI][tT][eE][rR]  {MAKE_KEYWORD(DELIMITER); }
+DATE        { MAKE_KEYWORD(DATE_P); }
+DAY         { MAKE_KEYWORD(DAY_P); }
+DECIMAL     { MAKE_KEYWORD(DECIMAL_P); }
+DESC        { MAKE_KEYWORD(DESC); }
+DISTINCT    { MAKE_KEYWORD(DISTINCT); }
+DROP        { MAKE_KEYWORD(DROP); }
+DELIMITER   { MAKE_KEYWORD(DELIMITER); }
 
-[eE][lL][sS][eE]                      { MAKE_KEYWORD(ELSE); }
-[eE][nN][dD]                          { MAKE_KEYWORD(END_P); }
-[eE][xX][cC][eE][pP][tT]              { MAKE_KEYWORD(EXCEPT); }
-[eE][xX][iI][sS][tT][sS]              { MAKE_KEYWORD(EXISTS); }
-[eE][xX][tT][eE][nN][dD]              { MAKE_KEYWORD(EXTEND); }
-[eE][xX][tT][rR][aA][cC][tT]          { MAKE_KEYWORD(EXTRACT); }
-[eE][sS][cC][aA][pP][eE]              { MAKE_KEYWORD(ESCAPE); }
+ELSE        { MAKE_KEYWORD(ELSE); }
+END         { MAKE_KEYWORD(END_P); }
+EXCEPT      { MAKE_KEYWORD(EXCEPT); }
+EXISTS      { MAKE_KEYWORD(EXISTS); }
+EXTEND      { MAKE_KEYWORD(EXTEND); }
+EXTRACT     { MAKE_KEYWORD(EXTRACT); }
+ESCAPE      { MAKE_KEYWORD(ESCAPE); }
 
-[fF][aA][lL][sS][eE]                  { MAKE_KEYWORD(FALSE_P); }
-[fF][lL][oO][aA][tT]                  { MAKE_KEYWORD(FLOAT_P); }
-[fF][oO][rR]                          { MAKE_KEYWORD(FOR); }
-[fF][rR][oO][mM]                      { MAKE_KEYWORD(FROM); }
-[fF][uU][lL][lL]                      { MAKE_KEYWORD(FULL); }
-[fF][oO][lL][lL][oO][wW][iI][nN][gG]  { MAKE_KEYWORD(FOLLOWING); }
+FALSE       { MAKE_KEYWORD(FALSE_P); }
+FLOAT       { MAKE_KEYWORD(FLOAT_P); }
+FOR         { MAKE_KEYWORD(FOR); }
+FROM        { MAKE_KEYWORD(FROM); }
+FULL        { MAKE_KEYWORD(FULL); }
+FOLLOWING   { MAKE_KEYWORD(FOLLOWING); }
 
-[gG][rR][oO][uU][pP]                  { MAKE_KEYWORD(GROUP_P); }
+GROUP       { MAKE_KEYWORD(GROUP_P); }
 
-[hH][aA][vV][iI][nN][gG]              { MAKE_KEYWORD(HAVING); }
+HAVING      { MAKE_KEYWORD(HAVING); }
 
-[iI][nN]                              { MAKE_KEYWORD(IN_P); }
-[iI][nN][nN][eE][rR]                  { MAKE_KEYWORD(INNER_P); }
-[iI][nN][sS][eE][rR][tT]              { MAKE_KEYWORD(INSERT); }
-[iI][nN][tT]                          { MAKE_KEYWORD(INT_P); }
-[iI][nN][tT][eE][gG][eE][rR]          { MAKE_KEYWORD(INTEGER); }
-[iI][nN][tT][eE][rR][sS][eE][cC][tT]  { MAKE_KEYWORD(INTERSECT); }
-[iI][nN][tT][eE][rR][vV][aA][lL]      { MAKE_KEYWORD(INTERVAL); }
-[iI][nN][tT][oO]                      { MAKE_KEYWORD(INTO); }
-[iI][sS]                              { MAKE_KEYWORD(IS); }
+IN          { MAKE_KEYWORD(IN_P); }
+INNER       { MAKE_KEYWORD(INNER_P); }
+INSERT      { MAKE_KEYWORD(INSERT); }
+INT         { MAKE_KEYWORD(INT_P); }
+INTEGER     { MAKE_KEYWORD(INTEGER); }
+INTERSECT   { MAKE_KEYWORD(INTERSECT); }
+INTERVAL    { MAKE_KEYWORD(INTERVAL); }
+INTO        { MAKE_KEYWORD(INTO); }
+IS          { MAKE_KEYWORD(IS); }
 
-[jJ][oO][iI][nN]                      { MAKE_KEYWORD(JOIN); }
+JOIN        { MAKE_KEYWORD(JOIN); }
 
-[kK][eE][yY]                          { MAKE_KEYWORD(KEY); }
+KEY         { MAKE_KEYWORD(KEY); }
 
-[lL][eE][fF][tT]                      { MAKE_KEYWORD(LEFT); }
-[lL][iI][kK][eE]                      { MAKE_KEYWORD(LIKE); }
-[lL][iI][mM][iI][tT]                  { MAKE_KEYWORD(LIMIT); }
+LEFT        { MAKE_KEYWORD(LEFT); }
+LIKE        { MAKE_KEYWORD(LIKE); }
+LIMIT       { MAKE_KEYWORD(LIMIT); }
 
-[mM][iI][nN][uU][tT][eE]              { MAKE_KEYWORD(MINUTE_P); }
-[mM][oO][nN][tT][hH]                  { MAKE_KEYWORD(MONTH_P); }
+MINUTE      { MAKE_KEYWORD(MINUTE_P); }
+MONTH       { MAKE_KEYWORD(MONTH_P); }
 
-[nN][aA][tT][uU][rR][aA][lL]          { MAKE_KEYWORD(NATURAL); }
-[nN][oO][tT]                          { MAKE_KEYWORD(NOT); }
-[nN][uU][lL][lL]                      { MAKE_KEYWORD(NULL_P); }
-[nN][uU][mM][eE][rR][iI][cC]          { MAKE_KEYWORD(NUMERIC); }
+NATURAL     { MAKE_KEYWORD(NATURAL); }
+NOT         { MAKE_KEYWORD(NOT); }
+NULL        { MAKE_KEYWORD(NULL_P); }
+NUMERIC     { MAKE_KEYWORD(NUMERIC); }
 
-[oO][fF][fF][sS][eE][tT]              { MAKE_KEYWORD(OFFSET); }
-[oO][nN]                              { MAKE_KEYWORD(ON); }
-[oO][rR]                              { MAKE_KEYWORD(OR); }
-[oO][rR][dD][eE][rR]                  { MAKE_KEYWORD(ORDER); }
-[oO][uU][tT][eE][rR]                  { MAKE_KEYWORD(OUTER_P); }
-[oO][vV][eE][rR]                      { MAKE_KEYWORD(OVER); }
+OFFSET      { MAKE_KEYWORD(OFFSET); }
+ON          { MAKE_KEYWORD(ON); }
+OR          { MAKE_KEYWORD(OR); }
+ORDER       { MAKE_KEYWORD(ORDER); }
+OUTER       { MAKE_KEYWORD(OUTER_P); }
+OVER        { MAKE_KEYWORD(OVER); }
 
-[pP][aA][rR][tT][iI][tT][iI][oO][nN]  { MAKE_KEYWORD(PARTITION); }
-[pP][rR][eE][cC][eE][dD][iI][nN][gG]  { MAKE_KEYWORD(PRECEDING); }
-[pP][rR][iI][mM][aA][rR][yY]          { MAKE_KEYWORD(PRIMARY); }
+PARTITION   { MAKE_KEYWORD(PARTITION); }
+PRECEDING   { MAKE_KEYWORD(PRECEDING); }
+PRIMARY     { MAKE_KEYWORD(PRIMARY); }
 
-[rR][iI][gG][hH][tT]                  { MAKE_KEYWORD(RIGHT); }
-[rR][oO][lL][lL][uU][pP]              { MAKE_KEYWORD(ROLLUP); }
-[rR][oO][wW]                          { MAKE_KEYWORD(ROW); }
-[rR][oO][wW][sS]                      { MAKE_KEYWORD(ROWS); }
+RIGHT       { MAKE_KEYWORD(RIGHT); }
+ROLLUP      { MAKE_KEYWORD(ROLLUP); }
+ROW         { MAKE_KEYWORD(ROW); }
+ROWS        { MAKE_KEYWORD(ROWS); }
 
-[sS][eE][lL][eE][cC][tT]              { MAKE_KEYWORD(SELECT); }
-[sS][eE][tT]                          { MAKE_KEYWORD(SET); }
-[sS][oO][mM][eE]                      { MAKE_KEYWORD(SOME); }
-[sS][tT][rR][iI][nN][gG]              { MAKE_KEYWORD(STRING_P); }
-[sS][uU][bB][sS][tT][rR][iI][nN][gG]  { MAKE_KEYWORD(SUBSTRING); }
+SELECT      { MAKE_KEYWORD(SELECT); }
+SET         { MAKE_KEYWORD(SET); }
+SOME        { MAKE_KEYWORD(SOME); }
+STRING      { MAKE_KEYWORD(STRING_P); }
+SUBSTRING   { MAKE_KEYWORD(SUBSTRING); }
 
-[tT][aA][bB][lL][eE]                  { MAKE_KEYWORD(TABLE); }
-[tT][eE][xX][tT]                      { MAKE_KEYWORD(TEXT_P); }
-[tT][hH][eE][nN]                      { MAKE_KEYWORD(THEN); }
-[tT][rR][uU][eE]                      { MAKE_KEYWORD(TRUE_P); }
-[tT][iI][mM][eE][sS][tT][aA][mM][pP]  { MAKE_KEYWORD(TIMESTAMP); }
+TABLE       { MAKE_KEYWORD(TABLE); }
+TEXT        { MAKE_KEYWORD(TEXT_P); }
+THEN        { MAKE_KEYWORD(THEN); }
+TRUE        { MAKE_KEYWORD(TRUE_P); }
+TIMESTAMP   { MAKE_KEYWORD(TIMESTAMP); }
 
-[uU][nN][bB][oO][uU][nN][dD][eE][dD]  { MAKE_KEYWORD(UNBOUNDED); }
-[uU][nN][iI][oO][nN]                  { MAKE_KEYWORD(UNION); }
+UNBOUNDED   { MAKE_KEYWORD(UNBOUNDED); }
+UNION       { MAKE_KEYWORD(UNION); }
 
-[vV][aA][lL][uU][eE][sS]              { MAKE_KEYWORD(VALUES); }
-[vV][aA][rR][cC][hH][aA][rR]          { MAKE_KEYWORD(VARCHAR); }
-[vV][aA][rR][yY][iI][nN][gG]          { MAKE_KEYWORD(VARYING); }
+VALUES      { MAKE_KEYWORD(VALUES); }
+VARCHAR     { MAKE_KEYWORD(VARCHAR); }
+VARYING     { MAKE_KEYWORD(VARYING); }
 
-[wW][hH][eE][nN]                      { MAKE_KEYWORD(WHEN); }
-[wW][hH][eE][rR][eE]                  { MAKE_KEYWORD(WHERE); }
-[wW][iI][tT][hH]                      { MAKE_KEYWORD(WITH); }
+WHEN        { MAKE_KEYWORD(WHEN); }
+WHERE       { MAKE_KEYWORD(WHERE); }
+WITH        { MAKE_KEYWORD(WITH); }
 
-[yY][eE][aA][rR]                      { MAKE_KEYWORD(YEAR_P); }
+YEAR        { MAKE_KEYWORD(YEAR_P); }
 
 
 <<EOF>>    return lingodb::parser::make_YYEOF (loc);

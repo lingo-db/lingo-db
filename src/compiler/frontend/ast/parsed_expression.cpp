@@ -1328,14 +1328,14 @@ bool CaseExpression::operator==(ParsedExpression& other) {
     return true;
 }
 
-SetExpression::SetExpression(std::vector<std::pair<std::shared_ptr<ColumnRefExpression>, std::shared_ptr<ParsedExpression>>> sets) : ParsedExpression(ExpressionType::SET, TYPE) , sets(std::move(sets)){
+SetColumnExpression::SetColumnExpression(std::vector<std::pair<std::shared_ptr<ColumnRefExpression>, std::shared_ptr<ParsedExpression>>> sets) : ParsedExpression(ExpressionType::SET, TYPE) , sets(std::move(sets)){
 
 }
-std::string SetExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
+std::string SetColumnExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    return "Not implemented";
 }
 // ... existing code ...
-size_t SetExpression::hash() {
+size_t SetColumnExpression::hash() {
    size_t result = ParsedExpression::hash();
 
    // Combine hash for each (column, expression) pair in order
@@ -1364,12 +1364,12 @@ size_t SetExpression::hash() {
 
    return result;
 }
-bool SetExpression::operator==(ParsedExpression& other) {
+bool SetColumnExpression::operator==(ParsedExpression& other) {
    if (!ParsedExpression::operator==(other)) {
       return false;
    }
 
-   auto* otherSet = dynamic_cast<SetExpression*>(&other);
+   auto* otherSet = dynamic_cast<SetColumnExpression*>(&other);
    if (!otherSet) {
       return false;
    }
