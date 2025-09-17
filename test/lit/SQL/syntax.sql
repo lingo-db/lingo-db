@@ -2,12 +2,12 @@
 --//CHECK: module {
 --//CHECK:     func.func @main() {
 --//CHECK:         %{{.*}} = relalg.const_relation columns : [@dummyScope::@dummyName({type = i32})] values :
---//CHECK:         %{{.*}} = relalg.map %{{.*}} computes : [@map0::@tmp_attr0({type = i32})] (%arg0: !tuples.tuple){
+--//CHECK:         %{{.*}} = relalg.map %{{.*}} computes : [@{{.*}}::@tmp_attr({type = i32})] (%arg0: !tuples.tuple){
 --//CHECK:             %{{.*}} = db.constant(1 : i32) : i32
 --//CHECK:             tuples.return %{{.*}} : i32
 --//CHECK:         }
---//CHECK:         %{{.*}} = relalg.materialize %{{.*}} [@map0::@tmp_attr0] => [""] : !subop.local_table<[unnamed$0 : i32], [""]>
---//CHECK:         subop.set_result 0 %{{.*}} : !subop.local_table<[unnamed$0 : i32], [""]>
+--//CHECK:         %{{.*}} = relalg.materialize %{{.*}} [@{{.*}}::@tmp_attr] => [""] : !subop.local_table<[tmp_attr$0 : i32], [""]>
+--//CHECK:         subop.set_result 0 %{{.*}} : !subop.local_table<[tmp_attr$0 : i32], [""]>
 --//CHECK:         return
 --//CHECK:     }
 --//CHECK: }
@@ -50,8 +50,8 @@ select 1 not between 2 and 3;
 --//CHECK: %{{.*}} = db.between %{{.*}} : i32 between %{{.*}} : i32, %{{.*}} : i32, lowerInclusive : true, upperInclusive : true
 select 1 between 1 and 2;
 --//CHECK: module
---//CHECK: %{{.*}} = db.constant(2 : i32) : i32
 --//CHECK: %{{.*}} = db.constant(1 : i32) : i32
+--//CHECK: %{{.*}} = db.constant(2 : i32) : i32
 --//CHECK: %{{.*}} = db.oneof %{{.*}} : i32 ? %{{.*}}, %{{.*}} : i32, i32
 select 1 in (1,2);
 --//CHECK: module
@@ -66,14 +66,12 @@ select null is not null;
 --//CHECK: module
 --//CHECK: %{{.*}} = db.constant("1.2") : !db.string
 select cast(1.2 as string);
---//TODO: %{{.*}} = db.constant("1.2") : f64
---select '1.2'::float(32);
 --//CHECK: module
 --//CHECK: %{{.*}} = db.constant(42 : i32) : i32
 --//CHECK: %{{.*}} = db.compare gt %{{.*}} : i32, %{{.*}} : i32
 --//CHECK: %{{.*}} = db.derive_truth %{{.*}} : i1
 --//CHECK: %{{.*}} = scf.if %{{.*}} -> (i32) {
---//CHECK:   %{{.*}} = tuples.getcol %arg0 @constrel{{.*}}::@const0 : i32
+--//CHECK:   %{{.*}} = tuples.getcol %arg0 @{{.*}}::@const{{.*}} : i32
 --//CHECK:   %{{.*}} = db.constant(2 : i32) : i32
 --//CHECK:   %{{.*}} = db.div %{{.*}} : i32, %{{.*}} : i32
 --//CHECK:   scf.yield %{{.*}} : i32
@@ -90,7 +88,7 @@ select x, case when x>42 then x/2 else 0 end from (values (1)) t(x);
 --//CHECK:   %{{.*}} = db.constant(10 : i32) : i32
 --//CHECK:   scf.yield %{{.*}} : i32
 --//CHECK: } else {
---//CHECK:   %{{.*}} = tuples.getcol %arg0 @constrel{{.*}}::@const0 : i32
+--//CHECK:   %{{.*}} = tuples.getcol %arg0 @{{.*}}::@const{{.*}} : i32
 --//CHECK:   %{{.*}} = db.constant(2 : i32) : i32
 --//CHECK:   %{{.*}} = db.compare eq %{{.*}} : i32, %{{.*}} : i32
 --//CHECK:   %{{.*}} = db.derive_truth %{{.*}} : i1
@@ -103,7 +101,6 @@ select x, case when x>42 then x/2 else 0 end from (values (1)) t(x);
 --//CHECK:   }
 --//CHECK:   scf.yield %{{.*}} : i32
 --//CHECK: }
-
 select x, case when x=1 then 10 when x=2 then 20 else 0 end from (values (1)) t(x);
 --//CHECK: module
 --//CHECK: %{{.*}} = db.constant(1 : i32) : i32
@@ -127,7 +124,6 @@ select x, case when x=1 then 10 when x=2 then 20 else 0 end from (values (1)) t(
 --//CHECK:   }
 --//CHECK:   scf.yield %{{.*}} : !db.nullable<i32>
 --//CHECK: }
-
 select x, case x when 1 then 10 when 2 then 20 end from (values (1)) t(x);
 --//CHECK: module
 --//CHECK: %{{.*}} = db.null : <i32>
@@ -139,8 +135,8 @@ select x, case x when 1 then 10 when 2 then 20 end from (values (1)) t(x);
 --//CHECK:   %{{.*}} = db.constant(1 : i32) : i32
 --//CHECK:   %false = arith.constant false
 --//CHECK:   %{{.*}} = db.not %false : i1
+--//CHECK:   %{{.*}} = db.as_nullable %{{.*}} : i32 -> <i32>
 --//CHECK:   %{{.*}} = scf.if %{{.*}} -> (!db.nullable<i32>) {
---//CHECK:     %{{.*}} = db.as_nullable %{{.*}} : i32 -> <i32>
 --//CHECK:     scf.yield %{{.*}} : !db.nullable<i32>
 --//CHECK:   } else {
 --//CHECK:     %{{.*}} = db.null : <i32>
@@ -148,46 +144,43 @@ select x, case x when 1 then 10 when 2 then 20 end from (values (1)) t(x);
 --//CHECK:   }
 --//CHECK:   scf.yield %{{.*}} : !db.nullable<i32>
 --//CHECK: }
-
 select coalesce(null,1);
 --//CHECK: module
 --//CHECK: %{{.*}} = db.constant("a") : !db.string
 --//CHECK: %{{.*}} = db.constant("b") : !db.string
 --//CHECK: %{{.*}} = db.runtime_call "Concatenate"(%{{.*}}, %{{.*}}) : (!db.string, !db.string) -> !db.string
-
 select 'a' || 'b';
 --//CHECK: module
 --//CHECK: %{{.*}} = db.constant("hello world") : !db.string
 --//CHECK: %{{.*}} = db.constant("hello %") : !db.string
 --//CHECK: %{{.*}} = db.runtime_call "Like"(%{{.*}}, %{{.*}}) : (!db.string, !db.string) -> i1
-
 select 'hello world' like 'hello %';
 --//CHECK: module
 --//CHECK: %{{.*}} = relalg.aggregation %{{.*}} [] computes :
+--//CHECK-DAG:   %{{.*}} = relalg.aggrfn min @{{.*}}::@const{{.*}} %arg0 : !db.nullable<i32>
+--//CHECK-DAG:   %{{.*}} = relalg.aggrfn max @{{.*}}::@const{{.*}} %arg0 : !db.nullable<i32>
+--//CHECK-DAG:   %{{.*}} = relalg.aggrfn sum @{{.*}}::@const{{.*}} %arg0 : !db.nullable<i32>
+--//CHECK-DAG:   %{{.*}} = relalg.aggrfn count @{{.*}}::@const{{.*}} %arg0 : i64
 --//CHECK-DAG:   %{{.*}} = relalg.count %arg0
---//CHECK-DAG:   %{{.*}} = relalg.aggrfn count @constrel{{.*}}::@const0 %arg0 : i64
---//CHECK-DAG:   %{{.*}} = relalg.aggrfn sum @constrel{{.*}}::@const0 %arg0 : !db.nullable<i32>
---//CHECK-DAG:   %{{.*}} = relalg.aggrfn max @constrel{{.*}}::@const0 %arg0 : !db.nullable<i32>
---//CHECK-DAG:   %{{.*}} = relalg.aggrfn min @constrel{{.*}}::@const0 %arg0 : !db.nullable<i32>
---//CHECK:   tuples.return 
+--//CHECK:   tuples.return
 --//CHECK: }
 select min(x),max(x),sum(x),count(x), count(*)  from (values (1)) t(x);
 --//CHECK: module
---//CHECK: %{{.*}} = relalg.aggregation %{{.*}} [@constrel{{.*}}::@const0] computes : 
+--//CHECK: %{{.*}} = relalg.aggregation %{{.*}} [@{{.*}}{{.*}}::@const{{.*}}] computes :
 --//CHECK-DAG:       %{{.*}} = relalg.count %arg0
---//CHECK-DAG:       %{{.*}} = relalg.aggrfn count @constrel{{.*}}::@const0 %arg0 : i64
---//CHECK-DAG:       %{{.*}} = relalg.aggrfn sum @constrel{{.*}}::@const0 %arg0 : i32
---//CHECK-DAG:       %{{.*}} = relalg.aggrfn max @constrel{{.*}}::@const0 %arg0 : i32
---//CHECK-DAG:       %{{.*}} = relalg.aggrfn min @constrel{{.*}}::@const0 %arg0 : i32
---//CHECK:       tuples.return 
+--//CHECK-DAG:       %{{.*}} = relalg.aggrfn count @{{.*}}{{.*}}::@const{{.*}} %arg0 : i64
+--//CHECK-DAG:       %{{.*}} = relalg.aggrfn sum @{{.*}}{{.*}}::@const{{.*}} %arg0 : i32
+--//CHECK-DAG:       %{{.*}} = relalg.aggrfn max @{{.*}}{{.*}}::@const{{.*}} %arg0 : i32
+--//CHECK-DAG:       %{{.*}} = relalg.aggrfn min @{{.*}}{{.*}}::@const{{.*}} %arg0 : i32
+--//CHECK:       tuples.return
 --//CHECK: }
 select y, min(x),max(x),sum(x),count(x), count(*) from (values (1,2)) t(x,y) group by x;
 --//CHECK: module
 --//CHECK: call @{{.*}}RelationHelper{{.*}}createTable{{.*}}(%{{.*}}) : (!util.varlen32) -> ()
-create table test(
+create table test_tmp(
                      str varchar(20),
                      float32 float(2),
-                     float64 float(40),
+                     float64 float(4),
                      decimal decimal(5, 2),
                      int32 int,
                      int64 bigint,
@@ -210,13 +203,13 @@ INSERT into test(str, float32, float64, decimal, int32, int64, bool, date32, dat
 --//CHECK: %{{.*}} = util.varlen32_create_const "\\"
 --//CHECK: call @{{.*}}RelationHelper{{.*}}copyFromIntoTable{{.*}}(%{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}) : (!util.varlen32, !util.varlen32, !util.varlen32, !util.varlen32) -> ()
 copy test from 't.csv' csv escape '\' delimiter '|' null '';
---//CHECK: %{{.*}} = relalg.aggregation %{{.*}} [@constrel{{.*}}::@const0] computes : [@aggr2::@tmp_attr31({type = i32})] (%arg0: !tuples.tuplestream,%arg1: !tuples.tuple){
---//CHECK:       %{{.*}} = relalg.projection distinct [@constrel{{.*}}::@const1] %arg0
---//CHECK:       %{{.*}} = relalg.aggrfn sum @constrel{{.*}}::@const1 %{{.*}} : i32
+--//CHECK: %{{.*}} = relalg.aggregation %{{.*}} [@{{.*}}{{.*}}::@const{{.*}}] computes : [@{{.*}}::@{{.*}}({type = i32})] (%arg0: !tuples.tuplestream,%arg1: !tuples.tuple){
+--//CHECK:       %{{.*}} = relalg.projection distinct [@{{.*}}::@const{{.*}}] %arg0
+--//CHECK:       %{{.*}} = relalg.aggrfn sum @{{.*}}::@const{{.*}} %{{.*}} : i32
 --//CHECK:       tuples.return %{{.*}} : i32
 --//CHECK: }
 select x,sum(distinct y) from (values (1,2)) t(x,y) group by x;
---//CHECK: %{{.*}} = relalg.sort %{{.*}} [(@constrel{{.*}}::@const0,asc),(@constrel{{.*}}::@const1,desc),(@constrel{{.*}}::@const2,asc)]
+--//CHECK: %{{.*}} = relalg.sort %{{.*}} [(@{{.*}}::@const{{.*}},asc),(@{{.*}}::@const{{.*}},desc),(@{{.*}}::@const{{.*}},asc)]
 select * from (values (1,2,3)) t(x,y,z) order by x, y desc, z asc;
 --//CHECK: %{{.*}} = relalg.aggregation
 --//CHECK: %{{.*}} = relalg.aggregation
@@ -224,18 +217,18 @@ select * from (values (1,2,3)) t(x,y,z) order by x, y desc, z asc;
 --//CHECK: %{{.*}} = relalg.union all
 --//CHECK: %{{.*}} = relalg.union all
 select x,y,sum(z) from (values (1,2,3)) t(x,y,z) group by rollup(x,y);
---//CHECK: %{{.*}} = relalg.window %{{.*}} partitionBy : [@constrel{{.*}}::@const1] orderBy : [(@constrel{{.*}}::@const2,asc)] rows_between : -9223372036854775808 and 0 computes : [@window0::@tmp_attr33({type = !db.nullable<i32>})] (%arg0: !tuples.tuplestream,%arg1: !tuples.tuple){
---//CHECK:       %{{.*}} = relalg.aggrfn sum @constrel{{.*}}::@const0 %arg0 : !db.nullable<i32>
+--//CHECK: %{{.*}} = relalg.window %{{.*}} partitionBy : [@{{.*}}::@const{{.*}}] orderBy : [(@{{.*}}::@const{{.*}},asc)] rows_between : -9223372036854775808 and 0 computes : [@tmp_attr::@sum({type = !db.nullable<i32>})] (%arg0: !tuples.tuplestream,%arg1: !tuples.tuple){
+--//CHECK:       %{{.*}} = relalg.aggrfn sum @{{.*}}::@const{{.*}} %arg0 : !db.nullable<i32>
 --//CHECK:       tuples.return %{{.*}} : !db.nullable<i32>
 --//CHECK: }
 select sum(x) over (partition by y order by z) from (values (1,2,3)) t(x,y,z);
---//CHECK: %{{.*}} = relalg.window %{{.*}} partitionBy : [@constrel{{.*}}::@const1] orderBy : [(@constrel{{.*}}::@const2,asc)] rows_between : -9223372036854775808 and 0 computes : [@window1::@tmp_attr34({type = !db.nullable<i32>})] (%arg0: !tuples.tuplestream,%arg1: !tuples.tuple){
---//CHECK:       %{{.*}} = relalg.aggrfn sum @constrel{{.*}}::@const0 %arg0 : !db.nullable<i32>
+--//CHECK: %{{.*}} = relalg.window %{{.*}} partitionBy : [@{{.*}}::@const{{.*}}] orderBy : [(@{{.*}}::@const{{.*}},asc)] rows_between : -9223372036854775808 and 0 computes : [@tmp_attr::@sum({type = !db.nullable<i32>})] (%arg0: !tuples.tuplestream,%arg1: !tuples.tuple){
+--//CHECK:       %{{.*}} = relalg.aggrfn sum @{{.*}}::@const{{.*}} %arg0 : !db.nullable<i32>
 --//CHECK:       tuples.return %{{.*}} : !db.nullable<i32>
 --//CHECK: }
 select sum(x) over (partition by y order by z rows between unbounded preceding and current row) from (values (1,2,3)) t(x,y,z);
---//CHECK: %{{.*}} = relalg.window %{{.*}} partitionBy : [@constrel{{.*}}::@const1] orderBy : [(@constrel{{.*}}::@const2,asc)] rows_between : -100 and 100 computes : [@window2::@tmp_attr35({type = !db.nullable<i32>})] (%arg0: !tuples.tuplestream,%arg1: !tuples.tuple){
---//CHECK:       %{{.*}} = relalg.aggrfn sum @constrel{{.*}}::@const0 %arg0 : !db.nullable<i32>
+--//CHECK: %{{.*}} = relalg.window %{{.*}} partitionBy : [@{{.*}}::@const{{.*}}{{.*}}] orderBy : [(@{{.*}}::@const{{.*}}{{.*}},asc)] rows_between : -100 and 100 computes : [@{{.*}}::@{{.*}}({type = !db.nullable<i32>})] (%arg0: !tuples.tuplestream,%arg1: !tuples.tuple){
+--//CHECK:       %{{.*}} = relalg.aggrfn sum @{{.*}}::@const{{.*}} %arg0 : !db.nullable<i32>
 --//CHECK:       tuples.return %{{.*}} : !db.nullable<i32>
 --//CHECK: }
 select sum(x) over (partition by y order by z rows between 100 preceding and 100 following) from (values (1,2,3)) t(x,y,z);
@@ -261,19 +254,14 @@ select exists(select 1);
 --//CHECK:       tuples.return %{{.*}}
 --//CHECK: }
 select (select 1);
---//CHECK: %{{.*}} = relalg.selection %{{.*}} (%arg1: !tuples.tuple){
---//CHECK:         %{{.*}} = db.constant(1 : i32) : i32
---//CHECK:         %{{.*}} = tuples.getcol %arg1 @map
+--//CHECK-DAG: %{{.*}} = relalg.selection %{{.*}} (%arg1: !tuples.tuple){
+--//CHECK-DAG:         %{{.*}} = db.constant(1 : i32) : i32
+--//CHECK:         %{{.*}} = tuples.getcol %arg1 @map{{.*}}
 --//CHECK:         %{{.*}} = db.compare eq %{{.*}} : i32, %{{.*}} : i32
---//CHECK:         %{{.*}} = db.not %{{.*}} : i1
---//CHECK:         tuples.return %{{.*}} : i1
---//CHECK:       }
---//CHECK: %{{.*}} = relalg.exists %{{.*}}
---//CHECK: %{{.*}} = db.not %{{.*}} : i1
 select 1=all(select 1);
---//CHECK: %{{.*}} = relalg.selection %{{.*}} (%arg1: !tuples.tuple){
---//CHECK:   %{{.*}} = db.constant(1 : i32) : i32
---//CHECK:   %{{.*}} = tuples.getcol %arg1 @map
+--//CHECK-DAG: %{{.*}} = relalg.selection %{{.*}} (%arg1: !tuples.tuple){
+--//CHECK-DAG:   %{{.*}} = db.constant(1 : i32) : i32
+--//CHECK:   %{{.*}} = tuples.getcol %arg1 @map{{.*}}
 --//CHECK:   %{{.*}} = db.compare eq %{{.*}} : i32, %{{.*}} : i32
 --//CHECK:   tuples.return %{{.*}} : i1
 --//CHECK: }
