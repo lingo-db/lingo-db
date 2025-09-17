@@ -1107,10 +1107,19 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
          /**
           * Analyze AggregationExpressions
           */
+         bool nullable = !aggregationNode->groupByNode || aggregationNode->groupByNode->groupByExpressions.empty();
          std::ranges::transform(aggregationNode->aggregations, std::back_inserter(boundAggregationExpressions), [&](auto expr) {
             auto boundExpr = analyzeExpression(expr, context, resolverScope);
             assert(boundExpr->exprClass == ast::ExpressionClass::BOUND_FUNCTION);
-            return std::static_pointer_cast<ast::BoundFunctionExpression>(boundExpr);
+            auto boundFunction = std::static_pointer_cast<ast::BoundFunctionExpression>(boundExpr);
+            //Check if count
+            auto fName = boundFunction->functionName;
+            std::ranges::transform(fName, fName.begin(), ::toupper);
+            if (fName != "COUNT" && fName != "COUNT*" && nullable) {
+               boundExpr->resultType->isNullable = nullable;
+               boundExpr->namedResult.value()->resultType.isNullable = nullable;
+            }
+            return boundFunction;
          });
          /**
           * Analyze GroupByNode
@@ -2452,11 +2461,8 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeFunctionExpressio
             } else if (resultType.type.getTypeId() == catalog::LogicalTypeId::DECIMAL) {
                resultType = SQLTypeUtils::getCommonTypeAfterOperation(resultType, catalog::Type::decimal(19, 0), ast::ExpressionType::OPERATOR_DIVIDE);
             }
-            resultType.isNullable = true;
-            //else keep type
          }
-         resultType.isNullable = true;
-
+         resultType.isNullable = boundArguments[0]->resultType.value().isNullable;
          boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, boundArguments);
       }
       if (function->functionName == "RANK" || function->functionName == "ROW_NUMBER") {
