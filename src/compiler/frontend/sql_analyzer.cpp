@@ -2319,12 +2319,20 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeWindowExpression(
    }
 
    catalog::Type resultType = catalog::Type::int64();
+   //Aggregation functions used with window must be nullable
+   if (boundFunction->functionName != "RANK" && boundFunction->functionName != "ROW_NUMBER") {
+      boundFunction->namedResult.value()->resultType.isNullable = true;
+      boundFunction->resultType->isNullable = true;
+   }
+
 
    boundFunction->namedResult.value()->displayName = windowExpr->alias;
    context->mapAttribute(resolverScope, windowExpr->alias, boundFunction->namedResult.value());
 
+
    auto boundWindowExpression = drv.nf.node<ast::BoundWindowExpression>(windowExpr->loc, windowExpr->type, windowExpr->alias, resultType, boundFunction, boundPartitions, boundOrderByModifier, boundWindowBoundary);
-   boundWindowExpression->namedResult = std::make_shared<ast::NamedResult>(*boundFunction->namedResult.value().get());
+   boundWindowExpression->namedResult = boundFunction->namedResult.value();
+
 
    return boundWindowExpression;
 }
