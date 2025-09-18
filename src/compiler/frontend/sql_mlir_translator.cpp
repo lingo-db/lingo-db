@@ -1057,7 +1057,7 @@ mlir::Value SQLMlirTranslator::translateWhenChecks(mlir::OpBuilder& builder, std
    return ifOp.getResult(0);
 }
 
-mlir::Value SQLMlirTranslator::translateCoalesceExpression(mlir::OpBuilder& builder, catalog::NullableType resultType, std::vector<std::shared_ptr<ast::BoundExpression>> expressions, std::shared_ptr<analyzer::SQLContext> context) {
+mlir::Value SQLMlirTranslator::translateCoalesceExpression(mlir::OpBuilder& builder, NullableType resultType, std::vector<std::shared_ptr<ast::BoundExpression>> expressions, std::shared_ptr<analyzer::SQLContext> context) {
    auto *mlirContext = builder.getContext();
 
    if (expressions.empty()) {
