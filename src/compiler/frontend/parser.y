@@ -263,7 +263,9 @@
 %type<std::shared_ptr<lingodb::ast::ParsedExpression>>  columnref indirection indirection_el
 %type<std::vector<std::shared_ptr<lingodb::ast::ParsedExpression>>> columnref_list
 
-%type<std::shared_ptr<lingodb::ast::TableRef>> from_clause opt_from_clause table_ref from_list joined_table
+%type<std::shared_ptr<lingodb::ast::TableRef>> from_clause opt_from_clause table_ref joined_table
+%type<std::shared_ptr<lingodb::ast::CrossProductRef>> from_list
+
 %type<std::shared_ptr<lingodb::ast::ExpressionListRef>>  values_clause
 
 %type<std::string>  ColId ColLabel BareColLabel attr_name
@@ -896,16 +898,17 @@ opt_materialized:
 
 
  from_clause:
-			FROM from_list							{ $$=$from_list; }
+			FROM from_list							
+            {
+                $$ = $from_list;
+            }
             ;
 from_list:
-    table_ref { $$=$1;}
+    table_ref { auto crossProd = mkNode<lingodb::ast::CrossProductRef>(@$); crossProd->tables.emplace_back($1) ; $$=crossProd;}
     | from_list[list] COMMA table_ref
     {
-        auto join = mkNode<lingodb::ast::JoinRef>(@$, lingodb::ast::JoinType::CROSS, lingodb::ast::JoinCondType::CROSS);
-        join->left = $list;
-        join->right = $table_ref;
-        $$ = join;
+        $list->tables.emplace_back($table_ref);
+        $$ = $list;
     }
     ;
 
