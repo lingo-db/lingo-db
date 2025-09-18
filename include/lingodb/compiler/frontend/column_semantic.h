@@ -1,4 +1,5 @@
 #pragma once
+#include "frontend_type.h"
 #include "lingodb/catalog/Column.h"
 #include "lingodb/compiler/Dialect/TupleStream/ColumnManager.h"
 
@@ -10,12 +11,12 @@ class BoundFunctionExpression;
 class NamedResult {
    public:
    std::string scope;
-   catalog::NullableType resultType;
+   NullableType resultType;
    std::string name;
    //TODO find better name
    std::string displayName{};
-   NamedResult(std::string scope, catalog::NullableType resultType, std::string name) : scope(scope), resultType(resultType), name(name) {}
-   NamedResult(std::string scope, catalog::Column c) : scope(scope), resultType(catalog::NullableType(c.getLogicalType(), c.getIsNullable())), name(c.getColumnName()), displayName(c.getColumnName()) {}
+   NamedResult(std::string scope, NullableType resultType, std::string name) : scope(scope), resultType(resultType), name(name) {}
+   NamedResult(std::string scope, catalog::Column c) : scope(scope), resultType(NullableType(c.getLogicalType(), c.getIsNullable())), name(c.getColumnName()), displayName(c.getColumnName()) {}
 
    bool operator==(const NamedResult& other) const {
       return other.name == name && other.scope == scope && other.displayName == displayName;
