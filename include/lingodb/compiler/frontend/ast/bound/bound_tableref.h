@@ -40,6 +40,8 @@ class BoundJoinRef : public BoundTableRef {
    std::shared_ptr<TableProducer> left;
    //! Bound right hand
    std::shared_ptr<TableProducer> right;
+
+   std::vector<std::shared_ptr<TableProducer>> rights;
    //! The joint condition or a vector of ColumnRefExpression if USING
    boundJoinCond condition;
    //! The join type
@@ -59,6 +61,16 @@ class BoundJoinRef : public BoundTableRef {
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
+
+class BoundCrossProductRef : public BoundTableRef {
+   static constexpr TableReferenceType TYPE = TableReferenceType::CROSS_PRODUCT;
+   public:
+   BoundCrossProductRef(std::vector<std::shared_ptr<TableProducer>> boundTables);
+   std::vector<std::shared_ptr<TableProducer>> boundTables;
+
+   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
+};
+
 class BoundSubqueryRef : public BoundTableRef {
    static constexpr TableReferenceType TYPE = TableReferenceType::SUBQUERY;
 

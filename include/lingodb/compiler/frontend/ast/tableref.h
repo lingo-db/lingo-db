@@ -36,6 +36,7 @@ enum class TableReferenceType : uint8_t {
    COLUMN_DATA = 11, // column data collection
    DELIM_GET = 12, // Delim get ref
    BOUND_EXPRESSION_LIST = 13,
+   CROSS_PRODUCT = 14, //crossproducts: FROM x,y,..
 };
 class TableDescription {
    public:
@@ -92,7 +93,6 @@ enum class JoinType : uint8_t {
    // so that the build side can be the smaller table
    RIGHT_ANTI = 10, // RIGHT ANTI join is created by the optimizer when the children of an anti join need to be
    // switched so that the build side can be the smaller table
-   CROSS = 11, // CROSS join is a special case of INNER JOIN where no condition is specified
    FULL = 12,
 };
 using jointCondOrUsingCols = std::variant<std::shared_ptr<ParsedExpression>, std::vector<std::shared_ptr<ColumnRefExpression>>>;
@@ -107,6 +107,8 @@ class JoinRef : public TableRef {
    std::shared_ptr<TableProducer> left;
    //! The right hand side of the join
    std::shared_ptr<TableProducer> right;
+
+   std::vector<std::shared_ptr<ast::TableProducer>> rights;
    //! The joint condition or a vector of ColumnRefExpression if USING
    jointCondOrUsingCols condition;
    //! The join type
@@ -114,6 +116,15 @@ class JoinRef : public TableRef {
    //! Join condition type
    JoinCondType refType;
 
+
+   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
+};
+
+class CrossProductRef : public TableRef {
+   static constexpr TableReferenceType TYPE = TableReferenceType::CROSS_PRODUCT;
+   public:
+   CrossProductRef();
+   std::vector<std::shared_ptr<TableProducer>> tables;
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };

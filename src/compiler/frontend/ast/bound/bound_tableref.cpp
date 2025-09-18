@@ -30,6 +30,12 @@ std::string BoundJoinRef::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    return "";
 }
 
+BoundCrossProductRef::BoundCrossProductRef(std::vector<std::shared_ptr<TableProducer>> boundTables) : BoundTableRef(TYPE), boundTables(boundTables) {
+}
+std::string BoundCrossProductRef::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
+   return "";
+}
+
 BoundSubqueryRef::BoundSubqueryRef(std::shared_ptr<analyzer::SQLScope> sqlScope, std::shared_ptr<TableProducer> subSelect) : BoundTableRef(TYPE), sqlScope(sqlScope), subSelect(subSelect) {
 }
 std::string BoundSubqueryRef::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
