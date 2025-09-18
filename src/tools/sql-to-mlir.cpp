@@ -45,7 +45,7 @@ void printMLIR(std::string sql, std::shared_ptr<lingodb::catalog::Catalog> catal
       lingodb::translator::SQLMlirTranslator translator{moduleOp, catalog.get()};
       auto sqlContext = std::make_shared<lingodb::analyzer::SQLContext>();
       sqlContext->catalog = catalog.get();
-      if (!drv.parse(":" + sql)) {
+      if (!drv.parse(sql, false)) {
          auto results = drv.result;
          if (results.size() > 1) {
             throw std::runtime_error("Only one statement allowed");

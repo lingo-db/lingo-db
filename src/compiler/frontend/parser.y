@@ -55,7 +55,6 @@
 }
 
 %define api.token.prefix {TOK_}
-//TODO check if int?
 %token <int> ICONST
 %token <uint64_t>	    INTEGER_VALUE	"integer_value"
 %token <std::string>	FCONST
@@ -95,8 +94,7 @@
 %token			TYPECAST DOT_DOT COLON_EQUALS
 
 /* 
- * Taken directly from postgres grammatic 
- * TODO LINK
+ * Taken directly from postgres grammatic
 **/
 %token <std::string> ABORT_P ABSENT ABSOLUTE_P ACCESS ACTION ADD_P ADMIN AFTER
 	AGGREGATE ALL ALSO ALTER ALWAYS ANALYSE ANALYZE AND ANY ARRAY AS ASC
@@ -230,7 +228,7 @@
 */
 %type<std::variant<std::vector<std::shared_ptr<lingodb::ast::ParsedExpression>>, std::shared_ptr<lingodb::ast::SubqueryExpression>>> in_expr
 
-%type<std::shared_ptr<lingodb::ast::TargetsExpression>> opt_target_list
+%type<std::shared_ptr<lingodb::ast::TargetList>> opt_target_list
 
 %type<std::shared_ptr<lingodb::ast::ParsedExpression>>  having_clause target_el a_expr c_expr b_expr  where_clause group_by_item group_by_item_with_alias
                                                         func_arg_expr select_limit_value case_expr case_default cast_expr offset_clause 
@@ -253,7 +251,7 @@
 
 %type<lingodb::ast::jointCondOrUsingCols> join_qual
 
-%type<std::shared_ptr<lingodb::ast::WindowBoundary>> opt_frame_clause frame_extent frame_bound
+%type<std::shared_ptr<lingodb::ast::WindowFrame>> opt_frame_clause frame_extent frame_bound
 
 /*
 * Columnref or Starexpression for instance
@@ -302,14 +300,14 @@
 
 %type<std::shared_ptr<lingodb::ast::LimitModifier>> select_limit limit_clause
 
-%type<std::optional<lingodb::ast::LogicalType>> opt_interval
+%type<std::optional<std::string>> opt_interval
 %type<bool> opt_asymmetric set_quantifier distinct_clause
 
 %type<std::optional<std::shared_ptr<lingodb::ast::ParsedExpression>>> case_arg
 
 %type<std::shared_ptr<lingodb::ast::CreateNode>> CreateStmt
 %type<bool> OptTemp opt_varying
-%type<lingodb::ast::LogicalTypeWithMods> Numeric SimpleType Type CharacterWithoutLength character Bit ConstCharacter Character CharacterWithLength ConstDatetime Typename ConstTypename Numeric_with_opt_lenghth
+%type<lingodb::ast::LogicalTypeWithMods> Numeric SimpleType Type CharacterWithoutLength character Bit ConstCharacter Character CharacterWithLength ConstDatetime Typename ConstTypename Numeric_with_opt_lenghth ConstInterval
 %type<std::shared_ptr<lingodb::ast::TableElement>> TableElement columnElement TableConstraint
 %type<std::vector<std::shared_ptr<lingodb::ast::TableElement>>> TableElementList OptTableElementList
 %type<std::shared_ptr<lingodb::ast::Constraint>> ColConstraint ColConstraintElem ConstraintElem
@@ -424,9 +422,6 @@ toplevel_stmt:
     stmt {$$=$1;}
     | %empty
   ;
-/*
- * TODO Add the different Statement Types, like Create, Copy etc
-*/
 stmt:
  SelectStmt {$$=$1;}
  | CreateStmt {$$=$1;}
@@ -540,7 +535,6 @@ pipe_start:
 
 
      }
-     //TODO DOC
     | select_no_parens[parens] PIPE pipe_operator
     {
 
@@ -638,7 +632,6 @@ VariableSetStmt:
     | SET LOCAL set_rest
     | SET SESSION set_rest
     ;
-//TODO missing rules
 set_rest:
     set_rest_more
     {
@@ -784,7 +777,7 @@ simple_select:
     | SELECT distinct_clause target_list into_clause from_clause where_clause group_clause having_clause window_clause
     {
         auto t = mkNode<lingodb::ast::SelectNode>(@$);
-        auto target_list = mkNode<lingodb::ast::TargetsExpression>(@$);
+        auto target_list = mkNode<lingodb::ast::TargetList>(@$);
         target_list->targets = std::move($target_list);
 
         target_list->distinct = $distinct_clause;
@@ -1001,7 +994,6 @@ group_clause_with_alias:
         $$ = node;
         //TODO Support set_quantifier
     }
-    //TODO find a better solution
     | GROUP_P BY set_quantifier rollup_clause %prec ROLLUP_PRIORITY
     {
         auto node = mkNode<lingodb::ast::GroupByNode>(@$);
@@ -1402,13 +1394,9 @@ where_clause:
     WHERE a_expr {$$=$a_expr;}
     | %empty
     ;
-/*
-TODO
- * Add missing rules
-*/
+
 a_expr:
     c_expr { $$ = $c_expr;}
-
     //TODO | a-expr COLLATE any_name
     //TODO | a_expr AT TIME ZONE a_expr
     //TODO | a_expr AT LOCAL
@@ -1590,7 +1578,6 @@ c_expr:
     columnref {$$ = $columnref;}
     | AexprConst {$$=$1;}
     //TODO | PARAM opt_indirection
-    //TODO
     | LP a_expr RP {$$=$2;}//opt_indirection
     | case_expr
     {
@@ -1999,7 +1986,7 @@ window_specification:
         auto windowExpression = mkNode<lingodb::ast::WindowExpression>(@$);
         windowExpression->partitions = $opt_partition_clause;
         windowExpression->order = $opt_sort_clause;
-        windowExpression->windowBoundary = $opt_frame_clause;
+        windowExpression->windowFrame = $opt_frame_clause;
         $$ = windowExpression;
 
 
@@ -2027,7 +2014,7 @@ indirection_el:
 opt_target_list:
     target_list
     {
-        auto node = mkNode<lingodb::ast::TargetsExpression>(@$);
+        auto node = mkNode<lingodb::ast::TargetList>(@$);
         node->targets = std::move($target_list);
         $$ = node;
     }
@@ -2108,23 +2095,23 @@ frame_extent:
 frame_bound:
     UNBOUNDED PRECEDING
     {
-        $$ = mkNode<lingodb::ast::WindowBoundary>(@$, lingodb::ast::WindowBoundaryType::UNBOUNDED_PRECEDING );
+        $$ = mkNode<lingodb::ast::WindowFrame>(@$, lingodb::ast::WindowFrameType::UNBOUNDED_PRECEDING );
     }
     | UNBOUNDED FOLLOWING
     {
-        $$ = mkNode<lingodb::ast::WindowBoundary>(@$, lingodb::ast::WindowBoundaryType::UNBOUNDED_FOLLOWING );
+        $$ = mkNode<lingodb::ast::WindowFrame>(@$, lingodb::ast::WindowFrameType::UNBOUNDED_FOLLOWING );
     }
     | CURRENT_P ROW
     {
-        $$ = mkNode<lingodb::ast::WindowBoundary>(@$, lingodb::ast::WindowBoundaryType::CURRENT_ROW );
+        $$ = mkNode<lingodb::ast::WindowFrame>(@$, lingodb::ast::WindowFrameType::CURRENT_ROW );
     }
     | a_expr PRECEDING
     {
-        $$ = mkNode<lingodb::ast::WindowBoundary>(@$, lingodb::ast::WindowBoundaryType::EXPR_PRECEDING, $a_expr );
+        $$ = mkNode<lingodb::ast::WindowFrame>(@$, lingodb::ast::WindowFrameType::EXPR_PRECEDING, $a_expr );
     }
     | a_expr FOLLOWING
     {
-        $$ = mkNode<lingodb::ast::WindowBoundary>(@$, lingodb::ast::WindowBoundaryType::EXPR_FOLLOWING, $a_expr);
+        $$ = mkNode<lingodb::ast::WindowFrame>(@$, lingodb::ast::WindowFrameType::EXPR_FOLLOWING, $a_expr);
     }
     ;
 //TODO misisng rules
@@ -3020,7 +3007,10 @@ SimpleType:
     {
         $$ = $ConstDatetime;
     }
-    //TODO | ConstInterval
+    | ConstInterval
+    {
+        $$ = $1;
+    }
     //TODO | JsonType
     ;
 opt_type_modifiers: 
@@ -3084,7 +3074,6 @@ Numeric_with_opt_lenghth:
     }
     | Numeric LP type_modifier RP
     {
-        std::cout << "Num with modifier" << std::endl;
         $Numeric.typeModifiers.emplace_back($type_modifier);
         $$ = $Numeric;
     }
@@ -3093,33 +3082,38 @@ Numeric_with_opt_lenghth:
 Numeric:
     INT_P
     {
-        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::INT);
+        $$ = lingodb::ast::LogicalTypeWithMods(catalog::LogicalTypeId::INT);
     } 
     | INTEGER
     {
-        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::INT);
+        $$ = lingodb::ast::LogicalTypeWithMods(catalog::LogicalTypeId::INT);
     }
     | SMALLINT
     {
-        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::SMALLINT);
+        $$ = lingodb::ast::LogicalTypeWithMods(catalog::LogicalTypeId::INT);
+        $$.typeModifiers.emplace_back(std::make_shared<lingodb::ast::UnsignedIntValue>(2));
     }
     | BIGINT
     {
-        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::BIGINT);
+        $$ = lingodb::ast::LogicalTypeWithMods(catalog::LogicalTypeId::INT);
+        $$.typeModifiers.emplace_back(std::make_shared<lingodb::ast::UnsignedIntValue>(8));
     }
     | REAL
     | FLOAT_P 
     {
-        auto type = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::FLOAT);
+        auto type = lingodb::ast::LogicalTypeWithMods(catalog::LogicalTypeId::FLOAT);
         $$ = type;
     }
-    | DOUBLE_P PRECISION
+    | DOUBLE_P
     {
-        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::FLOAT);
+        auto type = lingodb::ast::LogicalTypeWithMods(catalog::LogicalTypeId::FLOAT);
+        auto value = std::make_shared<lingodb::ast::UnsignedIntValue>(4);
+        type.typeModifiers.emplace_back(value);
+        $$ = type;
     }
     | DECIMAL_P opt_type_modifiers
     {
-        lingodb::ast::LogicalTypeWithMods type{lingodb::ast::LogicalType::DECIMAL};
+        lingodb::ast::LogicalTypeWithMods type{catalog::LogicalTypeId::DECIMAL};
         type.typeModifiers = $opt_type_modifiers;
         $$ = type;
         
@@ -3127,13 +3121,13 @@ Numeric:
     | DEC //TODO opt_type_modifiers
     | NUMERIC  opt_type_modifiers 
     {
-        lingodb::ast::LogicalTypeWithMods type{lingodb::ast::LogicalType::DECIMAL};
+        lingodb::ast::LogicalTypeWithMods type{catalog::LogicalTypeId::DECIMAL};
         type.typeModifiers = $opt_type_modifiers;
         $$ = type;
     }
     | BOOLEAN_P
     {
-        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::BOOLEAN);
+        $$ = lingodb::ast::LogicalTypeWithMods(catalog::LogicalTypeId::BOOLEAN);
     }
     ;
 
@@ -3183,26 +3177,26 @@ character:
     CHARACTER opt_varying 
     {
         if($opt_varying) {
-            $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::STRING);
+            $$ = lingodb::ast::LogicalTypeWithMods(catalog::LogicalTypeId::STRING);
         } else {
-            $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::CHAR);
+            $$ = lingodb::ast::LogicalTypeWithMods(catalog::LogicalTypeId::CHAR);
         }
     }
     | VARCHAR 
     {
-        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::STRING);
+        $$ = lingodb::ast::LogicalTypeWithMods(catalog::LogicalTypeId::STRING);
     }
     | CHAR_P 
     {
-        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::CHAR);
+        $$ = lingodb::ast::LogicalTypeWithMods(catalog::LogicalTypeId::CHAR);
     }
     | TEXT_P
     {
-        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::STRING);
+        $$ = lingodb::ast::LogicalTypeWithMods(catalog::LogicalTypeId::STRING);
     }
     | STRING_P
     {
-        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::STRING);
+        $$ = lingodb::ast::LogicalTypeWithMods(catalog::LogicalTypeId::STRING);
     }
     ;
 opt_varying:
@@ -3219,12 +3213,12 @@ opt_varying:
 ConstDatetime: 
     TIMESTAMP //TODO opt_timezone
     {
-        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::TIMESTAMP);
+        $$ = lingodb::ast::LogicalTypeWithMods(catalog::LogicalTypeId::TIMESTAMP);
     }
 
     | DATE_P
     {
-        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::DATE);
+        $$ = lingodb::ast::LogicalTypeWithMods(catalog::LogicalTypeId::DATE);
     }
     ;
 
@@ -3311,7 +3305,7 @@ AexprConst:
     | func_name Sconst {
         //TODO move logic to analyzer?
         if($func_name == "date") {
-            auto dateExpr = mkNode<lingodb::ast::CastExpression>(@$, lingodb::ast::LogicalType::DATE, $Sconst);
+            auto dateExpr = mkNode<lingodb::ast::CastExpression>(@$, catalog::LogicalTypeId::DATE, $Sconst);
             
             $$ = dateExpr;
         } else {
@@ -3320,9 +3314,12 @@ AexprConst:
     }
     | ConstInterval Sconst opt_interval
     {
-        //TODO
-        auto interval = mkNode<lingodb::ast::CastExpression>(@$, lingodb::ast::LogicalType::INTERVAL, $Sconst);
-        interval->optInterval = $opt_interval;
+        auto intervalWithTypeMods = $ConstInterval;
+        if($opt_interval.has_value()) {
+            auto v = std::make_shared<lingodb::ast::StringValue>($opt_interval.value());
+            intervalWithTypeMods.typeModifiers.emplace_back(v);
+        }
+        auto interval = mkNode<lingodb::ast::CastExpression>(@$, intervalWithTypeMods, $Sconst);
         $$ = interval;
     }
     | ConstTypename Sconst 
@@ -3380,21 +3377,24 @@ Bconst:
 
 ConstInterval:
     | INTERVAL
+    {
+        auto t = lingodb::ast::LogicalTypeWithMods(catalog::LogicalTypeId::INTERVAL);
+        $$ = t;
+    }
     ;
 
-//TODO missing
 opt_interval: 
     DAY_P 
      {
-        $$ = lingodb::ast::LogicalType::DAYS;
+        $$ = "days";
      }
      | YEAR_P 
      {
-        $$ = lingodb::ast::LogicalType::YEARS;
+        $$ = "years";
      }
      | MONTH_P
      {
-        $$ = lingodb::ast::LogicalType::MONTHS;
+        $$ = "months";
      }
      | %empty
     ;
@@ -3440,7 +3440,6 @@ pipe_operator:
         joinRef->condition = $join_qual;
         $$ = mkNode<lingodb::ast::PipeOperator>(@$,lingodb::ast::PipeOperatorType::JOIN, joinRef);
     }
-    //TODO check if this does not allow to much!
     | AGGREGATE agg_expr
     {
          $$ = mkNode<lingodb::ast::PipeOperator>(@$, lingodb::ast::PipeOperatorType::AGGREGATE, $agg_expr);
@@ -3471,7 +3470,7 @@ pipe_operator:
     }
     | DROP columnref_list
     {
-        auto node = mkNode<lingodb::ast::TargetsExpression>(@$);
+        auto node = mkNode<lingodb::ast::TargetList>(@$);
         node->targets = std::move($columnref_list);
         $$ = mkNode<lingodb::ast::PipeOperator>(@$, lingodb::ast::PipeOperatorType::DROP, node);
     }

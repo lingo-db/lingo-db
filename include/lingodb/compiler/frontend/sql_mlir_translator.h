@@ -24,9 +24,6 @@
 
 #include <lingodb/compiler/Dialect/util/UtilOps.h>
 
-namespace lingodb::ast {
-class BoundSetOperationNode;
-}
 namespace lingodb::translator {
 #define error(message, loc)                                         \
    {                                                                \
@@ -41,14 +38,10 @@ class SQLMlirTranslator {
    compiler::dialect::tuples::ColumnManager& attrManager;
 
    std::optional<mlir::Value> translateStart(mlir::OpBuilder& builder, std::shared_ptr<ast::AstNode> astNode, std::shared_ptr<analyzer::SQLContext> context);
-   double getTiming() {
-      return timing;
-   }
 
    private:
    std::shared_ptr<TranslationContext> translationContext;
    catalog::Catalog* catalog;
-   double timing;
 
    mlir::Value translateTableProducer(mlir::OpBuilder& builder, std::shared_ptr<ast::TableProducer> tableProducer, std::shared_ptr<analyzer::SQLContext> context);
 
@@ -62,6 +55,7 @@ class SQLMlirTranslator {
 
    mlir::Value translateResultModifier(mlir::OpBuilder& builder, std::shared_ptr<ast::BoundResultModifier> resultModifier, std::shared_ptr<analyzer::SQLContext> context, mlir::Value tree);
 
+   mlir::Value translateSubquery(mlir::OpBuilder&builder, std::shared_ptr<ast::BoundSubqueryExpression>subquery, std::shared_ptr<analyzer::SQLContext>context );
    mlir::Value translateExpression(mlir::OpBuilder& builder, std::shared_ptr<ast::BoundExpression> expression, std::shared_ptr<analyzer::SQLContext> context);
    mlir::Value translateBinaryOperatorExpression(mlir::OpBuilder& builder, std::shared_ptr<ast::BoundOperatorExpression> expression, std::shared_ptr<analyzer::SQLContext> context, mlir::Value left, mlir::Value right);
    mlir::Value translateWindowExpression(mlir::OpBuilder& builder, mlir::Value tree, std::shared_ptr<ast::BoundWindowExpression> expression, std::shared_ptr<analyzer::SQLContext> context);
@@ -73,7 +67,7 @@ class SQLMlirTranslator {
 
    mlir::Value translateSetOperation(mlir::OpBuilder& builder, std::shared_ptr<ast::BoundSetOperationNode> boundSetOp, std::shared_ptr<analyzer::SQLContext> context);
    mlir::Value translateAggregationFunction(mlir::OpBuilder& builder, std::string mapName, std::vector<mlir::Attribute> groupByAttrs, mlir::Value relation, mlir::OpBuilder functionBuilder, std::shared_ptr<ast::BoundFunctionExpression> aggrFunction, mlir::Value& expr, compiler::dialect::tuples::ColumnDefAttr& attrDef);
-   mlir::Value translateGroupByAttributesAndAggregate(mlir::OpBuilder& builder, mlir::Value tree, mlir::Location loc, std::vector<std::shared_ptr<ast::NamedResult>> groupNamedResults, std::vector<std::shared_ptr<ast::BoundFunctionExpression>> aggregations, std::string mapName);
+   mlir::Value translateGroupByAttributesAndAggregate(mlir::OpBuilder& builder, mlir::Value tree, mlir::Location loc, std::vector<std::shared_ptr<ast::ColumnReference>> groupColumnReferences, std::vector<std::shared_ptr<ast::BoundFunctionExpression>> aggregations, std::string mapName);
 
    mlir::Value translateAggregation(mlir::OpBuilder& builder, std::shared_ptr<ast::BoundAggregationNode> aggregation, std::shared_ptr<analyzer::SQLContext> context, mlir::Value tree);
    mlir::Value createMap(mlir::OpBuilder& builder, mlir::Location loc, std::string mapName, std::vector<std::shared_ptr<ast::BoundExpression>> toMap, std::shared_ptr<analyzer::SQLContext> context, mlir::Value tree);
@@ -91,10 +85,5 @@ class SQLMlirTranslator {
    mlir::Location getLocationFromBison(const location& loc, mlir::MLIRContext* ctx);
 
    public:
-   /*
-   * Helper functions
-   */
-
-   mlir::Type createBaseTypeFromColumnType(mlir::MLIRContext* context, const catalog::Type& t);
 };
 } // namespace lingodb::translator

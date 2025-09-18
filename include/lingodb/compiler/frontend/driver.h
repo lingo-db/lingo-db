@@ -13,8 +13,8 @@ class driver {
    ~driver() {
    };
    std::vector<std::shared_ptr<lingodb::ast::AstNode>> result;
-   int parse(const std::string& f);
-   void scan_begin();
+   int parse(const std::string& f, bool isFile);
+   void scan_begin(bool isFile);
    void scan_end();
    lingodb::location location;
    std::string file;

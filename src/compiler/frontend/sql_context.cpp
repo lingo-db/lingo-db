@@ -4,7 +4,7 @@
 
 #include <iostream>
 namespace lingodb::analyzer {
-using ResolverScope = llvm::ScopedHashTable<std::string, std::shared_ptr<ast::NamedResult>, StringInfo>::ScopeTy;
+using ResolverScope = llvm::ScopedHashTable<std::string, std::shared_ptr<ast::ColumnReference>, StringInfo>::ScopeTy;
 ASTTransformContext::ASTTransformContext() : currentScope(std::make_shared<ASTTransformScope>()) {
    scopeStack.push(currentScope);
 }
@@ -44,18 +44,18 @@ DefineScope SQLContext::createDefineScope() {
    return DefineScope(*this);
 }
 
-std::vector<std::pair<std::string, std::shared_ptr<ast::NamedResult>>> SQLContext::getTopDefinedColumns() {
+std::vector<std::pair<std::string, std::shared_ptr<ast::ColumnReference>>> SQLContext::getTopDefinedColumns() {
    return definedAttributes.top();
 }
-void SQLContext::mapAttribute(ResolverScope& scope, std::string name, std::shared_ptr<ast::NamedResult> columnInfo) {
+void SQLContext::mapAttribute(ResolverScope& scope, std::string name, std::shared_ptr<ast::ColumnReference> columnInfo) {
    definedAttributes.top().push_back({name, columnInfo});
    resolver.insertIntoScope(&scope, name, columnInfo);
 }
 
-std::vector<std::shared_ptr<ast::NamedResult>> SQLContext::mapAttribute(ResolverScope& scope, std::string sqlScopeName, std::string uniqueScope, std::shared_ptr<catalog::TableCatalogEntry> tableCatalogEntry) {
-   std::vector<std::shared_ptr<ast::NamedResult>> result;
+std::vector<std::shared_ptr<ast::ColumnReference>> SQLContext::mapAttribute(ResolverScope& scope, std::string sqlScopeName, std::string uniqueScope, std::shared_ptr<catalog::TableCatalogEntry> tableCatalogEntry) {
+   std::vector<std::shared_ptr<ast::ColumnReference>> result;
    for (auto c : tableCatalogEntry->getColumns()) {
-      auto columnInfo = std::make_shared<ast::NamedResult>(uniqueScope, c);
+      auto columnInfo = std::make_shared<ast::ColumnReference>(uniqueScope, c);
 
       mapAttribute(scope, sqlScopeName + "." + std::string(c.getColumnName()), columnInfo);
       mapAttribute(scope, std::string(c.getColumnName()), columnInfo);
@@ -64,7 +64,7 @@ std::vector<std::shared_ptr<ast::NamedResult>> SQLContext::mapAttribute(Resolver
    return result;
 }
 
-void SQLContext::mapAttribute(ResolverScope& scope, std::string name, std::vector<std::shared_ptr<ast::NamedResult>> targetInfos) {
+void SQLContext::mapAttribute(ResolverScope& scope, std::string name, std::vector<std::shared_ptr<ast::ColumnReference>> targetInfos) {
    for (auto c : targetInfos) {
       //Better
       std::string cName = c->displayName.empty() ? c->name : c->displayName;
@@ -74,18 +74,18 @@ void SQLContext::mapAttribute(ResolverScope& scope, std::string name, std::vecto
       mapAttribute(scope, cName, c);
    }
 }
-std::shared_ptr<ast::NamedResult> SQLContext::getNamedResultInfo(location loc, std::string name) {
+std::shared_ptr<ast::ColumnReference> SQLContext::getColumnReference(location loc, std::string name) {
    if (!resolver.count(name)) {
       std::stringstream ss;
 
-      throw frontend_error("Could not resolve: " + name, loc);
+      throw frontend_error("Could not resolve '" + name + "'", loc);
    }
    const auto res = resolver.lookup(name);
    return res;
 }
 
-void SQLContext::replace(ResolverScope& scope, std::shared_ptr<ast::NamedResult> old, std::shared_ptr<ast::NamedResult> value) {
-   std::vector<std::pair<std::string, std::shared_ptr<ast::NamedResult>>> toReplace;
+void SQLContext::replace(ResolverScope& scope, std::shared_ptr<ast::ColumnReference> old, std::shared_ptr<ast::ColumnReference> value) {
+   std::vector<std::pair<std::string, std::shared_ptr<ast::ColumnReference>>> toReplace;
    std::ranges::copy_if(definedAttributes.top(), std::back_inserter(toReplace), [&](auto& p) { return p.second == old; });
    for (auto& c: toReplace) {
       mapAttribute(scope, c.first, value);

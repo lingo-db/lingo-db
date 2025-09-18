@@ -22,6 +22,9 @@ struct StringInfo {
    static std::string getTombstoneKey() { return "-"; }
    static size_t getHashValue(std::string str) { return std::hash<std::string>{}(str); }
 };
+/**
+ * @ASTTransformScope and @ASTTransformContext are used to store useful information that is needed by the Canonicalizer.
+ */
 class ASTTransformScope {
    public:
    ASTTransformScope() : aggregationNode(std::make_shared<ast::AggregationNode>()), extendNodeBeforeWindowFunctions(std::make_shared<ast::ExtendNode>(true)) {}
@@ -56,6 +59,9 @@ class ASTTransformContext {
    }
 };
 class SQLContext;
+/**
+ * A DefineScope is used to control the scope of SQLContext::definedAttributes
+*/
 class DefineScope {
    public:
    DefineScope(SQLContext& sqlContext);
@@ -64,7 +70,12 @@ class DefineScope {
    private:
    SQLContext& sqlContext;
 };
-
+/**
+ * Stores the colleted context during analysis
+ * SQLContext can be used to
+ *    - store/lookup Columns inside a specific scope
+ *    - store/lookup CTE nodes
+ */
 class SQLContext {
    public:
    SQLContext() : definedAttributes(), resolver() {
@@ -75,14 +86,14 @@ class SQLContext {
    std::vector<std::shared_ptr<SQLScope>> scopes;
    std::shared_ptr<SQLScope> currentScope;
 
-   std::stack<std::vector<std::pair<std::string, std::shared_ptr<ast::NamedResult>>>> definedAttributes;
-   using renameCte = std::vector<std::pair<std::shared_ptr<ast::NamedResult>, std::shared_ptr<ast::NamedResult>>>;
+   std::stack<std::vector<std::pair<std::string, std::shared_ptr<ast::ColumnReference>>>> definedAttributes;
+   using renameCte = std::vector<std::pair<std::shared_ptr<ast::ColumnReference>, std::shared_ptr<ast::ColumnReference>>>;
    std::unordered_map<std::string, std::pair<ast::TargetInfo, std::shared_ptr<ast::BoundCTENode>>> ctes;
 
    std::unordered_map<std::string, mlir::Value> translatedCtes;
 
-   llvm::ScopedHashTable<std::string, std::shared_ptr<ast::NamedResult>, StringInfo> resolver;
-   using ResolverScope = llvm::ScopedHashTable<std::string, std::shared_ptr<ast::NamedResult>, StringInfo>::ScopeTy;
+   llvm::ScopedHashTable<std::string, std::shared_ptr<ast::ColumnReference>, StringInfo> resolver;
+   using ResolverScope = llvm::ScopedHashTable<std::string, std::shared_ptr<ast::ColumnReference>, StringInfo>::ScopeTy;
 
    std::unordered_map<std::string, size_t> scopeUnifier;
 
@@ -94,13 +105,13 @@ class SQLContext {
 
    DefineScope createDefineScope();
 
-   std::vector<std::pair<std::string, std::shared_ptr<ast::NamedResult>>> getTopDefinedColumns();
+   std::vector<std::pair<std::string, std::shared_ptr<ast::ColumnReference>>> getTopDefinedColumns();
 
-   void mapAttribute(ResolverScope& scope, std::string name, std::shared_ptr<ast::NamedResult> columnInfo);
-   std::vector<std::shared_ptr<ast::NamedResult>> mapAttribute(ResolverScope& scope, std::string sqlScopeName, std::string uniqueScope, std::shared_ptr<catalog::TableCatalogEntry> tableCatalogEntry);
-   void mapAttribute(ResolverScope& scope, std::string name, std::vector<std::shared_ptr<ast::NamedResult>> targetInfos);
-   std::shared_ptr<ast::NamedResult> getNamedResultInfo(location loc, std::string name);
-   void replace(ResolverScope& scope, std::shared_ptr<ast::NamedResult> old, std::shared_ptr<ast::NamedResult> value);
+   void mapAttribute(ResolverScope& scope, std::string name, std::shared_ptr<ast::ColumnReference> columnInfo);
+   std::vector<std::shared_ptr<ast::ColumnReference>> mapAttribute(ResolverScope& scope, std::string sqlScopeName, std::string uniqueScope, std::shared_ptr<catalog::TableCatalogEntry> tableCatalogEntry);
+   void mapAttribute(ResolverScope& scope, std::string name, std::vector<std::shared_ptr<ast::ColumnReference>> targetInfos);
+   std::shared_ptr<ast::ColumnReference> getColumnReference(location loc, std::string name);
+   void replace(ResolverScope& scope, std::shared_ptr<ast::ColumnReference> old, std::shared_ptr<ast::ColumnReference> value);
 
    std::string getUniqueScope(std::string base);
 };

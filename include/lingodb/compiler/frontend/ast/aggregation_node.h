@@ -5,11 +5,9 @@
 namespace lingodb::ast {
 class AggregationNode : public AstNode {
    public:
-   AggregationNode();
+   AggregationNode() : AstNode(NodeType::AGGREGATION) {}
 
    std::shared_ptr<GroupByNode> groupByNode;
    std::vector<std::shared_ptr<FunctionExpression>> aggregations;
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 } // namespace lingodb::ast

@@ -17,8 +17,7 @@ class CopyInfo {
 class CopyNode : public AstNode {
    static constexpr NodeType TYPE = NodeType::COPY_NODE;
    public:
-   CopyNode();
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
+   CopyNode() : AstNode(TYPE), copyInfo(std::make_shared<CopyInfo>()) {}
    std::shared_ptr<CopyInfo> copyInfo;
 };
 } // namespace lingodb::ast

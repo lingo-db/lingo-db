@@ -8,17 +8,16 @@
 namespace lingodb::ast {
 class BoundFunctionExpression;
 
-class NamedResult {
+class ColumnReference {
    public:
    std::string scope;
    NullableType resultType;
    std::string name;
-   //TODO find better name
    std::string displayName{};
-   NamedResult(std::string scope, NullableType resultType, std::string name) : scope(scope), resultType(resultType), name(name) {}
-   NamedResult(std::string scope, catalog::Column c) : scope(scope), resultType(NullableType(c.getLogicalType(), c.getIsNullable())), name(c.getColumnName()), displayName(c.getColumnName()) {}
+   ColumnReference(std::string scope, NullableType resultType, std::string name) : scope(scope), resultType(resultType), name(name) {}
+   ColumnReference(std::string scope, catalog::Column c) : scope(scope), resultType(NullableType(c.getLogicalType(), c.getIsNullable())), name(c.getColumnName()), displayName(c.getColumnName()) {}
 
-   bool operator==(const NamedResult& other) const {
+   bool operator==(const ColumnReference& other) const {
       return other.name == name && other.scope == scope && other.displayName == displayName;
    }
 
@@ -42,9 +41,25 @@ class NamedResult {
    };
 };
 
+struct ColumnRefHash {
+   std::size_t operator()(const std::pair<std::shared_ptr<ast::ColumnReference>, size_t> p) const noexcept {
+      std::size_t h1 = std::hash<std::string>{}(p.first ? p.first->name : std::string{});
+      std::size_t h2 = std::hash<decltype(ast::ColumnReference::scope)>{}(p.first ? p.first->scope : decltype(ast::ColumnReference::scope){});
+      return h1 ^ (h2 + 0x9e3779b97f4a7c15ULL + (h1 << 6) + (h1 >> 2));
+   }
+};
+
+struct ColumnRefEq {
+   using is_transparent = void;
+   bool operator()(const std::pair<std::shared_ptr<ast::ColumnReference>, size_t> a,
+                   const std::pair<std::shared_ptr<ast::ColumnReference>, size_t> b) const noexcept {
+      return a.first->scope == b.first->scope && a.first->name == b.first->name;
+   }
+};
+
 struct TargetInfo {
-   std::vector<std::shared_ptr<NamedResult>> targetColumns;
-   void add(std::shared_ptr<NamedResult> entry) {
+   std::vector<std::shared_ptr<ColumnReference>> targetColumns;
+   void add(std::shared_ptr<ColumnReference> entry) {
       targetColumns.push_back(std::move(entry));
    }
 };

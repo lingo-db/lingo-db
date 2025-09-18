@@ -11,6 +11,7 @@ enum class PipeOperatorType : uint8_t {
    JOIN = 3,
    GROUP_BY = 4,
    RESULT_MODIFIER = 5,
+   //UNION, INTERSECT...
    SET_OPERATION = 7,
    INTERSECT = 9,
    EXCEPT = 10,
@@ -23,12 +24,10 @@ enum class PipeOperatorType : uint8_t {
 };
 class PipeOperator : public TableProducer {
    public:
-   PipeOperator(PipeOperatorType pipeOpType, std::shared_ptr<AstNode> node);
+   PipeOperator(PipeOperatorType pipeOpType, std::shared_ptr<AstNode> node) : TableProducer(NodeType::PIPE_OP), node(node), pipeOpType(pipeOpType) {}
    PipeOperatorType pipeOpType;
    std::shared_ptr<AstNode> node;
 
    std::shared_ptr<TableProducer> input = nullptr;
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 } // namespace lingodb::ast

@@ -15,9 +15,7 @@ enum class SetType : uint8_t {
 class SetNode : public AstNode {
    static constexpr NodeType TYPE = NodeType::SET_NODE;
    public:
-   //TODO: Add support SetScope
-   SetNode(SetType setType, std::string name);
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
+   SetNode(SetType setType, std::string name) : AstNode(TYPE), setType(setType), name(name) {}
 
    SetType setType;
    std::string name;
@@ -25,8 +23,7 @@ class SetNode : public AstNode {
 
 class SetVariableStatement : public SetNode {
    public:
-   SetVariableStatement(std::string name, std::vector<std::shared_ptr<ParsedExpression>> values);
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
+   SetVariableStatement(std::string name, std::vector<std::shared_ptr<ParsedExpression>> values) : SetNode(SetType::SET, name), values(values) {}
 
    std::vector<std::shared_ptr<ParsedExpression>> values;
 };

@@ -4,6 +4,7 @@
 #include "lingodb/compiler/frontend/column_semantic.h"
 #include "lingodb/compiler/frontend/sql_scope.h"
 
+#include <unordered_set>
 #include <mlir/Dialect/MLProgram/Transforms/Passes.h.inc>
 #include <mlir/IR/Types.h>
 namespace lingodb::ast {
@@ -26,11 +27,7 @@ class BoundExpression : public AstNode {
    std::optional<NullableType> resultType = std::nullopt;
 
    //If this expression is a column reference or (SELECT 2*d from t), it can be used to find the named result
-   std::optional<std::shared_ptr<NamedResult>> namedResult;
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override {
-      return "";
-   };
+   std::optional<std::shared_ptr<ColumnReference>> columnReference;
 };
 
 class BoundColumnRefExpression : public BoundExpression {
@@ -38,14 +35,16 @@ class BoundColumnRefExpression : public BoundExpression {
    static constexpr ExpressionClass TYPE = ExpressionClass::BOUND_COLUMN_REF;
 
    //! Specify both the column and table name
-   BoundColumnRefExpression(NullableType resultType, std::shared_ptr<NamedResult> namedResult, std::string alias);
+   BoundColumnRefExpression(NullableType resultType, std::shared_ptr<ColumnReference> columnReference, std::string alias) : BoundExpression(TYPE, ExpressionType::BOUND_COLUMN_REF, resultType, alias) {
+      this->columnReference = columnReference;
+   }
 };
 
 class BoundComparisonExpression : public BoundExpression {
    public:
    static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_COMPARISON;
 
-   BoundComparisonExpression(ExpressionType type, std::string alias, bool resultTypeNullable, std::shared_ptr<BoundExpression> left, std::vector<std::shared_ptr<BoundExpression>> rightChildren);
+   BoundComparisonExpression(ExpressionType type, std::string alias, bool resultTypeNullable, std::shared_ptr<BoundExpression> left, std::vector<std::shared_ptr<BoundExpression>> rightChildren) : BoundExpression(TYPE, type, NullableType(catalog::Type::boolean(), resultTypeNullable), alias), left(std::move(left)), rightChildren(std::move(rightChildren)) {}
 
    std::shared_ptr<BoundExpression> left;
    std::vector<std::shared_ptr<BoundExpression>> rightChildren;
@@ -54,8 +53,7 @@ class BoundComparisonExpression : public BoundExpression {
 class BoundConjunctionExpression : public BoundExpression {
    public:
    static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_CONJUNCTION;
-   BoundConjunctionExpression(ExpressionType type, std::string alias, std::shared_ptr<BoundExpression> left, std::shared_ptr<BoundExpression> right);
-   BoundConjunctionExpression(ExpressionType type, std::string alias, std::vector<std::shared_ptr<BoundExpression>> children);
+   BoundConjunctionExpression(ExpressionType type, std::string alias, std::vector<std::shared_ptr<BoundExpression>> children) : BoundExpression(TYPE, type, catalog::Type::boolean(), alias), children(std::move(children)) {}
 
    std::vector<std::shared_ptr<BoundExpression>> children;
 };
@@ -63,24 +61,16 @@ class BoundConjunctionExpression : public BoundExpression {
 class BoundConstantExpression : public BoundExpression {
    public:
    static constexpr ExpressionClass TYPE = ExpressionClass::BOUND_CONSTANT;
-   BoundConstantExpression(NullableType resultType, std::shared_ptr<Value> value, std::string alias);
+   BoundConstantExpression(NullableType resultType, std::shared_ptr<Value> value, std::string alias) : BoundExpression(TYPE, ExpressionType::VALUE_CONSTANT, resultType, alias), value(std::move(value)) {}
 
    std::shared_ptr<Value> value;
 };
 
-class BoundTargetsExpression : public BoundExpression {
-   public:
-   static constexpr ExpressionClass TYPE = ExpressionClass::BOUND_TARGETS;
-   BoundTargetsExpression(std::string alias, bool distinct, std::vector<std::shared_ptr<NamedResult>> targetColumns);
-
-   bool distinct = false;
-   std::vector<std::shared_ptr<NamedResult>> targetColumns;
-};
 
 class BoundFunctionExpression : public BoundExpression {
    public:
    static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_FUNCTION;
-   BoundFunctionExpression(ExpressionType type, NullableType resultType, std::string functionName, std::string scope, std::string alias, bool distinct, std::vector<std::shared_ptr<BoundExpression>> arguments);
+   BoundFunctionExpression(ExpressionType type, NullableType resultType, std::string functionName, std::string scope, std::string alias, bool distinct, std::vector<std::shared_ptr<BoundExpression>> arguments) : BoundExpression(TYPE, type, resultType, alias), functionName(functionName), scope(scope), distinct(distinct), arguments(arguments) {}
 
    std::string functionName;
    std::string scope;
@@ -93,17 +83,16 @@ class BoundFunctionExpression : public BoundExpression {
 class BoundStarExpression : public BoundExpression {
    public:
    static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_STAR;
-   explicit BoundStarExpression(std::string relationName, std::vector<std::shared_ptr<NamedResult>> namedResults);
+   explicit BoundStarExpression(std::string relationName,  std::unordered_set<std::pair<std::shared_ptr<ast::ColumnReference>, size_t>, ast::ColumnRefHash, ast::ColumnRefEq>  columnReferences) : BoundExpression(TYPE, ExpressionType::STAR, ""), relationName(relationName), columnReferences(std::move(columnReferences)) {}
 
    std::string relationName;
-   std::vector<std::shared_ptr<NamedResult>> namedResults{};
+   std::unordered_set<std::pair<std::shared_ptr<ast::ColumnReference>, size_t>, ast::ColumnRefHash, ast::ColumnRefEq>  columnReferences{};
 };
 
 class BoundOperatorExpression : public BoundExpression {
    public:
    static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_OPERATOR;
-   BoundOperatorExpression(ExpressionType type, NullableType resultType, std::string alias, std::vector<std::shared_ptr<BoundExpression>> children);
-   BoundOperatorExpression(ExpressionType type, NullableType resultType, std::string alias, std::shared_ptr<BoundExpression> left, std::shared_ptr<BoundExpression> right);
+   BoundOperatorExpression(ExpressionType type, NullableType resultType, std::string alias, std::vector<std::shared_ptr<BoundExpression>> children) : BoundExpression(TYPE, type, resultType, alias), children(children) {}
 
    std::vector<std::shared_ptr<BoundExpression>> children;
 };
@@ -111,13 +100,13 @@ class BoundOperatorExpression : public BoundExpression {
 class BoundCastExpression : public BoundExpression {
    public:
    static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_CAST;
-   BoundCastExpression(NullableType resultType, std::string alias, std::shared_ptr<BoundExpression> child, std::optional<LogicalTypeWithMods> logicalTypeWithMods, std::string stringRepr);
+   BoundCastExpression(NullableType resultType, std::string alias, std::shared_ptr<BoundExpression> child, std::optional<LogicalTypeWithMods> logicalTypeWithMods, std::string stringRepr) : BoundExpression(TYPE, ExpressionType::CAST, resultType, alias), child(std::move(child)), logicalTypeWithMods(logicalTypeWithMods), stringRepr(stringRepr) {}
    std::optional<LogicalTypeWithMods> logicalTypeWithMods;
 
    std::string stringRepr;
    std::shared_ptr<BoundExpression> child;
 };
-struct BoundWindowBoundary {
+struct BoundWindowFrame {
    WindowMode windowMode = WindowMode::INVALID;
 
    size_t start = std::numeric_limits<int64_t>::min();
@@ -128,19 +117,19 @@ struct BoundWindowBoundary {
 class BoundWindowExpression : public BoundExpression {
    public:
    static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_WINDOW;
-   BoundWindowExpression(ExpressionType type, std::string alias, NullableType resultType, std::shared_ptr<BoundFunctionExpression> function, std::vector<std::shared_ptr<BoundExpression>> partitions, std::optional<std::shared_ptr<BoundOrderByModifier>> order, std::shared_ptr<BoundWindowBoundary> windowBoundary );
+   BoundWindowExpression(ExpressionType type, std::string alias, NullableType resultType, std::shared_ptr<BoundFunctionExpression> function, std::vector<std::shared_ptr<BoundExpression>> partitions, std::optional<std::shared_ptr<BoundOrderByModifier>> order, std::shared_ptr<BoundWindowFrame> windowFrame ) : BoundExpression(TYPE, type, resultType, alias), function(function), partitions(partitions), order(order), windowFrame(windowFrame) {}
 
    std::shared_ptr<BoundFunctionExpression> function;
    std::vector<std::shared_ptr<BoundExpression>> partitions;
    std::optional<std::shared_ptr<BoundOrderByModifier>> order;
-   std::shared_ptr<BoundWindowBoundary> windowBoundary;
+   std::shared_ptr<BoundWindowFrame> windowFrame;
 };
 
 class BoundBetweenExpression : public BoundExpression {
    public:
    static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_BETWEEN;
 
-   BoundBetweenExpression(ExpressionType type, catalog::Type resultType, std::string alias, std::shared_ptr<BoundExpression> input, std::shared_ptr<BoundExpression> lower, std::shared_ptr<BoundExpression> upper);
+   BoundBetweenExpression(ExpressionType type, catalog::Type resultType, std::string alias, std::shared_ptr<BoundExpression> input, std::shared_ptr<BoundExpression> lower, std::shared_ptr<BoundExpression> upper) : BoundExpression(TYPE, type, resultType, alias), input(std::move(input)), lower(std::move(lower)), upper(std::move(upper)) {}
 
    std::shared_ptr<BoundExpression> input;
    std::shared_ptr<BoundExpression> lower;
@@ -152,12 +141,12 @@ class BoundSubqueryExpression : public BoundExpression {
    public:
    static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_SUBQUERY;
 
-   BoundSubqueryExpression(SubqueryType subqueryType, NullableType resultType, std::string alias, std::shared_ptr<NamedResult> namedResultForSubquery, std::shared_ptr<analyzer::SQLScope> sqlScope, std::shared_ptr<TableProducer> subquery, std::shared_ptr<BoundExpression> testExpr);
+   BoundSubqueryExpression(SubqueryType subqueryType, NullableType resultType, std::string alias, std::shared_ptr<ColumnReference> columnReferenceForSubquery, std::shared_ptr<analyzer::SQLScope> sqlScope, std::shared_ptr<TableProducer> subquery, std::shared_ptr<BoundExpression> testExpr) : BoundExpression(TYPE, ExpressionType::SUBQUERY, resultType, alias), subqueryType(subqueryType), sqlScope(sqlScope), columnReferenceForSubquery(columnReferenceForSubquery), subquery(std::move(subquery)), testExpr(testExpr) {}
 
    SubqueryType subqueryType = SubqueryType::INVALID;
    /// The subquery expression
    std::shared_ptr<TableProducer> subquery;
-   std::shared_ptr<NamedResult> namedResultForSubquery;
+   std::shared_ptr<ColumnReference> columnReferenceForSubquery;
    std::shared_ptr<analyzer::SQLScope> sqlScope;
    /// Expression to test against. The left side expression of an IN expression.
    std::shared_ptr<BoundExpression> testExpr;
@@ -173,7 +162,7 @@ class BoundCaseExpression : public BoundExpression {
    };
    static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_CASE;
 
-   BoundCaseExpression(NullableType resultType, std::string alias, std::optional<std::shared_ptr<BoundExpression>> caseExpr, std::vector<BoundCaseCheck> caseChecks, std::shared_ptr<BoundExpression> elseExpr);
+   BoundCaseExpression(NullableType resultType, std::string alias, std::optional<std::shared_ptr<BoundExpression>> caseExpr, std::vector<BoundCaseCheck> caseChecks, std::shared_ptr<BoundExpression> elseExpr) : BoundExpression(TYPE, ExpressionType::CASE_EXPR, resultType, alias), caseExpr(caseExpr),  caseChecks(std::move(caseChecks)), elseExpr(std::move(elseExpr)) {}
 
    std::optional<std::shared_ptr<BoundExpression>> caseExpr; //CASE expr ...
    std::vector<BoundCaseCheck> caseChecks; //CASE ... WHEN caseCheck
@@ -186,7 +175,7 @@ class BoundCaseExpression : public BoundExpression {
 class BoundSetColumnExpression : public BoundExpression {
    public:
    static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_SET;
-   BoundSetColumnExpression( std::string mapName, std::vector<std::shared_ptr<BoundExpression>> sets);
+   BoundSetColumnExpression( std::string mapName, std::vector<std::shared_ptr<BoundExpression>> sets) : BoundExpression(TYPE, ExpressionType::SET, ""), mapName(mapName), sets(std::move(sets)) {}
 
    std::string mapName;
    std::vector<std::shared_ptr<BoundExpression>> sets;
