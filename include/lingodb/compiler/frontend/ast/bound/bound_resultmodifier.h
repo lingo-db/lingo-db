@@ -17,20 +17,19 @@ class BoundResultModifier : public TableProducer {
 
    ResultModifierType modifierType;
    std::shared_ptr<TableProducer> input = nullptr;
-
-   virtual std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen);
 };
 /**
+ * Follows a similar logic to that of DuckDB
  * GROUP BY <element>
  */
 class BoundOrderByElement {
    public:
-   BoundOrderByElement(OrderType type, OrderByNullType nullOrder, std::shared_ptr<NamedResult> namedResult) : type(type), nullOrder(nullOrder), namedResult(namedResult) {};
+   BoundOrderByElement(OrderType type, OrderByNullType nullOrder, std::shared_ptr<ColumnReference> columnReference) : type(type), nullOrder(nullOrder), columnReference(columnReference) {};
 
    /// Sort order
    OrderType type;
    /// Expression to order by
-   std::shared_ptr<NamedResult> namedResult;
+   std::shared_ptr<ColumnReference> columnReference;
    /// The NULL sort order, NULLS_FIRST or NULLS_LAST
    OrderByNullType nullOrder;
 
@@ -44,8 +43,6 @@ class BoundOrderByModifier : public BoundResultModifier {
    BoundOrderByModifier(std::vector<std::shared_ptr<BoundOrderByElement>> orderByElements, std::shared_ptr<TableProducer> input) : BoundResultModifier(ResultModifierType::BOUND_ORDER_BY, input), orderByElements(orderByElements) {}
 
    std::vector<std::shared_ptr<BoundOrderByElement>> orderByElements;
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 
 class BoundLimitModifier : public BoundResultModifier {
@@ -54,7 +51,5 @@ class BoundLimitModifier : public BoundResultModifier {
 
    std::shared_ptr<BoundExpression> limitExpression;
    std::shared_ptr<BoundExpression> offset;
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 }

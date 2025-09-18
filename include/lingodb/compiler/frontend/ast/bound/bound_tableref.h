@@ -11,19 +11,15 @@ class BoundTableRef : public TableProducer {
    BoundTableRef(TableReferenceType type, std::string alias) : TableProducer(NodeType::BOUND_TABLE_REF, alias), type(type) {
    }
    TableReferenceType type;
-
-   virtual std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) = 0;
 };
 
 class BoundBaseTableRef : public BoundTableRef {
    public:
    static constexpr TableReferenceType TYPE = TableReferenceType::BASE_TABLE;
 
-   BoundBaseTableRef(std::vector<std::shared_ptr<NamedResult>> namedResultsEntries, std::string alias, std::string relationName, std::string mlirScope);
+   BoundBaseTableRef(std::vector<std::shared_ptr<ColumnReference>> columnReferenceEntries, std::string alias, std::string relationName, std::string mlirScope) : BoundTableRef(TYPE, std::move(alias)), columnReferenceEntries(std::move(columnReferenceEntries)), relationName(relationName), mlirScope(mlirScope) {}
 
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
-
-   std::vector<std::shared_ptr<NamedResult>> namedResultsEntries;
+   std::vector<std::shared_ptr<ColumnReference>> columnReferenceEntries;
    std::string relationName;
    std::string mlirScope;
 };
@@ -32,7 +28,7 @@ class BoundJoinRef : public BoundTableRef {
    static constexpr TableReferenceType TYPE = TableReferenceType::JOIN;
 
    public:
-   BoundJoinRef(JoinType type, JoinCondType refType, std::shared_ptr<TableProducer> left, std::shared_ptr<TableProducer> right, boundJoinCond condition);
+   BoundJoinRef(JoinType type, JoinCondType refType, std::shared_ptr<TableProducer> left, std::shared_ptr<TableProducer> right, boundJoinCond condition) : BoundTableRef(TYPE), left(std::move(left)), right(std::move(right)), condition(std::move(condition)), type(type), refType(refType)  {}
 
    //! The left hand side of the join
    //! QueryNode as variant is needed for pipe syntax. Example: FROM Test |> join ok on id1=id2
@@ -54,35 +50,28 @@ class BoundJoinRef : public BoundTableRef {
     * first: original attribute ref
     * second: new attribute ref
     */
-   std::vector<std::pair<std::shared_ptr<NamedResult>, std::shared_ptr<NamedResult>>> outerJoinMapping;
+   std::vector<std::pair<std::shared_ptr<ColumnReference>, std::shared_ptr<ColumnReference>>> outerJoinMapping;
 
    std::shared_ptr<analyzer::SQLScope> leftScope;
    std::shared_ptr<analyzer::SQLScope> rightScope;
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 
 class BoundCrossProductRef : public BoundTableRef {
    static constexpr TableReferenceType TYPE = TableReferenceType::CROSS_PRODUCT;
    public:
-   BoundCrossProductRef(std::vector<std::shared_ptr<TableProducer>> boundTables);
+   BoundCrossProductRef(std::vector<std::shared_ptr<TableProducer>> boundTables) : BoundTableRef(TYPE), boundTables(boundTables) {}
    std::vector<std::shared_ptr<TableProducer>> boundTables;
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 
 class BoundSubqueryRef : public BoundTableRef {
    static constexpr TableReferenceType TYPE = TableReferenceType::SUBQUERY;
 
    public:
-   BoundSubqueryRef(std::shared_ptr<analyzer::SQLScope> sqlScope, std::shared_ptr<TableProducer> subSelect);
+   BoundSubqueryRef(std::shared_ptr<analyzer::SQLScope> sqlScope, std::shared_ptr<TableProducer> subSelect) : BoundTableRef(TYPE), sqlScope(std::move(sqlScope)), subSelect(std::move(subSelect)) {}
 
    std::shared_ptr<analyzer::SQLScope> sqlScope;
    //! The subquery
-   //TODO correct Type?
    std::shared_ptr<TableProducer> subSelect;
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 /**
  * Naming consistent with that of DuckDb.
@@ -91,12 +80,10 @@ class BoundSubqueryRef : public BoundTableRef {
 class BoundExpressionListRef : public BoundTableRef {
    public:
    static constexpr TableReferenceType TYPE = TableReferenceType::BOUND_EXPRESSION_LIST;
-   BoundExpressionListRef(std::vector<std::vector<std::shared_ptr<BoundConstantExpression>>> values, std::vector<std::shared_ptr<NamedResult>> namedResultsEntries);
+   BoundExpressionListRef(std::vector<std::vector<std::shared_ptr<BoundConstantExpression>>> values, std::vector<std::shared_ptr<ColumnReference>> columnReferenceEntries) :  BoundTableRef(TYPE), values(std::move(values)), columnReferenceEntries(std::move(columnReferenceEntries)) {}
 
    //! The expressions in the list
    std::vector<std::vector<std::shared_ptr<BoundConstantExpression>>> values;
-   std::vector<std::shared_ptr<NamedResult>> namedResultsEntries;
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
+   std::vector<std::shared_ptr<ColumnReference>> columnReferenceEntries;
 };
 } // namespace lingodb::ast

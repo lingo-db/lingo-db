@@ -104,55 +104,56 @@ class MLIRFrontend : public lingodb::execution::Frontend {
 class SQLFrontend : public lingodb::execution::Frontend {
    mlir::MLIRContext context;
    mlir::OwningOpRef<mlir::ModuleOp> module;
-   bool parallismAllowed;
+   bool isFile = false;
    void load(std::string fileOrDirect) {
       lingodb::execution::initializeContext(context);
       driver drv;
+      try {
+         if (!drv.parse(fileOrDirect, isFile)) {
+            auto results = drv.result;
 
-      if (!drv.parse(fileOrDirect)) {
-         auto results = drv.result;
-
-         if (results.empty() || results.size() > 1) {
-            error.emit() << "Error during parsing: Only one statement allowed";
-            return;
-         }
-         auto sqlContext = std::make_shared<lingodb::analyzer::SQLContext>();
-         sqlContext->catalog = catalog;
-         lingodb::analyzer::SQLQueryAnalyzer analyzer{catalog};
-         drv.result[0] = analyzer.canonicalizeAndAnalyze(drv.result[0], sqlContext);
-
-         mlir::OpBuilder builder(&context);
-
-         mlir::ModuleOp moduleOp = builder.create<mlir::ModuleOp>(builder.getUnknownLoc());
-         lingodb::translator::SQLMlirTranslator translator{moduleOp, catalog};
-         builder.setInsertionPointToStart(moduleOp.getBody());
-         auto* queryBlock = new mlir::Block;
-         std::vector<mlir::Type> returnTypes;
-         {
-            mlir::OpBuilder::InsertionGuard guard(builder);
-            builder.setInsertionPointToStart(queryBlock);
-            auto val = translator.translateStart(builder, drv.result[0], sqlContext);
-            if (val.has_value()) {
-               builder.create<lingodb::compiler::dialect::subop::SetResultOp>(builder.getUnknownLoc(), 0, val.value());
+            if (results.empty() || results.size() > 1) {
+               error.emit() << "Error during parsing: Only one statement allowed";
+               return;
             }
-            builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc());
-         }
-         mlir::func::FuncOp funcOp = builder.create<mlir::func::FuncOp>(builder.getUnknownLoc(), "main", builder.getFunctionType({}, {}));
-         funcOp.getBody().push_back(queryBlock);
-         module = moduleOp;
-         parallismAllowed = false;
-         timing.emplace("frontEnd", analyzer.getTiming() + translator.getTiming());
+            auto sqlContext = std::make_shared<lingodb::analyzer::SQLContext>();
+            sqlContext->catalog = catalog;
+            lingodb::analyzer::SQLQueryAnalyzer analyzer{catalog};
+            drv.result[0] = analyzer.canonicalizeAndAnalyze(drv.result[0], sqlContext);
 
-      } else {
-         error.emit() << "Error during parsing";
+            mlir::OpBuilder builder(&context);
+
+            mlir::ModuleOp moduleOp = builder.create<mlir::ModuleOp>(builder.getUnknownLoc());
+            lingodb::translator::SQLMlirTranslator translator{moduleOp, catalog};
+            builder.setInsertionPointToStart(moduleOp.getBody());
+            auto* queryBlock = new mlir::Block;
+            std::vector<mlir::Type> returnTypes;
+            {
+               mlir::OpBuilder::InsertionGuard guard(builder);
+               builder.setInsertionPointToStart(queryBlock);
+               auto val = translator.translateStart(builder, drv.result[0], sqlContext);
+               if (val.has_value()) {
+                  builder.create<lingodb::compiler::dialect::subop::SetResultOp>(builder.getUnknownLoc(), 0, val.value());
+               }
+               builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc());
+            }
+            mlir::func::FuncOp funcOp = builder.create<mlir::func::FuncOp>(builder.getUnknownLoc(), "main", builder.getFunctionType({}, {}));
+            funcOp.getBody().push_back(queryBlock);
+            module = moduleOp;
+            } else {
+               error.emit() << "Error during parsing";
+            }
+      } catch (lingodb::frontend_error& e) {
+         error.emit() << e.what();
+
       }
    }
 
    void loadFromString(std::string sql) override {
-      sql = ":" + sql;
       load(sql);
    }
    void loadFromFile(std::string fileName) override {
+      isFile = true;
       load(fileName);
    }
 
@@ -160,9 +161,6 @@ class SQLFrontend : public lingodb::execution::Frontend {
    mlir::ModuleOp* getModule() override {
       assert(module);
       return module.operator->();
-   }
-   bool isParallelismAllowed() override {
-      return parallismAllowed;
    }
 };
 

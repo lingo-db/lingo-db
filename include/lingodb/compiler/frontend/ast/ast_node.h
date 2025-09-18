@@ -16,6 +16,7 @@ enum class NodeType : uint8_t {
    INSERT_NODE = 10,
    SET_NODE = 11,
    COPY_NODE = 12,
+   TARGET_LIST = 13,
 
    //Bound
    BOUND_TABLE_REF = 20,
@@ -25,30 +26,7 @@ enum class NodeType : uint8_t {
    BOUND_RESULT_MODIFIER = 27,
    BOUND_EXTEND_NODE = 28,
    BOUND_INSERT_NODE = 30,
-};
-//used for getting unique ids when printing the AST for debugging purposes as Dot graph
-class NodeIdGenerator {
-   public:
-   void reset() {
-      currentId = 0;
-      idMap.clear();
-   }
-
-   uint64_t getId(uintptr_t id) {
-      if (!idMap.contains(id)) {
-         idMap[id] = currentId;
-         currentId++;
-      }
-      return idMap[id];
-   }
-
-   void setId(uint64_t id, uint64_t setID) {
-      idMap[id] = setID;
-   }
-
-   private:
-   uint64_t currentId;
-   std::unordered_map<uint64_t, uint64_t> idMap;
+   BOUND_TARGET_LIST = 31,
 };
 class AstNode {
    public:
@@ -57,7 +35,5 @@ class AstNode {
 
    NodeType nodeType;
    location loc;
-
-   virtual std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) = 0;
 };
 } // namespace lingodb::ast

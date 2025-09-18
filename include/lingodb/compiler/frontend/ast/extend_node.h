@@ -6,8 +6,8 @@ namespace lingodb::ast {
 class ExtendNode : public AstNode {
    public:
    static constexpr auto TYPE = NodeType::EXTEND_NODE;
-   ExtendNode();
-   explicit ExtendNode(bool hidden);
+   ExtendNode() : AstNode(NodeType::EXTEND_NODE) {}
+   explicit ExtendNode(bool hidden) : AstNode(NodeType::EXTEND_NODE), hidden(hidden) {}
    std::vector<std::shared_ptr<ParsedExpression>> extensions;
 
    /**
@@ -16,7 +16,5 @@ class ExtendNode : public AstNode {
     * that help in query analysis and translation but are not intended to be part of the final output  unless explicitly referenced.
    */
    bool hidden = false;
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 } // namespace lingodb::ast

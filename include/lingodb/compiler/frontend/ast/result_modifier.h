@@ -33,7 +33,6 @@ class ResultModifier : public TableProducer {
    ResultModifierType modifierType;
    std::shared_ptr<TableProducer> input = nullptr;
 
-   virtual std::string toDotGraph(uint32_t depth);
 };
 /**
  * GROUP BY <element>
@@ -59,8 +58,6 @@ class OrderByModifier : public ResultModifier {
    OrderByModifier() : ResultModifier(ResultModifierType::ORDER_BY) {}
 
    std::vector<std::shared_ptr<OrderByElement>> orderByElements;
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 
 class LimitModifier : public ResultModifier {
@@ -68,8 +65,6 @@ class LimitModifier : public ResultModifier {
    explicit LimitModifier(std::shared_ptr<ParsedExpression> limitExpression) : ResultModifier(ResultModifierType::LIMIT), limitExpression(std::move(limitExpression)) {}
    std::shared_ptr<ParsedExpression> limitExpression;
    std::shared_ptr<ParsedExpression> offset;
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
    // ... implementation ...
 };
 

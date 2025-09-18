@@ -22,6 +22,7 @@ endif (ENABLE_GPU_BACKEND)
 
 add_library(runner ${EXECUTION_FILES})
 llvm_update_compile_flags(runner)
+target_compile_options(runner PRIVATE -fexceptions)
 target_link_libraries(runner PRIVATE ${LIBS} MLIRSQLFrontend utility)
 set(COMPILE_DEFS "SOURCE_DIR=\"${CMAKE_SOURCE_DIR}\"")
 if (ENABLE_BASELINE_BACKEND)

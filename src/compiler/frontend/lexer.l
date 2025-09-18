@@ -168,6 +168,7 @@ ANY         { MAKE_KEYWORD(ANY); }
 
 BETWEEN     { MAKE_KEYWORD(BETWEEN); }
 BIGINT      { MAKE_KEYWORD(BIGINT); }
+INT8        { MAKE_KEYWORD(BIGINT); }
 BOOLEAN     { MAKE_KEYWORD(BOOLEAN_P); }
 BOOL        { MAKE_KEYWORD(BOOLEAN_P); }
 BY          { MAKE_KEYWORD(BY); }
@@ -199,6 +200,8 @@ ESCAPE      { MAKE_KEYWORD(ESCAPE); }
 
 FALSE       { MAKE_KEYWORD(FALSE_P); }
 FLOAT       { MAKE_KEYWORD(FLOAT_P); }
+FLOAT4      { MAKE_KEYWORD(FLOAT_P); }
+FLOAT8      { MAKE_KEYWORD(DOUBLE_P); }
 FOR         { MAKE_KEYWORD(FOR); }
 FROM        { MAKE_KEYWORD(FROM); }
 FULL        { MAKE_KEYWORD(FULL); }
@@ -212,6 +215,7 @@ IN          { MAKE_KEYWORD(IN_P); }
 INNER       { MAKE_KEYWORD(INNER_P); }
 INSERT      { MAKE_KEYWORD(INSERT); }
 INT         { MAKE_KEYWORD(INT_P); }
+INT4         { MAKE_KEYWORD(INT_P); }
 INTEGER     { MAKE_KEYWORD(INTEGER); }
 INTERSECT   { MAKE_KEYWORD(INTERSECT); }
 INTERVAL    { MAKE_KEYWORD(INTERVAL); }
@@ -333,13 +337,13 @@ YEAR        { MAKE_KEYWORD(YEAR_P); }
 
 
 void
-driver::scan_begin ()
+driver::scan_begin (bool isFile)
 {
   yy_flex_debug = trace_scanning;
   if (file.empty () || file == "-")
     yyin = stdin;
-  if(file.starts_with(":")) {
-     const char* sql = file.c_str() + 1; // Skip the ":" prefix
+  if(!isFile) {
+     const char* sql = file.c_str();
      YY_BUFFER_STATE buffer = yy_scan_string(sql);
      yy_switch_to_buffer(buffer);
   }
