@@ -81,6 +81,8 @@ class SQLCanonicalizer {
     * @return Transformed query tree in canonical form
     */
    std::shared_ptr<ast::TableProducer> canonicalize(std::shared_ptr<ast::TableProducer> rootNode, std::shared_ptr<ASTTransformContext> context);
+   std::shared_ptr<ast::ParsedExpression> canonicalizeWindowExpression(std::shared_ptr<ast::WindowExpression> windowExpr, std::shared_ptr<ast::ExtendNode> extendNode, int& i, std::shared_ptr<ASTTransformContext> context);
+   std::shared_ptr<ast::ParsedExpression> canonicalizeFunctionExpression(std::shared_ptr<ast::ParsedExpression> rootNode, std::shared_ptr<ast::FunctionExpression> functionExpr, bool extend, std::shared_ptr<ast::ExtendNode> extendNode, int& i, std::shared_ptr<ASTTransformContext> context);
    /**
     * Canonicalizes a parsed expression by transforming it into a canonical form.
     * This method recursively processes different types of expressions and applies specific

@@ -403,6 +403,108 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
    }
 }
 
+std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeWindowExpression(std::shared_ptr<ast::WindowExpression> windowExpr, std::shared_ptr<ast::ExtendNode> extendNode, int& i, std::shared_ptr<ASTTransformContext> context) {
+   auto extendNodeToUse = context->currentScope->classicalSelect ? context->currentScope->extendNodeBeforeWindowFunctions : extendNode;
+   assert(windowExpr->functionExpression);
+
+   if (windowExpr->filter) {
+      windowExpr->filter = canonicalizeParsedExpression(windowExpr->filter, context, true, extendNode);
+   }
+   std::ranges::transform(windowExpr->functionExpression->arguments, windowExpr->functionExpression->arguments.begin(), [&](auto& arg) {
+      return canonicalizeParsedExpression(arg, context, true, extendNodeToUse);
+   });
+
+   std::ranges::transform(windowExpr->partitions, windowExpr->partitions.begin(), [&](auto& partition) {
+      return canonicalizeParsedExpression(partition, context, true, extendNodeToUse);
+   });
+   if (windowExpr->order.has_value()) {
+      std::ranges::transform(windowExpr->order.value()->orderByElements, windowExpr->order.value()->orderByElements.begin(), [&](auto& orderByElement) {
+         orderByElement->expression = canonicalizeParsedExpression(orderByElement->expression, context, true, extendNodeToUse);
+         return orderByElement;
+      });
+   }
+   if (windowExpr->startExpr) {
+      windowExpr->startExpr = canonicalizeParsedExpression(windowExpr->startExpr, context, false, extendNode);
+   }
+   if (windowExpr->endExpr) {
+      windowExpr->endExpr = canonicalizeParsedExpression(windowExpr->endExpr, context, false, extendNode);
+   }
+   if (windowExpr->offsetExpr) {
+      windowExpr->offsetExpr = canonicalizeParsedExpression(windowExpr->offsetExpr, context, false, extendNode);
+   }
+   if (windowExpr->defaultExpr) {
+      windowExpr->defaultExpr = canonicalizeParsedExpression(windowExpr->defaultExpr, context, false, extendNode);
+   }
+
+   std::string alias = windowExpr->alias.empty() ? windowExpr->functionExpression->functionName : windowExpr->alias;
+
+   windowExpr->alias = windowExpr->alias.empty() ? windowExpr->functionExpression->functionName + "_" + std::to_string(i) : windowExpr->alias;
+   i++;
+
+   auto columnRef = drv.nf.node<ast::ColumnRefExpression>(windowExpr->loc, windowExpr->alias);
+   columnRef->alias = alias;
+   extendNode->extensions.emplace_back(windowExpr);
+   return columnRef;
+}
+std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeFunctionExpression(std::shared_ptr<ast::ParsedExpression> rootNode, std::shared_ptr<ast::FunctionExpression> functionExpr, bool extend, std::shared_ptr<ast::ExtendNode> extendNode, int& i, std::shared_ptr<ASTTransformContext> context) {
+   std::string columnAlias = functionExpr->alias.empty() ? functionExpr->functionName : functionExpr->alias;
+   std::ranges::transform(functionExpr->arguments, functionExpr->arguments.begin(), [&](auto& arg) {
+      return canonicalizeParsedExpression(arg, context, false, extendNode);
+   });
+
+   std::string alias = functionExpr->alias.empty() ? functionExpr->functionName : functionExpr->alias;
+   if (functionExpr->type == ast::ExpressionType::AGGREGATE) {
+      functionExpr->alias = functionExpr->functionName + "_" + std::to_string(i);
+      i++;
+
+      auto columnRef = drv.nf.node<ast::ColumnRefExpression>(functionExpr->loc, functionExpr->alias);
+      columnRef->alias = columnAlias;
+      context->currentScope->aggregationNode->aggregations.push_back(functionExpr);
+      return columnRef;
+
+   } else {
+      i++;
+      std::string upperCaseName = functionExpr->functionName;
+      std::ranges::transform(upperCaseName.begin(), upperCaseName.end(), upperCaseName.begin(), ::toupper);
+
+      //Extract Grouping into aggregation node
+      if (upperCaseName == "GROUPING") {
+         auto find = context->currentScope->aggregationNode->groupByNode->groupingFunctions.find(functionExpr);
+
+         if (find == context->currentScope->aggregationNode->groupByNode->groupingFunctions.end()) {
+            if (functionExpr->alias.empty()) {
+               functionExpr->alias = "grouping_" + std::to_string(i);
+            }
+            context->currentScope->aggregationNode->groupByNode->groupingFunctions.emplace(functionExpr);
+         } else {
+            functionExpr->alias = find->get()->alias;
+         }
+
+         auto columnRef = drv.nf.node<ast::ColumnRefExpression>(functionExpr->loc, functionExpr->alias);
+         columnRef->alias = columnAlias;
+
+         return columnRef;
+      }
+
+      if (!extend || functionExpr->functionName == "GROUPING")
+         return rootNode;
+      auto find = context->currentScope->groupedByExpressions.find(functionExpr);
+      if (find == context->currentScope->groupedByExpressions.end()) {
+         if (functionExpr->alias.empty()) {
+            functionExpr->alias = functionExpr->functionName + "_" + std::to_string(i);
+         }
+         extendNode->extensions.push_back(functionExpr);
+      } else {
+         functionExpr->alias = find->get()->alias;
+      }
+
+      auto columnRef = drv.nf.node<ast::ColumnRefExpression>(functionExpr->loc, functionExpr->alias);
+      columnRef->alias = columnAlias;
+      return columnRef;
+   }
+
+   return functionExpr;
+}
 std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpression(std::shared_ptr<ast::ParsedExpression> rootNode, std::shared_ptr<ASTTransformContext> context, bool extend, std::shared_ptr<ast::ExtendNode> extendNode ) {
    if (stackGuard->newStackNeeded()) {
       boost::context::fixedsize_stack salloc(1024*1024);
@@ -424,6 +526,23 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
       return expression;
    }
    static int i = 0;
+   auto extendExpr = [this, context, extendNode](std::shared_ptr<ast::ParsedExpression> expr) {
+      std::string alias = expr->alias.empty() ? "" : expr->alias;
+      auto find = context->currentScope->groupedByExpressions.find(expr);
+      if (find == context->currentScope->groupedByExpressions.end()) {
+         if (expr->alias.empty()) {
+            expr->alias = "op_" + std::to_string(i);
+         }
+         i++;
+         extendNode->extensions.push_back(expr);
+      } else {
+         expr->alias = find->get()->alias;
+      }
+      auto columnRef = drv.nf.node<ast::ColumnRefExpression>(expr->loc, expr->alias);
+      columnRef->alias = alias;
+      columnRef->forceToUseAlias = true;
+      return columnRef;
+   };
 
 
    switch (rootNode->exprClass) {
@@ -436,24 +555,8 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
            subqueryExpr->testExpr = canonicalizeParsedExpression(subqueryExpr->testExpr, context, true, extendNode);
          }
 
-         std::string alias = subqueryExpr->alias.empty() ? "" : subqueryExpr->alias;
-
-
          if (extend) {
-            auto find = context->currentScope->groupedByExpressions.find(subqueryExpr);
-            if (find == context->currentScope->groupedByExpressions.end()) {
-               if (subqueryExpr->alias.empty()) {
-                  subqueryExpr->alias = "op_" + std::to_string(i);
-               }
-               i++;
-               extendNode->extensions.push_back(subqueryExpr);
-            } else {
-               subqueryExpr->alias = find->get()->alias;
-            }
-            auto columnRef = drv.nf.node<ast::ColumnRefExpression>(subqueryExpr->loc, subqueryExpr->alias);
-            columnRef->alias = alias;
-            columnRef->forceToUseAlias = true;
-            return columnRef;
+            return extendExpr(subqueryExpr);
          }
 
          return subqueryExpr;
@@ -464,23 +567,8 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
          std::ranges::transform(operatorExpr->children, operatorExpr->children.begin(), [&](auto& child) {
             return canonicalizeParsedExpression(child, context, false, extendNode);
          });
-         std::string alias = operatorExpr->alias.empty() ? "" : operatorExpr->alias;
          if (extend) {
-            auto find = context->currentScope->groupedByExpressions.find(operatorExpr);
-            if (find == context->currentScope->groupedByExpressions.end()) {
-               if (operatorExpr->alias.empty()) {
-                  operatorExpr->alias = "op_" + std::to_string(i);
-               }
-               i++;
-               extendNode->extensions.push_back(operatorExpr);
-            } else {
-               operatorExpr->alias = find->get()->alias;
-            }
-
-            auto columnRef = drv.nf.node<ast::ColumnRefExpression>(operatorExpr->loc, operatorExpr->alias);
-            columnRef->alias = alias;
-            columnRef->forceToUseAlias = true;
-            return columnRef;
+            return extendExpr(operatorExpr);
 
          }
          return operatorExpr;
@@ -514,141 +602,18 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
          std::ranges::transform(comparisonExpr->rightChildren, comparisonExpr->rightChildren.begin(), [&](auto& child) {
             return canonicalizeParsedExpression(child, context, false, extendNode);
          });
-         std::string alias = comparisonExpr->alias.empty() ? "" : comparisonExpr->alias;
          if (extend) {
-            auto find = context->currentScope->groupedByExpressions.find(comparisonExpr);
-            if (find == context->currentScope->groupedByExpressions.end()) {
-               if (comparisonExpr->alias.empty()) {
-                  comparisonExpr->alias = "comp__" + std::to_string(i);
-               }
-               i++;
-
-               extendNode->extensions.push_back(comparisonExpr);
-            } else {
-               comparisonExpr->alias = find->get()->alias;
-            }
-
-
-            auto columnRef = drv.nf.node<ast::ColumnRefExpression>(comparisonExpr->loc, comparisonExpr->alias);
-            columnRef->alias = alias;
-            columnRef->forceToUseAlias = true;
-            return columnRef;
-
+            return extendExpr(comparisonExpr);
          }
          return comparisonExpr;
       }
       case ast::ExpressionClass::FUNCTION: {
          auto functionExpr = std::static_pointer_cast<ast::FunctionExpression>(rootNode);
-         std::string columnAlias = functionExpr->alias.empty() ? functionExpr->functionName : functionExpr->alias;
-         std::ranges::transform(functionExpr->arguments, functionExpr->arguments.begin(), [&](auto& arg) {
-            return canonicalizeParsedExpression(arg, context, false, extendNode);
-         });
-
-
-         std::string alias = functionExpr->alias.empty() ? functionExpr->functionName : functionExpr->alias;
-         if (functionExpr->type == ast::ExpressionType::AGGREGATE) {
-            functionExpr->alias = functionExpr->functionName + "_" + std::to_string(i);
-            i++;
-
-            auto columnRef = drv.nf.node<ast::ColumnRefExpression>(functionExpr->loc, functionExpr->alias);
-            columnRef->alias = columnAlias;
-            context->currentScope->aggregationNode->aggregations.push_back(functionExpr);
-            return columnRef;
-
-         } else {
-            i++;
-            std::string upperCaseName = functionExpr->functionName;
-            std::ranges::transform(upperCaseName.begin(), upperCaseName.end(), upperCaseName.begin(), ::toupper);
-
-            //Extract Grouping into aggregation node
-            if (upperCaseName == "GROUPING") {
-
-               auto find = context->currentScope->aggregationNode->groupByNode->groupingFunctions.find(functionExpr);
-
-               if (find ==   context->currentScope->aggregationNode->groupByNode->groupingFunctions.end()) {
-                  if (functionExpr->alias.empty()) {
-                     functionExpr->alias = "grouping_" + std::to_string(i);
-                  }
-                  context->currentScope->aggregationNode->groupByNode->groupingFunctions.emplace(functionExpr);
-               } else {
-                  functionExpr->alias = find->get()->alias;
-               }
-
-               auto columnRef = drv.nf.node<ast::ColumnRefExpression>(functionExpr->loc, functionExpr->alias);
-               columnRef->alias = columnAlias;
-
-               return columnRef;
-            }
-
-            if (!extend || functionExpr->functionName == "GROUPING")
-               return rootNode;
-            auto find = context->currentScope->groupedByExpressions.find(functionExpr);
-            if (find == context->currentScope->groupedByExpressions.end()) {
-               if (functionExpr->alias.empty()) {
-                  functionExpr->alias = functionExpr->functionName + "_" + std::to_string(i);
-               }
-               extendNode->extensions.push_back(functionExpr);
-            } else {
-               functionExpr->alias = find->get()->alias;
-            }
-
-            auto columnRef = drv.nf.node<ast::ColumnRefExpression>(functionExpr->loc, functionExpr->alias);
-            columnRef->alias = columnAlias;
-            return columnRef;
-         }
-
-         return functionExpr;
+         return canonicalizeFunctionExpression(rootNode, functionExpr, extend, extendNode, i, context);
       }
       case ast::ExpressionClass::WINDOW: {
          auto windowExpr = std::static_pointer_cast<ast::WindowExpression>(rootNode);
-         auto extendNodeToUse = context->currentScope->classicalSelect ? context->currentScope->extendNodeBeforeWindowFunctions : extendNode;
-         assert(windowExpr->functionExpression);
-
-         if (windowExpr->filter) {
-            windowExpr->filter = canonicalizeParsedExpression(windowExpr->filter, context, true, extendNode);
-         }
-         std::ranges::transform(windowExpr->functionExpression->arguments, windowExpr->functionExpression->arguments.begin(), [&](auto& arg) {
-            return canonicalizeParsedExpression(arg, context, true, extendNodeToUse);
-         });
-
-         std::ranges::transform(windowExpr->partitions, windowExpr->partitions.begin(), [&](auto& partition) {
-            return canonicalizeParsedExpression(partition, context, true, extendNodeToUse);
-         });
-         if (windowExpr->order.has_value()) {
-            std::ranges::transform(windowExpr->order.value()->orderByElements, windowExpr->order.value()->orderByElements.begin(), [&](auto& orderByElement) {
-               orderByElement->expression = canonicalizeParsedExpression(orderByElement->expression, context, true, extendNodeToUse);
-               return orderByElement;
-            });
-         }
-         if (windowExpr->startExpr) {
-            windowExpr->startExpr = canonicalizeParsedExpression(windowExpr->startExpr, context, false, extendNode);
-         }
-         if (windowExpr->endExpr) {
-            windowExpr->endExpr = canonicalizeParsedExpression(windowExpr->endExpr, context, false, extendNode);
-         }
-         if (windowExpr->offsetExpr) {
-            windowExpr->offsetExpr = canonicalizeParsedExpression(windowExpr->offsetExpr, context, false, extendNode);
-         }
-         if (windowExpr->defaultExpr) {
-            windowExpr->defaultExpr = canonicalizeParsedExpression(windowExpr->defaultExpr, context, false, extendNode);
-         }
-
-         std::string alias = windowExpr->alias.empty() ? windowExpr->functionExpression->functionName : windowExpr->alias;
-
-         windowExpr->alias = windowExpr->alias.empty() ? windowExpr->functionExpression->functionName + "_" + std::to_string(i) : windowExpr->alias;
-         i++;
-
-         auto columnRef = drv.nf.node<ast::ColumnRefExpression>(windowExpr->loc, windowExpr->alias);
-         columnRef->alias = alias;
-         extendNode->extensions.emplace_back(windowExpr);
-         return columnRef;
-
-
-
-
-
-         return windowExpr;
-
+         return canonicalizeWindowExpression(windowExpr, extendNode, i, context);
 
       }
       case ast::ExpressionClass::CASE: {
@@ -664,25 +629,9 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
             caseExpr->elseExpr = constExpr;
          }
          caseExpr->elseExpr = canonicalizeParsedExpression(caseExpr->elseExpr, context, false, extendNode);
-         std::string alias = caseExpr->alias.empty() ? "" : caseExpr->alias;
+
          if (extend) {
-            auto find = context->currentScope->groupedByExpressions.find(caseExpr);
-            if (find == context->currentScope->groupedByExpressions.end()) {
-               if (caseExpr->alias.empty()) {
-                  caseExpr->alias = "case__" + std::to_string(i);
-               }
-               i++;
-
-               extendNode->extensions.push_back(caseExpr);
-            } else {
-               caseExpr->alias = find->get()->alias;
-            }
-
-
-            auto columnRef = drv.nf.node<ast::ColumnRefExpression>(caseExpr->loc, caseExpr->alias);
-            columnRef->alias = alias;
-            columnRef->forceToUseAlias = true;
-            return columnRef;
+            return extendExpr(caseExpr);
 
          }
          return caseExpr;
@@ -691,23 +640,8 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
       case ast::ExpressionClass::CAST: {
          auto castExpr = std::static_pointer_cast<ast::CastExpression>(rootNode);
          castExpr->child = canonicalizeParsedExpression(castExpr->child, context, false, extendNode);
-         std::string alias = castExpr->alias.empty() ? "" : castExpr->alias;
          if (extend) {
-            auto find = context->currentScope->groupedByExpressions.find(castExpr);
-            if (find == context->currentScope->groupedByExpressions.end()) {
-               if (castExpr->alias.empty()) {
-                  castExpr->alias = "constant__" + std::to_string(i);
-               }
-               i++;
-               extendNode->extensions.push_back(castExpr);
-            } else {
-               castExpr->alias = find->get()->alias;
-            }
-
-            auto columnRef = drv.nf.node<ast::ColumnRefExpression>(castExpr->loc, castExpr->alias);
-            columnRef->alias = alias;
-            columnRef->forceToUseAlias = true;
-            return columnRef;
+            return extendExpr(castExpr);
 
          }
          return castExpr;
@@ -715,50 +649,19 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
       }
       case ast::ExpressionClass::CONSTANT: {
          auto constantExpr = std::static_pointer_cast<ast::ConstantExpression>(rootNode);
-         std::string alias = constantExpr->alias.empty() ? "" : constantExpr->alias;
          if (extend) {
-            auto find = context->currentScope->groupedByExpressions.find(constantExpr);
-            if (find == context->currentScope->groupedByExpressions.end()) {
-               if (constantExpr->alias.empty()) {
-                  constantExpr->alias = "constant__" + std::to_string(i);
-               }
-               i++;
-               extendNode->extensions.push_back(constantExpr);
-            } else {
-               constantExpr->alias = find->get()->alias;
-            }
-
-            auto columnRef = drv.nf.node<ast::ColumnRefExpression>(constantExpr->loc, constantExpr->alias);
-            columnRef->alias = alias;
-            columnRef->forceToUseAlias = true;
-            return columnRef;
-
+            return extendExpr(constantExpr);
          }
 
          return constantExpr;
       }
       case ast::ExpressionClass::BETWEEN: {
          auto betweenExpr = std::static_pointer_cast<ast::BetweenExpression>(rootNode);
-         std::string alias = betweenExpr->alias.empty() ? "" : betweenExpr->alias;
          betweenExpr->input = canonicalizeParsedExpression(betweenExpr->input, context, false, extendNode);
          betweenExpr->upper = canonicalizeParsedExpression(betweenExpr->upper, context, false, extendNode);
          betweenExpr->lower = canonicalizeParsedExpression(betweenExpr->lower, context, false, extendNode);
          if (extend) {
-            auto find = context->currentScope->groupedByExpressions.find(betweenExpr);
-            if (find == context->currentScope->groupedByExpressions.end()) {
-               if (betweenExpr->alias.empty()) {
-                  betweenExpr->alias = "constant__" + std::to_string(i);
-               }
-               i++;
-               extendNode->extensions.push_back(betweenExpr);
-            } else {
-               betweenExpr->alias = find->get()->alias;
-            }
-
-            auto columnRef = drv.nf.node<ast::ColumnRefExpression>(betweenExpr->loc, betweenExpr->alias);
-            columnRef->alias = alias;
-            columnRef->forceToUseAlias = true;
-            return columnRef;
+            return extendExpr(betweenExpr);
 
          }
          return betweenExpr;
