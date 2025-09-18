@@ -1137,17 +1137,37 @@ mlir::Value SQLMlirTranslator::translateTableRef(mlir::OpBuilder& builder, std::
          }
          return builder.create<relalg::BaseTableOp>(location, tuples::TupleStreamType::get(mlirContext), relation, builder.getDictionaryAttr(columns));
       }
+      case ast::TableReferenceType::CROSS_PRODUCT: {
+         auto crossProd = std::static_pointer_cast<ast::BoundCrossProductRef>(tableRef);
+         mlir::Value current = translateTableProducer(builder, crossProd->boundTables[0], context);
+         for (size_t i = 1; i < crossProd->boundTables.size(); i++) {
+            current = builder.create<relalg::CrossProductOp>(location, tuples::TupleStreamType::get(mlirContext), current, translateTableProducer(builder, crossProd->boundTables[i], context));
+         }
+
+         return current;
+      }
       case ast::TableReferenceType::JOIN: {
          auto boundJoin = std::static_pointer_cast<ast::BoundJoinRef>(tableRef);
          mlir::Value left, right;
-         assert(boundJoin->leftScope && boundJoin->rightScope);
-         context->pushNewScope(boundJoin->leftScope);
+
+         if (boundJoin->leftScope) {
+            context->pushNewScope(boundJoin->leftScope);
+         }
          left = translateTableProducer(builder, boundJoin->left, context);
-         context->popCurrentScope();
+         if (boundJoin->leftScope) {
+            context->popCurrentScope();
+         }
          //Here the evalbefore gets lost!
-         context->pushNewScope(boundJoin->rightScope);
-         right = translateTableProducer(builder, boundJoin->right, context);
-         context->popCurrentScope();
+         if (boundJoin->rightScope) {
+            context->pushNewScope(boundJoin->rightScope);
+         }
+         if (boundJoin->right) {
+            right = translateTableProducer(builder, boundJoin->right, context);
+         }
+
+         if (boundJoin->leftScope) {
+            context->popCurrentScope();
+         }
          switch (boundJoin->type) {
             case ast::JoinType::INNER: {
                mlir::Block* pred;
@@ -1160,10 +1180,6 @@ mlir::Value SQLMlirTranslator::translateTableRef(mlir::OpBuilder& builder, std::
                auto joinOp = builder.create<relalg::InnerJoinOp>(location, tuples::TupleStreamType::get(mlirContext), left, right);
                joinOp.getPredicate().push_back(pred);
 
-               return joinOp;
-            }
-            case ast::JoinType::CROSS: {
-               auto joinOp = builder.create<relalg::CrossProductOp>(location, tuples::TupleStreamType::get(mlirContext), left, right);
                return joinOp;
             }
             case ast::JoinType::LEFT: {
