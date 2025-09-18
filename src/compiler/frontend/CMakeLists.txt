@@ -47,6 +47,7 @@ add_library(MLIRSQLFrontend
         ast/copy_node.cpp
 #common
         frontend_error.cpp
+        frontend_type.cpp
 
         ${BISON_parser_OUTPUTS}
         ${FLEX_lexer_OUTPUTS}

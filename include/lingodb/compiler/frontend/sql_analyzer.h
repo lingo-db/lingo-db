@@ -186,17 +186,17 @@ struct SQLTypeUtils {
     * @return A NullableType representing the common type that can hold both values
     * @throws std::runtime_error if no common type exists between the input types
     */
-   static catalog::NullableType getCommonType(catalog::NullableType nullableType1, catalog::NullableType nullableType2);
-   static catalog::NullableType getHigherDecimalType(catalog::NullableType left, catalog::NullableType right);
+   static NullableType getCommonType(NullableType nullableType1, NullableType nullableType2);
+   static NullableType getHigherDecimalType(NullableType left, NullableType right);
 
-   static catalog::NullableType getCommonBaseType(std::vector<catalog::NullableType> types, ast::ExpressionType operationType);
-   static catalog::NullableType getCommonBaseType(std::vector<catalog::NullableType> types);
-   static catalog::NullableType getCommonTypeAfterOperation(catalog::NullableType type1, catalog::NullableType type2, ast::ExpressionType operationType);
+   static NullableType getCommonBaseType(std::vector<NullableType> types, ast::ExpressionType operationType);
+   static NullableType getCommonBaseType(std::vector<NullableType> types);
+   static NullableType getCommonTypeAfterOperation(NullableType type1, NullableType type2, ast::ExpressionType operationType);
 
-   static std::vector<catalog::NullableType> toCommonTypes(std::vector<catalog::NullableType> types);
-   static std::vector<catalog::NullableType> toCommonNumber(std::vector<catalog::NullableType> types);
+   static std::vector<NullableType> toCommonTypes(std::vector<NullableType> types);
+   static std::vector<NullableType> toCommonNumber(std::vector<NullableType> types);
 
-   static catalog::NullableType typemodsToCatalogType(ast::LogicalType logicalType, std::vector<std::shared_ptr<ast::Value>>& typeModifiers);
+   static NullableType typemodsToCatalogType(ast::LogicalType logicalType, std::vector<std::shared_ptr<ast::Value>>& typeModifiers);
 
    [[nodiscard]]
    static std::pair<unsigned long, unsigned long> getAdaptedDecimalPAndSAfterMulDiv(unsigned long p, unsigned long s);

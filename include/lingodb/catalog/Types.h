@@ -85,22 +85,7 @@ class Type {
    static Type noneType();
    static Type index();
 };
-class NullableType {
-   public:
-   NullableType(Type type);
-   NullableType(Type type, bool isNullable);
-   Type type;
-   std::shared_ptr<NullableType> castType = nullptr;
-   bool isNullable;
-   bool useZeroInsteadOfNull = false;
-   mlir::Type toMlirType(mlir::MLIRContext* context) const;
-   mlir::Value castValueToThisType(mlir::OpBuilder& builder, mlir::Value valueToCast, bool valueNullable) const;
-   mlir::Value castValue(mlir::OpBuilder& builder, mlir::Value valueToCast) const;
-   bool isNumeric() const;
 
-   bool operator==(NullableType&);
-   bool operator!=(NullableType&);
-};
 class IntTypeInfo : public TypeInfo {
    bool isSigned;
    size_t bitWidth;
