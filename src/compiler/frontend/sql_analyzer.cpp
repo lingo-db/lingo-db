@@ -22,7 +22,7 @@ StackGuardNormal::StackGuardNormal() {
    if (suc != 0) {
       limit = 0;
    }
-   limit = 0.095*rlp.rlim_cur;
+   limit = 0.005*rlp.rlim_cur;
    startFameAddress = __builtin_frame_address(0);
 }
 void StackGuardNormal::reset() {
@@ -1469,6 +1469,25 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
 }
 
 std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableRef(std::shared_ptr<ast::TableRef> tableRef, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope) {
+   if (stackGuard->newStackNeeded()) {
+      boost::context::fixedsize_stack salloc(1024*1024);
+      boost::context::stack_context sctx = salloc.allocate();
+      auto sGuard = stackGuard;
+      stackGuard = std::make_shared<StackGuardFiber>(sctx);
+      void * sp=static_cast<char*>(sctx.sp);
+      std::size_t size=sctx.size;
+      std::shared_ptr<ast::TableProducer> boundTableRef;
+
+      boost::context::fiber f(std::allocator_arg, boost::context::preallocated(sp, size, sctx),salloc, [&](boost::context::fiber&& sink) {
+         boundTableRef = analyzeTableRef(tableRef, context, resolverScope);
+         return std::move(sink);
+      });
+
+      f = std::move(f).resume();
+      stackGuard = sGuard;
+
+      return boundTableRef;
+   }
    switch (tableRef->type) {
       case ast::TableReferenceType::BASE_TABLE: {
          auto baseTableRef = std::static_pointer_cast<ast::BaseTableRef>(tableRef);
