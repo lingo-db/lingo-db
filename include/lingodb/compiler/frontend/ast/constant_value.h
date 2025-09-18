@@ -12,6 +12,7 @@ enum class ConstantType : uint8_t {
    INTERVAL = 5,
    NULL_P = 6,
    BOOLEAN = 7,
+   DATE = 8,
 
    INVALID = 99,
 
@@ -52,7 +53,6 @@ class IntValue : public Value {
 class FloatValue : public Value {
    public:
    explicit FloatValue(std::string fVal) : Value(ConstantType::FLOAT), fVal(fVal) {}
-   //TODO float or double?
    std::string fVal;
    std::string toString() override {
       return "float: " + fVal;
@@ -87,9 +87,7 @@ class NullValue : public Value {
 
 class Interval {
    public:
-   int32_t months;
-   int32_t days;
-   int64_t micros;
+   std::string stringRepresentation;
 };
 
 class IntervalValue : public Value {
@@ -97,7 +95,16 @@ class IntervalValue : public Value {
    explicit IntervalValue(Interval iVal) : Value(ConstantType::INTERVAL), iVal(iVal) {}
    Interval iVal;
    std::string toString() override {
-      return "interval[...]";
+      return "interval[" + iVal.stringRepresentation + "]";
+   }
+};
+
+class DateValue : public Value {
+   public:
+   explicit DateValue(std::string date) : Value(ConstantType::DATE), date(date) {}
+   std::string date;
+   std::string toString() override {
+      return "dateValue[" + date + "]";
    }
 };
 
