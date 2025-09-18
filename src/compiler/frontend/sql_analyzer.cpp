@@ -1939,11 +1939,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
                break;
             case ast::ConstantType::STRING: {
                auto strValue = std::static_pointer_cast<ast::StringValue>(constExpr->value)->sVal;
-               if (strValue.length() <= 8) {
-                  type = catalog::Type::charType(strValue.length());
-               } else {
-                  type = catalog::Type::stringType();
-               }
+               type = catalog::Type::charType(strValue.length());
                break;
             }
 
@@ -2841,7 +2837,7 @@ NullableType SQLTypeUtils::getCommonType(NullableType nullableType1, NullableTyp
        }
 
        if (type1.getTypeId() == catalog::LogicalTypeId::DATE) {
-          if (type2.getTypeId() == catalog::LogicalTypeId::STRING) {
+          if (type2.getTypeId() == catalog::LogicalTypeId::STRING || type2.getTypeId() == catalog::LogicalTypeId::CHAR) {
              return NullableType(type1, isNullable);
           }
           if (type2.getTypeId() == catalog::LogicalTypeId::INTERVAL) {
