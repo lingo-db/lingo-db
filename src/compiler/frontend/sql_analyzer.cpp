@@ -966,7 +966,7 @@ std::shared_ptr<ast::CreateNode> SQLQueryAnalyzer::analyzeCreateNode(std::shared
                      error("Column name cannot be empty", columnElement->loc);
                   }
                   std::vector<std::variant<size_t, std::string>> typeModifiers;
-                  catalog::NullableType nullableType = SQLTypeUtils::typemodsToCatalogType(columnElement->logicalTypeWithMods.logicalType, columnElement->logicalTypeWithMods.typeModifiers);
+                  NullableType nullableType = SQLTypeUtils::typemodsToCatalogType(columnElement->logicalTypeWithMods.logicalType, columnElement->logicalTypeWithMods.typeModifiers);
                   nullableType.isNullable = true;
                   bool primary = false;
                   for (auto& constraint : columnElement->constraints) {
@@ -1021,10 +1021,10 @@ std::shared_ptr<ast::BoundInsertNode> SQLQueryAnalyzer::analyzeInsertNode(std::s
 
    auto exprListTableRef = std::static_pointer_cast<ast::BoundValuesQueryNode>(boundTableProducer)->expressionListRef;
    auto rel = maybeRel.value();
-   std::unordered_map<std::string, catalog::NullableType> allCollumnTypes;
+   std::unordered_map<std::string, NullableType> allCollumnTypes;
    //Check for correct Type
    for (auto c : rel->getColumns()) {
-      allCollumnTypes.emplace(c.getColumnName(), catalog::NullableType(c.getLogicalType(), c.getIsNullable()));
+      allCollumnTypes.emplace(c.getColumnName(), NullableType(c.getLogicalType(), c.getIsNullable()));
    }
    if (insertNode->columns.empty()) {
       for (auto c : rel->getColumns()) {
@@ -1799,7 +1799,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableRef(std::share
 
          std::vector<std::vector<std::shared_ptr<ast::BoundConstantExpression>>> boundValues{};
          size_t sizePerExprList = expressionListRef->values[0].size();
-         std::vector<std::vector<catalog::NullableType>> types{sizePerExprList};
+         std::vector<std::vector<NullableType>> types{sizePerExprList};
 
          for (auto exprList : expressionListRef->values) {
             if (exprList.size() != sizePerExprList) {
@@ -1817,7 +1817,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableRef(std::share
             }
             boundValues.emplace_back(boundExprList);
          }
-         std::vector<catalog::NullableType> commonTypes{};
+         std::vector<NullableType> commonTypes{};
          std::ranges::transform(types, std::back_inserter(commonTypes), [&](auto& typeList) {
             auto t = SQLTypeUtils::getCommonBaseType(typeList);
             SQLTypeUtils::toCommonTypes(typeList);
@@ -1932,7 +1932,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
          if (!constExpr->value) {
             throw std::runtime_error("Value of constExpr is empty");
          }
-         catalog::NullableType type = catalog::Type::int64();
+         NullableType type = catalog::Type::int64();
          switch (constExpr->value->type) {
             case ast::ConstantType::INT:
                type = catalog::Type::int32();
@@ -2024,7 +2024,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
          if (!left->resultType.has_value()) {
             error("Left side of comparison is not a valid expression", comparison->left->loc);
          }
-         std::vector<catalog::NullableType> types{};
+         std::vector<NullableType> types{};
          types.push_back(left->resultType.value());
          std::ranges::transform(boundRightChildren, std::back_inserter(types), [](auto& child) {
             return child->resultType.value();
@@ -2129,8 +2129,8 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
          }
          std::optional<std::shared_ptr<ast::BoundExpression>> boundCaseExpr = std::nullopt;
          std::vector<ast::BoundCaseExpression::BoundCaseCheck> boundCaseChecks;
-         std::vector<catalog::NullableType> thenTypes{};
-         std::vector<catalog::NullableType> whenTypes{};
+         std::vector<NullableType> thenTypes{};
+         std::vector<NullableType> whenTypes{};
          std::ranges::transform(caseExpr->caseChecks, std::back_inserter(boundCaseChecks), [&](ast::CaseExpression::CaseCheck& caseCheck) {
             if (!caseCheck.thenExpr || !caseCheck.whenExpr) {
                error("Should not happen", caseExpr->loc);
@@ -2198,20 +2198,20 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeOperatorExpressio
       error("Operator expression has children with different types", boundChildren[0]->loc);
    }
    //Get common type
-   std::vector<catalog::NullableType> types{};
+   std::vector<NullableType> types{};
    std::ranges::transform(boundChildren, std::back_inserter(types), [](auto c) {
       return c->resultType.value();
    });
 
    auto commonNumbers = SQLTypeUtils::toCommonNumber(types);
-   std::vector<catalog::NullableType> castValues{};
+   std::vector<NullableType> castValues{};
    std::ranges::transform(commonNumbers, std::back_inserter(castValues), [](auto c) {
       if (c.castType) {
          return *c.castType;
       }
       return c;
    });
-   catalog::NullableType resultType = SQLTypeUtils::getCommonBaseType(castValues, operatorExpr->type);
+   NullableType resultType = SQLTypeUtils::getCommonBaseType(castValues, operatorExpr->type);
    switch (operatorExpr->type) {
       case ast::ExpressionType::OPERATOR_IS_NOT_NULL:
       case ast::ExpressionType::OPERATOR_IS_NULL: {
@@ -2222,12 +2222,12 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeOperatorExpressio
          break;
       }
       case ast::ExpressionType::OPERATOR_CONCAT: {
-         resultType = catalog::NullableType(catalog::Type::stringType(), resultType.isNullable);
+         resultType = NullableType(catalog::Type::stringType(), resultType.isNullable);
 
          break;
       }
       case ast::ExpressionType::OPERATOR_NOT: {
-         resultType = catalog::NullableType(catalog::Type::boolean());
+         resultType = NullableType(catalog::Type::boolean());
          if (boundChildren.size() != 1) {
             error("Operator NOT expects exactly one child", operatorExpr->loc);
          }
@@ -2439,7 +2439,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeFunctionExpressio
       auto fName = function->alias.empty() ? function->functionName : function->alias;
       std::ranges::transform(function->functionName, function->functionName.begin(), ::toupper);
       std::shared_ptr<ast::BoundFunctionExpression> boundFunctionExpression = nullptr;
-      catalog::NullableType resultType{catalog::Type::noneType()};
+      NullableType resultType{catalog::Type::noneType()};
 
       if (function->arguments.size() > 1) {
          error("Aggregation with more than one argument not supported", function->loc);
@@ -2543,7 +2543,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeFunctionExpressio
    auto scope = context->getUniqueScope("tmp_attr");
    auto fName = function->alias.empty() ? function->functionName : function->alias;
    std::shared_ptr<ast::BoundFunctionExpression> boundFunctionExpression = nullptr;
-   catalog::NullableType resultType{catalog::Type::noneType()};
+   NullableType resultType{catalog::Type::noneType()};
 
    if (function->functionName == "DATE") {
       if (function->arguments.size() != 1) {
@@ -2582,7 +2582,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeFunctionExpressio
       if (arg2->resultType.has_value() && arg2->resultType.value().type.getTypeId() != catalog::LogicalTypeId::DATE && arg2->resultType.value().type.getTypeId() != catalog::LogicalTypeId::TIMESTAMP && arg2->resultType.value().type.getTypeId() != catalog::LogicalTypeId::INTERVAL) {
          error("Function extract needs second argument of type date, interval or timestamp", function->loc);
       }
-      resultType = catalog::NullableType{catalog::Type::int64(), arg2->resultType->isNullable};
+      resultType = NullableType{catalog::Type::int64(), arg2->resultType->isNullable};
 
       boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, std::vector{arg1, arg2});
 
@@ -2683,7 +2683,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeFunctionExpressio
       }
 
       std::vector<std::shared_ptr<ast::BoundExpression>> boundArgs{};
-      std::vector<catalog::NullableType> types{};
+      std::vector<NullableType> types{};
       std::ranges::transform(function->arguments, std::back_inserter(boundArgs), [&](auto c) {
          auto e = analyzeExpression(c, context, resolverScope);
          types.push_back(e->resultType.value());
@@ -2786,7 +2786,7 @@ std::shared_ptr<ast::BoundColumnRefExpression> SQLQueryAnalyzer::analyzeColumnRe
 /*
     * SQLTypeUtils
     */
-catalog::NullableType SQLTypeUtils::getCommonType(catalog::NullableType nullableType1, catalog::NullableType nullableType2) {
+NullableType SQLTypeUtils::getCommonType(NullableType nullableType1, NullableType nullableType2) {
     const bool isNullable = nullableType1.isNullable || nullableType2.isNullable;
 
     // If types are identical, handle special case for DECIMAL or return the type
@@ -2800,7 +2800,7 @@ catalog::NullableType SQLTypeUtils::getCommonType(catalog::NullableType nullable
           auto charInfo2 = nullableType2.type.getInfo<catalog::CharTypeInfo>();
           //If char have different lengths, return string type
           if (charInfo1->getLength() != charInfo2->getLength()) {
-             return catalog::NullableType(catalog::Type::stringType(), isNullable);
+             return NullableType(catalog::Type::stringType(), isNullable);
           }
 
        }
@@ -2808,12 +2808,12 @@ catalog::NullableType SQLTypeUtils::getCommonType(catalog::NullableType nullable
           auto intInfo1 = nullableType1.type.getInfo<catalog::IntTypeInfo>();
           auto intInfo2 = nullableType2.type.getInfo<catalog::IntTypeInfo>();
           if (intInfo1->getBitWidth() > intInfo2->getBitWidth()) {
-             return catalog::NullableType(nullableType1.type, isNullable);
+             return NullableType(nullableType1.type, isNullable);
           } else {
-             return catalog::NullableType(nullableType2.type, isNullable);
+             return NullableType(nullableType2.type, isNullable);
           }
        }
-        return catalog::NullableType(nullableType1.type, isNullable);
+        return NullableType(nullableType1.type, isNullable);
     }
 
     for (size_t i = 0; i<2; i++) {
@@ -2823,29 +2823,29 @@ catalog::NullableType SQLTypeUtils::getCommonType(catalog::NullableType nullable
        // Check combinations in one direction
        if (type1.getTypeId() == catalog::LogicalTypeId::DECIMAL &&
            type2.getTypeId() == catalog::LogicalTypeId::INT) {
-          return catalog::NullableType(type1, isNullable);
+          return NullableType(type1, isNullable);
            }
        if ((type1.getTypeId() == catalog::LogicalTypeId::INT || type1.getTypeId() == catalog::LogicalTypeId::DECIMAL) && type2.getTypeId() == catalog::LogicalTypeId::DOUBLE) {
-          return catalog::NullableType(type2, isNullable);
+          return NullableType(type2, isNullable);
            }
 
 
        if (type1.getTypeId() == catalog::LogicalTypeId::STRING &&
            type2.getTypeId() == catalog::LogicalTypeId::CHAR) {
-          return catalog::NullableType(type1, isNullable);
+          return NullableType(type1, isNullable);
            }
        if (type1.getTypeId() == catalog::LogicalTypeId::STRING) {
          if (type2.getTypeId() == catalog::LogicalTypeId::INT || type2.getTypeId() == catalog::LogicalTypeId::DECIMAL) {
-            return catalog::NullableType(type1, isNullable);
+            return NullableType(type1, isNullable);
          }
        }
 
        if (type1.getTypeId() == catalog::LogicalTypeId::DATE) {
           if (type2.getTypeId() == catalog::LogicalTypeId::STRING) {
-             return catalog::NullableType(type1, isNullable);
+             return NullableType(type1, isNullable);
           }
           if (type2.getTypeId() == catalog::LogicalTypeId::INTERVAL) {
-             return catalog::NullableType(
+             return NullableType(
                  catalog::Type(catalog::LogicalTypeId::DATE,
                              std::make_shared<catalog::DateTypeInfo>(catalog::DateTypeInfo::DateUnit::DAY)),
                  isNullable);
@@ -2855,15 +2855,15 @@ catalog::NullableType SQLTypeUtils::getCommonType(catalog::NullableType nullable
 
        if (type1.getTypeId() == catalog::LogicalTypeId::INT &&
            type2.getTypeId() == catalog::LogicalTypeId::CHAR) {
-          return catalog::NullableType(type1, isNullable);
+          return NullableType(type1, isNullable);
            }
 
        // Handle NONE type
        if (type2.getTypeId() == catalog::LogicalTypeId::NONE) {
-          return catalog::NullableType(type1, isNullable);
+          return NullableType(type1, isNullable);
        }
        if (type1.getTypeId() == catalog::LogicalTypeId::NONE) {
-          return catalog::NullableType(type2, isNullable);
+          return NullableType(type2, isNullable);
        }
        std::swap(nullableType1, nullableType2);
     }
@@ -2871,16 +2871,16 @@ catalog::NullableType SQLTypeUtils::getCommonType(catalog::NullableType nullable
     throw std::runtime_error("No common type found for " + nullableType1.type.toString() + " and " + nullableType2.type.toString());
 }
 
-catalog::NullableType SQLTypeUtils::getHigherDecimalType(catalog::NullableType left, catalog::NullableType right) {
+NullableType SQLTypeUtils::getHigherDecimalType(NullableType left, NullableType right) {
    assert(left.type.getTypeId() == catalog::LogicalTypeId::DECIMAL && right.type.getTypeId() == catalog::LogicalTypeId::DECIMAL);
    auto leftInfo = left.type.getInfo<catalog::DecimalTypeInfo>();
    auto rightInfo = right.type.getInfo<catalog::DecimalTypeInfo>();
    int hidig = std::max(leftInfo->getPrecision() - leftInfo->getScale(), rightInfo->getPrecision() - rightInfo->getScale());
    int maxs = std::max(leftInfo->getScale(), rightInfo->getScale());
-   return catalog::NullableType(catalog::Type::decimal(hidig + maxs, maxs), left.isNullable || right.isNullable);
+   return NullableType(catalog::Type::decimal(hidig + maxs, maxs), left.isNullable || right.isNullable);
 }
 
-catalog::NullableType SQLTypeUtils::getCommonBaseType(std::vector<catalog::NullableType> types) {
+NullableType SQLTypeUtils::getCommonBaseType(std::vector<NullableType> types) {
    auto commonType = types.front();
    for (size_t i = 1; i < types.size(); ++i) {
       commonType = getCommonType(commonType, types[i]);
@@ -2888,7 +2888,7 @@ catalog::NullableType SQLTypeUtils::getCommonBaseType(std::vector<catalog::Nulla
    return commonType;
 }
 
-catalog::NullableType SQLTypeUtils::getCommonBaseType(std::vector<catalog::NullableType> types, ast::ExpressionType operationType) {
+NullableType SQLTypeUtils::getCommonBaseType(std::vector<NullableType> types, ast::ExpressionType operationType) {
    auto commonType = types.front();
    for (size_t i = 1; i < types.size(); ++i) {
       commonType = getCommonTypeAfterOperation(commonType, types[i], operationType);
@@ -2896,7 +2896,7 @@ catalog::NullableType SQLTypeUtils::getCommonBaseType(std::vector<catalog::Nulla
    return commonType;
 }
 
-catalog::NullableType SQLTypeUtils::getCommonTypeAfterOperation(catalog::NullableType type1, catalog::NullableType type2, ast::ExpressionType operationType) {
+NullableType SQLTypeUtils::getCommonTypeAfterOperation(NullableType type1, NullableType type2, ast::ExpressionType operationType) {
    auto commonType = getCommonType(type1, type2);
 
    //Maybe the other way arround
@@ -2908,7 +2908,7 @@ catalog::NullableType SQLTypeUtils::getCommonTypeAfterOperation(catalog::Nullabl
 
             auto [p, s] = getAdaptedDecimalPAndSAfterMulDiv(type1Info->getPrecision() - type1Info->getScale() + type2Info->getScale() + std::max<unsigned long>(6, type1Info->getScale() + type2Info->getPrecision()), std::max<unsigned long>(6, type1Info->getScale() + type2Info->getPrecision()));
 
-            return catalog::NullableType(catalog::Type::decimal(p, s), commonType.isNullable);
+            return NullableType(catalog::Type::decimal(p, s), commonType.isNullable);
          }
          return commonType;
       }
@@ -2917,7 +2917,7 @@ catalog::NullableType SQLTypeUtils::getCommonTypeAfterOperation(catalog::Nullabl
             auto type1Info = type1.type.getInfo<catalog::DecimalTypeInfo>();
             auto type2Info = type2.type.getInfo<catalog::DecimalTypeInfo>();
             auto [p, s] = getAdaptedDecimalPAndSAfterMulDiv(type1Info->getPrecision() + type2Info->getPrecision(), type1Info->getScale() + type2Info->getScale());
-            return catalog::NullableType(catalog::Type::decimal(p, s), commonType.isNullable);
+            return NullableType(catalog::Type::decimal(p, s), commonType.isNullable);
          }
 
          return commonType;
@@ -2926,11 +2926,11 @@ catalog::NullableType SQLTypeUtils::getCommonTypeAfterOperation(catalog::Nullabl
    }
 }
 
-std::vector<catalog::NullableType> SQLTypeUtils::toCommonTypes(std::vector<catalog::NullableType> types) {
+std::vector<NullableType> SQLTypeUtils::toCommonTypes(std::vector<NullableType> types) {
    auto commonType = getCommonBaseType(types);
-   std::vector<catalog::NullableType> res;
+   std::vector<NullableType> res;
    for (auto type : types) {
-      type.castType = std::make_shared<catalog::NullableType>(commonType);
+      type.castType = std::make_shared<NullableType>(commonType);
       type.castType->isNullable = type.isNullable;
       res.push_back(type);
    }
@@ -2938,14 +2938,14 @@ std::vector<catalog::NullableType> SQLTypeUtils::toCommonTypes(std::vector<catal
    return res;
 }
 
-std::vector<catalog::NullableType> SQLTypeUtils::toCommonNumber(std::vector<catalog::NullableType> types) {
-   auto anyDecimal = llvm::any_of(types, [](catalog::NullableType type) { return type.type.getTypeId() == catalog::LogicalTypeId::DECIMAL; });
-   auto anyFloat = llvm::any_of(types, [](catalog::NullableType type) { return type.type.getTypeId() == catalog::LogicalTypeId::FLOAT || type.type.getTypeId() == catalog::LogicalTypeId::DOUBLE; });
+std::vector<NullableType> SQLTypeUtils::toCommonNumber(std::vector<NullableType> types) {
+   auto anyDecimal = llvm::any_of(types, [](NullableType type) { return type.type.getTypeId() == catalog::LogicalTypeId::DECIMAL; });
+   auto anyFloat = llvm::any_of(types, [](NullableType type) { return type.type.getTypeId() == catalog::LogicalTypeId::FLOAT || type.type.getTypeId() == catalog::LogicalTypeId::DOUBLE; });
    if (anyDecimal && !anyFloat) {
-      std::vector<catalog::NullableType> res;
+      std::vector<NullableType> res;
       for (auto type : types) {
          if (type.type.getTypeId() != catalog::LogicalTypeId::DECIMAL) {
-            type.castType = std::make_shared<catalog::NullableType>(catalog::Type::decimal(19, 0), type.isNullable);
+            type.castType = std::make_shared<NullableType>(catalog::Type::decimal(19, 0), type.isNullable);
             res.push_back(type);
 
          } else {
@@ -2973,7 +2973,7 @@ std::pair<unsigned long, unsigned long> SQLTypeUtils::getAdaptedDecimalPAndSAfte
    return {p, s};
 }
 
-catalog::NullableType SQLTypeUtils::typemodsToCatalogType(ast::LogicalType logicalType, std::vector<std::shared_ptr<ast::Value>>& typeModifiers) {
+NullableType SQLTypeUtils::typemodsToCatalogType(ast::LogicalType logicalType, std::vector<std::shared_ptr<ast::Value>>& typeModifiers) {
    switch (logicalType) {
       case ast::LogicalType::INT: {
          return catalog::Type::int32();
