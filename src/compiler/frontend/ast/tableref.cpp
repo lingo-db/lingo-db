@@ -113,6 +113,13 @@ std::string JoinRef::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    return dot;
 }
 
+/// CrossProductRef
+CrossProductRef::CrossProductRef() : TableRef(TYPE) {
+}
+std::string CrossProductRef::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
+   return "Not implemented";
+}
+
 ///SuqueryRef
 SubqueryRef::SubqueryRef(std::shared_ptr<TableProducer> subSelectNode) : TableRef(TYPE), subSelectNode(std::move(subSelectNode)) {
 }
