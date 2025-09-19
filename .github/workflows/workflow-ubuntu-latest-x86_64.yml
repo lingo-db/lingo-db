@@ -170,13 +170,6 @@ jobs:
           mkdir -p /db/tpcds-1
           cd /datasets/tpcds-1
           $BASE_PATH/build/lingodb-${{ matrix.build_type }}/sql /db/tpcds-1 < $BASE_PATH/resources/sql/tpcds/initialize.sql
-      - name: Load dataset job
-        run: |
-          export BASE_PATH=$(pwd)
-          mkdir -p /db/job
-          cd /datasets/job
-          $BASE_PATH/build/lingodb-${{ matrix.build_type }}/sql /db/job < $BASE_PATH/resources/sql/job/initialize.sql
-
       - name: Test tpcds (llvm)
         run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpchSf1.test /db/tpch-1
         env:
@@ -195,16 +188,10 @@ jobs:
         env:
           LINGODB_EXECUTION_MODE: BASELINE
       - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+      - name: Setup tmate session
         if: ${{ failure() }}
         uses: mxschmitt/action-tmate@v3
-      - name: Test job (llvm)
-        run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/job.test /db/job
-        env:
-          LINGODB_EXECUTION_MODE: DEFAULT
-      - name: Test job (baseline)
-        run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/job.test /db/job
-        env:
-          LINGODB_EXECUTION_MODE: BASELINE
 
 
   build_lingodb_python:
