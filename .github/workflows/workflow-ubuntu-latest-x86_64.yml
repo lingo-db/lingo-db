@@ -194,7 +194,9 @@ jobs:
         run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpcdsSf1.test /db/tpcds-1
         env:
           LINGODB_EXECUTION_MODE: BASELINE
-
+      - name: Setup tmate session
+        if: ${{ failure() }}
+        uses: mxschmitt/action-tmate@v3
       - name: Test job (llvm)
         run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/job.test /db/job
         env:
