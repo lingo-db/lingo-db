@@ -1,9 +1,10 @@
 #include "lingodb/compiler/frontend/ast/set_node.h"
 namespace lingodb::ast {
- SetNode::SetNode(SetType setType, std::string name) : AstNode(TYPE), setType(setType), name(name) {
+ SetNode::SetNode(SetType setType, std::string name) : AstNode(kType), setType(setType), name(name) {
 
 }
  std::string SetNode::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
+    return "";
  }
 
  /**

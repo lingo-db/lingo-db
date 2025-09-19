@@ -2,7 +2,7 @@
 #include "lingodb/compiler/frontend/ast/parsed_expression.h"
 namespace lingodb::ast {
 ///BaseTableRef
-BaseTableRef::BaseTableRef(TableDescription tableDescription) : TableRef(TYPE), catalogName(tableDescription.database), schemaName(tableDescription.schema), tableName(tableDescription.table) {
+BaseTableRef::BaseTableRef(TableDescription tableDescription) : TableRef(kType), catalogName(tableDescription.database), schemaName(tableDescription.schema), tableName(tableDescription.table) {
 }
 
 std::string BaseTableRef::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
@@ -28,7 +28,7 @@ std::string BaseTableRef::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
 }
 
 /// JoinRef
-JoinRef::JoinRef(JoinType type, JoinCondType refType) : TableRef(TYPE), type(type), refType(refType) {
+JoinRef::JoinRef(JoinType type, JoinCondType refType) : TableRef(kType), type(type), refType(refType) {
 }
 
 std::string JoinRef::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
@@ -114,14 +114,14 @@ std::string JoinRef::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
 }
 
 /// CrossProductRef
-CrossProductRef::CrossProductRef() : TableRef(TYPE) {
+CrossProductRef::CrossProductRef() : TableRef(kType) {
 }
 std::string CrossProductRef::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    return "Not implemented";
 }
 
 ///SuqueryRef
-SubqueryRef::SubqueryRef(std::shared_ptr<TableProducer> subSelectNode) : TableRef(TYPE), subSelectNode(std::move(subSelectNode)) {
+SubqueryRef::SubqueryRef(std::shared_ptr<TableProducer> subSelectNode) : TableRef(kType), subSelectNode(std::move(subSelectNode)) {
 }
 
 std::string SubqueryRef::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
@@ -142,7 +142,7 @@ std::string SubqueryRef::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
 }
 
 /// ExpressionListRef
-ExpressionListRef::ExpressionListRef(std::vector<std::vector<std::shared_ptr<ParsedExpression>>> values) : TableRef(TYPE), values(std::move(values)) {
+ExpressionListRef::ExpressionListRef(std::vector<std::vector<std::shared_ptr<ParsedExpression>>> values) : TableRef(kType), values(std::move(values)) {
 }
 std::string ExpressionListRef::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    std::string dot;

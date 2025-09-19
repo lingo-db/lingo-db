@@ -1,4 +1,6 @@
-#pragma once
+#ifndef LINGODB_COMPILER_FRONTEND_COLUMN_SEMANTIC_H
+#define LINGODB_COMPILER_FRONTEND_COLUMN_SEMANTIC_H
+
 #include "frontend_type.h"
 #include "lingodb/catalog/Column.h"
 #include "lingodb/compiler/Dialect/TupleStream/ColumnManager.h"
@@ -24,18 +26,18 @@ class NamedResult {
 
 
 
-   virtual compiler::dialect::tuples::ColumnRefAttr createRef(mlir::OpBuilder& builder, compiler::dialect::tuples::ColumnManager& attrManager) {
+   compiler::dialect::tuples::ColumnRefAttr createRef(mlir::OpBuilder& builder, compiler::dialect::tuples::ColumnManager& attrManager) {
       auto ref = attrManager.createRef(this->scope, name);
       ref.getColumn().type = resultType.toMlirType(builder.getContext());
       return ref;
    };
 
-   virtual compiler::dialect::tuples::ColumnDefAttr createDef(mlir::OpBuilder& builder, compiler::dialect::tuples::ColumnManager& attrManager) {
+   compiler::dialect::tuples::ColumnDefAttr createDef(mlir::OpBuilder& builder, compiler::dialect::tuples::ColumnManager& attrManager) {
       auto def = attrManager.createDef(this->scope, name);
       def.getColumn().type = resultType.toMlirType(builder.getContext());
       return def;
    };
-   virtual compiler::dialect::tuples::ColumnDefAttr createDef(mlir::OpBuilder& builder, compiler::dialect::tuples::ColumnManager& attrManager, mlir::Attribute fromExisting) {
+   compiler::dialect::tuples::ColumnDefAttr createDef(mlir::OpBuilder& builder, compiler::dialect::tuples::ColumnManager& attrManager, mlir::Attribute fromExisting) {
       auto def = attrManager.createDef(this->scope, name, fromExisting);
       def.getColumn().type = resultType.toMlirType(builder.getContext());
       return def;
@@ -49,3 +51,4 @@ struct TargetInfo {
    }
 };
 } // namespace lingodb::ast
+#endif

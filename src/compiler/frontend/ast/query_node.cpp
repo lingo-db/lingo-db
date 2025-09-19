@@ -5,7 +5,7 @@ namespace lingodb::ast {
 /**
  * SelectNode
  */
-SelectNode::SelectNode() : QueryNode(TYPE) {
+SelectNode::SelectNode() : QueryNode(kType) {
 }
 SelectNode::~SelectNode() = default;
 
@@ -17,24 +17,24 @@ std::string SelectNode::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    dot += nodeId + " [label=\"SelectNode\"];\n";
 
    // Handle select list
-   if (select_list) {
-      std::string selectListId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(select_list.get())));
+   if (selectList) {
+      std::string selectListId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(selectList.get())));
       dot += nodeId + " -> " + selectListId + " [label=\"select list\"];\n";
-      dot += select_list->toDotGraph(depth + 1, idGen);
+      dot += selectList->toDotGraph(depth + 1, idGen);
    }
 
    // Handle FROM clause
-   if (from_clause) {
-      std::string fromId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(from_clause.get())));
+   if (fromClause) {
+      std::string fromId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(fromClause.get())));
       dot += nodeId + " -> " + fromId + " [label=\"FROM\"];\n";
-      dot += from_clause->toDotGraph(depth + 1, idGen);
+      dot += fromClause->toDotGraph(depth + 1, idGen);
    }
 
    // Handle WHERE clause
-   if (where_clause) {
-      std::string whereId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(where_clause.get())));
+   if (whereClause) {
+      std::string whereId = "node" + std::to_string(idGen.getId(reinterpret_cast<uintptr_t>(whereClause.get())));
       dot += nodeId + " -> " + whereId + " [label=\"WHERE\"];\n";
-      dot += where_clause->toDotGraph(depth + 1, idGen);
+      dot += whereClause->toDotGraph(depth + 1, idGen);
    }
 
    // Handle GROUP BY
@@ -110,7 +110,7 @@ std::string SelectNode::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
 /**
  * SetOperation
  */
-SetOperationNode::SetOperationNode(SetOperationType setType, std::shared_ptr<TableProducer> left, std::shared_ptr<TableProducer> right) : QueryNode(TYPE), setType(setType), left(left), right(right) {
+SetOperationNode::SetOperationNode(SetOperationType setType, std::shared_ptr<TableProducer> left, std::shared_ptr<TableProducer> right) : QueryNode(kType), setType(setType), left(left), right(right) {
 }
 std::string SetOperationNode::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    std::string dot;
@@ -156,7 +156,7 @@ std::string SetOperationNode::toDotGraph(uint32_t depth, NodeIdGenerator& idGen)
 /**
  * ValuesQueryNode
  */
-ValuesQueryNode::ValuesQueryNode(std::shared_ptr<ExpressionListRef> expressionListRef) : QueryNode(TYPE), expressionListRef(std::move(expressionListRef)) {
+ValuesQueryNode::ValuesQueryNode(std::shared_ptr<ExpressionListRef> expressionListRef) : QueryNode(kType), expressionListRef(std::move(expressionListRef)) {
 }
 std::string ValuesQueryNode::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    std::string dot;

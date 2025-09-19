@@ -776,9 +776,9 @@ simple_select:
     group_clause having_clause //TODO window_clause
     {
         auto t = mkNode<lingodb::ast::SelectNode>(@$);
-        t->select_list = $opt_target_list;
-        t->where_clause = $where_clause;
-        t->from_clause = $opt_from_clause;
+        t->selectList = $opt_target_list;
+        t->whereClause = $where_clause;
+        t->fromClause = $opt_from_clause;
         t->groups = $group_clause;
         t->having = $having_clause;
         $$ = t;
@@ -790,9 +790,9 @@ simple_select:
         target_list->targets = std::move($target_list);
 
         target_list->distinct = $distinct_clause;
-        t->select_list = target_list;
-        t->where_clause = $where_clause;
-        t->from_clause = $from_clause;
+        t->selectList = target_list;
+        t->whereClause = $where_clause;
+        t->fromClause = $from_clause;
         t->groups = $group_clause;
         t->having = $having_clause;
         $$ = t;
@@ -3539,5 +3539,5 @@ set_list:
 void
 lingodb::parser::error (const location_type& l, const std::string& m)
 {
-  throw lingodb::syntax_error(m, l);
+  throw lingodb::SyntaxError(m, l);
 }

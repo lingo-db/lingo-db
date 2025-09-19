@@ -1,4 +1,7 @@
-#pragma once
+#ifndef LINGODB_COMPILER_FRONTEND_AST_CREATE_NODE_H
+#define LINGODB_COMPILER_FRONTEND_AST_CREATE_NODE_H
+
+
 #include "ast_node.h"
 #include "constraint.h"
 #include "parsed_expression.h"
@@ -116,4 +119,5 @@ class TableConstraintElement : public TableElement {
 
    std::shared_ptr<Constraint> constraint;
 };
-}
+} // namespace lingodb::ast
+#endif

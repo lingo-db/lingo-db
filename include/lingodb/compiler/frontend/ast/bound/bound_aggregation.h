@@ -1,6 +1,8 @@
-#pragma once
-#include "bound_expression.h"
+#ifndef LINGODB_COMPILER_FRONTEND_AST_BOUND_BOUND_AGGREGATION_H
+#define LINGODB_COMPILER_FRONTEND_AST_BOUND_BOUND_AGGREGATION_H
 #include "bound_groupby.h"
+
+
 namespace lingodb::ast {
 class BoundAggregationNode : public AstNode {
    public:
@@ -17,4 +19,5 @@ class BoundAggregationNode : public AstNode {
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
-}
+} // namespace lingodb::ast
+#endif

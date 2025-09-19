@@ -78,7 +78,7 @@ std::shared_ptr<ast::NamedResult> SQLContext::getNamedResultInfo(location loc, s
    if (!resolver.count(name)) {
       std::stringstream ss;
 
-      throw frontend_error("Could not resolve: " + name, loc);
+      throw FrontendError("Could not resolve: " + name, loc);
    }
    const auto res = resolver.lookup(name);
    return res;

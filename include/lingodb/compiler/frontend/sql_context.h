@@ -1,9 +1,10 @@
-#pragma once
+#ifndef LINGODB_COMPILER_FRONTEND_SQL_CONTEXT_H
+#define LINGODB_COMPILER_FRONTEND_SQL_CONTEXT_H
 
 #include "lingodb/compiler/frontend/ast/aggregation_node.h"
+#include "lingodb/compiler/frontend/ast/bound/bound_query_node.h"
 #include "lingodb/compiler/frontend/ast/extend_node.h"
 #include "lingodb/compiler/frontend/sql_scope.h"
-#include "lingodb/compiler/frontend/ast/bound/bound_query_node.h"
 
 #include <llvm/ADT/ScopedHashTable.h>
 
@@ -13,7 +14,7 @@
 #include <vector>
 namespace lingodb::ast {
 class CTENode;
-}
+} // namespace lingodb::ast
 namespace lingodb::analyzer {
 
 struct StringInfo {
@@ -105,3 +106,4 @@ class SQLContext {
    std::string getUniqueScope(std::string base);
 };
 } // namespace lingodb::analyzer
+#endif

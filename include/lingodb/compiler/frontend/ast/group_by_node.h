@@ -1,4 +1,7 @@
-#pragma once
+#ifndef LINGODB_COMPILER_FRONTEND_AST_GROUP_BY_NODE_H
+#define LINGODB_COMPILER_FRONTEND_AST_GROUP_BY_NODE_H
+
+
 #include "parsed_expression.h"
 #include <memory>
 #include <set>
@@ -22,3 +25,4 @@ class GroupByNode : public AstNode {
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 } // namespace lingodb::ast
+#endif

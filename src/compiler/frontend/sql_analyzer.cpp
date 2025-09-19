@@ -85,17 +85,17 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                auto selectNode = std::static_pointer_cast<ast::SelectNode>(queryNode);
                std::shared_ptr<ast::TableProducer> transformed = nullptr;
                //Transform from_clause
-               if (selectNode->from_clause) {
-                  auto transformedFrom = selectNode->from_clause;
+               if (selectNode->fromClause) {
+                  auto transformedFrom = selectNode->fromClause;
 
-                  selectNode->from_clause = nullptr;
+                  selectNode->fromClause = nullptr;
                   transformed = transformedFrom;
                }
                //Transform where_clause
-               if (selectNode->where_clause) {
-                  auto pipe = drv.nf.node<ast::PipeOperator>(selectNode->where_clause->loc, ast::PipeOperatorType::WHERE, selectNode->where_clause);
+               if (selectNode->whereClause) {
+                  auto pipe = drv.nf.node<ast::PipeOperator>(selectNode->whereClause->loc, ast::PipeOperatorType::WHERE, selectNode->whereClause);
                   pipe->input = transformed;
-                  selectNode->where_clause = nullptr;
+                  selectNode->whereClause = nullptr;
                   transformed = pipe;
                }
 
@@ -110,7 +110,7 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
 
 
 
-               auto extendBeforeWindowPipeOp = drv.nf.node<ast::PipeOperator>(selectNode->select_list->loc, ast::PipeOperatorType::EXTEND, context->currentScope->extendNodeBeforeWindowFunctions);
+               auto extendBeforeWindowPipeOp = drv.nf.node<ast::PipeOperator>(selectNode->selectList->loc, ast::PipeOperatorType::EXTEND, context->currentScope->extendNodeBeforeWindowFunctions);
                extendBeforeWindowPipeOp->input = transformed;
                transformed = extendBeforeWindowPipeOp;
 
@@ -118,9 +118,9 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
 
 
                //Transform target selection
-               if (selectNode->select_list) {
-                  auto pipe = drv.nf.node<ast::PipeOperator>(selectNode->select_list->loc, ast::PipeOperatorType::SELECT, selectNode->select_list);
-                  for (auto& target : selectNode->select_list->targets) {
+               if (selectNode->selectList) {
+                  auto pipe = drv.nf.node<ast::PipeOperator>(selectNode->selectList->loc, ast::PipeOperatorType::SELECT, selectNode->selectList);
+                  for (auto& target : selectNode->selectList->targets) {
                      if (target->alias.empty()) {
                         continue;
                      }
@@ -129,7 +129,7 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                   pipe->input = transformed;
 
                   transformed = pipe;
-                  selectNode->select_list = nullptr;
+                  selectNode->selectList = nullptr;
                }
 
                if (selectNode->having) {
@@ -726,15 +726,6 @@ std::shared_ptr<ast::AstNode> SQLQueryAnalyzer::canonicalizeAndAnalyze(std::shar
       //rootNode is a TableProducer
       parallelismAllowed = true;
       auto transformed = sqlCanonicalizer.canonicalize(rootNode, std::make_shared<ASTTransformContext>());
-      ast::NodeIdGenerator idGen{};
-      if (DEBUG) {
-         std::cout << std::endl
-               << std::endl;
-         std::cout << "digraph ast {" << std::endl;
-         std::cout << transformed->toDotGraph(1, idGen) << std::endl;
-         std::cout << "}" << std::endl;
-      }
-
       context->pushNewScope();
       auto scope = context->createResolverScope();
       transformed = analyzeTableProducer(transformed, context, scope);
@@ -1069,7 +1060,6 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                      auto n = std::make_shared<ast::NamedResult>( scope, boundExpression->resultType.value(),  context->getUniqueScope("tmp_attr"));
                      n->displayName = boundExpression->alias.empty() ? "" : boundExpression->alias;
                      evalBeforeAggr.emplace_back(boundExpression);
-                     ast::NodeIdGenerator g{};
 
                      boundExpression->namedResult = n;
                      break;

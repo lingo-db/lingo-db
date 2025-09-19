@@ -3,12 +3,12 @@
 
 #include <memory>
 #include <mlir/Dialect/Func/Transforms/Passes.h.inc>
-#include <optional>
-#include <string>
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/MLIRContext.h>
 #include <mlir/IR/Types.h>
 #include <mlir/IR/Value.h>
+#include <optional>
+#include <string>
 namespace lingodb::utility {
 class Serializer;
 class Deserializer;

@@ -1,4 +1,6 @@
-#pragma once
+#ifndef LINGODB_COMPILER_FRONTEND_SQL_MLIR_TRANSLATOR_H
+#define LINGODB_COMPILER_FRONTEND_SQL_MLIR_TRANSLATOR_H
+
 #include "ast/bound/bound_insert_node.h"
 #include "ast/bound/bound_pipe_operator.h"
 #include "ast/create_node.h"
@@ -6,33 +8,33 @@
 #include "lingodb/compiler/frontend/ast/bound/bound_aggregation.h"
 #include "lingodb/compiler/frontend/ast/bound/bound_resultmodifier.h"
 #include "lingodb/compiler/frontend/ast/bound/bound_tableref.h"
+#include "lingodb/compiler/frontend/ast/copy_node.h"
 #include "lingodb/compiler/frontend/ast/parsed_expression.h"
 #include "lingodb/compiler/frontend/ast/set_node.h"
-#include "lingodb/compiler/frontend/ast/copy_node.h"
 #include "lingodb/compiler/frontend/frontend_error.h"
 #include "lingodb/compiler/frontend/sql_context.h"
 #include "lingodb/compiler/frontend/translation_context.h"
 
 #include <memory>
 
-#include "mlir/IR/BuiltinOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/IR/BuiltinOps.h"
 
 #include <lingodb/compiler/Dialect/util/UtilOps.h>
 
 namespace lingodb::ast {
 class BoundSetOperationNode;
-}
+} // namespace lingodb::ast
 namespace lingodb::translator {
 #define error(message, loc)                                         \
    {                                                                \
       std::ostringstream s{};                                       \
       s << message; \
-      throw frontend_error(s.str(), loc);                            \
+      throw FrontendError(s.str(), loc);                            \
    }
 class SQLMlirTranslator {
    public:
@@ -98,3 +100,4 @@ class SQLMlirTranslator {
    mlir::Type createBaseTypeFromColumnType(mlir::MLIRContext* context, const catalog::Type& t);
 };
 } // namespace lingodb::translator
+#endif

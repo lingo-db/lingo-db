@@ -6,4 +6,4 @@ BoundSetPipeOperator::BoundSetPipeOperator(PipeOperatorType pipeOpType, std::sha
 std::string BoundSetPipeOperator::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    return "";
 }
-}
+} // namespace lingodb::ast

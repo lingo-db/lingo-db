@@ -29,4 +29,4 @@ std::string ExtendNode::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
 
    return dot;
 }
-}
+} // namespace lingodb::ast

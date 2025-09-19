@@ -4,7 +4,7 @@ namespace lingodb::ast {
  * BoundBase Table
 */
 
-BoundBaseTableRef::BoundBaseTableRef(std::vector<std::shared_ptr<NamedResult>> namedResultsEntries, std::string alias, std::string relationName, std::string mlirScope) : BoundTableRef(TYPE, std::move(alias)), namedResultsEntries(std::move(namedResultsEntries)), mlirScope(mlirScope), relationName(relationName) {
+BoundBaseTableRef::BoundBaseTableRef(std::vector<std::shared_ptr<NamedResult>> namedResultsEntries, std::string alias, std::string relationName, std::string mlirScope) : BoundTableRef(kType, std::move(alias)), namedResultsEntries(std::move(namedResultsEntries)), mlirScope(mlirScope), relationName(relationName) {
 }
 std::string BoundBaseTableRef::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    std::string dot;
@@ -24,25 +24,25 @@ std::string BoundBaseTableRef::toDotGraph(uint32_t depth, NodeIdGenerator& idGen
    return dot;
 }
 
-BoundJoinRef::BoundJoinRef(JoinType type, JoinCondType refType, std::shared_ptr<TableProducer> left, std::shared_ptr<TableProducer> right, boundJoinCond condition) : BoundTableRef(TYPE), type(type), refType(refType), left(std::move(left)), right(std::move(right)), condition(std::move(condition)) {
+BoundJoinRef::BoundJoinRef(JoinType type, JoinCondType refType, std::shared_ptr<TableProducer> left, std::shared_ptr<TableProducer> right, boundJoinCond condition) : BoundTableRef(kType), type(type), refType(refType), left(std::move(left)), right(std::move(right)), condition(std::move(condition)) {
 }
 std::string BoundJoinRef::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    return "";
 }
 
-BoundCrossProductRef::BoundCrossProductRef(std::vector<std::shared_ptr<TableProducer>> boundTables) : BoundTableRef(TYPE), boundTables(boundTables) {
+BoundCrossProductRef::BoundCrossProductRef(std::vector<std::shared_ptr<TableProducer>> boundTables) : BoundTableRef(kType), boundTables(boundTables) {
 }
 std::string BoundCrossProductRef::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    return "";
 }
 
-BoundSubqueryRef::BoundSubqueryRef(std::shared_ptr<analyzer::SQLScope> sqlScope, std::shared_ptr<TableProducer> subSelect) : BoundTableRef(TYPE), sqlScope(sqlScope), subSelect(subSelect) {
+BoundSubqueryRef::BoundSubqueryRef(std::shared_ptr<analyzer::SQLScope> sqlScope, std::shared_ptr<TableProducer> subSelect) : BoundTableRef(kType), sqlScope(sqlScope), subSelect(subSelect) {
 }
 std::string BoundSubqueryRef::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    return "";
 }
 
-BoundExpressionListRef::BoundExpressionListRef(std::vector<std::vector<std::shared_ptr<BoundConstantExpression>>> values, std::vector<std::shared_ptr<NamedResult>> namedResultsEntries) : BoundTableRef(TYPE), values(std::move(values)), namedResultsEntries(std::move(namedResultsEntries)) {
+BoundExpressionListRef::BoundExpressionListRef(std::vector<std::vector<std::shared_ptr<BoundConstantExpression>>> values, std::vector<std::shared_ptr<NamedResult>> namedResultsEntries) : BoundTableRef(kType), values(std::move(values)), namedResultsEntries(std::move(namedResultsEntries)) {
 }
 std::string BoundExpressionListRef::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    return "";

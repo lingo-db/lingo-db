@@ -8,4 +8,4 @@ std::string CreateNode::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    return "";
 }
 
-}
+} // namespace lingodb::ast

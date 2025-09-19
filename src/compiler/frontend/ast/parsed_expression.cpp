@@ -2,8 +2,8 @@
 
 #include "lingodb/compiler/frontend/ast/result_modifier.h"
 
-#include <cassert>
 #include <clang/AST/Type.h>
+#include <cassert>
 namespace lingodb::ast {
 
 size_t ParsedExpression::hash() {
@@ -23,7 +23,7 @@ ColumnRefExpression::ColumnRefExpression(std::string columnName, std::string tab
 ColumnRefExpression::ColumnRefExpression(std::string columnName) : ColumnRefExpression(std::vector<std::string>{std::move(columnName)}) {
 }
 
-ColumnRefExpression::ColumnRefExpression(std::vector<std::string> columnNames) : ParsedExpression(ExpressionType::COLUMN_REF, TYPE), columnNames(columnNames) {
+ColumnRefExpression::ColumnRefExpression(std::vector<std::string> columnNames) : ParsedExpression(ExpressionType::COLUMN_REF, kType), columnNames(columnNames) {
 }
 
 std::string ColumnRefExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
@@ -74,12 +74,12 @@ bool ColumnRefExpression::operator==(ParsedExpression& other) {
 }
 
 /// ComparisonExpression
-ComparisonExpression::ComparisonExpression(ExpressionType type) : ParsedExpression(type, TYPE) {
+ComparisonExpression::ComparisonExpression(ExpressionType type) : ParsedExpression(type, kType) {
 }
-ComparisonExpression::ComparisonExpression(ExpressionType type, std::shared_ptr<ParsedExpression> left, std::shared_ptr<ParsedExpression> right) : ParsedExpression(type, TYPE), left(std::move(left)), rightChildren({std::move(right)}) {
+ComparisonExpression::ComparisonExpression(ExpressionType type, std::shared_ptr<ParsedExpression> left, std::shared_ptr<ParsedExpression> right) : ParsedExpression(type, kType), left(std::move(left)), rightChildren({std::move(right)}) {
 }
 
-ComparisonExpression::ComparisonExpression(ExpressionType type, std::shared_ptr<ParsedExpression> left, std::vector<std::shared_ptr<ParsedExpression>> rightChildren) : ParsedExpression(type, TYPE), left(std::move(left)), rightChildren(rightChildren) {
+ComparisonExpression::ComparisonExpression(ExpressionType type, std::shared_ptr<ParsedExpression> left, std::vector<std::shared_ptr<ParsedExpression>> rightChildren) : ParsedExpression(type, kType), left(std::move(left)), rightChildren(rightChildren) {
 }
 
 std::string ComparisonExpression::typeToAscii(ExpressionType type) const {
@@ -124,9 +124,9 @@ std::string ComparisonExpression::toDotGraph(uint32_t depth, NodeIdGenerator& id
 }
 
 /// ConjunctionExpression
-ConjunctionExpression::ConjunctionExpression(ExpressionType type) : ParsedExpression(type, TYPE), children() {}
+ConjunctionExpression::ConjunctionExpression(ExpressionType type) : ParsedExpression(type, kType), children() {}
 ConjunctionExpression::ConjunctionExpression(ExpressionType type, std::shared_ptr<lingodb::ast::ParsedExpression> left, std::shared_ptr<lingodb::ast::ParsedExpression> right) : ConjunctionExpression(type, std::vector{left, right}) {}
-ConjunctionExpression::ConjunctionExpression(ExpressionType type, std::vector<std::shared_ptr<ParsedExpression>> children) : ParsedExpression(type, TYPE), children(std::move(children)) {
+ConjunctionExpression::ConjunctionExpression(ExpressionType type, std::vector<std::shared_ptr<ParsedExpression>> children) : ParsedExpression(type, kType), children(std::move(children)) {
 }
 
 std::string ConjunctionExpression::typeToAscii(ExpressionType type) const {
@@ -203,7 +203,7 @@ bool ConjunctionExpression::operator==(ParsedExpression& other) {
 
 
 /// ConstantExpression
-ConstantExpression::ConstantExpression() : ParsedExpression(ExpressionType::VALUE_CONSTANT, TYPE) {}
+ConstantExpression::ConstantExpression() : ParsedExpression(ExpressionType::VALUE_CONSTANT, kType) {}
 
 std::string ConstantExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    std::string dot{};
@@ -256,7 +256,7 @@ bool ConstantExpression::operator==(ParsedExpression& other) {
    return *value == *otherConst.value;
 }
 /// FunctionExpression
-FunctionExpression::FunctionExpression(std::string catalog, std::string schema, std::string functionName, bool isOperator, bool distinct, bool exportState) : ParsedExpression(ExpressionType::FUNCTION, TYPE), catalog(catalog), schema(schema), functionName(functionName), isOperator(isOperator), distinct(distinct), exportState(exportState) {
+FunctionExpression::FunctionExpression(std::string catalog, std::string schema, std::string functionName, bool isOperator, bool distinct, bool exportState) : ParsedExpression(ExpressionType::FUNCTION, kType), catalog(catalog), schema(schema), functionName(functionName), isOperator(isOperator), distinct(distinct), exportState(exportState) {
    auto found = std::find(aggregationFunctions.begin(), aggregationFunctions.end(), functionName);
    if (found != aggregationFunctions.end()) {
       //! TODO Check if this make sense here
@@ -481,7 +481,7 @@ bool StarExpression::operator==(ParsedExpression& other) {
 
 
 ///TargetsExpression
-TargetsExpression::TargetsExpression() : ParsedExpression(ExpressionType::TARGETS, TYPE) {
+TargetsExpression::TargetsExpression() : ParsedExpression(ExpressionType::TARGETS, kType) {
 }
 
 std::string TargetsExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
@@ -552,11 +552,11 @@ bool TargetsExpression::operator==(ParsedExpression& other) {
    return otherTargets.distinct == distinct;
 }
 
-OperatorExpression::OperatorExpression(ExpressionType type, std::shared_ptr<ParsedExpression> left) : ParsedExpression(type, TYPE), children(std::vector{left}) {
+OperatorExpression::OperatorExpression(ExpressionType type, std::shared_ptr<ParsedExpression> left) : ParsedExpression(type, kType), children(std::vector{left}) {
 }
-OperatorExpression::OperatorExpression(ExpressionType type, std::shared_ptr<ParsedExpression> left, std::shared_ptr<ParsedExpression> right) : ParsedExpression(type, TYPE), children(std::vector{left, right}) {
+OperatorExpression::OperatorExpression(ExpressionType type, std::shared_ptr<ParsedExpression> left, std::shared_ptr<ParsedExpression> right) : ParsedExpression(type, kType), children(std::vector{left, right}) {
 }
-OperatorExpression::OperatorExpression(std::string opString, std::shared_ptr<ParsedExpression> left, std::shared_ptr<ParsedExpression> right) : ParsedExpression(ExpressionType::OPERATOR_UNKNOWN, TYPE), opString(opString), children(std::vector{left, right}) {
+OperatorExpression::OperatorExpression(std::string opString, std::shared_ptr<ParsedExpression> left, std::shared_ptr<ParsedExpression> right) : ParsedExpression(ExpressionType::OPERATOR_UNKNOWN, kType), opString(opString), children(std::vector{left, right}) {
 }
 std::string OperatorExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    std::string dot{};
@@ -664,7 +664,7 @@ bool OperatorExpression::operator==(ParsedExpression& other) {
    return true;
 }
 
-CastExpression::CastExpression(LogicalTypeWithMods logicalTypeWithMods, std::shared_ptr<ParsedExpression> child) : ParsedExpression(ExpressionType::CAST, TYPE), logicalTypeWithMods(logicalTypeWithMods), child(std::move(child)) {
+CastExpression::CastExpression(LogicalTypeWithMods logicalTypeWithMods, std::shared_ptr<ParsedExpression> child) : ParsedExpression(ExpressionType::CAST, kType), logicalTypeWithMods(logicalTypeWithMods), child(std::move(child)) {
 }
 std::string CastExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    std::string dot{};
@@ -782,7 +782,7 @@ WindowBoundary::WindowBoundary(WindowBoundaryType start) : start(start) {
 }
 WindowBoundary::WindowBoundary(WindowBoundaryType start, std::shared_ptr<ParsedExpression> startExpr) : start(start), startExpr(startExpr) {
 }
-WindowExpression::WindowExpression() : ParsedExpression(ExpressionType::WINDOW_INVALID, TYPE) {
+WindowExpression::WindowExpression() : ParsedExpression(ExpressionType::WINDOW_INVALID, kType) {
 }
 std::string WindowExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    std::string dot{};
@@ -1035,7 +1035,7 @@ bool WindowExpression::operator==(ParsedExpression& other) {
 }
 
 
-BetweenExpression::BetweenExpression(ExpressionType type, std::shared_ptr<ParsedExpression> input, std::shared_ptr<ParsedExpression> lower, std::shared_ptr<ParsedExpression> upper) : ParsedExpression(type, TYPE), input(input), lower(lower), upper(upper) {
+BetweenExpression::BetweenExpression(ExpressionType type, std::shared_ptr<ParsedExpression> input, std::shared_ptr<ParsedExpression> lower, std::shared_ptr<ParsedExpression> upper) : ParsedExpression(type, kType), input(input), lower(lower), upper(upper) {
    assert(lower != nullptr && upper != nullptr && input != nullptr);
    assert(type == ExpressionType::COMPARE_BETWEEN || type == ExpressionType::COMPARE_NOT_BETWEEN);
 }
@@ -1156,7 +1156,7 @@ bool BetweenExpression::operator==(ParsedExpression& other) {
 }
 
 
-SubqueryExpression::SubqueryExpression(SubqueryType subQueryType, std::shared_ptr<TableProducer> subquery) : ParsedExpression(ExpressionType::SUBQUERY, TYPE), subQueryType(subQueryType), subquery(subquery) {
+SubqueryExpression::SubqueryExpression(SubqueryType subQueryType, std::shared_ptr<TableProducer> subquery) : ParsedExpression(ExpressionType::SUBQUERY, kType), subQueryType(subQueryType), subquery(subquery) {
 }
 std::string SubqueryExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    std::string dot;
@@ -1224,7 +1224,7 @@ bool SubqueryExpression::operator==(ParsedExpression& other) {
 }
 
 
-CaseExpression::CaseExpression(std::optional<std::shared_ptr<ParsedExpression>> caseExpr, std::vector<CaseCheck> caseChecks, std::shared_ptr<ParsedExpression> elseExpr) : ParsedExpression(ExpressionType::CASE_EXPR, TYPE), caseExpr(caseExpr), caseChecks(std::move(caseChecks)), elseExpr(std::move(elseExpr)) {
+CaseExpression::CaseExpression(std::optional<std::shared_ptr<ParsedExpression>> caseExpr, std::vector<CaseCheck> caseChecks, std::shared_ptr<ParsedExpression> elseExpr) : ParsedExpression(ExpressionType::CASE_EXPR, kType), caseExpr(caseExpr), caseChecks(std::move(caseChecks)), elseExpr(std::move(elseExpr)) {
 }
 
 std::string CaseExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
@@ -1328,7 +1328,7 @@ bool CaseExpression::operator==(ParsedExpression& other) {
     return true;
 }
 
-SetColumnExpression::SetColumnExpression(std::vector<std::pair<std::shared_ptr<ColumnRefExpression>, std::shared_ptr<ParsedExpression>>> sets) : ParsedExpression(ExpressionType::SET, TYPE) , sets(std::move(sets)){
+SetColumnExpression::SetColumnExpression(std::vector<std::pair<std::shared_ptr<ColumnRefExpression>, std::shared_ptr<ParsedExpression>>> sets) : ParsedExpression(ExpressionType::SET, kType) , sets(std::move(sets)){
 
 }
 std::string SetColumnExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {

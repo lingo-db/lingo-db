@@ -7,7 +7,7 @@ std::string BoundSetOperationNode::toDotGraph(uint32_t depth, NodeIdGenerator& i
    return "";
 }
 
-BoundValuesQueryNode::BoundValuesQueryNode(std::string alias, std::shared_ptr<BoundExpressionListRef> expressionListRef) : QueryNode(TYPE), expressionListRef(std::move(expressionListRef)) {
+BoundValuesQueryNode::BoundValuesQueryNode(std::string alias, std::shared_ptr<BoundExpressionListRef> expressionListRef) : QueryNode(kType), expressionListRef(std::move(expressionListRef)) {
    this->alias = alias;
 }
 std::string BoundValuesQueryNode::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {

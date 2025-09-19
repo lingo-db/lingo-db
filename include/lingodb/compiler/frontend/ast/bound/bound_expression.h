@@ -1,4 +1,7 @@
-#pragma once
+#ifndef LINGODB_COMPILER_FRONTEND_AST_BOUND_BOUND_EXPRESSION_H
+#define LINGODB_COMPILER_FRONTEND_AST_BOUND_BOUND_EXPRESSION_H
+
+
 #include "lingodb/compiler/frontend/ast/ast_node.h"
 #include "lingodb/compiler/frontend/ast/parsed_expression.h"
 #include "lingodb/compiler/frontend/column_semantic.h"
@@ -35,7 +38,7 @@ class BoundExpression : public AstNode {
 
 class BoundColumnRefExpression : public BoundExpression {
    public:
-   static constexpr ExpressionClass TYPE = ExpressionClass::BOUND_COLUMN_REF;
+   static constexpr ExpressionClass kType = ExpressionClass::BOUND_COLUMN_REF;
 
    //! Specify both the column and table name
    BoundColumnRefExpression(NullableType resultType, std::shared_ptr<NamedResult> namedResult, std::string alias);
@@ -43,7 +46,7 @@ class BoundColumnRefExpression : public BoundExpression {
 
 class BoundComparisonExpression : public BoundExpression {
    public:
-   static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_COMPARISON;
+   static constexpr ExpressionClass kType = ExpressionClass::BOUND_COMPARISON;
 
    BoundComparisonExpression(ExpressionType type, std::string alias, bool resultTypeNullable, std::shared_ptr<BoundExpression> left, std::vector<std::shared_ptr<BoundExpression>> rightChildren);
 
@@ -53,7 +56,7 @@ class BoundComparisonExpression : public BoundExpression {
 
 class BoundConjunctionExpression : public BoundExpression {
    public:
-   static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_CONJUNCTION;
+   static constexpr ExpressionClass kType = ExpressionClass::BOUND_CONJUNCTION;
    BoundConjunctionExpression(ExpressionType type, std::string alias, std::shared_ptr<BoundExpression> left, std::shared_ptr<BoundExpression> right);
    BoundConjunctionExpression(ExpressionType type, std::string alias, std::vector<std::shared_ptr<BoundExpression>> children);
 
@@ -62,7 +65,7 @@ class BoundConjunctionExpression : public BoundExpression {
 
 class BoundConstantExpression : public BoundExpression {
    public:
-   static constexpr ExpressionClass TYPE = ExpressionClass::BOUND_CONSTANT;
+   static constexpr ExpressionClass kType = ExpressionClass::BOUND_CONSTANT;
    BoundConstantExpression(NullableType resultType, std::shared_ptr<Value> value, std::string alias);
 
    std::shared_ptr<Value> value;
@@ -70,7 +73,7 @@ class BoundConstantExpression : public BoundExpression {
 
 class BoundTargetsExpression : public BoundExpression {
    public:
-   static constexpr ExpressionClass TYPE = ExpressionClass::BOUND_TARGETS;
+   static constexpr ExpressionClass kType = ExpressionClass::BOUND_TARGETS;
    BoundTargetsExpression(std::string alias, bool distinct, std::vector<std::shared_ptr<NamedResult>> targetColumns);
 
    bool distinct = false;
@@ -79,7 +82,7 @@ class BoundTargetsExpression : public BoundExpression {
 
 class BoundFunctionExpression : public BoundExpression {
    public:
-   static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_FUNCTION;
+   static constexpr ExpressionClass kType = ExpressionClass::BOUND_FUNCTION;
    BoundFunctionExpression(ExpressionType type, NullableType resultType, std::string functionName, std::string scope, std::string alias, bool distinct, std::vector<std::shared_ptr<BoundExpression>> arguments);
 
    std::string functionName;
@@ -92,7 +95,7 @@ class BoundFunctionExpression : public BoundExpression {
 
 class BoundStarExpression : public BoundExpression {
    public:
-   static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_STAR;
+   static constexpr ExpressionClass kType = ExpressionClass::BOUND_STAR;
    explicit BoundStarExpression(std::string relationName, std::vector<std::shared_ptr<NamedResult>> namedResults);
 
    std::string relationName;
@@ -101,7 +104,7 @@ class BoundStarExpression : public BoundExpression {
 
 class BoundOperatorExpression : public BoundExpression {
    public:
-   static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_OPERATOR;
+   static constexpr ExpressionClass kType = ExpressionClass::BOUND_OPERATOR;
    BoundOperatorExpression(ExpressionType type, NullableType resultType, std::string alias, std::vector<std::shared_ptr<BoundExpression>> children);
    BoundOperatorExpression(ExpressionType type, NullableType resultType, std::string alias, std::shared_ptr<BoundExpression> left, std::shared_ptr<BoundExpression> right);
 
@@ -110,7 +113,7 @@ class BoundOperatorExpression : public BoundExpression {
 
 class BoundCastExpression : public BoundExpression {
    public:
-   static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_CAST;
+   static constexpr ExpressionClass kType = ExpressionClass::BOUND_CAST;
    BoundCastExpression(NullableType resultType, std::string alias, std::shared_ptr<BoundExpression> child, std::optional<LogicalTypeWithMods> logicalTypeWithMods, std::string stringRepr);
    std::optional<LogicalTypeWithMods> logicalTypeWithMods;
 
@@ -127,7 +130,7 @@ struct BoundWindowBoundary {
 };
 class BoundWindowExpression : public BoundExpression {
    public:
-   static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_WINDOW;
+   static constexpr ExpressionClass kType = ExpressionClass::BOUND_WINDOW;
    BoundWindowExpression(ExpressionType type, std::string alias, NullableType resultType, std::shared_ptr<BoundFunctionExpression> function, std::vector<std::shared_ptr<BoundExpression>> partitions, std::optional<std::shared_ptr<BoundOrderByModifier>> order, std::shared_ptr<BoundWindowBoundary> windowBoundary );
 
    std::shared_ptr<BoundFunctionExpression> function;
@@ -138,7 +141,7 @@ class BoundWindowExpression : public BoundExpression {
 
 class BoundBetweenExpression : public BoundExpression {
    public:
-   static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_BETWEEN;
+   static constexpr ExpressionClass kType = ExpressionClass::BOUND_BETWEEN;
 
    BoundBetweenExpression(ExpressionType type, catalog::Type resultType, std::string alias, std::shared_ptr<BoundExpression> input, std::shared_ptr<BoundExpression> lower, std::shared_ptr<BoundExpression> upper);
 
@@ -150,7 +153,7 @@ class BoundBetweenExpression : public BoundExpression {
 
 class BoundSubqueryExpression : public BoundExpression {
    public:
-   static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_SUBQUERY;
+   static constexpr ExpressionClass kType = ExpressionClass::BOUND_SUBQUERY;
 
    BoundSubqueryExpression(SubqueryType subqueryType, NullableType resultType, std::string alias, std::shared_ptr<NamedResult> namedResultForSubquery, std::shared_ptr<analyzer::SQLScope> sqlScope, std::shared_ptr<TableProducer> subquery, std::shared_ptr<BoundExpression> testExpr);
 
@@ -171,7 +174,7 @@ class BoundCaseExpression : public BoundExpression {
       std::shared_ptr<BoundExpression> whenExpr;
       std::shared_ptr<BoundExpression> thenExpr;
    };
-   static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_CASE;
+   static constexpr ExpressionClass kType = ExpressionClass::BOUND_CASE;
 
    BoundCaseExpression(NullableType resultType, std::string alias, std::optional<std::shared_ptr<BoundExpression>> caseExpr, std::vector<BoundCaseCheck> caseChecks, std::shared_ptr<BoundExpression> elseExpr);
 
@@ -185,10 +188,11 @@ class BoundCaseExpression : public BoundExpression {
  */
 class BoundSetColumnExpression : public BoundExpression {
    public:
-   static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_SET;
+   static constexpr ExpressionClass kType = ExpressionClass::BOUND_SET;
    BoundSetColumnExpression( std::string mapName, std::vector<std::shared_ptr<BoundExpression>> sets);
 
    std::string mapName;
    std::vector<std::shared_ptr<BoundExpression>> sets;
 };
 } // namespace lingodb::ast
+#endif

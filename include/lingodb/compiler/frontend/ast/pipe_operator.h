@@ -1,4 +1,7 @@
-#pragma once
+#ifndef LINGODB_COMPILER_FRONTEND_AST_PIPE_OPERATOR_H
+#define LINGODB_COMPILER_FRONTEND_AST_PIPE_OPERATOR_H
+
+
 #include "parsed_expression.h"
 #include "table_producer.h"
 #include "tableref.h"
@@ -32,3 +35,4 @@ class PipeOperator : public TableProducer {
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 } // namespace lingodb::ast
+#endif

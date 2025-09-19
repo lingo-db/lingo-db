@@ -1,4 +1,7 @@
-#pragma once
+#ifndef LINGODB_COMPILER_FRONTEND_AST_BOUND_BOUND_TABLEREF_H
+#define LINGODB_COMPILER_FRONTEND_AST_BOUND_BOUND_TABLEREF_H
+
+
 #include "bound_expression.h"
 #include "lingodb/compiler/frontend/ast/table_producer.h"
 #include "lingodb/compiler/frontend/ast/tableref.h"
@@ -17,7 +20,7 @@ class BoundTableRef : public TableProducer {
 
 class BoundBaseTableRef : public BoundTableRef {
    public:
-   static constexpr TableReferenceType TYPE = TableReferenceType::BASE_TABLE;
+   static constexpr TableReferenceType kType = TableReferenceType::BASE_TABLE;
 
    BoundBaseTableRef(std::vector<std::shared_ptr<NamedResult>> namedResultsEntries, std::string alias, std::string relationName, std::string mlirScope);
 
@@ -29,7 +32,7 @@ class BoundBaseTableRef : public BoundTableRef {
 };
 using boundJoinCond = std::variant<std::shared_ptr<BoundExpression>, std::vector<std::shared_ptr<ColumnRefExpression>>>;
 class BoundJoinRef : public BoundTableRef {
-   static constexpr TableReferenceType TYPE = TableReferenceType::JOIN;
+   static constexpr TableReferenceType kType = TableReferenceType::JOIN;
 
    public:
    BoundJoinRef(JoinType type, JoinCondType refType, std::shared_ptr<TableProducer> left, std::shared_ptr<TableProducer> right, boundJoinCond condition);
@@ -63,7 +66,7 @@ class BoundJoinRef : public BoundTableRef {
 };
 
 class BoundCrossProductRef : public BoundTableRef {
-   static constexpr TableReferenceType TYPE = TableReferenceType::CROSS_PRODUCT;
+   static constexpr TableReferenceType kType = TableReferenceType::CROSS_PRODUCT;
    public:
    BoundCrossProductRef(std::vector<std::shared_ptr<TableProducer>> boundTables);
    std::vector<std::shared_ptr<TableProducer>> boundTables;
@@ -72,7 +75,7 @@ class BoundCrossProductRef : public BoundTableRef {
 };
 
 class BoundSubqueryRef : public BoundTableRef {
-   static constexpr TableReferenceType TYPE = TableReferenceType::SUBQUERY;
+   static constexpr TableReferenceType kType = TableReferenceType::SUBQUERY;
 
    public:
    BoundSubqueryRef(std::shared_ptr<analyzer::SQLScope> sqlScope, std::shared_ptr<TableProducer> subSelect);
@@ -90,7 +93,7 @@ class BoundSubqueryRef : public BoundTableRef {
  */
 class BoundExpressionListRef : public BoundTableRef {
    public:
-   static constexpr TableReferenceType TYPE = TableReferenceType::BOUND_EXPRESSION_LIST;
+   static constexpr TableReferenceType kType = TableReferenceType::BOUND_EXPRESSION_LIST;
    BoundExpressionListRef(std::vector<std::vector<std::shared_ptr<BoundConstantExpression>>> values, std::vector<std::shared_ptr<NamedResult>> namedResultsEntries);
 
    //! The expressions in the list
@@ -100,3 +103,4 @@ class BoundExpressionListRef : public BoundTableRef {
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 } // namespace lingodb::ast
+#endif
