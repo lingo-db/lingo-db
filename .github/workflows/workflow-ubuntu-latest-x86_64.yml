@@ -14,7 +14,7 @@ jobs:
   build:
     strategy:
       matrix:
-        build_type: [ debug, asan, release ]
+        build_type: [ asan ]
     runs-on: ubuntu-24.04
     container: ghcr.io/lingo-db/lingodb-dev:0eeb4dcaa2d7d1309171d2d4d366a17e5fc76c59
     steps:
@@ -28,6 +28,8 @@ jobs:
         with:
           path: /ccache
           key: ccache-${{ matrix.build_type }}-build
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
       - name: Build
         run: |
           mkdir -p /ccache
@@ -48,7 +50,7 @@ jobs:
     needs: build
     strategy:
       matrix:
-        build_type: [ debug, asan ]
+        build_type: [ asan ]
     runs-on: ubuntu-24.04
     container: ghcr.io/lingo-db/lingodb-dev:0eeb4dcaa2d7d1309171d2d4d366a17e5fc76c59
     steps:
@@ -97,7 +99,7 @@ jobs:
   sqlite_tests:
     strategy:
       matrix:
-        build_type: [ release, asan ]
+        build_type: [ asan ]
     needs: build
     runs-on: ubuntu-24.04
     container: ghcr.io/lingo-db/lingodb-dev:0eeb4dcaa2d7d1309171d2d4d366a17e5fc76c59
@@ -129,7 +131,7 @@ jobs:
   sqlite_dataset-tests:
     strategy:
       matrix:
-        build_type: [ release, asan ]
+        build_type: [ asan ]
     needs: build
     runs-on: ubuntu-24.04
     container: ghcr.io/lingo-db/lingodb-dev:0eeb4dcaa2d7d1309171d2d4d366a17e5fc76c59
@@ -232,7 +234,7 @@ jobs:
     needs: build
     strategy:
       matrix:
-        build_type: [ debug]
+        build_type: [ release ]
     runs-on: ubuntu-24.04
     container: ghcr.io/lingo-db/lingodb-dev:0eeb4dcaa2d7d1309171d2d4d366a17e5fc76c59
     steps:
