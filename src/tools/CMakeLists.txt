@@ -13,7 +13,7 @@ set_target_properties(mlir-db-opt PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_B
 
 # sql-to-mlir
 add_executable(sql-to-mlir sql-to-mlir.cpp)
-target_link_libraries(sql-to-mlir PUBLIC ${LIBS} MLIRSQLFrontend pg_query::pg_query runtime utility runner scheduler)
+target_link_libraries(sql-to-mlir PUBLIC ${LIBS} MLIRSQLFrontend runtime utility runner scheduler)
 set_target_properties(sql-to-mlir PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
 # run-mlir
@@ -21,8 +21,9 @@ add_executable(run-mlir run-mlir.cpp)
 target_link_libraries(run-mlir PUBLIC runner runtime utility mlir-support scheduler)
 set_target_properties(run-mlir PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
-
 # run-sql
 add_executable(run-sql run-sql.cpp)
 target_link_libraries(run-sql PUBLIC runner runtime utility mlir-support scheduler)
 set_target_properties(run-sql PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+
+

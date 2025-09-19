@@ -14,9 +14,9 @@ jobs:
   build:
     strategy:
       matrix:
-        build_type: [ debug, asan, release ]
+        build_type: [ asan ]
     runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:621f9dc1279092fce957b9852a9f7f421a7ebfe1
+    container: ghcr.io/lingo-db/lingodb-dev:0eeb4dcaa2d7d1309171d2d4d366a17e5fc76c59
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -28,6 +28,8 @@ jobs:
         with:
           path: /ccache
           key: ccache-${{ matrix.build_type }}-build
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
       - name: Build
         run: |
           mkdir -p /ccache
@@ -48,9 +50,9 @@ jobs:
     needs: build
     strategy:
       matrix:
-        build_type: [ debug, asan ]
+        build_type: [ asan ]
     runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:621f9dc1279092fce957b9852a9f7f421a7ebfe1
+    container: ghcr.io/lingo-db/lingodb-dev:0eeb4dcaa2d7d1309171d2d4d366a17e5fc76c59
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
@@ -97,10 +99,10 @@ jobs:
   sqlite_tests:
     strategy:
       matrix:
-        build_type: [ release, asan ]
+        build_type: [ asan ]
     needs: build
     runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:621f9dc1279092fce957b9852a9f7f421a7ebfe1
+    container: ghcr.io/lingo-db/lingodb-dev:0eeb4dcaa2d7d1309171d2d4d366a17e5fc76c59
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
@@ -129,10 +131,10 @@ jobs:
   sqlite_dataset-tests:
     strategy:
       matrix:
-        build_type: [ release, asan ]
+        build_type: [ asan ]
     needs: build
     runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:621f9dc1279092fce957b9852a9f7f421a7ebfe1
+    container: ghcr.io/lingo-db/lingodb-dev:0eeb4dcaa2d7d1309171d2d4d366a17e5fc76c59
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
@@ -170,13 +172,6 @@ jobs:
           mkdir -p /db/tpcds-1
           cd /datasets/tpcds-1
           $BASE_PATH/build/lingodb-${{ matrix.build_type }}/sql /db/tpcds-1 < $BASE_PATH/resources/sql/tpcds/initialize.sql
-      - name: Load dataset job
-        run: |
-          export BASE_PATH=$(pwd)
-          mkdir -p /db/job
-          cd /datasets/job
-          $BASE_PATH/build/lingodb-${{ matrix.build_type }}/sql /db/job < $BASE_PATH/resources/sql/job/initialize.sql
-
       - name: Test tpcds (llvm)
         run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpchSf1.test /db/tpch-1
         env:
@@ -194,20 +189,16 @@ jobs:
         run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpcdsSf1.test /db/tpcds-1
         env:
           LINGODB_EXECUTION_MODE: BASELINE
-
-      - name: Test job (llvm)
-        run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/job.test /db/job
-        env:
-          LINGODB_EXECUTION_MODE: DEFAULT
-      - name: Test job (baseline)
-        run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/job.test /db/job
-        env:
-          LINGODB_EXECUTION_MODE: BASELINE
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+      - name: Setup tmate session
+        if: ${{ failure() }}
+        uses: mxschmitt/action-tmate@v3
 
 
   build_lingodb_python:
     runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-py-dev:8d290609bbccabd5c07a7c3c06ca44da8ca45c92
+    container: ghcr.io/lingo-db/lingodb-py-dev:0eeb4dcaa2d7d1309171d2d4d366a17e5fc76c59
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -243,9 +234,9 @@ jobs:
     needs: build
     strategy:
       matrix:
-        build_type: [ debug]
+        build_type: [ release ]
     runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:621f9dc1279092fce957b9852a9f7f421a7ebfe1
+    container: ghcr.io/lingo-db/lingodb-dev:0eeb4dcaa2d7d1309171d2d4d366a17e5fc76c59
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master

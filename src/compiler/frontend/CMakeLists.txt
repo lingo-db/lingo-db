@@ -1,0 +1,67 @@
+set(GEN_OUTPUT_DIR ${CMAKE_BINARY_DIR}/include/lingodb/compiler/frontend/sql-parser/gen )
+set(BISON_INPUT_FILE ${CMAKE_SOURCE_DIR}/src/compiler/frontend/parser.y)
+set(FLEX_INPUT_FILE ${CMAKE_SOURCE_DIR}/src/compiler/frontend/lexer.l)
+BISON_TARGET(parser ${BISON_INPUT_FILE} ${GEN_OUTPUT_DIR}/parser.cpp)
+FLEX_TARGET(lexer ${FLEX_INPUT_FILE} ${GEN_OUTPUT_DIR}/lexer.cpp)
+
+
+set(Boost_USE_STATIC_LIBS ON)
+find_package(Boost 1.83.0 REQUIRED COMPONENTS context)
+include_directories(${Boost_INCLUDE_DIRS})
+
+ADD_FLEX_BISON_DEPENDENCY(lexer parser)
+include_directories(lingo-db-sql-translator ${GEN_OUTPUT_DIR})
+add_library(MLIRSQLFrontend
+        #analyzer
+        sql_analyzer.cpp
+        sql_context.cpp
+
+        ast/bound/bound_tableref.cpp
+        ast/bound/bound_expression.cpp
+        ast/bound/bound_resultmodifier.cpp
+        ast/bound/bound_groupby.cpp
+        ast/bound/bound_aggregation.cpp
+        ast/bound/bound_extend_node.cpp
+        ast/bound/bound_insert_node.cpp
+        ast/bound/bound_pipe_operator.cpp
+        ast/bound/bound_query_node.cpp
+        #translator
+        sql_mlir_translator.cpp
+
+        translation_context.cpp
+#parser
+        driver.cpp
+
+        ast/parsed_expression.cpp
+        ast/tableref.cpp
+        ast/group_by_node.cpp
+        ast/pipe_operator.cpp
+        ast/aggregation_node.cpp
+        ast/result_modifier.cpp
+        ast/extend_node.cpp
+        ast/create_node.cpp
+        ast/constraint.cpp
+        ast/insert_node.cpp
+        ast/query_node.cpp
+        ast/set_node.cpp
+        ast/copy_node.cpp
+#common
+        frontend_error.cpp
+        frontend_type.cpp
+
+        ${BISON_parser_OUTPUTS}
+        ${FLEX_lexer_OUTPUTS}
+
+)
+
+add_dependencies(MLIRSQLFrontend ec-rt-defs)
+target_link_libraries(MLIRSQLFrontend PUBLIC ${dialect_libs}
+        ${conversion_libs}
+        ${translation_libs}
+        runtime_funcs_ptr
+        utility
+        catalog
+        Boost::context
+
+
+)

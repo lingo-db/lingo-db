@@ -269,6 +269,8 @@ class DefaultQueryExecuter : public QueryExecuter {
          std::cerr << "Must provide file or string!" << std::endl;
          exit(1);
       }
+      handleTiming(frontend.getTiming());
+
       auto serializationState = std::make_shared<SnapshotState>();
       serializationState->serialize = true;
 
@@ -327,6 +329,7 @@ class DefaultQueryExecuter : public QueryExecuter {
       }
    }
 };
+
 std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(execution::ExecutionMode runMode, bool sqlInput) {
    auto config = std::make_unique<QueryExecutionConfig>();
    if (sqlInput) {
@@ -374,6 +377,8 @@ std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(execution::Exec
    }
    return config;
 }
+
+
 std::unique_ptr<QueryExecuter> QueryExecuter::createDefaultExecuter(std::unique_ptr<QueryExecutionConfig> queryExecutionConfig, runtime::Session& session) {
    return std::make_unique<DefaultQueryExecuter>(std::move(queryExecutionConfig), session.createExecutionContext());
 }

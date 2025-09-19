@@ -1,7 +1,6 @@
 #include "lingodb/catalog/Types.h"
 #include "lingodb/catalog/MLIRTypes.h"
 #include "lingodb/utility/Serialization.h"
-
 namespace lingodb::catalog {
 Type::Type(lingodb::catalog::LogicalTypeId id, std::shared_ptr<TypeInfo> infoInput) : id(id), info(std::move(infoInput)) {
    switch (id) {
@@ -39,6 +38,11 @@ Type::Type(lingodb::catalog::LogicalTypeId id, std::shared_ptr<TypeInfo> infoInp
       case LogicalTypeId::STRING:
          mlirTypeCreator = lingodb::catalog::createStringTypeCreator(std::dynamic_pointer_cast<StringTypeInfo>(info));
          break;
+      case LogicalTypeId::NONE:
+         mlirTypeCreator = lingodb::catalog::createNoneTypeCreator();
+         break;
+      case LogicalTypeId::INDEX:
+         mlirTypeCreator = lingodb::catalog::createIndexTypeCreator();
    }
 }
 void Type::serialize(utility::Serializer& serializer) const {
@@ -73,6 +77,7 @@ std::shared_ptr<TypeInfo> TypeInfo::deserialize(utility::Deserializer& deseriali
          return IntervalTypeInfo::deserialize(deserializer);
    }
 }
+
 void IntTypeInfo::serializeConcrete(utility::Serializer& serializer) const {
    serializer.writeProperty(0, isSigned);
    serializer.writeProperty(1, bitWidth);
@@ -135,6 +140,12 @@ std::string Type::toString() const {
          return std::dynamic_pointer_cast<CharTypeInfo>(info)->toString();
       case LogicalTypeId::STRING:
          return std::dynamic_pointer_cast<StringTypeInfo>(info)->toString();
+      case LogicalTypeId::NONE:
+         return "none";
+      case LogicalTypeId::INDEX:
+         return "index";
+      default:
+         return "invalid";
    }
 }
 std::string IntTypeInfo::toString() {
@@ -249,5 +260,11 @@ Type Type::intervalDaytime() {
 }
 Type Type::intervalMonths() {
    return Type(LogicalTypeId::INTERVAL, std::make_shared<IntervalTypeInfo>(IntervalTypeInfo::IntervalUnit::MONTH));
+}
+Type Type::noneType() {
+   return Type(LogicalTypeId::NONE, nullptr);
+}
+Type Type::index() {
+   return Type(LogicalTypeId::INDEX, nullptr);
 }
 } //end namespace lingodb::catalog

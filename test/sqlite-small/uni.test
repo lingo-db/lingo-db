@@ -263,3 +263,192 @@ query tsv rowsort i
 SELECT SUM(sws), SUM(sws + 1), SUM(sws + 2), SUM(sws + 3), SUM(sws + 4), SUM(sws + 5), SUM(sws + 6), SUM(sws + 7), SUM(sws + 8), SUM(sws + 9), SUM(sws + 10), SUM(sws + 11), SUM(sws + 12), SUM(sws + 13), SUM(sws + 14), SUM(sws + 15), SUM(sws + 16), SUM(sws + 17), SUM(sws + 18), SUM(sws + 19), SUM(sws + 20), SUM(sws + 21), SUM(sws + 22), SUM(sws + 23), SUM(sws + 24), SUM(sws + 25), SUM(sws + 26), SUM(sws + 27), SUM(sws + 28), SUM(sws + 29), SUM(sws + 30), SUM(sws + 31), SUM(sws + 32), SUM(sws + 33), SUM(sws + 34), SUM(sws + 35), SUM(sws + 36), SUM(sws + 37), SUM(sws + 38), SUM(sws + 39), SUM(sws + 40), SUM(sws + 41), SUM(sws + 42), SUM(sws + 43), SUM(sws + 44), SUM(sws + 45), SUM(sws + 46), SUM(sws + 47), SUM(sws + 48), SUM(sws + 49), SUM(sws + 50), SUM(sws + 51), SUM(sws + 52), SUM(sws + 53), SUM(sws + 54), SUM(sws + 55), SUM(sws + 56), SUM(sws + 57), SUM(sws + 58), SUM(sws + 59), SUM(sws + 60), SUM(sws + 61), SUM(sws + 62), SUM(sws + 63), SUM(sws + 64), SUM(sws + 65), SUM(sws + 66), SUM(sws + 67), SUM(sws + 68), SUM(sws + 69), SUM(sws + 70), SUM(sws + 71), SUM(sws + 72), SUM(sws + 73), SUM(sws + 74), SUM(sws + 75), SUM(sws + 76), SUM(sws + 77), SUM(sws + 78), SUM(sws + 79), SUM(sws + 80), SUM(sws + 81), SUM(sws + 82), SUM(sws + 83), SUM(sws + 84), SUM(sws + 85), SUM(sws + 86), SUM(sws + 87), SUM(sws + 88), SUM(sws + 89) FROM Vorlesungen;
 ----
 30	40	50	60	70	80	90	100	110	120	130	140	150	160	170	180	190	200	210	220	230	240	250	260	270	280	290	300	310	320	330	340	350	360	370	380	390	400	410	420	430	440	450	460	470	480	490	500	510	520	530	540	550	560	570	580	590	600	610	620	630	640	650	660	670	680	690	700	710	720	730	740	750	760	770	780	790	800	810	820	830	840	850	860	870	880	890	900	910	920
+
+query tsv pipesql
+FROM studenten s
+|> JOIN hoeren h ON s.matrnr = h.matrnr
+|> JOIN vorlesungen v ON h.vorlnr = v.vorlnr
+|> AGGREGATE sum(v.sws),min(v.sws),max(v.sws),avg(v.sws*1.0),count(*),count(v.sws) GROUP BY s.matrnr
+|> ORDER BY s.matrnr;
+----
+25403	2	2	2	2.000000000000000000	1	1
+26120	4	4	4	4.000000000000000000	1	1
+27550	8	4	4	4.000000000000000000	2	2
+28106	11	2	4	2.750000000000000000	4	4
+29120	10	2	4	3.333333333333333333	3	3
+29555	6	2	4	3.000000000000000000	2	2
+
+query tsv pipesql
+from vorlesungen v
+|> AGGREGATE sum(v.sws),min(v.sws),max(v.sws),avg(v.sws*1.0000),count(*),count(v.sws);
+----
+30	2	4	3.000000000000000000	10	10
+
+query tsv rowsort pipesql
+from studenten s
+|> select s.name
+|> where not exists( from hoeren h |> where h.matrnr=s.matrnr );
+----
+Aristoxenos
+Xenokrates
+
+query tsv rowsort pipesql
+from studenten
+----
+24002	Xenokrates	18
+25403	Jonas	12
+26120	Fichte	10
+26830	Aristoxenos	8
+27550	Schopenhauer	6
+28106	Carnap	3
+29120	Theophrastos	2
+29555	Feuerbach	2
+
+query tsv rowsort pipesql
+from studenten s
+|> where exists( select * from hoeren h where h.matrnr=s.matrnr)
+|> select s.name
+----
+Carnap
+Feuerbach
+Fichte
+Jonas
+Schopenhauer
+Theophrastos
+
+query tsv rowsort pipesql
+from studenten
+|> where name='Carnap'
+----
+28106	Carnap	3
+
+query tsv rowsort pipesql
+from studenten s
+|> left outer join hoeren h on  s.matrnr = h.matrnr
+|> select s.name, h.vorlnr
+----
+Aristoxenos	NULL
+Carnap	5041
+Carnap	5052
+Carnap	5216
+Carnap	5259
+Feuerbach	5001
+Feuerbach	5022
+Fichte	5001
+Jonas	5022
+Schopenhauer	4052
+Schopenhauer	5001
+Theophrastos	5001
+Theophrastos	5041
+Theophrastos	5049
+Xenokrates	NULL
+
+query tsv s pipesql
+from hoeren h, studenten s,vorlesungen v
+|> select s.name,v.titel
+|> where h.matrnr=s.matrnr and h.vorlnr=v.vorlnr
+|> order by s.name asc,v.titel desc
+|> limit 5
+----
+Carnap	Wissenschaftstheorie
+Carnap	Ethik
+Carnap	Der Wiener Kreis
+Carnap	Bioethik
+Feuerbach	Grundzuege
+
+query tsv rowsort a pipesql
+from hoeren h, studenten s,vorlesungen v
+|> where h.matrnr=s.matrnr and h.vorlnr=v.vorlnr
+|> select s.name,v.titel
+----
+Carnap	Bioethik
+Carnap	Der Wiener Kreis
+Carnap	Ethik
+Carnap	Wissenschaftstheorie
+Feuerbach	Glaube und Wissen
+Feuerbach	Grundzuege
+Fichte	Grundzuege
+Jonas	Glaube und Wissen
+Schopenhauer	Grundzuege
+Schopenhauer	Logik
+Theophrastos	Ethik
+Theophrastos	Grundzuege
+Theophrastos	Maeeutik
+
+query tsv b pipesql
+from hoeren h, studenten s,vorlesungen v
+|> select s.name,v.titel
+|> where h.matrnr=s.matrnr and h.vorlnr=v.vorlnr
+|> order by s.name asc,v.titel desc
+----
+Carnap	Wissenschaftstheorie
+Carnap	Ethik
+Carnap	Der Wiener Kreis
+Carnap	Bioethik
+Feuerbach	Grundzuege
+Feuerbach	Glaube und Wissen
+Fichte	Grundzuege
+Jonas	Glaube und Wissen
+Schopenhauer	Logik
+Schopenhauer	Grundzuege
+Theophrastos	Maeeutik
+Theophrastos	Grundzuege
+Theophrastos	Ethik
+
+query tsv rowsort c pipesql
+from studenten s
+|> select s.matrnr,s.semester
+|> EXTEND avg(s.matrnr) over (partition by s.semester)
+----
+24002	18	24002.0000000000000000000
+25403	12	25403.0000000000000000000
+26120	10	26120.0000000000000000000
+26830	8	26830.0000000000000000000
+27550	6	27550.0000000000000000000
+28106	3	28106.0000000000000000000
+29120	2	29337.5000000000000000000
+29555	2	29337.5000000000000000000
+
+query tsv rowsort d pipesql
+from studenten s
+|> select s.matrnr
+|> EXTEND rank() over (order by s.matrnr)
+----
+24002	1
+25403	2
+26120	3
+26830	4
+27550	5
+28106	6
+29120	7
+29555	8
+
+query tsv rowsort e pipesql
+from studenten s
+|> select s.matrnr,s.semester
+|> EXTEND rank() over (partition by s.semester order by s.matrnr)
+
+----
+24002	18	1
+25403	12	1
+26120	10	1
+26830	8	1
+27550	6	1
+28106	3	1
+29120	2	1
+29555	2	2
+
+query tsv rowsort f pipesql
+from studenten s
+|> select s.matrnr,s.semester
+|> EXTEND sum(s.matrnr) over (partition by s.semester order by s.matrnr)
+
+----
+24002	18	24002
+25403	12	25403
+26120	10	26120
+26830	8	26830
+27550	6	27550
+28106	3	28106
+29120	2	29120
+29555	2	58675
