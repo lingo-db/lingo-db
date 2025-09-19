@@ -1876,7 +1876,11 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
                break;
             case ast::ConstantType::STRING: {
                auto strValue = std::static_pointer_cast<ast::StringValue>(constExpr->value)->sVal;
-               type = catalog::Type::charType(strValue.length());
+               if (strValue.size() < 8) {
+                  type = catalog::Type::charType(strValue.length());
+               } else {
+                  type = catalog::Type::stringType();
+               }
                break;
             }
 
