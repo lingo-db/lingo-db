@@ -129,9 +129,6 @@ class SQLQueryAnalyzer {
 
    std::shared_ptr<ast::AstNode> canonicalizeAndAnalyze(std::shared_ptr<ast::AstNode> rootNode, std::shared_ptr<SQLContext> context);
 
-   double getTiming() {
-      return totalTime;
-   }
    bool parallelismAllowed;
 
    private:
@@ -208,7 +205,6 @@ class SQLQueryAnalyzer {
    catalog::Catalog* catalog;
    driver drv{};
    SQLCanonicalizer sqlCanonicalizer{};
-   double totalTime;
 };
 
 struct SQLTypeUtils {

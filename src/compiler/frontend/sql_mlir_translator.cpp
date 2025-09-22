@@ -37,7 +37,6 @@ std::optional<mlir::Value> SQLMlirTranslator::translateStart(mlir::OpBuilder& bu
    auto *mlirContext = builder.getContext();
    auto location = getLocationFromBison(astNode->loc, mlirContext);
 
-   auto startTranslate = std::chrono::high_resolution_clock::now();
    auto tableProducer = std::dynamic_pointer_cast<ast::TableProducer>(astNode);
    if (!tableProducer) {
       //Root node is not a TableProducer
@@ -113,8 +112,6 @@ std::optional<mlir::Value> SQLMlirTranslator::translateStart(mlir::OpBuilder& bu
       relalg::QueryOp queryOp = builder.create<relalg::QueryOp>(location, mlir::TypeRange{localTableType}, mlir::ValueRange{});
       queryOp.getQueryOps().getBlocks().clear();
       queryOp.getQueryOps().push_back(block);
-      auto endTranslate = std::chrono::high_resolution_clock::now();
-      this->timing = std::chrono::duration_cast<std::chrono::microseconds>(endTranslate - startTranslate).count() / 1000.0;
       return queryOp.getResults()[0];
    }
 }
