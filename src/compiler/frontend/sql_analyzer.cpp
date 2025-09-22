@@ -2323,7 +2323,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeCastExpression(st
             default: error("Expression cannot be casted to date (unsupported type)", castExpr->loc);
          }
       }
-      case ast::LogicalType::INTERVAL: {
+      case ast::SQLAbstractLogicalType::INTERVAL: {
          auto constExpr = std::static_pointer_cast<ast::BoundConstantExpression>(boundChild);
          if (constExpr->value->type != ast::ConstantType::STRING) {
             error("Cannot cast " + constExpr->value->toString() + " to date", constExpr->loc);
@@ -2333,12 +2333,12 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeCastExpression(st
          std::string stringRepresentation = std::static_pointer_cast<ast::StringValue>(constExpr->value)->sVal;
          if (castExpr->optInterval.has_value()) {
             switch (castExpr->optInterval.value()) {
-               case ast::LogicalType::YEARS: {
+               case ast::SQLAbstractLogicalType::YEARS: {
                   resultType = catalog::Type::intervalMonths();
                   stringRepresentation = std::to_string(std::stol(stringRepresentation) * 12);
                   break;
                }
-               case ast::LogicalType::MONTHS: {
+               case ast::SQLAbstractLogicalType::MONTHS: {
                   resultType = catalog::Type::intervalMonths();
                   break;
                }
@@ -2910,24 +2910,24 @@ std::pair<unsigned long, unsigned long> SQLTypeUtils::getAdaptedDecimalPAndSAfte
    return {p, s};
 }
 
-NullableType SQLTypeUtils::typemodsToCatalogType(ast::LogicalType logicalType, std::vector<std::shared_ptr<ast::Value>>& typeModifiers) {
+NullableType SQLTypeUtils::typemodsToCatalogType(ast::SQLAbstractLogicalType logicalType, std::vector<std::shared_ptr<ast::Value>>& typeModifiers) {
    switch (logicalType) {
-      case ast::LogicalType::INT: {
+      case ast::SQLAbstractLogicalType::INT: {
          return catalog::Type::int32();
       }
-      case ast::LogicalType::BIGINT: {
+      case ast::SQLAbstractLogicalType::BIGINT: {
          return catalog::Type::int64();
       }
-      case ast::LogicalType::SMALLINT: {
+      case ast::SQLAbstractLogicalType::SMALLINT: {
          return catalog::Type::int8();
       }
-      case ast::LogicalType::BOOLEAN: {
+      case ast::SQLAbstractLogicalType::BOOLEAN: {
          return catalog::Type::boolean();
       }
-      case ast::LogicalType::STRING: {
+      case ast::SQLAbstractLogicalType::STRING: {
          return catalog::Type::stringType();
       }
-      case ast::LogicalType::CHAR: {
+      case ast::SQLAbstractLogicalType::CHAR: {
          if (typeModifiers.size() == 0) {
             return catalog::Type::charType(1);
          }
@@ -2940,7 +2940,7 @@ NullableType SQLTypeUtils::typemodsToCatalogType(ast::LogicalType logicalType, s
          }
          return catalog::Type::stringType();
       }
-      case ast::LogicalType::DECIMAL: {
+      case ast::SQLAbstractLogicalType::DECIMAL: {
          if (typeModifiers.size() != 2 || typeModifiers[0]->type != ast::ConstantType::UINT || typeModifiers[1]->type != ast::ConstantType::UINT) {
             throw std::runtime_error("Invalid Typemodfiers for type: descimal");
          }
@@ -2949,13 +2949,13 @@ NullableType SQLTypeUtils::typemodsToCatalogType(ast::LogicalType logicalType, s
 
          return catalog::Type::decimal(p, s);
       }
-      case ast::LogicalType::DATE: {
+      case ast::SQLAbstractLogicalType::DATE: {
          return catalog::Type(catalog::LogicalTypeId::DATE, std::make_shared<catalog::DateTypeInfo>(catalog::DateTypeInfo::DateUnit::DAY));
       }
-      case ast::LogicalType::TIMESTAMP: {
+      case ast::SQLAbstractLogicalType::TIMESTAMP: {
          return catalog::Type::timestamp();
       }
-      case ast::LogicalType::FLOAT: {
+      case ast::SQLAbstractLogicalType::FLOAT: {
          if (typeModifiers.size() >= 1) {
             auto sizeValue = typeModifiers.at(0);
             if (sizeValue->type == ast::ConstantType::UINT) {

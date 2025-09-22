@@ -676,7 +676,7 @@ std::string CastExpression::toDotGraph(uint32_t depth, NodeIdGenerator& idGen) {
    std::string label = "Cast\\nType: ";
    if (logicalTypeWithMods.has_value()) {
       switch (logicalTypeWithMods.value().logicalType) {
-         case LogicalType::DATE:
+         case SQLAbstractLogicalType::DATE:
             label += "DATE";
             break;
             // TODO: Add other logical types as needed

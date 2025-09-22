@@ -139,8 +139,27 @@ class SQLQueryAnalyzer {
    std::shared_ptr<ast::CreateNode> analyzeCreateNode(std::shared_ptr<ast::CreateNode> createNode, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope);
    std::shared_ptr<ast::BoundInsertNode> analyzeInsertNode(std::shared_ptr<ast::InsertNode> insertNode, std::shared_ptr<SQLContext> context, SQLContext::ResolverScope& resolverScope);
    std::shared_ptr<ast::SetNode> analyzeSetNode(std::shared_ptr<ast::SetNode> setNode, std::shared_ptr<SQLContext> context, SQLContext::ResolverScope& resolverScope);
-
+   /**
+    * Analyzes a single PIPE operator
+    *
+    * Behavior by operator type includes:
+    * - binding columns and intermediate results
+    * - handling types, check for correct types, finding common types
+    * @param pipeOperator The parsed PIPE operator to analyze
+    * @param context      Analysis context providing scope and attribute mapping utilities
+    * @param resolverScope Resolver scope used for symbol resolution and replacement
+    * @return A bound TableProducer representing the analyzed operator
+    * @throws frontend_error on semantic or type errors (e.g., non-boolean WHERE)
+    */
    std::shared_ptr<ast::TableProducer> analyzePipeOperator(std::shared_ptr<ast::PipeOperator> pipeOperator, std::shared_ptr<SQLContext>& context, ResolverScope& resolverScope);
+   /**
+   * Analyzes a TableRef
+   * @param tableRef The table reference to analyze
+   * @param context      Analysis context providing scope and attribute mapping utilities
+   * @param resolverScope Resolver scope used for symbol resolution and replacement
+   * @return A bound TableProducer representing the analyzed table reference
+   * @throws frontend_error on semantic or type errors
+   */
    std::shared_ptr<ast::TableProducer> analyzeTableRef(std::shared_ptr<ast::TableRef> tableRef, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope);
    std::shared_ptr<ast::TableProducer> analyzeExpressionListRef(std::shared_ptr<ast::ExpressionListRef> expressionListRef, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope);
    std::shared_ptr<ast::TableProducer> analyzeJoinRef(std::shared_ptr<ast::JoinRef> join, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope);
@@ -148,13 +167,29 @@ class SQLQueryAnalyzer {
    std::shared_ptr<ast::TableProducer> analyzeInnerJoin(std::shared_ptr<ast::JoinRef> join, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope);
    std::shared_ptr<ast::TableProducer> analyzeLeftOuterJoin(std::shared_ptr<ast::JoinRef> join, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope);
    std::shared_ptr<ast::TableProducer> analyzeFullOuterJoin(std::shared_ptr<ast::JoinRef> join, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope);
+   /**
+  * Analyzes a result modifier like order by or limit
+  * @param resultModifier The result modifier to analyze
+  * @param context      Analysis context providing scope and attribute mapping utilities
+  * @return A bound result modifier representing the analyzed result modifier
+  * @throws frontend_error on semantic or type errors
+  */
    std::shared_ptr<ast::BoundResultModifier> analyzeResultModifier(std::shared_ptr<ast::ResultModifier> resultModifier, std::shared_ptr<SQLContext> context);
 
 
 
-
-
-   ///Expressions
+   /**
+    * Analyzes expressions
+    *
+    * Behavior by operator type includes:
+    * - binding columns and intermediate results
+    * - handling types, check for correct types, finding common types
+    * @param rootNode The expression to analyze
+    * @param context      Analysis context providing scope and attribute mapping utilities
+    * @param resolverScope Resolver scope used for symbol resolution and replacement
+    * @return A bound expression representing the analyzed operator
+    * @throws frontend_error on semantic or type errors (e.g., non-boolean conjunction)
+    */
    std::shared_ptr<ast::BoundExpression> analyzeExpression(std::shared_ptr<ast::ParsedExpression> rootNode, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope);
    std::shared_ptr<ast::BoundExpression> analyzeOperatorExpression(std::shared_ptr<ast::OperatorExpression> operatorExpr, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope);
    std::shared_ptr<ast::BoundExpression> analyzeWindowExpression(std::shared_ptr<ast::WindowExpression> windowExpr, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope);
@@ -204,7 +239,7 @@ struct SQLTypeUtils {
    static std::vector<NullableType> toCommonTypes(std::vector<NullableType> types);
    static std::vector<NullableType> toCommonNumber(std::vector<NullableType> types);
 
-   static NullableType typemodsToCatalogType(ast::LogicalType logicalType, std::vector<std::shared_ptr<ast::Value>>& typeModifiers);
+   static NullableType typemodsToCatalogType(ast::SQLAbstractLogicalType logicalType, std::vector<std::shared_ptr<ast::Value>>& typeModifiers);
 
    [[nodiscard]]
    static std::pair<unsigned long, unsigned long> getAdaptedDecimalPAndSAfterMulDiv(unsigned long p, unsigned long s);

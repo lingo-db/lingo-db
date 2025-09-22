@@ -140,7 +140,7 @@ class SQLFrontend : public lingodb::execution::Frontend {
          mlir::func::FuncOp funcOp = builder.create<mlir::func::FuncOp>(builder.getUnknownLoc(), "main", builder.getFunctionType({}, {}));
          funcOp.getBody().push_back(queryBlock);
          module = moduleOp;
-         parallismAllowed = false;
+         parallismAllowed = analyzer.parallelismAllowed;
          timing.emplace("frontEnd", analyzer.getTiming() + translator.getTiming());
 
       } else {

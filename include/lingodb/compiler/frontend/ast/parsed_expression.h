@@ -10,7 +10,7 @@ namespace lingodb::ast {
 class OrderByModifier;
 enum class ExpressionType : uint8_t;
 enum class ExpressionClass : uint8_t;
-enum LogicalType : uint8_t {
+enum SQLAbstractLogicalType : uint8_t {
    INVALID = 0,
    BOOLEAN = 1,
    CHAR = 2,
@@ -31,11 +31,11 @@ enum LogicalType : uint8_t {
 class LogicalTypeWithMods {
    public:
    LogicalTypeWithMods() : LogicalTypeWithMods(INVALID) {}
-   LogicalTypeWithMods(LogicalType logicalType)
+   LogicalTypeWithMods(SQLAbstractLogicalType logicalType)
       : logicalType(logicalType), typeModifiers({}) {}
-   LogicalTypeWithMods(LogicalType logicalType, std::vector<std::shared_ptr<Value>> typeModifiers)
+   LogicalTypeWithMods(SQLAbstractLogicalType logicalType, std::vector<std::shared_ptr<Value>> typeModifiers)
       : logicalType(logicalType), typeModifiers(std::move(typeModifiers)) {}
-   LogicalType logicalType;
+   SQLAbstractLogicalType logicalType;
    std::vector<std::shared_ptr<Value>> typeModifiers;
 };
 
@@ -466,7 +466,7 @@ class CastExpression : public ParsedExpression {
    CastExpression(LogicalTypeWithMods logicalTypeWithMods, std::shared_ptr<ParsedExpression> child);
    std::optional<LogicalTypeWithMods> logicalTypeWithMods;
 
-   std::optional<LogicalType> optInterval;
+   std::optional<SQLAbstractLogicalType> optInterval;
    std::shared_ptr<ParsedExpression> child;
 
    std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;

@@ -304,7 +304,7 @@
 
 %type<std::shared_ptr<lingodb::ast::LimitModifier>> select_limit limit_clause
 
-%type<std::optional<lingodb::ast::LogicalType>> opt_interval
+%type<std::optional<lingodb::ast::SQLAbstractLogicalType>> opt_interval
 %type<bool> opt_asymmetric set_quantifier distinct_clause
 
 %type<std::optional<std::shared_ptr<lingodb::ast::ParsedExpression>>> case_arg
@@ -426,9 +426,6 @@ toplevel_stmt:
     stmt {$$=$1;}
     | %empty
   ;
-/*
- * TODO Add the different Statement Types, like Create, Copy etc
-*/
 stmt:
  SelectStmt {$$=$1;}
  | CreateStmt {$$=$1;}
@@ -3094,33 +3091,33 @@ Numeric_with_opt_lenghth:
 Numeric:
     INT_P
     {
-        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::INT);
+        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::SQLAbstractLogicalType::INT);
     } 
     | INTEGER
     {
-        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::INT);
+        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::SQLAbstractLogicalType::INT);
     }
     | SMALLINT
     {
-        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::SMALLINT);
+        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::SQLAbstractLogicalType::SMALLINT);
     }
     | BIGINT
     {
-        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::BIGINT);
+        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::SQLAbstractLogicalType::BIGINT);
     }
     | REAL
     | FLOAT_P 
     {
-        auto type = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::FLOAT);
+        auto type = lingodb::ast::LogicalTypeWithMods(lingodb::ast::SQLAbstractLogicalType::FLOAT);
         $$ = type;
     }
     | DOUBLE_P PRECISION
     {
-        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::FLOAT);
+        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::SQLAbstractLogicalType::FLOAT);
     }
     | DECIMAL_P opt_type_modifiers
     {
-        lingodb::ast::LogicalTypeWithMods type{lingodb::ast::LogicalType::DECIMAL};
+        lingodb::ast::LogicalTypeWithMods type{lingodb::ast::SQLAbstractLogicalType::DECIMAL};
         type.typeModifiers = $opt_type_modifiers;
         $$ = type;
         
@@ -3128,13 +3125,13 @@ Numeric:
     | DEC //TODO opt_type_modifiers
     | NUMERIC  opt_type_modifiers 
     {
-        lingodb::ast::LogicalTypeWithMods type{lingodb::ast::LogicalType::DECIMAL};
+        lingodb::ast::LogicalTypeWithMods type{lingodb::ast::SQLAbstractLogicalType::DECIMAL};
         type.typeModifiers = $opt_type_modifiers;
         $$ = type;
     }
     | BOOLEAN_P
     {
-        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::BOOLEAN);
+        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::SQLAbstractLogicalType::BOOLEAN);
     }
     ;
 
@@ -3184,26 +3181,26 @@ character:
     CHARACTER opt_varying 
     {
         if($opt_varying) {
-            $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::STRING);
+            $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::SQLAbstractLogicalType::STRING);
         } else {
-            $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::CHAR);
+            $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::SQLAbstractLogicalType::CHAR);
         }
     }
     | VARCHAR 
     {
-        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::STRING);
+        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::SQLAbstractLogicalType::STRING);
     }
     | CHAR_P 
     {
-        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::CHAR);
+        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::SQLAbstractLogicalType::CHAR);
     }
     | TEXT_P
     {
-        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::STRING);
+        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::SQLAbstractLogicalType::STRING);
     }
     | STRING_P
     {
-        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::STRING);
+        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::SQLAbstractLogicalType::STRING);
     }
     ;
 opt_varying:
@@ -3220,12 +3217,12 @@ opt_varying:
 ConstDatetime: 
     TIMESTAMP //TODO opt_timezone
     {
-        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::TIMESTAMP);
+        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::SQLAbstractLogicalType::TIMESTAMP);
     }
 
     | DATE_P
     {
-        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::LogicalType::DATE);
+        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::SQLAbstractLogicalType::DATE);
     }
     ;
 
@@ -3312,7 +3309,7 @@ AexprConst:
     | func_name Sconst {
         //TODO move logic to analyzer?
         if($func_name == "date") {
-            auto dateExpr = mkNode<lingodb::ast::CastExpression>(@$, lingodb::ast::LogicalType::DATE, $Sconst);
+            auto dateExpr = mkNode<lingodb::ast::CastExpression>(@$, lingodb::ast::SQLAbstractLogicalType::DATE, $Sconst);
             
             $$ = dateExpr;
         } else {
@@ -3322,7 +3319,7 @@ AexprConst:
     | ConstInterval Sconst opt_interval
     {
         //TODO
-        auto interval = mkNode<lingodb::ast::CastExpression>(@$, lingodb::ast::LogicalType::INTERVAL, $Sconst);
+        auto interval = mkNode<lingodb::ast::CastExpression>(@$, lingodb::ast::SQLAbstractLogicalType::INTERVAL, $Sconst);
         interval->optInterval = $opt_interval;
         $$ = interval;
     }
@@ -3387,15 +3384,15 @@ ConstInterval:
 opt_interval: 
     DAY_P 
      {
-        $$ = lingodb::ast::LogicalType::DAYS;
+        $$ = lingodb::ast::SQLAbstractLogicalType::DAYS;
      }
      | YEAR_P 
      {
-        $$ = lingodb::ast::LogicalType::YEARS;
+        $$ = lingodb::ast::SQLAbstractLogicalType::YEARS;
      }
      | MONTH_P
      {
-        $$ = lingodb::ast::LogicalType::MONTHS;
+        $$ = lingodb::ast::SQLAbstractLogicalType::MONTHS;
      }
      | %empty
     ;
