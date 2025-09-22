@@ -486,10 +486,7 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
             }
             case ast::ConstantType::STRING: {
                auto value = std::static_pointer_cast<ast::StringValue>(constExpr->value);
-               mlir::Type stringType = db::StringType::get(mlirContext);
-               if (value->sVal.size() <= 8 && value->sVal.size() > 0) {
-                  stringType = db::CharType::get(mlirContext, value->sVal.size());
-               };
+               mlir::Type stringType = db::CharType::get(mlirContext, value->sVal.size());
                return builder.create<db::ConstantOp>(exprLocation, stringType, builder.getStringAttr(value->sVal));
             }
             case ast::ConstantType::FLOAT: {
