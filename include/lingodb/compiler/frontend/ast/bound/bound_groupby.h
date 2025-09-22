@@ -9,7 +9,7 @@ namespace lingodb::ast {
  */
 class BoundGroupByNode : public AstNode {
    public:
-   BoundGroupByNode(std::vector<std::shared_ptr<NamedResult>> groupNamedResults);
+   BoundGroupByNode(std::vector<std::shared_ptr<NamedResult>> groupNamedResults) : AstNode(NodeType::BOUND_GROUP_BY), groupByNamedResults(groupNamedResults) {}
    //! The total set of all group by expressions
    std::vector<std::shared_ptr<NamedResult>> groupByNamedResults;
 
@@ -53,6 +53,8 @@ class BoundGroupByNode : public AstNode {
     */
    std::vector<std::pair<size_t, std::shared_ptr<NamedResult>>>  groupingFunctions;
 
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
+   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override {
+      return "";
+   };
 };
 }

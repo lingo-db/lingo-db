@@ -1160,9 +1160,6 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
 
             }
 
-
-
-
             std::vector<std::shared_ptr<ast::NamedResult>> currentAttributes(
                boundAggrNode->groupByNode->localMapToNullNamedResults.at(0).begin(),
                boundAggrNode->groupByNode->localMapToNullNamedResults.at(0).end());
@@ -1203,7 +1200,6 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                boundAggrNode->groupByNode->unionNamedResults.emplace_back(std::move(unionNamedResults));
 
 
-
             }
             for (size_t i = 0; i < boundAggrNode->groupByNode->groupByNamedResults.size(); i++) {
                auto old = boundAggrNode->groupByNode->groupByNamedResults[i];
@@ -1241,8 +1237,6 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
 
             groupingSetId++;
          }
-
-
 
 
          break;
@@ -1376,8 +1370,6 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
          boundAstNode = drv.nf.node<ast::BoundSetColumnExpression>(setExpression->loc,  context->getUniqueScope("setMap"),boundExpressions);
 
          break;
-
-
 
       }
       default: error("pipe operator not implemented", pipeOperator->loc);
@@ -1879,7 +1871,6 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
                type = catalog::Type::charType(strValue.length());
                break;
             }
-
             case ast::ConstantType::INTERVAL:
                type = catalog::Type::intervalDaytime();
                break;

@@ -19,11 +19,6 @@ add_library(MLIRSQLFrontend
         ast/bound/bound_tableref.cpp
         ast/bound/bound_expression.cpp
         ast/bound/bound_resultmodifier.cpp
-        ast/bound/bound_groupby.cpp
-        ast/bound/bound_aggregation.cpp
-        ast/bound/bound_extend_node.cpp
-        ast/bound/bound_insert_node.cpp
-        ast/bound/bound_pipe_operator.cpp
         ast/bound/bound_query_node.cpp
         #translator
         sql_mlir_translator.cpp
@@ -39,13 +34,10 @@ add_library(MLIRSQLFrontend
         ast/aggregation_node.cpp
         ast/result_modifier.cpp
         ast/extend_node.cpp
-        ast/create_node.cpp
-        ast/constraint.cpp
         ast/insert_node.cpp
         ast/query_node.cpp
         ast/set_node.cpp
-        ast/copy_node.cpp
-#common
+        #common
         frontend_error.cpp
         frontend_type.cpp
 

@@ -49,10 +49,12 @@ class TableElement;
 class CreateInfo;
 class CreateNode : public AstNode {
    public:
-   explicit CreateNode(std::shared_ptr<CreateInfo> createInfo);
+   explicit CreateNode(std::shared_ptr<CreateInfo> createInfo) : AstNode(NodeType::CREATE_NODE), createInfo(createInfo) {};
    std::shared_ptr<CreateInfo> createInfo;
 
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
+   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override {
+      return "";
+   };
 };
 class CreateInfo {
    public:
@@ -69,16 +71,6 @@ class CreateInfo {
     OnCreateConflict on_conflict;*/
    //! Whether or not the entry is temporary
    bool temporary;
-   /* //! Whether or not the entry is an internal entry
-   bool internal;
-   //! The SQL string of the CREATE statement
-   string sql;
-   //! The inherent dependencies of the created entry
-   LogicalDependencyList dependencies;
-   //! User provided comment
-   Value comment;
-   //! Key-value tags with additional metadata
-   unordered_map<string, string> tags;*/
 };
 
 class CreateTableInfo : public CreateInfo {
