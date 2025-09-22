@@ -916,9 +916,8 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
       // we store the length in the first 8 bytes of the buffer
       auto buf_vr = this->val_ref(op.getBuffer());
       auto res_vr = this->result_ref(op.getResult());
-      ValuePart elem_size_vp{*elem_size, 8, Config::GP_BANK};
-      derived()->encode_arith_udiv_i64(buf_vr.part(0), GenericValuePart{Expr{elem_size_vp.load_to_reg(derived())}}, res_vr.part(0));
-      elem_size_vp.reset(derived()); // release the temporary register
+      ValuePartRef elem_size_vp{this, *elem_size, 8, Config::GP_BANK};
+      derived()->encode_arith_udiv_i64(buf_vr.part(0), GenericValuePart{std::move(elem_size_vp)}, res_vr.part(0));
       return true;
    }
 
