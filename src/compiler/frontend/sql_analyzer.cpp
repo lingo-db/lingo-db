@@ -12,7 +12,6 @@
 
 #include <boost/context/fiber_fcontext.hpp>
 #include <cctype>
-#include <chrono>
 #include <ranges>
 #include <sys/resource.h>
 namespace lingodb::analyzer {
@@ -683,7 +682,6 @@ SQLQueryAnalyzer::SQLQueryAnalyzer(catalog::Catalog* catalog) : catalog(std::mov
 }
 std::shared_ptr<ast::AstNode> SQLQueryAnalyzer::canonicalizeAndAnalyze(std::shared_ptr<ast::AstNode> astRootNode, std::shared_ptr<SQLContext> context) {
    stackGuard->reset();
-   auto startCanonicalizeAndAnalyze = std::chrono::high_resolution_clock::now();
 
    auto rootNode = std::dynamic_pointer_cast<ast::TableProducer>(astRootNode);
    if (!rootNode) {
@@ -692,8 +690,6 @@ std::shared_ptr<ast::AstNode> SQLQueryAnalyzer::canonicalizeAndAnalyze(std::shar
          case ast::NodeType::CREATE_NODE: {
             auto createNode = std::static_pointer_cast<ast::CreateNode>(astRootNode);
             auto scope = context->createResolverScope();
-            auto endCanonicalizeAndAnalyze = std::chrono::high_resolution_clock::now();
-            this->totalTime = std::chrono::duration_cast<std::chrono::microseconds>(endCanonicalizeAndAnalyze - startCanonicalizeAndAnalyze).count() / 1000.0;
             return analyzeCreateNode(createNode, context, scope);
             ;
          }
@@ -704,8 +700,6 @@ std::shared_ptr<ast::AstNode> SQLQueryAnalyzer::canonicalizeAndAnalyze(std::shar
             auto scope = context->createResolverScope();
             insertNode->producer = sqlCanonicalizer.canonicalize(insertNode->producer, std::make_shared<ASTTransformContext>());
             auto i = analyzeInsertNode(insertNode, context, scope);
-            auto endCanonicalizeAndAnalyze = std::chrono::high_resolution_clock::now();
-            this->totalTime = std::chrono::duration_cast<std::chrono::microseconds>(endCanonicalizeAndAnalyze - startCanonicalizeAndAnalyze).count() / 1000.0;
             return i;
          }
          case ast::NodeType::SET_NODE: {
@@ -738,8 +732,6 @@ std::shared_ptr<ast::AstNode> SQLQueryAnalyzer::canonicalizeAndAnalyze(std::shar
       context->pushNewScope();
       auto scope = context->createResolverScope();
       transformed = analyzeTableProducer(transformed, context, scope);
-      auto endCanonicalizeAndAnalyze = std::chrono::high_resolution_clock::now();
-      this->totalTime = std::chrono::duration_cast<std::chrono::microseconds>(endCanonicalizeAndAnalyze - startCanonicalizeAndAnalyze).count() / 1000.0;
 
       return transformed;
    }

@@ -141,8 +141,6 @@ class SQLFrontend : public lingodb::execution::Frontend {
             funcOp.getBody().push_back(queryBlock);
             module = moduleOp;
             parallismAllowed = analyzer.parallelismAllowed;
-            timing.emplace("frontEnd", analyzer.getTiming() + translator.getTiming());
-
             } else {
                error.emit() << "Error during parsing";
             }
