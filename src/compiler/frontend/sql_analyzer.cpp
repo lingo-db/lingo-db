@@ -940,6 +940,14 @@ std::shared_ptr<ast::BoundInsertNode> SQLQueryAnalyzer::analyzeInsertNode(std::s
    if (!std::static_pointer_cast<ast::BoundValuesQueryNode>(boundTableProducer)->modifiers.empty()) {
       error("Modifiers for insert node not yet supported", boundTableProducer->loc);
    }
+   for (auto c : context->currentScope->targetInfo.targetColumns) {
+      if (c->resultType.type.getTypeId() == catalog::LogicalTypeId::CHAR) {
+         auto charInfo = c->resultType.type.getInfo<catalog::CharTypeInfo>();
+         if (charInfo->getLength() > 8) {
+            c->resultType.type = catalog::Type::stringType();
+         }
+      }
+   }
 
    auto exprListTableRef = std::static_pointer_cast<ast::BoundValuesQueryNode>(boundTableProducer)->expressionListRef;
    auto rel = maybeRel.value();
@@ -1876,11 +1884,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
                break;
             case ast::ConstantType::STRING: {
                auto strValue = std::static_pointer_cast<ast::StringValue>(constExpr->value)->sVal;
-               if (strValue.size() < 8) {
-                  type = catalog::Type::charType(strValue.length());
-               } else {
-                  type = catalog::Type::stringType();
-               }
+               type = catalog::Type::charType(strValue.length());
                break;
             }
 
