@@ -20,6 +20,7 @@
 #include "mlir/Pass/PassManager.h"
 
 #include "json.h"
+#include "lingodb/compiler/frontend/frontend_error.h"
 
 #include <chrono>
 #include <sstream>
@@ -273,8 +274,10 @@ class DefaultQueryExecuter : public QueryExecuter {
 
       auto serializationState = std::make_shared<SnapshotState>();
       serializationState->serialize = true;
-
-      handleError("FRONTEND", frontend.getError());
+      if (frontend.getError()) {
+         std::cerr << "Frontend error: " << frontend.getError().getMessage() << std::endl;
+         return;
+      }
       mlir::ModuleOp& moduleOp = *queryExecutionConfig->frontend->getModule();
       snapshotImportantStep("canonical", moduleOp, serializationState);
       if (queryExecutionConfig->queryOptimizer) {
