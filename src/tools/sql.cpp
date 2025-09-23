@@ -120,7 +120,7 @@ int main(int argc, char** argv) {
 
    linenoiseSetMultiLine(true); // enables multi-line editing
    std::stringstream query;
-
+   size_t count = 0;
    while (true) {
       const char* promptStr = prompt.getValue() ? (query.str().empty() ? "sql> " : "   -> ") : "";
       char* input = linenoise(promptStr);
@@ -143,8 +143,9 @@ int main(int argc, char** argv) {
       // Trim trailing whitespace
       std::string trimmed = line;
       trimmed.erase(trimmed.find_last_not_of(" \t\r\n") + 1);
+      count+= std::ranges::count(trimmed.begin(), trimmed.end(), '$');
 
-      if (!trimmed.empty() && trimmed.back() == ';') {
+      if (!trimmed.empty() && trimmed.back() == ';' && count%4 == 0) {
          // Done reading the full statement
          linenoiseHistoryAdd(query.str().c_str()); // optional: add to history
 
