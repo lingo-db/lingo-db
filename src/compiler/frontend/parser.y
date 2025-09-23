@@ -311,7 +311,7 @@
 
 %type<std::shared_ptr<lingodb::ast::CreateNode>> CreateStmt
 %type<bool> OptTemp opt_varying
-%type<lingodb::ast::LogicalTypeWithMods> Numeric SimpleType Type CharacterWithoutLength character Bit ConstCharacter Character CharacterWithLength ConstDatetime Typename ConstTypename Numeric_with_opt_lenghth
+%type<lingodb::ast::LogicalTypeWithMods> Numeric SimpleType Type CharacterWithoutLength character Bit ConstCharacter Character CharacterWithLength ConstDatetime Typename ConstTypename Numeric_with_opt_lenghth ConstInterval
 %type<std::shared_ptr<lingodb::ast::TableElement>> TableElement columnElement TableConstraint
 %type<std::vector<std::shared_ptr<lingodb::ast::TableElement>>> TableElementList OptTableElementList
 %type<std::shared_ptr<lingodb::ast::Constraint>> ColConstraint ColConstraintElem ConstraintElem
@@ -3019,7 +3019,10 @@ SimpleType:
     {
         $$ = $ConstDatetime;
     }
-    //TODO | ConstInterval
+    | ConstInterval
+    {
+        $$ = $1;
+    }
     //TODO | JsonType
     ;
 opt_type_modifiers: 
@@ -3111,9 +3114,12 @@ Numeric:
         auto type = lingodb::ast::LogicalTypeWithMods(lingodb::ast::SQLAbstractLogicalType::FLOAT);
         $$ = type;
     }
-    | DOUBLE_P PRECISION
+    | DOUBLE_P
     {
-        $$ = lingodb::ast::LogicalTypeWithMods(lingodb::ast::SQLAbstractLogicalType::FLOAT);
+        auto type = lingodb::ast::LogicalTypeWithMods(lingodb::ast::SQLAbstractLogicalType::FLOAT);
+        auto value = std::make_shared<lingodb::ast::UnsignedIntValue>(4);
+        type.typeModifiers.emplace_back(value);
+        $$ = type;
     }
     | DECIMAL_P opt_type_modifiers
     {
@@ -3378,6 +3384,10 @@ Bconst:
 
 ConstInterval:
     | INTERVAL
+    {
+        auto t = lingodb::ast::LogicalTypeWithMods(lingodb::ast::SQLAbstractLogicalType::INTERVAL);
+        $$ = t;
+    }
     ;
 
 //TODO missing

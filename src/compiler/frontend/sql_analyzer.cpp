@@ -2955,6 +2955,9 @@ NullableType SQLTypeUtils::typemodsToCatalogType(ast::SQLAbstractLogicalType log
          }
          return catalog::Type::f64();
       }
+      case ast::SQLAbstractLogicalType::INTERVAL: {
+         return catalog::Type::intervalDaytime();
+      }
       default: throw std::runtime_error("Typemod not implemented");
    }
 }
