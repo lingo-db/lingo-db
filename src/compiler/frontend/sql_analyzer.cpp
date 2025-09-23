@@ -589,7 +589,7 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
          conjunctionExpr->children = std::move(combinedChildren);
 
          if (extend) {
-            error("Conjunction cannot be extended", conjunctionExpr->loc);
+           return extendExpr(conjunctionExpr);
          }
          return conjunctionExpr;
       }
@@ -1298,6 +1298,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                   boundWindowExpressions.emplace_back(window);
                   break;
                }
+               case ast::ExpressionClass::BOUND_CONJUNCTION:
                case ast::ExpressionClass::BOUND_BETWEEN:
                case ast::ExpressionClass::BOUND_COMPARISON:
                case ast::ExpressionClass::BOUND_CONSTANT:
