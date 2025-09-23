@@ -1,0 +1,125 @@
+statement ok
+CREATE TABLE ints(i int not null);
+
+statement ok
+INSERT INTO ints VALUES (1), (2), (3), (4);
+
+statement ok
+CREATE TABLE dups(i int not null);
+
+statement ok
+INSERT INTO dups VALUES (1), (1), (2), (2), (3), (3);
+
+statement ok
+create or replace function addOne(x int)
+returns int
+language c
+as
+$$
+return x+1;
+$$
+
+statement ok
+create or replace function addFloats(x float4, y float4)
+returns float4
+language c
+as
+$$
+return x+y;
+$$
+
+statement ok
+create or replace function addDoubles(x float8, y float8)
+returns float8
+language c
+as
+$$
+return x+y;
+$$
+
+statement ok
+create or replace function equal(x int, y bigint)
+returns bool
+language c
+as
+$$
+return x==y;
+$$
+
+statement ok
+create or replace function isEven(x bigint)
+returns bool
+language c
+as
+$$
+size_t mod = x%2;
+if(mod == 0)
+    return true;
+return false;
+$$
+
+query 1
+select addOne(2);
+----
+3
+
+query 2
+select addOne(-2);
+----
+-1
+
+query 3
+select * from ints i ,dups d where equal(i.i,d.i);
+----
+1
+1
+1
+1
+2
+2
+2
+2
+3
+3
+3
+3
+
+query 4
+select * from ints i where  isEven(i.i);
+----
+2
+4
+
+query 4
+select * from ints i where  not isEven(i.i);
+----
+1
+3
+
+query 5
+select addFloats(1.2,1.33)
+----
+2.530
+
+
+query 6
+select addFloats(i,1.577) from ints
+----
+2.577
+3.577
+4.577
+5.577
+
+query 7
+select addDoubles(1.2,1.33)
+----
+2.530
+
+
+query 8
+select addDoubles(i,1.577) from ints
+----
+2.577
+3.577
+4.577
+5.577
