@@ -242,7 +242,11 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
       if (const auto utilSizeOfOp = mlir::dyn_cast_or_null<dialect::util::SizeOfOp>(ref.value.getDefiningOp())) {
          assert(part == 0);
          const mlir::TypeAttr type_attr = mlir::cast<mlir::TypeAttr>(utilSizeOfOp->getAttr("type"));
-         const uint64_t tuple_size = TupleHelper::sizeAndPadding(mlir::cast<mlir::TupleType>(type_attr.getValue())).first;
+         mlir::TupleType tupleType = mlir::dyn_cast_or_null<mlir::TupleType>(type_attr.getValue());
+         if (!tupleType) {
+            tupleType = mlir::TupleType::get(ref.value.getContext(), type_attr.getValue());
+         }
+         const uint64_t tuple_size = TupleHelper::sizeAndPadding(tupleType).first;
          return ValuePartRef(this, tuple_size, 8, Config::GP_BANK);
       }
       if (const auto constVarLenOp = mlir::dyn_cast_or_null<dialect::util::CreateConstVarLen>(
