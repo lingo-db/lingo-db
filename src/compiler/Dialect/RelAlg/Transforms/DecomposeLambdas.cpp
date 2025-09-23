@@ -108,32 +108,35 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
          }
       }
    }
+   void getConditionValsFromSelection(mlir::Value v, std::vector<mlir::Value>& values) {
+      if (auto andop = dyn_cast_or_null<db::AndOp>(v.getDefiningOp())) {
+         for (auto operand : andop.getVals()) {
+            getConditionValsFromSelection(operand, values);
+         }
+      } else {
+         values.push_back(v);
+      }
+   }
    void decomposeSelection(mlir::Value v, mlir::Value& tree) {
       auto currentSel = mlir::dyn_cast_or_null<relalg::SelectionOp>(v.getDefiningOp()->getParentOp());
       using namespace mlir;
-      if (auto andop = dyn_cast_or_null<db::AndOp>(v.getDefiningOp())) {
-         for (auto operand : andop.getVals()) {
-            decomposeSelection(operand, tree);
+      if (deriveExtraConditions) {
+         if (auto orOp = dyn_cast_or_null<db::OrOp>(v.getDefiningOp())) {
+            //todo: fix potential dominator problem...
+            deriveRestrictionsFromOr(orOp, tree);
          }
-      } else {
-         if (deriveExtraConditions) {
-            if (auto orOp = dyn_cast_or_null<db::OrOp>(v.getDefiningOp())) {
-               //todo: fix potential dominator problem...
-               deriveRestrictionsFromOr(orOp, tree);
-            }
-         }
-         OpBuilder builder(currentSel);
-         mlir::IRMapping mapping;
-         auto newsel = builder.create<relalg::SelectionOp>(currentSel->getLoc(), tuples::TupleStreamType::get(builder.getContext()), tree);
-         tree = newsel;
-         newsel.initPredicate();
-         mapping.map(currentSel.getPredicateArgument(), newsel.getPredicateArgument());
-         builder.setInsertionPointToStart(&newsel.getPredicate().front());
-         relalg::detail::inlineOpIntoBlock(v.getDefiningOp(), v.getDefiningOp()->getParentOp(), &newsel.getPredicateBlock(), mapping);
-         builder.create<tuples::ReturnOp>(currentSel->getLoc(), mapping.lookup(v));
-         auto* terminator = newsel.getLambdaBlock().getTerminator();
-         terminator->erase();
       }
+      OpBuilder builder(currentSel);
+      mlir::IRMapping mapping;
+      auto newsel = builder.create<relalg::SelectionOp>(currentSel->getLoc(), tuples::TupleStreamType::get(builder.getContext()), tree);
+      tree = newsel;
+      newsel.initPredicate();
+      mapping.map(currentSel.getPredicateArgument(), newsel.getPredicateArgument());
+      builder.setInsertionPointToStart(&newsel.getPredicate().front());
+      relalg::detail::inlineOpIntoBlock(v.getDefiningOp(), v.getDefiningOp()->getParentOp(), &newsel.getPredicateBlock(), mapping);
+      builder.create<tuples::ReturnOp>(currentSel->getLoc(), mapping.lookup(v));
+      auto* terminator = newsel.getLambdaBlock().getTerminator();
+      terminator->erase();
    }
    static llvm::DenseMap<mlir::Value, relalg::ColumnSet> analyze(mlir::Block* block, relalg::ColumnSet availableLeft, relalg::ColumnSet availableRight) {
       llvm::DenseMap<mlir::Value, relalg::ColumnSet> required;
@@ -227,13 +230,27 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
          auto* terminator = op.getRegion().front().getTerminator();
          mlir::Value val = op.getRel();
          if (terminator->getNumOperands() > 0) {
-            decomposeSelection(terminator->getOperand(0), val);
+            std::vector<mlir::Value> conditionValues;
+            getConditionValsFromSelection(terminator->getOperand(0), conditionValues);
+            if (conditionValues.size() > 1) {
+               // decomposition is only needed for multiple conditions
+               for (auto condition : conditionValues) {
+                  decomposeSelection(condition, val);
+               }
+               op.replaceAllUsesWith(val);
+               toErase.push_back(op.getOperation());
+            }
+         } else {
+            op.replaceAllUsesWith(val);
+            toErase.push_back(op.getOperation());
          }
-         op.replaceAllUsesWith(val);
-         toErase.push_back(op.getOperation());
       });
       getOperation().walk([&](relalg::MapOp op) {
          mlir::Value val = op.getRel();
+         if (op.getComputedCols().size() == 1) {
+            // single column map does not need decomposition
+            return;
+         }
          decomposeMap(op, val);
          op.replaceAllUsesWith(val);
          toErase.push_back(op.getOperation());
