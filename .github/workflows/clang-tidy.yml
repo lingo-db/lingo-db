@@ -4,7 +4,7 @@ on: [pull_request]
 jobs:
   lint:
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-dev:621f9dc1279092fce957b9852a9f7f421a7ebfe1
+    container: ghcr.io/lingo-db/lingodb-dev:0eeb4dcaa2d7d1309171d2d4d366a17e5fc76c59
     steps:
       - name: Checkout
         uses: actions/checkout@v2

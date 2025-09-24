@@ -20,6 +20,7 @@
 #include "mlir/Pass/PassManager.h"
 
 #include "json.h"
+#include "lingodb/compiler/frontend/frontend_error.h"
 
 #include <chrono>
 #include <sstream>
@@ -269,10 +270,14 @@ class DefaultQueryExecuter : public QueryExecuter {
          std::cerr << "Must provide file or string!" << std::endl;
          exit(1);
       }
+      handleTiming(frontend.getTiming());
+
       auto serializationState = std::make_shared<SnapshotState>();
       serializationState->serialize = true;
-
-      handleError("FRONTEND", frontend.getError());
+      if (frontend.getError()) {
+         std::cerr << "Frontend error: " << frontend.getError().getMessage() << std::endl;
+         return;
+      }
       mlir::ModuleOp& moduleOp = *queryExecutionConfig->frontend->getModule();
       snapshotImportantStep("canonical", moduleOp, serializationState);
       if (queryExecutionConfig->queryOptimizer) {
@@ -327,6 +332,7 @@ class DefaultQueryExecuter : public QueryExecuter {
       }
    }
 };
+
 std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(execution::ExecutionMode runMode, bool sqlInput) {
    auto config = std::make_unique<QueryExecutionConfig>();
    if (sqlInput) {
@@ -374,6 +380,8 @@ std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(execution::Exec
    }
    return config;
 }
+
+
 std::unique_ptr<QueryExecuter> QueryExecuter::createDefaultExecuter(std::unique_ptr<QueryExecutionConfig> queryExecutionConfig, runtime::Session& session) {
    return std::make_unique<DefaultQueryExecuter>(std::move(queryExecutionConfig), session.createExecutionContext());
 }

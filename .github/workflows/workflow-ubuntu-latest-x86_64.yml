@@ -16,7 +16,7 @@ jobs:
       matrix:
         build_type: [ debug, asan, release ]
     runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:621f9dc1279092fce957b9852a9f7f421a7ebfe1
+    container: ghcr.io/lingo-db/lingodb-dev:0eeb4dcaa2d7d1309171d2d4d366a17e5fc76c59
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -50,7 +50,7 @@ jobs:
       matrix:
         build_type: [ debug, asan ]
     runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:621f9dc1279092fce957b9852a9f7f421a7ebfe1
+    container: ghcr.io/lingo-db/lingodb-dev:0eeb4dcaa2d7d1309171d2d4d366a17e5fc76c59
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
@@ -100,7 +100,7 @@ jobs:
         build_type: [ release, asan ]
     needs: build
     runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:621f9dc1279092fce957b9852a9f7f421a7ebfe1
+    container: ghcr.io/lingo-db/lingodb-dev:0eeb4dcaa2d7d1309171d2d4d366a17e5fc76c59
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
@@ -132,7 +132,7 @@ jobs:
         build_type: [ release, asan ]
     needs: build
     runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:621f9dc1279092fce957b9852a9f7f421a7ebfe1
+    container: ghcr.io/lingo-db/lingodb-dev:0eeb4dcaa2d7d1309171d2d4d366a17e5fc76c59
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
@@ -207,7 +207,7 @@ jobs:
 
   build_lingodb_python:
     runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-py-dev:8d290609bbccabd5c07a7c3c06ca44da8ca45c92
+    container: ghcr.io/lingo-db/lingodb-py-dev:0eeb4dcaa2d7d1309171d2d4d366a17e5fc76c59
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -245,7 +245,7 @@ jobs:
       matrix:
         build_type: [ debug]
     runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:621f9dc1279092fce957b9852a9f7f421a7ebfe1
+    container: ghcr.io/lingo-db/lingodb-dev:0eeb4dcaa2d7d1309171d2d4d366a17e5fc76c59
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
