@@ -49,10 +49,7 @@ class BaseExpression : public AstNode {
    //! The alias of the expression,
    std::string alias;
 };
-//Extracted from PostgresSQL
-//===--------------------------------------------------------------------===//
-// Predicate Expression Operation Types
-//===--------------------------------------------------------------------===//
+//Follows a similar logic to that of DuckDB
 enum class ExpressionType : uint8_t {
    INVALID = 0,
 
@@ -207,7 +204,6 @@ enum class ExpressionType : uint8_t {
    BOUND_SET = 243,
 
 };
-
 enum class ExpressionClass : uint8_t {
    INVALID = 0,
    //===--------------------------------------------------------------------===//

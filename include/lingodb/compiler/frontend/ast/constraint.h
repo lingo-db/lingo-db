@@ -19,7 +19,7 @@ class Constraint {
    ConstraintType type; // The type of the constraint
    location loc;
 };
-
+//Follows same structure as DukcckDB
 class UniqueConstraint : public Constraint {
    public:
    explicit UniqueConstraint(bool isPrimaryKey) : Constraint(ConstraintType::UNIQUE), columnNames({}), isPrimaryKey(isPrimaryKey) {}
