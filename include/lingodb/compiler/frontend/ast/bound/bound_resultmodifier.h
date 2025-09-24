@@ -21,6 +21,7 @@ class BoundResultModifier : public TableProducer {
    virtual std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen);
 };
 /**
+ * Follows a similar logic to that of DuckDB
  * GROUP BY <element>
  */
 class BoundOrderByElement {

@@ -6,6 +6,7 @@
 #include <memory>
 #include <vector>
 namespace lingodb::ast {
+//Follows a similar logic to that of DuckDB
 enum class CatalogType : uint8_t {
    INVALID = 0,
    TABLE_ENTRY = 1,
