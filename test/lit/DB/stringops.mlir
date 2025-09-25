@@ -229,7 +229,41 @@ module {
         db.runtime_call "DumpValue"(%r19) : (i1) -> ()
         //CHECK: bool(true)
 
+        %like16 = db.constant("%Jos"): !db.string
+        %c20 = db.constant("Jose!!") : !db.string
+        %r20 = db.runtime_call "Like"(%c20, %like16) : (!db.string, !db.string) -> (i1)
+        db.runtime_call "DumpValue"(%r20) : (i1) -> ()
+        //CHECK: bool(false)
 
+        %like17 = db.constant("a_b%abc%%_aáé"): !db.string
+        %c21 = db.constant("aabxxabcxaáéxaáé") : !db.string
+        %r21 = db.runtime_call "Like"(%c21, %like17) : (!db.string, !db.string) -> (i1)
+        db.runtime_call "DumpValue"(%r21) : (i1) -> ()
+        //CHECK: bool(true)
+
+        %like18 = db.constant("a_b%%%_aáé"): !db.string
+        %c22 = db.constant("aabxxxxaáéáé") : !db.string
+        %r22 = db.runtime_call "Like"(%c22, %like18) : (!db.string, !db.string) -> (i1)
+        db.runtime_call "DumpValue"(%r22) : (i1) -> ()
+        //CHECK: bool(false)
+
+        %like19 = db.constant("a_b%abc%bc"): !db.string
+        %c23 = db.constant("aababc") : !db.string
+        %r23 = db.runtime_call "Like"(%c23, %like19) : (!db.string, !db.string) -> (i1)
+        db.runtime_call "DumpValue"(%r23) : (i1) -> ()
+        //CHECK: bool(false)
+
+        %like20 = db.constant("a_b%abc%_bc"): !db.string
+        %c24 = db.constant("aababcabcbbc") : !db.string
+        %r24 = db.runtime_call "Like"(%c24, %like20) : (!db.string, !db.string) -> (i1)
+        db.runtime_call "DumpValue"(%r24) : (i1) -> ()
+        //CHECK: bool(true)
+
+        %like21 = db.constant("a_b%__%abc%"): !db.string
+        %c25 = db.constant("abbabcaa") : !db.string
+        %r25 = db.runtime_call "Like"(%c25, %like21) : (!db.string, !db.string) -> (i1)
+        db.runtime_call "DumpValue"(%r25) : (i1) -> ()
+        //CHECK: bool(false)
         return
     }
 }
