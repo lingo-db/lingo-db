@@ -57,7 +57,7 @@ mlir::Value dateSubImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArgum
       return DateRuntime::subtractMonths(rewriter, loc)(loweredArguments)[0];
    }
 }
-mlir::Value matchPart(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value lastMatchEnd, std::string pattern, mlir::Value str, mlir::Value end) {
+mlir::Value matchPart(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value lastMatchEnd, std::string pattern, mlir::Value str, mlir::Value end, bool flexibleStart) {
    if (pattern.empty()) {
       if (!lastMatchEnd) {
          lastMatchEnd = builder.create<mlir::arith::ConstantIndexOp>(loc, 0);
@@ -65,17 +65,23 @@ mlir::Value matchPart(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value 
       return lastMatchEnd;
    }
    mlir::Value needleValue = builder.create<util::CreateConstVarLen>(loc, util::VarLen32Type::get(builder.getContext()), pattern);
+   mlir::Value patternLen = builder.create<mlir::arith::ConstantIndexOp>(loc, pattern.size());
    if (lastMatchEnd) {
-      mlir::Value matchEnd = StringRuntime::findMatch(builder, loc)(mlir::ValueRange{str, needleValue, lastMatchEnd, end})[0];
+      mlir::Value matchEnd;
+      if (flexibleStart) {
+         // match first occurrence of pattern beginning at position lastMatchEnd
+         matchEnd = StringRuntime::findMatch(builder, loc)(mlir::ValueRange{str, needleValue, lastMatchEnd, end})[0];
+      } else {
+         // pattern must start at position lastMatchEnd
+         mlir::Value patternEnd = builder.create<mlir::arith::AddIOp>(loc, lastMatchEnd, patternLen);
+         matchEnd = StringRuntime::findMatch(builder, loc)(mlir::ValueRange{str, needleValue, lastMatchEnd, patternEnd})[0];
+      }
       return builder.create<mlir::arith::IndexCastOp>(loc, builder.getIndexType(), matchEnd);
    } else {
+      // match the start of the string
       mlir::Value startsWithPattern = StringRuntime::startsWith(builder, loc)(mlir::ValueRange{str, needleValue})[0];
-      mlir::Value patternLen = builder.create<mlir::arith::ConstantIndexOp>(loc, pattern.size());
       mlir::Value invalidPos = builder.create<mlir::arith::ConstantIndexOp>(loc, 0x8000000000000000);
-
-      mlir::Value matchEnd = builder.create<mlir::arith::SelectOp>(loc, startsWithPattern, patternLen, invalidPos);
-
-      return matchEnd;
+      return builder.create<mlir::arith::SelectOp>(loc, startsWithPattern, patternLen, invalidPos);
    }
 }
 mlir::Value constLikeImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, const mlir::TypeConverter* typeConverter, mlir::Location loc) {
@@ -88,24 +94,44 @@ mlir::Value constLikeImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArg
       std::string currentSubPattern;
       mlir::Value lastMatchEnd;
       mlir::Value end = rewriter.create<util::VarLenGetLen>(loc, rewriter.getIndexType(), str);
-      bool flexible = false;
+      bool flexibleStart = false; // start of the next sub pattern is flexible (sub pattern was preceded by '%')
+
+      // find beginning of suffix pattern (sub pattern after last '%' -> must exactly match the end of the string)
+      size_t suffixBegin = pattern.size();
+      size_t suffixLen = 0;
+      for (size_t p = 0; p < pattern.size(); ++p) {
+         ++suffixLen;
+         if (pattern[p] == '\\') {
+            ++p;
+         } else if (pattern[p] == '%') {
+            suffixBegin = p + 1;
+            suffixLen = 0;
+         }
+      }
       while (pos < pattern.size()) {
+         if (pos == suffixBegin) { //remaining sub patterns match the suffix of the string
+            mlir::Value remainingPatternLen = rewriter.create<mlir::arith::ConstantIndexOp>(loc, suffixLen);
+            mlir::Value suffixBeginPos = rewriter.create<mlir::arith::SubIOp>(loc, end, remainingPatternLen);
+            mlir::Value rightShiftSuffixBegin = rewriter.create<mlir::arith::CmpIOp>(loc, arith::CmpIPredicate::ule, lastMatchEnd, suffixBeginPos);
+            // move lastMatchEnd to position where suffix must start (only move position to the right to prevent overlapping with already matched part)
+            lastMatchEnd = rewriter.create<mlir::arith::SelectOp>(loc, rightShiftSuffixBegin, suffixBeginPos, lastMatchEnd);
+            flexibleStart = false;
+         }
          if (pattern[pos] == '\\') {
             currentSubPattern += pattern[pos + 1];
             pos += 2;
+         } else if (pattern[pos] == '%') {
+            lastMatchEnd = matchPart(rewriter, loc, lastMatchEnd, currentSubPattern, str, end, flexibleStart);
+            currentSubPattern = "";
+            flexibleStart = true;
+            pos += 1;
          } else if (pattern[pos] == '_') {
             //match current pattern
-            lastMatchEnd = matchPart(rewriter, loc, lastMatchEnd, currentSubPattern, str, end);
+            lastMatchEnd = matchPart(rewriter, loc, lastMatchEnd, currentSubPattern, str, end, flexibleStart);
 
             auto nextChar = StringRuntime::nextChar(rewriter, loc)(mlir::ValueRange{str, lastMatchEnd})[0];
             lastMatchEnd = rewriter.create<mlir::arith::IndexCastOp>(loc, rewriter.getIndexType(), nextChar);
 
-            currentSubPattern = "";
-            //lastMatchEnd+=1
-            pos += 1;
-         } else if (pattern[pos] == '%') {
-            flexible = true;
-            lastMatchEnd = matchPart(rewriter, loc, lastMatchEnd, currentSubPattern, str, end);
             currentSubPattern = "";
             pos += 1;
          } else {
@@ -113,21 +139,11 @@ mlir::Value constLikeImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArg
             pos += 1;
          }
       }
-      if (!currentSubPattern.empty()) {
-         mlir::Value needleValue = rewriter.create<util::CreateConstVarLen>(loc, util::VarLen32Type::get(rewriter.getContext()), currentSubPattern);
-         mlir::Value endsWith = StringRuntime::endsWith(rewriter, loc)({str, needleValue})[0];
-         if (lastMatchEnd) {
-            mlir::Value patternLength = rewriter.create<mlir::arith::ConstantIndexOp>(loc, currentSubPattern.size());
-            lastMatchEnd = rewriter.create<mlir::arith::AddIOp>(loc, lastMatchEnd, patternLength);
-            mlir::Value previousMatchesEnd = rewriter.create<mlir::arith::CmpIOp>(loc, flexible ? arith::CmpIPredicate::ule : arith::CmpIPredicate::eq, lastMatchEnd, end);
-            return rewriter.create<mlir::arith::AndIOp>(loc, previousMatchesEnd, endsWith);
-         } else {
-            return endsWith;
-         }
-         lastMatchEnd = matchPart(rewriter, loc, lastMatchEnd, currentSubPattern, str, end);
-      }
 
-      return rewriter.create<mlir::arith::CmpIOp>(loc, flexible ? arith::CmpIPredicate::ule : arith::CmpIPredicate::eq, lastMatchEnd, end);
+      if (!currentSubPattern.empty()) {
+         lastMatchEnd = matchPart(rewriter, loc, lastMatchEnd, currentSubPattern, str, end, flexibleStart);
+      }
+      return rewriter.create<mlir::arith::CmpIOp>(loc, flexibleStart ? arith::CmpIPredicate::ule : arith::CmpIPredicate::eq, lastMatchEnd, end);
    }
 
    return Value();
