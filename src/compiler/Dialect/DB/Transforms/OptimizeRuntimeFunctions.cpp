@@ -57,13 +57,13 @@ std::optional<std::string> getConstantString(mlir::Value v) {
    }
    return std::optional<std::string>();
 }
-struct DeterministicConstStringMatcher : public Matcher {
-   DeterministicConstStringMatcher() {}
+struct ConstantDeterministicPatternMatcher : public Matcher {
+   ConstantDeterministicPatternMatcher() {}
    bool matches(mlir::Value v) override {
       auto constStringOpt = getConstantString(v);
       return constStringOpt.has_value() && isDeterministicLikePattern(constStringOpt.value());
    }
-   virtual ~DeterministicConstStringMatcher() {}
+   virtual ~ConstantDeterministicPatternMatcher() {}
 };
 struct StringConstMatcher : public Matcher {
    std::string toMatch;
@@ -129,7 +129,7 @@ class OptimizeRuntimeFunctions : public mlir::PassWrapper<OptimizeRuntimeFunctio
          patterns.insert<ReplaceFnWithFn>(&getContext(), "DateDiff", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("hour"), std::make_shared<AnyMatcher>(), std::make_shared<AnyMatcher>()}, "DateDiffHour");
          patterns.insert<ReplaceFnWithFn>(&getContext(), "DateDiff", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("day"), std::make_shared<AnyMatcher>(), std::make_shared<AnyMatcher>()}, "DateDiffDay");
 
-         patterns.insert<ReplaceFnWithFn>(&getContext(), "Like", std::vector<std::shared_ptr<Matcher>>{std::make_shared<AnyMatcher>(), std::make_shared<DeterministicConstStringMatcher>()}, "ConstLike");
+         patterns.insert<ReplaceFnWithFn>(&getContext(), "Like", std::vector<std::shared_ptr<Matcher>>{std::make_shared<AnyMatcher>(), std::make_shared<ConstantDeterministicPatternMatcher>()}, "ConstLike");
          if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
             assert(false && "should not happen");
          }

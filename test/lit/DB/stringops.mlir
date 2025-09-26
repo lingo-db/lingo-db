@@ -264,6 +264,18 @@ module {
         %r25 = db.runtime_call "Like"(%c25, %like21) : (!db.string, !db.string) -> (i1)
         db.runtime_call "DumpValue"(%r25) : (i1) -> ()
         //CHECK: bool(false)
+
+        // Non deterministic patterns
+        %like22 = db.constant("_x%ab_cd_ab%_d_ef"): !db.string
+        %c26 = db.constant("xxababccdaabdeefddef") : !db.string
+        %r26 = db.runtime_call "Like"(%c26, %like22) : (!db.string, !db.string) -> (i1)
+        db.runtime_call "DumpValue"(%r26) : (i1) -> ()
+        //CHECK: bool(true)
+
+        %c27 = db.constant("yxabxcdxabdxef") : !db.string
+        %r27 = db.runtime_call "Like"(%c27, %like22) : (!db.string, !db.string) -> (i1)
+        db.runtime_call "DumpValue"(%r27) : (i1) -> ()
+        //CHECK: bool(false)
         return
     }
 }
