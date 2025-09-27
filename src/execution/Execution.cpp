@@ -275,7 +275,7 @@ class DefaultQueryExecuter : public QueryExecuter {
       auto serializationState = std::make_shared<SnapshotState>();
       serializationState->serialize = true;
       if (frontend.getError()) {
-         std::cerr << "Frontend error: " << frontend.getError().getMessage() << std::endl;
+         std::cerr << frontend.getError().getMessage() << std::endl;
          return;
       }
       mlir::ModuleOp& moduleOp = *queryExecutionConfig->frontend->getModule();

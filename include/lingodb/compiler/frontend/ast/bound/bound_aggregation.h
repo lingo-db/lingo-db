@@ -14,11 +14,5 @@ class BoundAggregationNode : public AstNode {
    std::string mapName;
 
    std::vector<std::shared_ptr<BoundExpression>> evalBeforeAggr;
-
-
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override {
-      return "";
-   };
 };
 }

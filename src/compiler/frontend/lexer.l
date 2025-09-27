@@ -337,13 +337,13 @@ YEAR        { MAKE_KEYWORD(YEAR_P); }
 
 
 void
-driver::scan_begin ()
+driver::scan_begin (bool isFile)
 {
   yy_flex_debug = trace_scanning;
   if (file.empty () || file == "-")
     yyin = stdin;
-  if(file.starts_with(":")) {
-     const char* sql = file.c_str() + 1; // Skip the ":" prefix
+  if(!isFile) {
+     const char* sql = file.c_str();
      YY_BUFFER_STATE buffer = yy_scan_string(sql);
      yy_switch_to_buffer(buffer);
   }

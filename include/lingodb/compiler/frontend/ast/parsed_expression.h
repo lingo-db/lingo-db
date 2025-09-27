@@ -26,7 +26,7 @@ enum SQLAbstractLogicalType : uint8_t {
    DECIMAL = 11,
    TIMESTAMP = 12,
    FLOAT = 13,
-   //TODO other
+
 };
 class LogicalTypeWithMods {
    public:
@@ -198,8 +198,6 @@ enum class ExpressionType : uint8_t {
    POSITIONAL_REFERENCE = 232,
    BOUND_LAMBDA_REF = 233,
    BOUND_EXPANDED = 234,
-   TARGETS = 240,
-   BOUND_TARGETS = 241,
    SET = 242,
    BOUND_SET = 243,
 
@@ -255,8 +253,6 @@ enum class ExpressionClass : uint8_t {
    //===--------------------------------------------------------------------===//
    BOUND_EXPRESSION = 50,
    BOUND_EXPANDED = 51,
-   TARGETS = 52,
-   BOUND_TARGETS = 53,
    SET = 54,
    BOUND_SET = 55,
 
@@ -266,9 +262,10 @@ class ParsedExpression : public BaseExpression {
    public:
    ParsedExpression(ExpressionType type, ExpressionClass expression_class) : BaseExpression(type, expression_class) {
    }
-
-   virtual std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) = 0;
-
+   /**
+   * Computes a hash value for this expression.
+   * Used to identify identical expressions across SELECT, ORDER BY, and GROUP BY clauses.
+   */
    virtual size_t hash();
    virtual bool operator==(ParsedExpression& other);
 };
@@ -294,7 +291,6 @@ class ColumnRefExpression : public ParsedExpression {
    //! Specify both the column and table name
    ColumnRefExpression(std::string columnName, std::string tableName);
    //! Specify both the column and table alias
-   //TODO ColumnRefExpression(std::string column_name, const BindingAlias &alias);
    //! Only specify the column name, the table name will be derived later
    explicit ColumnRefExpression(std::string columnName);
    //! Specify a set of names
@@ -307,8 +303,6 @@ class ColumnRefExpression : public ParsedExpression {
 
    size_t hash() override;
    bool operator==(ParsedExpression& other) override;
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 
 //! ComparisonExpression represents a boolean comparison (e.g. =, >=, <>). Always returns a boolean
@@ -317,15 +311,12 @@ class ComparisonExpression : public ParsedExpression {
    public:
    static constexpr const ExpressionClass TYPE = ExpressionClass::COMPARISON;
 
-   explicit ComparisonExpression(ExpressionType type);
    ComparisonExpression(ExpressionType type, std::shared_ptr<ParsedExpression> left, std::shared_ptr<ParsedExpression> right);
    ComparisonExpression(ExpressionType type, std::shared_ptr<ParsedExpression> left, std::vector<std::shared_ptr<ParsedExpression>> rightChildren);
 
    std::shared_ptr<ParsedExpression> left;
    ///Multiple right children, e.g. for IN expressions IN (1, 2, 3)
    std::vector<std::shared_ptr<ParsedExpression>> rightChildren;
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 
    private:
    std::string typeToAscii(ExpressionType type) const;
@@ -336,19 +327,13 @@ class ComparisonExpression : public ParsedExpression {
 class ConjunctionExpression : public ParsedExpression {
    public:
    static constexpr const ExpressionClass TYPE = ExpressionClass::CONJUNCTION;
-   explicit ConjunctionExpression(ExpressionType type);
    ConjunctionExpression(ExpressionType type, std::shared_ptr<lingodb::ast::ParsedExpression> left, std::shared_ptr<lingodb::ast::ParsedExpression> right);
    ConjunctionExpression(ExpressionType type, std::vector<std::shared_ptr<ParsedExpression>> children);
 
    std::vector<std::shared_ptr<ParsedExpression>> children;
 
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
-
    size_t hash() override;
    bool operator==(ParsedExpression& other) override;
-
-   private:
-   std::string typeToAscii(ExpressionType type) const;
 };
 
 class ConstantExpression : public ParsedExpression {
@@ -358,8 +343,6 @@ class ConstantExpression : public ParsedExpression {
 
    std::shared_ptr<Value> value;
 
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
-
    size_t hash() override;
    bool operator==(ParsedExpression& other) override;
 };
@@ -367,7 +350,6 @@ class ConstantExpression : public ParsedExpression {
 class FunctionExpression : public ParsedExpression {
    public:
    static constexpr ExpressionClass TYPE = ExpressionClass::FUNCTION;
-   //TODO Finish constructor
    FunctionExpression(std::string catalog, std::string schema, std::string functionName, bool isOperator, bool distinct, bool exportState);
 
    //! Catalog of the function
@@ -390,8 +372,6 @@ class FunctionExpression : public ParsedExpression {
    bool exportState;
 
    bool star = false;
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 
    size_t hash() override;
    bool operator==(ParsedExpression& other) override;
@@ -416,30 +396,10 @@ class StarExpression : public ParsedExpression {
    //! Whether or not this is a COLUMNS expression
    bool columnsExpr = false;
 
-
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
-
    size_t hash() override;
    bool operator==(ParsedExpression& other) override;
 };
 
-//List of targets
-//Used for the select_list
-//Select ...,...,...
-//TODO check TargetsExpression should be a ParsedExpression
-class TargetsExpression : public ParsedExpression {
-   public:
-   static constexpr ExpressionClass TYPE = ExpressionClass::TARGETS;
-   TargetsExpression();
-
-   std::vector<std::shared_ptr<ParsedExpression>> targets{};
-   bool distinct = false;
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
-   size_t hash() override;
-   bool operator==(ParsedExpression& other) override;
-};
 
 class OperatorExpression : public ParsedExpression {
    public:
@@ -449,7 +409,6 @@ class OperatorExpression : public ParsedExpression {
    OperatorExpression(std::string opString, std::shared_ptr<ParsedExpression> left, std::shared_ptr<ParsedExpression> right);
    std::vector<std::shared_ptr<ParsedExpression>> children;
 
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
    size_t hash() override;
    bool operator==(ParsedExpression& other) override;
 
@@ -465,7 +424,6 @@ class CastExpression : public ParsedExpression {
    std::optional<SQLAbstractLogicalType> optInterval;
    std::shared_ptr<ParsedExpression> child;
 
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
    size_t hash() override;
    bool operator==(ParsedExpression& other) override;
 };
@@ -477,7 +435,7 @@ enum class WindowMode : uint8_t {
    GROUPS = 3
 };
 
-enum class WindowBoundaryType : uint8_t {
+enum class WindowFrameType : uint8_t {
    INVALID = 0,
    UNBOUNDED_PRECEDING = 1,
    UNBOUNDED_FOLLOWING = 2,
@@ -486,13 +444,13 @@ enum class WindowBoundaryType : uint8_t {
    EXPR_FOLLOWING = 5
 };
 
-class WindowBoundary {
+class WindowFrame {
    public:
-   explicit WindowBoundary(WindowBoundaryType start);
-   WindowBoundary(WindowBoundaryType start, std::shared_ptr<ParsedExpression> startExpr);
+   explicit WindowFrame(WindowFrameType start);
+   WindowFrame(WindowFrameType start, std::shared_ptr<ParsedExpression> startExpr);
    WindowMode windowMode = WindowMode::INVALID;
-   WindowBoundaryType start = WindowBoundaryType::INVALID;
-   WindowBoundaryType end = WindowBoundaryType::INVALID;
+   WindowFrameType start = WindowFrameType::INVALID;
+   WindowFrameType end = WindowFrameType::INVALID;
 
    std::shared_ptr<ParsedExpression> startExpr;
    std::shared_ptr<ParsedExpression> endExpr;
@@ -519,9 +477,7 @@ class WindowExpression : public ParsedExpression {
    bool distinct = false;
 
    /// The window boundaries
-   std::shared_ptr<WindowBoundary> windowBoundary;
-
-   //TODO window exclude clause
+   std::shared_ptr<WindowFrame> windowFrame;
 
    std::shared_ptr<ParsedExpression> startExpr;
    std::shared_ptr<ParsedExpression> endExpr;
@@ -535,10 +491,7 @@ class WindowExpression : public ParsedExpression {
    /// These are distinct from the frame ordering clauses e.g., the "x" in
    /// FIRST_VALUE(a ORDER BY x) OVER (PARTITION BY p ORDER BY s)
    std::shared_ptr<OrderByModifier> argOrders;
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
-   size_t hash() override;
-   bool operator==(ParsedExpression& other) override;
+   // Custom hash and equality operators are not needed since WindowExpression cannot appear in GROUP BY clauses
 };
 
 class BetweenExpression : public ParsedExpression {
@@ -552,7 +505,6 @@ class BetweenExpression : public ParsedExpression {
    std::shared_ptr<ParsedExpression> upper;
    bool asymmetric = false; // If true, the lower and upper bounds are not symmetric (e.g., BETWEEN x AND y vs. BETWEEN y AND x)
 
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
    size_t hash() override;
    bool operator==(ParsedExpression& other) override;
 };
@@ -580,11 +532,10 @@ class SubqueryExpression : public ParsedExpression {
 
    /// For EXISTS/NOT EXISTS/ANY/NOT ANY, the expression to test against
    std::shared_ptr<ParsedExpression> testExpr;
-   //TODO find better solution
+
    /// For ANY/NOT ANY, the operator used (e.g., =, !=)
    std::optional<ExpressionType> comparisonType;
 
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
    size_t hash() override;
    bool operator==(ParsedExpression& other) override;
 };
@@ -604,7 +555,6 @@ class CaseExpression : public ParsedExpression {
    std::optional<std::shared_ptr<ParsedExpression>> caseExpr;
    std::shared_ptr<ParsedExpression> elseExpr;
 
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
    size_t hash() override;
    bool operator==(ParsedExpression& other) override;
 };
@@ -615,13 +565,10 @@ class CaseExpression : public ParsedExpression {
 class SetColumnExpression : public ParsedExpression {
    public:
    static constexpr const ExpressionClass TYPE = ExpressionClass::SET;
-   SetColumnExpression(std::vector<std::pair<std::shared_ptr<ColumnRefExpression>, std::shared_ptr<ParsedExpression>>> sets);
+   SetColumnExpression(std::vector<std::pair<std::shared_ptr<ColumnRefExpression>, std::shared_ptr<ParsedExpression>>> sets) : ParsedExpression(ExpressionType::SET, TYPE) , sets(std::move(sets)) {}
 
    std::vector<std::pair<std::shared_ptr<ColumnRefExpression>,std::shared_ptr<ParsedExpression> >> sets;
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
-   size_t hash() override;
-   bool operator==(ParsedExpression& other) override;
+   // Custom hash and equality operators are not needed since SetColumnExpression cannot appear in GROUP BY clauses
 };
 
 } // namespace lingodb::ast

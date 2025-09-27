@@ -10,7 +10,10 @@ namespace lingodb::ast {
 class BoundExpression;
 } // namespace lingodb::ast
 namespace lingodb::analyzer {
-
+/**
+ * The SQLScope stores the TargetInfo for the corresponding scope.
+ * Each Subquery creates a new SQL Scope
+ */
 class SQLScope {
    public:
    //Stores the columns that should be produced at the end

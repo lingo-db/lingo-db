@@ -11,7 +11,6 @@ class GroupByNode : public AstNode {
    public:
    GroupByNode() : AstNode(NodeType::GROUP_BY) {};
    //! The total set of all group expressions
-   //TODO
    std::vector<std::shared_ptr<ParsedExpression>> groupByExpressions;
 
    std::vector<std::set<size_t>> groupingSet;
@@ -19,6 +18,6 @@ class GroupByNode : public AstNode {
       std::unordered_set<std::shared_ptr<FunctionExpression>, ParsedExprPtrHash, ParsedExprPtrEqual> groupingFunctions;
 
    bool rollup = false;
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
+
 } // namespace lingodb::ast

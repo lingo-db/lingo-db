@@ -16,10 +16,6 @@ add_library(MLIRSQLFrontend
         sql_analyzer.cpp
         sql_context.cpp
 
-        ast/bound/bound_tableref.cpp
-        ast/bound/bound_expression.cpp
-        ast/bound/bound_resultmodifier.cpp
-        ast/bound/bound_query_node.cpp
         #translator
         sql_mlir_translator.cpp
 
@@ -28,15 +24,6 @@ add_library(MLIRSQLFrontend
         driver.cpp
 
         ast/parsed_expression.cpp
-        ast/tableref.cpp
-        ast/group_by_node.cpp
-        ast/pipe_operator.cpp
-        ast/aggregation_node.cpp
-        ast/result_modifier.cpp
-        ast/extend_node.cpp
-        ast/insert_node.cpp
-        ast/query_node.cpp
-        ast/set_node.cpp
         #common
         frontend_error.cpp
         frontend_type.cpp

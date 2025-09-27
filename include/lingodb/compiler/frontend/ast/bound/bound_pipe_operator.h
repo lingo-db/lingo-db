@@ -18,9 +18,5 @@ class BoundSetPipeOperator : public PipeOperator {
    std::shared_ptr<analyzer::SQLScope> leftScope;
 
    std::shared_ptr<analyzer::SQLScope> rightScope;
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override {
-      return "";
-   };
 };
 } // namespace lingodb::ast

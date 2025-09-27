@@ -11,9 +11,5 @@ class BoundExtendNode : public AstNode {
    std::string mapName;
    std::vector<std::shared_ptr<BoundExpression>> extensions;
    std::vector<std::shared_ptr<BoundWindowExpression>> windowExpressions;
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override {
-      return "";
-   };
 };
 }

@@ -104,12 +104,12 @@ class MLIRFrontend : public lingodb::execution::Frontend {
 class SQLFrontend : public lingodb::execution::Frontend {
    mlir::MLIRContext context;
    mlir::OwningOpRef<mlir::ModuleOp> module;
-   bool parallismAllowed;
+   bool isFile = false;
    void load(std::string fileOrDirect) {
       lingodb::execution::initializeContext(context);
       driver drv;
       try {
-         if (!drv.parse(fileOrDirect)) {
+         if (!drv.parse(fileOrDirect, isFile)) {
             auto results = drv.result;
 
             if (results.empty() || results.size() > 1) {
@@ -140,7 +140,6 @@ class SQLFrontend : public lingodb::execution::Frontend {
             mlir::func::FuncOp funcOp = builder.create<mlir::func::FuncOp>(builder.getUnknownLoc(), "main", builder.getFunctionType({}, {}));
             funcOp.getBody().push_back(queryBlock);
             module = moduleOp;
-            parallismAllowed = analyzer.parallelismAllowed;
             } else {
                error.emit() << "Error during parsing";
             }
@@ -151,10 +150,10 @@ class SQLFrontend : public lingodb::execution::Frontend {
    }
 
    void loadFromString(std::string sql) override {
-      sql = ":" + sql;
       load(sql);
    }
    void loadFromFile(std::string fileName) override {
+      isFile = true;
       load(fileName);
    }
 
@@ -162,9 +161,6 @@ class SQLFrontend : public lingodb::execution::Frontend {
    mlir::ModuleOp* getModule() override {
       assert(module);
       return module.operator->();
-   }
-   bool isParallelismAllowed() override {
-      return parallismAllowed;
    }
 };
 

@@ -9,17 +9,14 @@ namespace lingodb::ast {
 
 class InsertNode : public AstNode {
    public:
-   InsertNode(std::string schema, std::string tableName, std::shared_ptr<TableProducer> producer);
-   InsertNode(std::string schema, std::string tableName, std::shared_ptr<TableProducer> producer, std::vector<std::string> columns);
+   InsertNode(std::string schema, std::string tableName, std::shared_ptr<TableProducer> producer) : AstNode(NodeType::INSERT_NODE), schema(schema), tableName(tableName), producer(producer) {}
+   InsertNode(std::string schema, std::string tableName, std::shared_ptr<TableProducer> producer, std::vector<std::string> columns) : AstNode(NodeType::INSERT_NODE), schema(schema), tableName(tableName), producer(producer), columns(columns) {}
 
    std::string schema;
    std::string tableName;
 
-   //TODO conflict etc
    std::shared_ptr<TableProducer> producer;
    std::vector<std::string> columns;
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 
 } // namespace lingodb::ast

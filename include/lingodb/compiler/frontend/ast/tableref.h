@@ -18,8 +18,6 @@ class TableRef : public TableProducer {
    }
    TableReferenceType type;
    std::string alias;
-
-   virtual std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) = 0;
 };
 
 enum class TableReferenceType : uint8_t {
@@ -50,7 +48,7 @@ class TableDescription {
 class BaseTableRef : public TableRef {
    public:
    static constexpr TableReferenceType TYPE = TableReferenceType::BASE_TABLE;
-   BaseTableRef(TableDescription tableDescription);
+   BaseTableRef(TableDescription tableDescription) : TableRef(TYPE), catalogName(tableDescription.database), schemaName(tableDescription.schema), tableName(tableDescription.table) {}
 
    //! The catalog name.
    std::string catalogName;
@@ -65,8 +63,6 @@ class BaseTableRef : public TableRef {
    */
    std::shared_ptr<catalog::TableCatalogEntry> catalogEntry = nullptr;
    std::string scopeName;
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 
 enum class JoinCondType : uint8_t {
@@ -100,7 +96,7 @@ class JoinRef : public TableRef {
    static constexpr TableReferenceType TYPE = TableReferenceType::JOIN;
 
    public:
-   JoinRef(JoinType type, JoinCondType refType);
+   JoinRef(JoinType type, JoinCondType refType) : TableRef(TYPE), type(type), refType(refType) {}
 
    //! The left hand side of the join
    //! QueryNode as variant is needed for pipe syntax. Example: FROM Test |> join ok on id1=id2
@@ -115,31 +111,24 @@ class JoinRef : public TableRef {
    JoinType type;
    //! Join condition type
    JoinCondType refType;
-
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 
 class CrossProductRef : public TableRef {
    static constexpr TableReferenceType TYPE = TableReferenceType::CROSS_PRODUCT;
    public:
-   CrossProductRef();
+   CrossProductRef() :  TableRef(TYPE) {}
    std::vector<std::shared_ptr<TableProducer>> tables;
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 
 class SubqueryRef : public TableRef {
    static constexpr TableReferenceType TYPE = TableReferenceType::SUBQUERY;
 
    public:
-   SubqueryRef(std::shared_ptr<TableProducer> subSelectNode);
+   SubqueryRef(std::shared_ptr<TableProducer> subSelectNode) : TableRef(TYPE), subSelectNode(std::move(subSelectNode)) {}
 
    //! The subquery
    std::shared_ptr<TableProducer> subSelectNode;
    std::vector<std::string> columnNames;
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 
 /**
@@ -149,12 +138,11 @@ class SubqueryRef : public TableRef {
 class ExpressionListRef : public TableRef {
    public:
    static constexpr TableReferenceType TYPE = TableReferenceType::EXPRESSION_LIST;
-   ExpressionListRef(std::vector<std::vector<std::shared_ptr<ParsedExpression>>> values);
+   ExpressionListRef(std::vector<std::vector<std::shared_ptr<ParsedExpression>>> values) :  TableRef(TYPE), values(std::move(values)) {}
 
    //! The expressions in the list
    std::vector<std::vector<std::shared_ptr<ParsedExpression>>> values;
 
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override;
 };
 
 } // namespace lingodb::ast

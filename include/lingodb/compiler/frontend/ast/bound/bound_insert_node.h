@@ -20,10 +20,6 @@ class BoundInsertNode : public AstNode {
    std::vector<std::string> columnsToInsert;
 
    std::unordered_map<std::string, NullableType> allColumnsAndTypes;
-
-   std::string toDotGraph(uint32_t depth, NodeIdGenerator& idGen) override {
-      return "";
-   };
 };
 
 } // namespace lingodb::ast

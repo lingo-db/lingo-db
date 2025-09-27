@@ -57,7 +57,6 @@
 }
 
 %define api.token.prefix {TOK_}
-//TODO check if int?
 %token <int> ICONST
 %token <uint64_t>	    INTEGER_VALUE	"integer_value"
 %token <std::string>	FCONST
@@ -97,8 +96,7 @@
 %token			TYPECAST DOT_DOT COLON_EQUALS
 
 /* 
- * Taken directly from postgres grammatic 
- * TODO LINK
+ * Taken directly from postgres grammatic
 **/
 %token <std::string> ABORT_P ABSENT ABSOLUTE_P ACCESS ACTION ADD_P ADMIN AFTER
 	AGGREGATE ALL ALSO ALTER ALWAYS ANALYSE ANALYZE AND ANY ARRAY AS ASC
@@ -232,7 +230,7 @@
 */
 %type<std::variant<std::vector<std::shared_ptr<lingodb::ast::ParsedExpression>>, std::shared_ptr<lingodb::ast::SubqueryExpression>>> in_expr
 
-%type<std::shared_ptr<lingodb::ast::TargetsExpression>> opt_target_list
+%type<std::shared_ptr<lingodb::ast::TargetList>> opt_target_list
 
 %type<std::shared_ptr<lingodb::ast::ParsedExpression>>  having_clause target_el a_expr c_expr b_expr  where_clause group_by_item group_by_item_with_alias
                                                         func_arg_expr select_limit_value case_expr case_default cast_expr offset_clause 
@@ -255,7 +253,7 @@
 
 %type<lingodb::ast::jointCondOrUsingCols> join_qual
 
-%type<std::shared_ptr<lingodb::ast::WindowBoundary>> opt_frame_clause frame_extent frame_bound
+%type<std::shared_ptr<lingodb::ast::WindowFrame>> opt_frame_clause frame_extent frame_bound
 
 /*
 * Columnref or Starexpression for instance
@@ -539,7 +537,6 @@ pipe_start:
 
 
      }
-     //TODO DOC
     | select_no_parens[parens] PIPE pipe_operator
     {
 
@@ -637,7 +634,6 @@ VariableSetStmt:
     | SET LOCAL set_rest
     | SET SESSION set_rest
     ;
-//TODO missing rules
 set_rest:
     set_rest_more
     {
@@ -783,7 +779,7 @@ simple_select:
     | SELECT distinct_clause target_list into_clause from_clause where_clause group_clause having_clause window_clause
     {
         auto t = mkNode<lingodb::ast::SelectNode>(@$);
-        auto target_list = mkNode<lingodb::ast::TargetsExpression>(@$);
+        auto target_list = mkNode<lingodb::ast::TargetList>(@$);
         target_list->targets = std::move($target_list);
 
         target_list->distinct = $distinct_clause;
@@ -1000,7 +996,6 @@ group_clause_with_alias:
         $$ = node;
         //TODO Support set_quantifier
     }
-    //TODO find a better solution
     | GROUP_P BY set_quantifier rollup_clause %prec ROLLUP_PRIORITY
     {
         auto node = mkNode<lingodb::ast::GroupByNode>(@$);
@@ -1401,13 +1396,9 @@ where_clause:
     WHERE a_expr {$$=$a_expr;}
     | %empty
     ;
-/*
-TODO
- * Add missing rules
-*/
+
 a_expr:
     c_expr { $$ = $c_expr;}
-
     //TODO | a-expr COLLATE any_name
     //TODO | a_expr AT TIME ZONE a_expr
     //TODO | a_expr AT LOCAL
@@ -1589,7 +1580,6 @@ c_expr:
     columnref {$$ = $columnref;}
     | AexprConst {$$=$1;}
     //TODO | PARAM opt_indirection
-    //TODO
     | LP a_expr RP {$$=$2;}//opt_indirection
     | case_expr
     {
@@ -1998,7 +1988,7 @@ window_specification:
         auto windowExpression = mkNode<lingodb::ast::WindowExpression>(@$);
         windowExpression->partitions = $opt_partition_clause;
         windowExpression->order = $opt_sort_clause;
-        windowExpression->windowBoundary = $opt_frame_clause;
+        windowExpression->windowFrame = $opt_frame_clause;
         $$ = windowExpression;
 
 
@@ -2026,7 +2016,7 @@ indirection_el:
 opt_target_list:
     target_list
     {
-        auto node = mkNode<lingodb::ast::TargetsExpression>(@$);
+        auto node = mkNode<lingodb::ast::TargetList>(@$);
         node->targets = std::move($target_list);
         $$ = node;
     }
@@ -2107,23 +2097,23 @@ frame_extent:
 frame_bound:
     UNBOUNDED PRECEDING
     {
-        $$ = mkNode<lingodb::ast::WindowBoundary>(@$, lingodb::ast::WindowBoundaryType::UNBOUNDED_PRECEDING );
+        $$ = mkNode<lingodb::ast::WindowFrame>(@$, lingodb::ast::WindowFrameType::UNBOUNDED_PRECEDING );
     }
     | UNBOUNDED FOLLOWING
     {
-        $$ = mkNode<lingodb::ast::WindowBoundary>(@$, lingodb::ast::WindowBoundaryType::UNBOUNDED_FOLLOWING );
+        $$ = mkNode<lingodb::ast::WindowFrame>(@$, lingodb::ast::WindowFrameType::UNBOUNDED_FOLLOWING );
     }
     | CURRENT_P ROW
     {
-        $$ = mkNode<lingodb::ast::WindowBoundary>(@$, lingodb::ast::WindowBoundaryType::CURRENT_ROW );
+        $$ = mkNode<lingodb::ast::WindowFrame>(@$, lingodb::ast::WindowFrameType::CURRENT_ROW );
     }
     | a_expr PRECEDING
     {
-        $$ = mkNode<lingodb::ast::WindowBoundary>(@$, lingodb::ast::WindowBoundaryType::EXPR_PRECEDING, $a_expr );
+        $$ = mkNode<lingodb::ast::WindowFrame>(@$, lingodb::ast::WindowFrameType::EXPR_PRECEDING, $a_expr );
     }
     | a_expr FOLLOWING
     {
-        $$ = mkNode<lingodb::ast::WindowBoundary>(@$, lingodb::ast::WindowBoundaryType::EXPR_FOLLOWING, $a_expr);
+        $$ = mkNode<lingodb::ast::WindowFrame>(@$, lingodb::ast::WindowFrameType::EXPR_FOLLOWING, $a_expr);
     }
     ;
 //TODO misisng rules
@@ -3390,7 +3380,6 @@ ConstInterval:
     }
     ;
 
-//TODO missing
 opt_interval: 
     DAY_P 
      {
@@ -3448,7 +3437,6 @@ pipe_operator:
         joinRef->condition = $join_qual;
         $$ = mkNode<lingodb::ast::PipeOperator>(@$,lingodb::ast::PipeOperatorType::JOIN, joinRef);
     }
-    //TODO check if this does not allow to much!
     | AGGREGATE agg_expr
     {
          $$ = mkNode<lingodb::ast::PipeOperator>(@$, lingodb::ast::PipeOperatorType::AGGREGATE, $agg_expr);
@@ -3479,7 +3467,7 @@ pipe_operator:
     }
     | DROP columnref_list
     {
-        auto node = mkNode<lingodb::ast::TargetsExpression>(@$);
+        auto node = mkNode<lingodb::ast::TargetList>(@$);
         node->targets = std::move($columnref_list);
         $$ = mkNode<lingodb::ast::PipeOperator>(@$, lingodb::ast::PipeOperatorType::DROP, node);
     }

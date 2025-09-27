@@ -13,7 +13,7 @@
 #include <functional>
 #include <sys/resource.h>
 namespace lingodb::analyzer {
-using ResolverScope = llvm::ScopedHashTable<std::string, std::shared_ptr<ast::NamedResult>, StringInfo>::ScopeTy;
+using ResolverScope = llvm::ScopedHashTable<std::string, std::shared_ptr<ast::ColumnReference>, StringInfo>::ScopeTy;
 #define error(message, loc)                       \
    {                                               \
       std::ostringstream s{};                     \
@@ -65,7 +65,7 @@ class StackGuardFiber : public StackGuard {
 class SQLCanonicalizer {
    public:
    /**
-    * Transforms a query tree into a canonical form based on the pipeline execution model.
+    * Transforms a query tree into a canonical.
     * Converts a nested SELECT statement into a sequence of pipe operations.
     *
     * Key transformations:
@@ -128,8 +128,6 @@ class SQLQueryAnalyzer {
    std::shared_ptr<StackGuard> stackGuard = std::make_shared<StackGuardNormal>();
 
    std::shared_ptr<ast::AstNode> canonicalizeAndAnalyze(std::shared_ptr<ast::AstNode> rootNode, std::shared_ptr<SQLContext> context);
-
-   bool parallelismAllowed;
 
    private:
    std::shared_ptr<ast::TableProducer> analyzeTableProducer(std::shared_ptr<ast::TableProducer> rootNode, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope);
