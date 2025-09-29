@@ -1,3 +1,4 @@
+#include "features.h"
 #include "lingodb/compiler/mlir-support/eval.h"
 #include "lingodb/execution/Execution.h"
 #include "lingodb/runtime/ArrowTable.h"
@@ -381,6 +382,11 @@ void runQuery(runtime::Session& session, const std::vector<std::string>& lines, 
 }
 } // namespace
 int main(int argc, char** argv) {
+   if (argc == 2 && std::string(argv[1]) == "--features") {
+      printFeatures();
+      return 0;
+   }
+
    lingodb::compiler::support::eval::init();
    if (argc < 2 || argc > 3) {
       std::cerr << "usage: sqllite-tester file [dataset]" << std::endl;

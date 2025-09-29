@@ -1,7 +1,7 @@
 // RUN: LINGODB_EXECUTION_MODE=DEBUGGING LINGODB_BACKEND_ONLY=ON run-mlir %s | FileCheck %s
 // RUN: LINGODB_EXECUTION_MODE=DEFAULT LINGODB_BACKEND_ONLY=ON run-mlir %s | FileCheck %s
 // RUN: LINGODB_EXECUTION_MODE=C LINGODB_BACKEND_ONLY=ON run-mlir %s | FileCheck %s
-// RUN: if [ "$(uname)" = "Linux" ]; then env LINGODB_EXECUTION_MODE=BASELINE run-mlir %s | FileCheck %s; fi
+// RUN: %if baseline-backend %{LINGODB_EXECUTION_MODE=BASELINE run-mlir %s | FileCheck %s %}
 
 module  {
   func.func private @dumpString(!util.varlen32)

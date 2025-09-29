@@ -1,3 +1,4 @@
+#include "features.h"
 #include "lingodb/compiler/Dialect/DB/IR/DBDialect.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorDialect.h"
@@ -54,6 +55,11 @@ void printMLIR(std::string sql, std::shared_ptr<lingodb::catalog::Catalog> catal
 }
 } // end namespace
 int main(int argc, char** argv) {
+   if (argc == 2 && std::string(argv[1]) == "--features") {
+      printFeatures();
+      return 0;
+   }
+
    std::string filename = std::string(argv[1]);
    auto catalog = lingodb::catalog::Catalog::createEmpty();
    if (argc >= 3) {
