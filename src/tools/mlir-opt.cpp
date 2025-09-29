@@ -1,3 +1,4 @@
+#include "features.h"
 #include "lingodb/compiler/Conversion/ArrowToStd/ArrowToStd.h"
 #include "lingodb/compiler/Conversion/DBToStd/DBToStd.h"
 #include "lingodb/compiler/Conversion/RelAlgToSubOp/RelAlgToSubOpPass.h"
@@ -32,6 +33,12 @@
 #include <mlir/Dialect/ControlFlow/IR/ControlFlow.h>
 int main(int argc, char** argv) {
    using namespace lingodb::compiler::dialect;
+
+   if (argc == 2 && std::string(argv[1]) == "--features") {
+      printFeatures();
+      return 0;
+   }
+
    if (argc > 2) {
       if (std::string(argv[1]) == "--use-db") {
          relalg::setStaticCatalog(lingodb::catalog::Catalog::create(std::string(argv[2]), false));

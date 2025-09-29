@@ -2,12 +2,19 @@
 #include <iostream>
 #include <string>
 
+#include "features.h"
 #include "lingodb/compiler/mlir-support/eval.h"
 #include "lingodb/execution/Execution.h"
 #include "lingodb/scheduler/Scheduler.h"
 
 int main(int argc, char** argv) {
    using namespace lingodb;
+
+   if (argc == 2 && std::string(argv[1]) == "--features") {
+      printFeatures();
+      return 0;
+   }
+
    std::string inputFileName = "-";
    if (argc > 1) {
       inputFileName = std::string(argv[1]);

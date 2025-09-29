@@ -37,7 +37,7 @@ if platform.system() == "Darwin":  # Check if the system is macOS
     config.environment['LINGODB_COMPILATION_C_BACKEND_COMPILER_DRIVER'] = "/opt/homebrew/bin/clang++"  # Use the CMake CXX compiler path
 
 llvm_config.with_system_environment(
-    ['HOME', 'INCLUDE', 'LIB', 'TMP', 'TEMP', "LINGODB_COMPILATION_STATICLINKER", "LINGODB_COMPILATION_C_BACKEND_COMPILER_DRIVER"])
+    ['HOME', 'INCLUDE', 'LIB', 'TMP', 'TEMP', "LINGODB_COMPILATION_STATICLINKER", "LINGODB_COMPILATION_C_BACKEND_COMPILER_DRIVER", "ENABLE_BASELINE_BACKEND"])
 
 llvm_config.use_default_substitutions()
 
@@ -70,3 +70,23 @@ tools = [
 ]
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)
+
+# Query tool features for conditional testing.
+def get_features(tool):
+    tool_path = f"{config.mlirdb_obj_root}/{tool}"
+    try:
+        result = subprocess.run([tool_path, '--features'], stdin=subprocess.DEVNULL , stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+        features = set(result.stderr.strip().splitlines())
+        return features
+    except Exception as e:
+        print(f"Warning: Could not get features from {tool_path}: {e}")
+        return set()
+
+tool_features = set(frozenset(get_features(t)) for t in tools)
+if len(tool_features) > 1:
+    print("Warning: Tools have differing features, which may lead to inconsistent test behavior.")
+else:
+    print("Running tests with tool features:\n", "\n".join(next(iter(tool_features))))
+
+if all("baseline-backend" in features for features in tool_features):
+    config.available_features.add('baseline-backend')

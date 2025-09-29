@@ -1,3 +1,4 @@
+#include "features.h"
 #include "linenoise.h"
 
 #include <fstream>
@@ -40,10 +41,16 @@ void handleQuery(runtime::Session& session, std::string sqlQuery, bool reportTim
 }
 } // namespace
 int main(int argc, char** argv) {
+   if (argc == 2 && std::string(argv[1]) == "--features") {
+      printFeatures();
+      return 0;
+   }
+
    if (argc <= 1) {
       std::cerr << "USAGE: sql database" << std::endl;
       return 1;
    }
+
    bool reportTimes = false;
    if (const char* reportTimesEnv = std::getenv("LINGODB_SQL_REPORT_TIMES")) {
       reportTimes = std::stoll(reportTimesEnv);

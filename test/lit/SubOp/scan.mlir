@@ -1,5 +1,5 @@
 //RUN: env LINGODB_EXECUTION_MODE=DEFAULT run-mlir %s %S/../../../resources/data/test| FileCheck %s
-//RUN: if [ "$(uname)" = "Linux" ]; then env LINGODB_EXECUTION_MODE=BASELINE run-mlir %s %S/../../../resources/data/test | FileCheck %s; fi
+//RUN: %if baseline-backend %{LINGODB_EXECUTION_MODE=BASELINE run-mlir %s %S/../../../resources/data/test | FileCheck %s %}
 
 //CHECK: |                           str  |                       float32  |                       float64  |                       decimal  |                         int32  |                         int64  |                          bool  |                        date32  |                        date64  |                         char1  |                        char20  |
 //CHECK: ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
