@@ -121,6 +121,12 @@ mlir::Value constLikeImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArg
             currentSubPattern += pattern[pos + 1];
             pos += 2;
          } else if (pattern[pos] == '%') {
+            // in case of a simple 'starts with' pattern (i.e. 'abc%'), we can simply return the result of the startsWith call
+            if (!lastMatchEnd && pos == pattern.size() - 1) {
+               // we only need to check that the prefix matches
+               mlir::Value needleValue = rewriter.create<util::CreateConstVarLen>(loc, util::VarLen32Type::get(rewriter.getContext()), currentSubPattern);
+               return StringRuntime::startsWith(rewriter, loc)(mlir::ValueRange{str, needleValue})[0];
+            }
             lastMatchEnd = matchPart(rewriter, loc, lastMatchEnd, currentSubPattern, str, end, flexibleStart);
             currentSubPattern = "";
             flexibleStart = true;
