@@ -1,5 +1,7 @@
-#pragma once
-#include "lingodb/compiler/frontend/sql-parser/gen/location.hh"
+#ifndef LINGODB_COMPILER_FRONTEND_NODE_FACTORY_H
+#define LINGODB_COMPILER_FRONTEND_NODE_FACTORY_H
+
+#include "lingodb/compiler/frontend/generated/location.hh"
 #include <memory>
 #include <vector>
 namespace lingodb::ast {
@@ -24,3 +26,4 @@ class NodeFactory {
    }
 };
 } // namespace lingodb::ast
+#endif

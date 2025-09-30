@@ -1,4 +1,5 @@
-#pragma once
+#ifndef LINGODB_COMPILER_FRONTEND_SQL_SCOPE_H
+#define LINGODB_COMPILER_FRONTEND_SQL_SCOPE_H
 
 #include "lingodb/catalog/Defs.h"
 #include "lingodb/catalog/TableCatalogEntry.h"
@@ -22,3 +23,4 @@ class SQLScope {
    std::shared_ptr<SQLScope> parent;
 };
 } // namespace lingodb::analyzer
+#endif

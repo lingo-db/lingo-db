@@ -7,7 +7,7 @@
 # include "lingodb/compiler/frontend/driver.h"
 # include "parser.hpp"
 # include <algorithm>
-#include <lingodb/compiler/frontend/sql-parser/gen/location.hh>
+#include <lingodb/compiler/frontend/generated/location.hh>
 
 %}
 
@@ -337,9 +337,9 @@ YEAR        { MAKE_KEYWORD(YEAR_P); }
 
 
 void
-driver::scan_begin (bool isFile)
+Driver::scanBegin (bool isFile)
 {
-  yy_flex_debug = trace_scanning;
+  yy_flex_debug = traceScanning;
   if (file.empty () || file == "-")
     yyin = stdin;
   if(!isFile) {
@@ -355,7 +355,7 @@ driver::scan_begin (bool isFile)
 }
 
 void
-driver::scan_end ()
+Driver::scanEnd ()
 {
   if (YY_CURRENT_BUFFER) {
       yy_delete_buffer(YY_CURRENT_BUFFER);
