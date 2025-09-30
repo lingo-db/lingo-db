@@ -1,8 +1,10 @@
-#pragma once
+#ifndef LINGODB_COMPILER_FRONTEND_AST_CREATE_NODE_H
+#define LINGODB_COMPILER_FRONTEND_AST_CREATE_NODE_H
+
 #include "ast_node.h"
 #include "constraint.h"
-#include "parsed_expression.h"
 #include "lingodb/catalog/Catalog.h"
+#include "parsed_expression.h"
 
 #include <memory>
 #include <vector>
@@ -57,7 +59,7 @@ class TableElement {
 class ColumnElement : public TableElement {
    public:
    ColumnElement(std::string name, LogicalTypeWithMods typeMods)
-      : TableElement(TableElementType::COLUMN), name(std::move(name)), logicalTypeWithMods(typeMods) {}
+      : TableElement(TableElementType::COLUMN), logicalTypeWithMods(typeMods), name(std::move(name)) {}
 
    LogicalTypeWithMods logicalTypeWithMods;
    std::string name;
@@ -71,4 +73,5 @@ class TableConstraintElement : public TableElement {
 
    std::shared_ptr<Constraint> constraint;
 };
-}
+} // namespace lingodb::ast
+#endif

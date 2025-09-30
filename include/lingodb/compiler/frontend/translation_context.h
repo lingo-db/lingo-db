@@ -1,4 +1,6 @@
-#pragma once
+#ifndef LINGODB_COMPILER_FRONTEND_TRANSLATION_CONTEXT_H
+#define LINGODB_COMPILER_FRONTEND_TRANSLATION_CONTEXT_H
+
 #include <stack>
 
 #include <mlir/IR/Value.h>
@@ -24,3 +26,4 @@ class TranslationContext {
    std::map<size_t, mlir::Type> translatedValuesType;
 };
 } // namespace lingodb::translator
+#endif

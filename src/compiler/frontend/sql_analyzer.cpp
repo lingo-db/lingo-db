@@ -25,14 +25,13 @@ StackGuardNormal::StackGuardNormal() {
    if (suc != 0) {
       limit = 0;
    }
-   limit = 0.080*rlp.rlim_cur;
+   limit = 0.080 * rlp.rlim_cur;
    startFameAddress = __builtin_frame_address(0);
 #else
    static constexpr size_t stackSize = 1 << 20;
-   limit = 0.8*stackSize;
+   limit = 0.8 * stackSize;
    startFameAddress = __builtin_frame_address(0);
 #endif
-
 }
 void StackGuardNormal::reset() {
    startFameAddress = __builtin_frame_address(0);
@@ -40,12 +39,12 @@ void StackGuardNormal::reset() {
 bool StackGuardNormal::newStackNeeded() {
    rlimit rlp{};
    auto suc = getrlimit(RLIMIT_STACK, &rlp);
-   assert(suc==0);
+   assert(suc == 0);
    void* currentFrameAddress = __builtin_frame_address(0);
    size_t size = reinterpret_cast<size_t>(startFameAddress) - reinterpret_cast<size_t>(currentFrameAddress);
 
    if (size > limit) {
-      std::cerr << "StackLimit: " << rlp.rlim_cur << " Max: " << rlp.rlim_max << " recorded size: " << size << " Perc: " << ((size*1.0)/rlp.rlim_cur) * 100 << std::endl;
+      std::cerr << "StackLimit: " << rlp.rlim_cur << " Max: " << rlp.rlim_max << " recorded size: " << size << " Perc: " << ((size * 1.0) / rlp.rlim_cur) * 100 << std::endl;
 #ifdef ASAN_ACTIVE
       throw std::runtime_error("StackLimit reached");
 #endif
@@ -54,10 +53,9 @@ bool StackGuardNormal::newStackNeeded() {
    return false;
 }
 
-
 StackGuardFiber::StackGuardFiber(boost::context::stack_context& stackContext) : StackGuard(), stackContext(stackContext) {
    startFameAddress = stackContext.sp;
-   limit = stackContext.size*0.65;
+   limit = stackContext.size * 0.65;
 }
 void StackGuardFiber::reset() {
    startFameAddress = stackContext.sp;
@@ -66,7 +64,7 @@ bool StackGuardFiber::newStackNeeded() {
    void* currentFrameAddress = __builtin_frame_address(0);
    size_t size = reinterpret_cast<size_t>(startFameAddress) - reinterpret_cast<size_t>(currentFrameAddress);
    if (size > limit) {
-      std::cerr << "Fiber: StackLimit: " << stackContext.size << " recorded size: " << size << " Perc: " << ((size*1.0)/stackContext.size) * 100 << std::endl;
+      std::cerr << "Fiber: StackLimit: " << stackContext.size << " recorded size: " << size << " Perc: " << ((size * 1.0) / stackContext.size) * 100 << std::endl;
       return true;
    }
    return false;
@@ -85,20 +83,19 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                auto selectNode = std::static_pointer_cast<ast::SelectNode>(queryNode);
                std::shared_ptr<ast::TableProducer> transformed = nullptr;
                //Transform from_clause
-               if (selectNode->from_clause) {
-                  auto transformedFrom = selectNode->from_clause;
+               if (selectNode->fromClause) {
+                  auto transformedFrom = selectNode->fromClause;
 
-                  selectNode->from_clause = nullptr;
+                  selectNode->fromClause = nullptr;
                   transformed = transformedFrom;
                }
                //Transform where_clause
-               if (selectNode->where_clause) {
-                  auto pipe = drv.nf.node<ast::PipeOperator>(selectNode->where_clause->loc, ast::PipeOperatorType::WHERE, selectNode->where_clause);
+               if (selectNode->whereClause) {
+                  auto pipe = drv.nf.node<ast::PipeOperator>(selectNode->whereClause->loc, ast::PipeOperatorType::WHERE, selectNode->whereClause);
                   pipe->input = transformed;
-                  selectNode->where_clause = nullptr;
+                  selectNode->whereClause = nullptr;
                   transformed = pipe;
                }
-
 
                //Transform Group by
                if (selectNode->groups) {
@@ -108,19 +105,14 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                aggPipeNode->input = transformed;
                transformed = aggPipeNode;
 
-
-
-               auto extendBeforeWindowPipeOp = drv.nf.node<ast::PipeOperator>(selectNode->select_list->loc, ast::PipeOperatorType::EXTEND, context->currentScope->extendNodeBeforeWindowFunctions);
+               auto extendBeforeWindowPipeOp = drv.nf.node<ast::PipeOperator>(selectNode->selectList->loc, ast::PipeOperatorType::EXTEND, context->currentScope->extendNodeBeforeWindowFunctions);
                extendBeforeWindowPipeOp->input = transformed;
                transformed = extendBeforeWindowPipeOp;
 
-
-
-
                //Transform target selection
-               if (selectNode->select_list) {
-                  auto pipe = drv.nf.node<ast::PipeOperator>(selectNode->select_list->loc, ast::PipeOperatorType::SELECT, selectNode->select_list);
-                  for (auto& target : selectNode->select_list->targets) {
+               if (selectNode->selectList) {
+                  auto pipe = drv.nf.node<ast::PipeOperator>(selectNode->selectList->loc, ast::PipeOperatorType::SELECT, selectNode->selectList);
+                  for (auto& target : selectNode->selectList->targets) {
                      if (target->alias.empty()) {
                         continue;
                      }
@@ -129,7 +121,7 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                   pipe->input = transformed;
 
                   transformed = pipe;
-                  selectNode->select_list = nullptr;
+                  selectNode->selectList = nullptr;
                }
 
                if (selectNode->having) {
@@ -140,8 +132,6 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                   selectNode->having = nullptr;
                }
 
-
-
                //Transform modifiers
                for (auto modifier : selectNode->modifiers) {
                   modifier->input = transformed;
@@ -151,7 +141,6 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                }
                selectNode->modifiers.clear();
                transformed = canonicalize(transformed, context);
-
 
                return transformed;
             }
@@ -206,7 +195,6 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                auto extendPipeOp = drv.nf.node<ast::PipeOperator>(selectNode->loc, ast::PipeOperatorType::EXTEND, extendNode);
                //Extract AggFunctions
                std::vector<std::pair<std::string, std::shared_ptr<ast::ParsedExpression>>> toRemove{};
-               int i = 0;
                //Canonicalize target expressions
                std::ranges::transform(selectNode->targets, selectNode->targets.begin(), [&](std::shared_ptr<ast::ParsedExpression>& target) {
                   return canonicalizeParsedExpression(target, context, true, extendNode);
@@ -214,8 +202,7 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                extendPipeOp->input = pipeOp->input;
                pipeOp->input = extendPipeOp;
 
-
-              break;
+               break;
             }
             case ast::PipeOperatorType::WHERE: {
                assert(pipeOp->node->nodeType == ast::NodeType::EXPRESSION);
@@ -229,7 +216,6 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                assert(aggNode);
                std::vector<std::shared_ptr<ast::ParsedExpression>> newGroupByExpressions{};
                if (aggNode->groupByNode) {
-
                   if (aggNode->groupByNode->rollup) {
                      for (size_t i = 0; i <= aggNode->groupByNode->groupByExpressions.size(); i++) {
                         size_t n = aggNode->groupByNode->groupByExpressions.size() - i;
@@ -239,10 +225,8 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                         }
                         aggNode->groupByNode->groupingSet.emplace_back(set);
                      }
-
                   }
                   for (auto e : aggNode->groupByNode->groupByExpressions) {
-
                      if (e->type == ast::ExpressionType::COLUMN_REF) {
                         auto columnRef = std::static_pointer_cast<ast::ColumnRefExpression>(e);
                         auto name = columnRef->columnNames.size() == 1 ? columnRef->columnNames[0] : columnRef->columnNames[0] + "." + columnRef->columnNames[1];
@@ -252,13 +236,10 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                            context->currentScope->groupedByExpressions.emplace(found->second);
                            continue;
                         }
-
-
                      }
                      auto canonicalized = canonicalizeParsedExpression(e, context, true, extendNode);
                      newGroupByExpressions.emplace_back(canonicalized);
                      context->currentScope->groupedByExpressions.emplace(e);
-
                   }
                   aggNode->groupByNode->groupByExpressions = std::move(newGroupByExpressions);
                }
@@ -286,8 +267,6 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                extendPipeOp->input = pipeOp->input;
                pipeOp->input = extendPipeOp;
                return pipeOp;
-
-
             }
             case ast::PipeOperatorType::JOIN: {
                auto join = std::static_pointer_cast<ast::JoinRef>(pipeOp->node);
@@ -310,7 +289,7 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                auto setExpression = std::static_pointer_cast<ast::SetColumnExpression>(pipeOp->node);
                assert(setExpression->type == ast::ExpressionType::SET);
                std::ranges::transform(setExpression->sets, setExpression->sets.begin(), [&](auto& pair) {
-                    return std::pair(pair.first, canonicalizeParsedExpression(pair.second, context, false, nullptr));
+                  return std::pair(pair.first, canonicalizeParsedExpression(pair.second, context, false, nullptr));
                });
                return pipeOp;
             }
@@ -505,17 +484,17 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeFunctionExp
 
    return functionExpr;
 }
-std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpression(std::shared_ptr<ast::ParsedExpression> rootNode, std::shared_ptr<ASTTransformContext> context, bool extend, std::shared_ptr<ast::ExtendNode> extendNode ) {
+std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpression(std::shared_ptr<ast::ParsedExpression> rootNode, std::shared_ptr<ASTTransformContext> context, bool extend, std::shared_ptr<ast::ExtendNode> extendNode) {
    if (stackGuard->newStackNeeded()) {
-      boost::context::fixedsize_stack salloc(1024*1024);
+      boost::context::fixedsize_stack salloc(1024 * 1024);
       boost::context::stack_context sctx = salloc.allocate();
       auto sGuard = stackGuard;
       stackGuard = std::make_shared<StackGuardFiber>(sctx);
-      void * sp=static_cast<char*>(sctx.sp);
-      std::size_t size=sctx.size;
+      void* sp = static_cast<char*>(sctx.sp);
+      std::size_t size = sctx.size;
       std::shared_ptr<ast::ParsedExpression> expression;
 
-      boost::context::fiber f(std::allocator_arg, boost::context::preallocated(sp, size, sctx),salloc, [&](boost::context::fiber&& sink) {
+      boost::context::fiber f(std::allocator_arg, boost::context::preallocated(sp, size, sctx), salloc, [&](boost::context::fiber&& sink) {
          expression = canonicalizeParsedExpression(rootNode, context, extend, extendNode);
          return std::move(sink);
       });
@@ -544,15 +523,14 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
       return columnRef;
    };
 
-
    switch (rootNode->exprClass) {
       case ast::ExpressionClass::SUBQUERY: {
          auto subqueryExpr = std::static_pointer_cast<ast::SubqueryExpression>(rootNode);
          auto canacolizedSubquery = canonicalizeCast<ast::PipeOperator>(subqueryExpr->subquery, std::make_shared<ASTTransformContext>());
          subqueryExpr->subquery = canacolizedSubquery;
-        // assert(subqueryExpr->subquery->nodeType == ast::NodeType::PIPE_OP && "Should not happen");
+         // assert(subqueryExpr->subquery->nodeType == ast::NodeType::PIPE_OP && "Should not happen");
          if (subqueryExpr->testExpr) {
-           subqueryExpr->testExpr = canonicalizeParsedExpression(subqueryExpr->testExpr, context, true, extendNode);
+            subqueryExpr->testExpr = canonicalizeParsedExpression(subqueryExpr->testExpr, context, true, extendNode);
          }
 
          if (extend) {
@@ -569,10 +547,8 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
          });
          if (extend) {
             return extendExpr(operatorExpr);
-
          }
          return operatorExpr;
-
       }
       case ast::ExpressionClass::CONJUNCTION: {
          auto conjunctionExpr = std::static_pointer_cast<ast::ConjunctionExpression>(rootNode);
@@ -585,12 +561,11 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
             } else {
                combinedChildren.emplace_back(child);
             }
-
          }
          conjunctionExpr->children = std::move(combinedChildren);
 
          if (extend) {
-           return extendExpr(conjunctionExpr);
+            return extendExpr(conjunctionExpr);
          }
          return conjunctionExpr;
       }
@@ -614,7 +589,6 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
       case ast::ExpressionClass::WINDOW: {
          auto windowExpr = std::static_pointer_cast<ast::WindowExpression>(rootNode);
          return canonicalizeWindowExpression(windowExpr, extendNode, i, context);
-
       }
       case ast::ExpressionClass::CASE: {
          auto caseExpr = std::static_pointer_cast<ast::CaseExpression>(rootNode);
@@ -632,20 +606,16 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
 
          if (extend) {
             return extendExpr(caseExpr);
-
          }
          return caseExpr;
-
       }
       case ast::ExpressionClass::CAST: {
          auto castExpr = std::static_pointer_cast<ast::CastExpression>(rootNode);
          castExpr->child = canonicalizeParsedExpression(castExpr->child, context, false, extendNode);
          if (extend) {
             return extendExpr(castExpr);
-
          }
          return castExpr;
-
       }
       case ast::ExpressionClass::CONSTANT: {
          auto constantExpr = std::static_pointer_cast<ast::ConstantExpression>(rootNode);
@@ -662,7 +632,6 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
          betweenExpr->lower = canonicalizeParsedExpression(betweenExpr->lower, context, false, extendNode);
          if (extend) {
             return extendExpr(betweenExpr);
-
          }
          return betweenExpr;
       }
@@ -690,9 +659,7 @@ std::shared_ptr<ast::AstNode> SQLQueryAnalyzer::canonicalizeAndAnalyze(std::shar
       switch (astRootNode->nodeType) {
          case ast::NodeType::CREATE_NODE: {
             auto createNode = std::static_pointer_cast<ast::CreateNode>(astRootNode);
-            auto scope = context->createResolverScope();
-            return analyzeCreateNode(createNode, context, scope);
-            ;
+            return analyzeCreateNode(createNode);
          }
          case ast::NodeType::INSERT_NODE: {
             auto insertNode = std::static_pointer_cast<ast::InsertNode>(astRootNode);
@@ -705,8 +672,7 @@ std::shared_ptr<ast::AstNode> SQLQueryAnalyzer::canonicalizeAndAnalyze(std::shar
          }
          case ast::NodeType::SET_NODE: {
             auto setNode = std::static_pointer_cast<ast::SetNode>(astRootNode);
-            auto scope = context->createResolverScope();
-            setNode = analyzeSetNode(setNode, context, scope);
+            setNode = analyzeSetNode(setNode);
 
             return setNode;
          }
@@ -783,7 +749,6 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableProducer(std::
                      }
                      boundCteNode->renamedColumnReferences = std::move(renamedColumnReferences);
 
-
                      context->ctes.insert({cteNode->alias, {targetInfo, boundCteNode}});
                   }
                }
@@ -856,7 +821,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableProducer(std::
    }
 }
 
-std::shared_ptr<ast::CreateNode> SQLQueryAnalyzer::analyzeCreateNode(std::shared_ptr<ast::CreateNode> createNode, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope) {
+std::shared_ptr<ast::CreateNode> SQLQueryAnalyzer::analyzeCreateNode(std::shared_ptr<ast::CreateNode> createNode) {
    switch (createNode->createInfo->type) {
       case catalog::CatalogEntry::CatalogEntryType::LINGODB_TABLE_ENTRY: {
          auto createTableInfo = std::static_pointer_cast<ast::CreateTableInfo>(createNode->createInfo);
@@ -948,7 +913,7 @@ std::shared_ptr<ast::BoundInsertNode> SQLQueryAnalyzer::analyzeInsertNode(std::s
 
    return drv.nf.node<ast::BoundInsertNode>(insertNode->loc, insertNode->schema, insertNode->tableName, exprListTableRef, insertNode->columns, allCollumnTypes);
 }
-std::shared_ptr<ast::SetNode> SQLQueryAnalyzer::analyzeSetNode(std::shared_ptr<ast::SetNode> setNode, std::shared_ptr<SQLContext> context, SQLContext::ResolverScope& resolverScope) {
+std::shared_ptr<ast::SetNode> SQLQueryAnalyzer::analyzeSetNode(std::shared_ptr<ast::SetNode> setNode) {
    switch (setNode->setType) {
       case ast::SetType::SET: {
          auto setVariableOperation = std::static_pointer_cast<ast::SetVariableStatement>(setNode);
@@ -963,9 +928,8 @@ std::shared_ptr<ast::SetNode> SQLQueryAnalyzer::analyzeSetNode(std::shared_ptr<a
       case ast::SetType::RESET: {
          error("Reset not yet supported", setNode->loc);
       }
-      default:error("Set type not supported", setNode->loc);
+      default: error("Set type not supported", setNode->loc);
    }
-
 }
 
 std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::shared_ptr<ast::PipeOperator> pipeOperator, std::shared_ptr<SQLContext>& context, ResolverScope& resolverScope) {
@@ -1075,12 +1039,11 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                continue;
             }
             toMap.emplace_back(aggr->arguments[0]);
-            aggr->arguments[0]->alias =  context->getUniqueScope("tmp_attr");
+            aggr->arguments[0]->alias = context->getUniqueScope("tmp_attr");
             aggr->arguments[0]->columnReference = std::make_shared<ast::ColumnReference>(mapName, aggr->arguments[0]->resultType.value(), aggr->arguments[0]->alias);
-
          }
 
-         for (auto boundAggr: boundAggregationExpressions) {
+         for (auto boundAggr : boundAggregationExpressions) {
             if (boundAggr->functionName == "COUNT" || boundAggr->functionName == "COUNT*") {
                boundAggr->columnReference.value()->resultType.useZeroInsteadOfNull = !aggregationNode->groupByNode || aggregationNode->groupByNode->groupByExpressions.empty();
                boundAggr->resultType->useZeroInsteadOfNull = !aggregationNode->groupByNode || aggregationNode->groupByNode->groupByExpressions.empty();
@@ -1111,11 +1074,10 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                      mappedColumnReference->resultType.isNullable = true;
                   } else {
                      present |= (1 << j);
-                     auto mappedColumnReference = std::make_shared<ast::ColumnReference>( "groupingSet_" + std::to_string(groupingSetId), groupColumnReferences[j]->resultType, "tmp_" + std::to_string(j));
+                     auto mappedColumnReference = std::make_shared<ast::ColumnReference>("groupingSet_" + std::to_string(groupingSetId), groupColumnReferences[j]->resultType, "tmp_" + std::to_string(j));
                      notAvailable.emplace_back(mappedColumnReference);
                      mappedColumnReference->displayName = groupColumnReferences[j]->displayName;
                      mappedColumnReference->resultType.isNullable = true;
-
                   }
                }
 
@@ -1127,15 +1089,12 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                }
                boundAggrNode->groupByNode->localAggregationColumnReferences.emplace_back(std::move(aggregationColumnReferences));
 
-
-
                boundAggrNode->groupByNode->localGroupByColumnReferences.emplace_back(std::move(localGroupBy));
                boundAggrNode->groupByNode->localMapToNullColumnReferences.emplace_back(std::move(mapToNull));
                boundAggrNode->groupByNode->localNotAvailableColumnReferences.emplace_back(std::move(notAvailable));
                auto presentColumnReference = std::make_shared<ast::ColumnReference>(boundAggrNode->mapName, catalog::Type::int64(), "intval" + std::to_string(present));
-               boundAggrNode->groupByNode->localPresentIntval.emplace_back(std::pair{present,presentColumnReference});
+               boundAggrNode->groupByNode->localPresentIntval.emplace_back(std::pair{present, presentColumnReference});
                groupingSetId++;
-
             }
 
             std::vector<std::shared_ptr<ast::ColumnReference>> currentAttributes(
@@ -1143,27 +1102,26 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                boundAggrNode->groupByNode->localMapToNullColumnReferences.at(0).end());
 
             currentAttributes.insert(currentAttributes.end(),
-               boundAggrNode->groupByNode->localNotAvailableColumnReferences.at(0).begin(),
-               boundAggrNode->groupByNode->localNotAvailableColumnReferences.at(0).end());
+                                     boundAggrNode->groupByNode->localNotAvailableColumnReferences.at(0).begin(),
+                                     boundAggrNode->groupByNode->localNotAvailableColumnReferences.at(0).end());
 
             currentAttributes.insert(currentAttributes.end(),
-               boundAggrNode->groupByNode->localAggregationColumnReferences.at(0).begin(),
-               boundAggrNode->groupByNode->localAggregationColumnReferences.at(0).end());
+                                     boundAggrNode->groupByNode->localAggregationColumnReferences.at(0).begin(),
+                                     boundAggrNode->groupByNode->localAggregationColumnReferences.at(0).end());
             currentAttributes.emplace_back(boundAggrNode->groupByNode->localPresentIntval.at(0).second);
             for (size_t i = 1; i < boundAggrNode->groupByNode->localGroupByColumnReferences.size(); i++) {
                auto rollUpUnionName = context->getUniqueScope("rollupUnion");
                std::vector<std::shared_ptr<ast::ColumnReference>> currentLocalAttributes(
-               boundAggrNode->groupByNode->localMapToNullColumnReferences.at(i).begin(),
-               boundAggrNode->groupByNode->localMapToNullColumnReferences.at(i).end());
+                  boundAggrNode->groupByNode->localMapToNullColumnReferences.at(i).begin(),
+                  boundAggrNode->groupByNode->localMapToNullColumnReferences.at(i).end());
                currentLocalAttributes.insert(currentLocalAttributes.end(),
-               boundAggrNode->groupByNode->localNotAvailableColumnReferences.at(i).begin(),
-               boundAggrNode->groupByNode->localNotAvailableColumnReferences.at(i).end());
+                                             boundAggrNode->groupByNode->localNotAvailableColumnReferences.at(i).begin(),
+                                             boundAggrNode->groupByNode->localNotAvailableColumnReferences.at(i).end());
                currentLocalAttributes.insert(currentLocalAttributes.end(),
-               boundAggrNode->groupByNode->localAggregationColumnReferences.at(i).begin(),
-               boundAggrNode->groupByNode->localAggregationColumnReferences.at(i).end());
+                                             boundAggrNode->groupByNode->localAggregationColumnReferences.at(i).begin(),
+                                             boundAggrNode->groupByNode->localAggregationColumnReferences.at(i).end());
                currentLocalAttributes.emplace_back(boundAggrNode->groupByNode->localPresentIntval.at(i).second);
 
-               size_t id = 0;
                std::vector<std::shared_ptr<ast::ColumnReference>> unionColumnReferences{};
                for (size_t j = 0; j < currentLocalAttributes.size(); j++) {
                   auto left = currentAttributes[j];
@@ -1171,13 +1129,10 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                   auto unionColumnReference = std::make_shared<ast::ColumnReference>(rollUpUnionName + std::to_string(i), right->resultType, left->name);
                   unionColumnReferences.emplace_back(unionColumnReference);
                   unionColumnReference->displayName = left->displayName;
-
                }
-               currentAttributes= unionColumnReferences;
+               currentAttributes = unionColumnReferences;
 
                boundAggrNode->groupByNode->unionColumnReferences.emplace_back(std::move(unionColumnReferences));
-
-
             }
             for (size_t i = 0; i < boundAggrNode->groupByNode->groupByColumnReferences.size(); i++) {
                auto old = boundAggrNode->groupByNode->groupByColumnReferences[i];
@@ -1186,10 +1141,9 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
             }
             for (size_t i = 0; i < boundAggrNode->aggregations.size(); i++) {
                auto old = boundAggrNode->aggregations[i]->columnReference.value();
-               auto newN = boundAggrNode->groupByNode->unionColumnReferences.back().at(boundAggrNode->groupByNode->groupByColumnReferences.size()+i);
+               auto newN = boundAggrNode->groupByNode->unionColumnReferences.back().at(boundAggrNode->groupByNode->groupByColumnReferences.size() + i);
                context->replace(resolverScope, old, newN);
             }
-
 
             std::vector<std::shared_ptr<ast::BoundFunctionExpression>> boundGroupingFunctions;
             for (size_t i = 0; i < aggregationNode->groupByNode->groupingFunctions.size(); i++) {
@@ -1199,23 +1153,21 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                context->mapAttribute(resolverScope, boundGroupingFunction->alias, boundGroupingFunction->columnReference.value());
 
                assert(std::static_pointer_cast<ast::BoundFunctionExpression>(boundGroupingFunction)->arguments[0]->columnReference.has_value());
-               auto functionArgColumnReference = std::static_pointer_cast<ast::BoundFunctionExpression>(boundGroupingFunction)->arguments[0];;
+               auto functionArgColumnReference = std::static_pointer_cast<ast::BoundFunctionExpression>(boundGroupingFunction)->arguments[0];
+               ;
                size_t j = 0;
                for (; j < boundAggrNode->groupByNode->groupByColumnReferences.size(); j++) {
-                  auto groupColumnReference =  boundAggrNode->groupByNode->unionColumnReferences.back().at(j);
+                  auto groupColumnReference = boundAggrNode->groupByNode->unionColumnReferences.back().at(j);
                   if (groupColumnReference->name == functionArgColumnReference->columnReference.value()->name) {
                      break;
                   }
-
                }
 
                boundAggrNode->groupByNode->groupingFunctions.emplace_back(std::pair{j, boundGroupingFunction->columnReference.value()});
-
             }
 
             groupingSetId++;
          }
-
 
          break;
       }
@@ -1228,7 +1180,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
          std::vector<std::shared_ptr<ast::BoundExpression>> boundExpressions;
          std::vector<std::shared_ptr<ast::BoundWindowExpression>> boundWindowExpressions;
 
-         for (auto& expr: extendNode->extensions) {
+         for (auto& expr : extendNode->extensions) {
             auto boundExpression = analyzeExpression(expr, context, resolverScope);
             boundExtensions.emplace_back(boundExpression);
             switch (boundExpression->exprClass) {
@@ -1242,7 +1194,6 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                      context->currentScope->targetInfo.add(boundExpression->columnReference.value());
                   }
                   break;
-
                }
                case ast::ExpressionClass::BOUND_FUNCTION: {
                   assert(boundExpression->resultType.has_value() && boundExpression->columnReference.has_value());
@@ -1262,8 +1213,6 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                case ast::ExpressionClass::BOUND_WINDOW: {
                   assert(boundExpression->resultType.has_value() && boundExpression->columnReference.has_value());
                   auto window = std::static_pointer_cast<ast::BoundWindowExpression>(boundExpression);
-
-
 
                   auto fName = window->alias;
                   context->mapAttribute(resolverScope, fName, window->columnReference.value());
@@ -1289,7 +1238,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                   if (resultType.useZeroInsteadOfNull) {
                      resultType.isNullable = false;
                   }
-                  auto n = std::make_shared<ast::ColumnReference>(scope, resultType ,  context->getUniqueScope("tmp_attr"));
+                  auto n = std::make_shared<ast::ColumnReference>(scope, resultType, context->getUniqueScope("tmp_attr"));
                   n->displayName = boundExpression->alias.empty() ? "" : boundExpression->alias;
                   context->mapAttribute(resolverScope, boundExpression->alias.empty() ? n->name : boundExpression->alias, n);
                   if (extendNode->hidden) {
@@ -1323,18 +1272,16 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
             }
             auto boundExpression = analyzeExpression(target, context, resolverScope);
             assert(boundExpression->columnReference.has_value());
-            std::erase_if(context->currentScope->targetInfo.targetColumns,[&](const std::shared_ptr<ast::ColumnReference>& other) {
+            std::erase_if(context->currentScope->targetInfo.targetColumns, [&](const std::shared_ptr<ast::ColumnReference>& other) {
                return *other == *boundExpression->columnReference.value();
             });
          }
          return pipeOperator->input;
-
-
       }
       case ast::PipeOperatorType::SET: {
          auto setExpression = std::static_pointer_cast<ast::SetColumnExpression>(pipeOperator->node);
          std::vector<std::shared_ptr<ast::BoundExpression>> boundExpressions{};
-         for (auto [columnRef, expr]: setExpression->sets) {
+         for (auto [columnRef, expr] : setExpression->sets) {
             auto boundExpression = analyzeExpression(expr, context, resolverScope);
             auto boundColumnRef = analyzeExpression(columnRef, context, resolverScope);
 
@@ -1344,10 +1291,9 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
             boundExpression->columnReference = boundColumnRef->columnReference.value();
             boundColumnRef->columnReference.value()->resultType = boundExpression->resultType.value();
          }
-         boundAstNode = drv.nf.node<ast::BoundSetColumnExpression>(setExpression->loc,  context->getUniqueScope("setMap"),boundExpressions);
+         boundAstNode = drv.nf.node<ast::BoundSetColumnExpression>(setExpression->loc, context->getUniqueScope("setMap"), boundExpressions);
 
          break;
-
       }
       default: error("pipe operator not implemented", pipeOperator->loc);
    }
@@ -1357,15 +1303,15 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
 
 std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableRef(std::shared_ptr<ast::TableRef> tableRef, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope) {
    if (stackGuard->newStackNeeded()) {
-      boost::context::fixedsize_stack salloc(1024*1024);
+      boost::context::fixedsize_stack salloc(1024 * 1024);
       boost::context::stack_context sctx = salloc.allocate();
       auto sGuard = stackGuard;
       stackGuard = std::make_shared<StackGuardFiber>(sctx);
-      void * sp=static_cast<char*>(sctx.sp);
-      std::size_t size=sctx.size;
+      void* sp = static_cast<char*>(sctx.sp);
+      std::size_t size = sctx.size;
       std::shared_ptr<ast::TableProducer> boundTableRef;
 
-      boost::context::fiber f(std::allocator_arg, boost::context::preallocated(sp, size, sctx),salloc, [&](boost::context::fiber&& sink) {
+      boost::context::fiber f(std::allocator_arg, boost::context::preallocated(sp, size, sctx), salloc, [&](boost::context::fiber&& sink) {
          boundTableRef = analyzeTableRef(tableRef, context, resolverScope);
          return std::move(sink);
       });
@@ -1727,7 +1673,7 @@ std::shared_ptr<ast::BoundResultModifier> SQLQueryAnalyzer::analyzeResultModifie
                      }
                      assert(boundConstant->value);
                      auto constantValue = std::static_pointer_cast<ast::IntValue>(boundConstant->value);
-                     if (context->currentScope->targetInfo.targetColumns.size() < constantValue->iVal || constantValue->iVal <= 0) {
+                     if (context->currentScope->targetInfo.targetColumns.size() < static_cast<size_t>(constantValue->iVal) || constantValue->iVal <= 0) {
                         error("Invalid order by element", boundConstant->loc);
                      }
                      columnReference = context->currentScope->targetInfo.targetColumns.at(constantValue->iVal - 1);
@@ -1811,15 +1757,15 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeExpressionListRef(s
  */
 std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::shared_ptr<ast::ParsedExpression> rootNode, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope) {
    if (stackGuard->newStackNeeded()) {
-      boost::context::fixedsize_stack salloc(1024*1024);
+      boost::context::fixedsize_stack salloc(1024 * 1024);
       boost::context::stack_context sctx = salloc.allocate();
       auto sGuard = stackGuard;
       stackGuard = std::make_shared<StackGuardFiber>(sctx);
-      void * sp=static_cast<char*>(sctx.sp);
-      std::size_t size=sctx.size;
+      void* sp = static_cast<char*>(sctx.sp);
+      std::size_t size = sctx.size;
       std::shared_ptr<ast::BoundExpression> boundExpression;
 
-      boost::context::fiber f(std::allocator_arg, boost::context::preallocated(sp, size, sctx),salloc, [&](boost::context::fiber&& sink) {
+      boost::context::fiber f(std::allocator_arg, boost::context::preallocated(sp, size, sctx), salloc, [&](boost::context::fiber&& sink) {
          boundExpression = analyzeExpression(rootNode, context, resolverScope);
          return std::move(sink);
       });
@@ -1911,7 +1857,6 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
             if (comparison->rightChildren.size() != 1) {
                error("ComparisonExpression expects exactly one right child for type: " << std::to_string(static_cast<int>(comparison->type)), comparison->loc)
             }
-
          }
 
          auto left = analyzeExpression(comparison->left, context, resolverScope);
@@ -2242,14 +2187,11 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeWindowExpression(
       boundFunction->resultType->isNullable = true;
    }
 
-
    boundFunction->columnReference.value()->displayName = windowExpr->alias;
    context->mapAttribute(resolverScope, windowExpr->alias, boundFunction->columnReference.value());
 
-
    auto boundWindowExpression = drv.nf.node<ast::BoundWindowExpression>(windowExpr->loc, windowExpr->type, windowExpr->alias, resultType, boundFunction, boundPartitions, boundOrderByModifier, boundWindowFrame);
    boundWindowExpression->columnReference = boundFunction->columnReference.value();
-
 
    return boundWindowExpression;
 }
@@ -2279,9 +2221,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeCastExpression(st
                if (boundColRef->resultType.value().type.getTypeId() == catalog::LogicalTypeId::DATE) {
                   return boundColRef;
                }
-               if (boundColRef->resultType.value().type.getTypeId() != catalog::LogicalTypeId::STRING) {
-                  error("Cannot cast " + boundColRef->alias + " to date", boundColRef->loc);
-               }
+               error("Cannot cast " + boundColRef->alias + " to date", boundColRef->loc);
             }
             default: error("Expression cannot be casted to date (unsupported type)", castExpr->loc);
          }
@@ -2300,7 +2240,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeCastExpression(st
                error("Interval type modifier must be string", castExpr->loc);
             }
             auto typeModStr = std::static_pointer_cast<ast::StringValue>(typeMod)->sVal;
-            stringRepresentation+=typeModStr;
+            stringRepresentation += typeModStr;
          } else if (castExpr->logicalTypeWithMods->typeModifiers.size() > 1) {
             error("Interval with more than one type modifier not supported yet", castExpr->loc);
          }
@@ -2308,9 +2248,8 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeCastExpression(st
             stringRepresentation.erase(stringRepresentation.size() - 5);
             resultType = catalog::Type::intervalMonths();
             stringRepresentation = std::to_string(std::stol(stringRepresentation) * 12);
-            stringRepresentation+="years";
+            stringRepresentation += "years";
          } else if (stringRepresentation.ends_with("days")) {
-
          } else if (stringRepresentation.ends_with("months")) {
             resultType = catalog::Type::intervalMonths();
          } else {
@@ -2658,7 +2597,6 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeFunctionExpressio
       });
       resultType = catalog::Type::index();
       boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, boundArgs);
-
    }
 
    if (boundFunctionExpression == nullptr) {
@@ -2688,7 +2626,7 @@ std::shared_ptr<ast::BoundColumnRefExpression> SQLQueryAnalyzer::analyzeColumnRe
    if (!found) {
       error("Column not found", columnRef->loc);
    }
-   found->displayName = !columnRef->alias.empty() || columnRef->forceToUseAlias ?  columnRef->alias : found->displayName;
+   found->displayName = !columnRef->alias.empty() || columnRef->forceToUseAlias ? columnRef->alias : found->displayName;
    return drv.nf.node<ast::BoundColumnRefExpression>(columnRef->loc, found->resultType, found, columnRef->alias);
 }
 
@@ -2696,88 +2634,85 @@ std::shared_ptr<ast::BoundColumnRefExpression> SQLQueryAnalyzer::analyzeColumnRe
     * SQLTypeUtils
     */
 NullableType SQLTypeUtils::getCommonType(NullableType nullableType1, NullableType nullableType2) {
-    const bool isNullable = nullableType1.isNullable || nullableType2.isNullable;
+   const bool isNullable = nullableType1.isNullable || nullableType2.isNullable;
 
-    // If types are identical, handle special case for DECIMAL or return the type
-    if (nullableType1.type.getTypeId() == nullableType2.type.getTypeId()) {
-        if (nullableType1.type.getTypeId() == catalog::LogicalTypeId::DECIMAL) {
-            return getHigherDecimalType(nullableType1, nullableType2);
-        }
+   // If types are identical, handle special case for DECIMAL or return the type
+   if (nullableType1.type.getTypeId() == nullableType2.type.getTypeId()) {
+      if (nullableType1.type.getTypeId() == catalog::LogicalTypeId::DECIMAL) {
+         return getHigherDecimalType(nullableType1, nullableType2);
+      }
 
-       if (nullableType1.type.getTypeId() == catalog::LogicalTypeId::CHAR) {
-          auto charInfo1 = nullableType1.type.getInfo<catalog::CharTypeInfo>();
-          auto charInfo2 = nullableType2.type.getInfo<catalog::CharTypeInfo>();
-          //If char have different lengths, return string type
-          if (charInfo1->getLength() != charInfo2->getLength()) {
-             return NullableType(catalog::Type::stringType(), isNullable);
-          }
+      if (nullableType1.type.getTypeId() == catalog::LogicalTypeId::CHAR) {
+         auto charInfo1 = nullableType1.type.getInfo<catalog::CharTypeInfo>();
+         auto charInfo2 = nullableType2.type.getInfo<catalog::CharTypeInfo>();
+         //If char have different lengths, return string type
+         if (charInfo1->getLength() != charInfo2->getLength()) {
+            return NullableType(catalog::Type::stringType(), isNullable);
+         }
+      }
+      if (nullableType1.type.getTypeId() == catalog::LogicalTypeId::INT) {
+         auto intInfo1 = nullableType1.type.getInfo<catalog::IntTypeInfo>();
+         auto intInfo2 = nullableType2.type.getInfo<catalog::IntTypeInfo>();
+         if (intInfo1->getBitWidth() > intInfo2->getBitWidth()) {
+            return NullableType(nullableType1.type, isNullable);
+         } else {
+            return NullableType(nullableType2.type, isNullable);
+         }
+      }
+      return NullableType(nullableType1.type, isNullable);
+   }
 
-       }
-       if (nullableType1.type.getTypeId() == catalog::LogicalTypeId::INT) {
-          auto intInfo1 = nullableType1.type.getInfo<catalog::IntTypeInfo>();
-          auto intInfo2 = nullableType2.type.getInfo<catalog::IntTypeInfo>();
-          if (intInfo1->getBitWidth() > intInfo2->getBitWidth()) {
-             return NullableType(nullableType1.type, isNullable);
-          } else {
-             return NullableType(nullableType2.type, isNullable);
-          }
-       }
-        return NullableType(nullableType1.type, isNullable);
-    }
+   for (size_t i = 0; i < 2; i++) {
+      const auto& type1 = nullableType1.type;
+      const auto& type2 = nullableType2.type;
 
-    for (size_t i = 0; i<2; i++) {
-       const auto& type1 = nullableType1.type;
-       const auto& type2 = nullableType2.type;
+      // Check combinations in one direction
+      if (type1.getTypeId() == catalog::LogicalTypeId::DECIMAL &&
+          type2.getTypeId() == catalog::LogicalTypeId::INT) {
+         return NullableType(type1, isNullable);
+      }
+      if ((type1.getTypeId() == catalog::LogicalTypeId::INT || type1.getTypeId() == catalog::LogicalTypeId::DECIMAL) && type2.getTypeId() == catalog::LogicalTypeId::DOUBLE) {
+         return NullableType(type2, isNullable);
+      }
 
-       // Check combinations in one direction
-       if (type1.getTypeId() == catalog::LogicalTypeId::DECIMAL &&
-           type2.getTypeId() == catalog::LogicalTypeId::INT) {
-          return NullableType(type1, isNullable);
-           }
-       if ((type1.getTypeId() == catalog::LogicalTypeId::INT || type1.getTypeId() == catalog::LogicalTypeId::DECIMAL) && type2.getTypeId() == catalog::LogicalTypeId::DOUBLE) {
-          return NullableType(type2, isNullable);
-           }
-
-
-       if (type1.getTypeId() == catalog::LogicalTypeId::STRING &&
-           type2.getTypeId() == catalog::LogicalTypeId::CHAR) {
-          return NullableType(type1, isNullable);
-           }
-       if (type1.getTypeId() == catalog::LogicalTypeId::STRING) {
+      if (type1.getTypeId() == catalog::LogicalTypeId::STRING &&
+          type2.getTypeId() == catalog::LogicalTypeId::CHAR) {
+         return NullableType(type1, isNullable);
+      }
+      if (type1.getTypeId() == catalog::LogicalTypeId::STRING) {
          if (type2.getTypeId() == catalog::LogicalTypeId::INT || type2.getTypeId() == catalog::LogicalTypeId::DECIMAL) {
             return NullableType(type1, isNullable);
          }
-       }
+      }
 
-       if (type1.getTypeId() == catalog::LogicalTypeId::DATE) {
-          if (type2.getTypeId() == catalog::LogicalTypeId::STRING || type2.getTypeId() == catalog::LogicalTypeId::CHAR) {
-             return NullableType(type1, isNullable);
-          }
-          if (type2.getTypeId() == catalog::LogicalTypeId::INTERVAL) {
-             return NullableType(
-                 catalog::Type(catalog::LogicalTypeId::DATE,
+      if (type1.getTypeId() == catalog::LogicalTypeId::DATE) {
+         if (type2.getTypeId() == catalog::LogicalTypeId::STRING || type2.getTypeId() == catalog::LogicalTypeId::CHAR) {
+            return NullableType(type1, isNullable);
+         }
+         if (type2.getTypeId() == catalog::LogicalTypeId::INTERVAL) {
+            return NullableType(
+               catalog::Type(catalog::LogicalTypeId::DATE,
                              std::make_shared<catalog::DateTypeInfo>(catalog::DateTypeInfo::DateUnit::DAY)),
-                 isNullable);
-          }
-       }
+               isNullable);
+         }
+      }
 
+      if (type1.getTypeId() == catalog::LogicalTypeId::INT &&
+          type2.getTypeId() == catalog::LogicalTypeId::CHAR) {
+         return NullableType(type1, isNullable);
+      }
 
-       if (type1.getTypeId() == catalog::LogicalTypeId::INT &&
-           type2.getTypeId() == catalog::LogicalTypeId::CHAR) {
-          return NullableType(type1, isNullable);
-           }
+      // Handle NONE type
+      if (type2.getTypeId() == catalog::LogicalTypeId::NONE) {
+         return NullableType(type1, isNullable);
+      }
+      if (type1.getTypeId() == catalog::LogicalTypeId::NONE) {
+         return NullableType(type2, isNullable);
+      }
+      std::swap(nullableType1, nullableType2);
+   }
 
-       // Handle NONE type
-       if (type2.getTypeId() == catalog::LogicalTypeId::NONE) {
-          return NullableType(type1, isNullable);
-       }
-       if (type1.getTypeId() == catalog::LogicalTypeId::NONE) {
-          return NullableType(type2, isNullable);
-       }
-       std::swap(nullableType1, nullableType2);
-    }
-
-    throw std::runtime_error("No common type found for " + nullableType1.type.toString() + " and " + nullableType2.type.toString());
+   throw std::runtime_error("No common type found for " + nullableType1.type.toString() + " and " + nullableType2.type.toString());
 }
 
 NullableType SQLTypeUtils::getHigherDecimalType(NullableType left, NullableType right) {
@@ -2887,17 +2822,17 @@ NullableType SQLTypeUtils::typemodsToCatalogType(catalog::LogicalTypeId logicalT
       case catalog::LogicalTypeId::INT: {
          if (typeModifiers.size() == 1) {
             auto typeModifier = typeModifiers[0];
-             if (typeModifier->type != ast::ConstantType::UINT) {
-                throw std::runtime_error("Invalid Typemodfiers for type: int");
-             }
+            if (typeModifier->type != ast::ConstantType::UINT) {
+               throw std::runtime_error("Invalid Typemodfiers for type: int");
+            }
             auto size = std::reinterpret_pointer_cast<ast::UnsignedIntValue>(typeModifier)->iVal;
-            if (size>=8) {
+            if (size >= 8) {
                return catalog::Type::int64();
             }
-            if (size==2) {
+            if (size == 2) {
                return catalog::Type::int16();
             }
-            if (size==1) {
+            if (size == 1) {
                return catalog::Type::int8();
             }
          }

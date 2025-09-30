@@ -1,11 +1,13 @@
-#pragma once
+#ifndef LINGODB_COMPILER_FRONTEND_AST_EXTEND_NODE_H
+#define LINGODB_COMPILER_FRONTEND_AST_EXTEND_NODE_H
+
 #include "ast_node.h"
 #include "parsed_expression.h"
 #include "table_producer.h"
 namespace lingodb::ast {
 class ExtendNode : public AstNode {
    public:
-   static constexpr auto TYPE = NodeType::EXTEND_NODE;
+   static constexpr auto cType = NodeType::EXTEND_NODE;
    ExtendNode() : AstNode(NodeType::EXTEND_NODE) {}
    explicit ExtendNode(bool hidden) : AstNode(NodeType::EXTEND_NODE), hidden(hidden) {}
    std::vector<std::shared_ptr<ParsedExpression>> extensions;
@@ -18,3 +20,4 @@ class ExtendNode : public AstNode {
    bool hidden = false;
 };
 } // namespace lingodb::ast
+#endif

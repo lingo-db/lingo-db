@@ -143,7 +143,7 @@ lint: build/lingodb-debug/.stamp
 	else \
 		sed -i 's/-fno-lifetime-dse//g' build/lingodb-debug/compile_commands.json; \
 	fi
-	python3 tools/scripts/run-clang-tidy.py -p $(dir $<) -quiet -header-filter="$(shell pwd)/include/.*" -exclude-header-filter="generated|vendored" -exclude="arrow|vendored" -clang-tidy-binary=clang-tidy-20
+	python3 tools/scripts/run-clang-tidy.py -p $(dir $<) -quiet -header-filter="$(shell pwd)/include/.*" -exclude-header-filter="generated|vendored|include/lingodb/compiler/frontend/generated" -exclude="arrow|vendored|include/lingodb/compiler/frontend/generated" -clang-tidy-binary=clang-tidy-20
 
 format:
 	find include \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \) -exec clang-format-20 -i {} +
