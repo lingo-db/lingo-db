@@ -142,6 +142,8 @@ std::string Type::toString() const {
          return std::dynamic_pointer_cast<StringTypeInfo>(info)->toString();
       case LogicalTypeId::NONE:
          return "none";
+      default:
+         return "none";
    }
 }
 std::string IntTypeInfo::toString() {

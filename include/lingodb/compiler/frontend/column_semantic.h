@@ -1,4 +1,6 @@
-#pragma once
+#ifndef LINGODB_COMPILER_FRONTEND_COLUMN_SEMANTIC_H
+#define LINGODB_COMPILER_FRONTEND_COLUMN_SEMANTIC_H
+
 #include "frontend_type.h"
 #include "lingodb/catalog/Column.h"
 #include "lingodb/compiler/Dialect/TupleStream/ColumnManager.h"
@@ -21,20 +23,18 @@ class ColumnReference {
       return other.name == name && other.scope == scope && other.displayName == displayName;
    }
 
-
-
-   virtual compiler::dialect::tuples::ColumnRefAttr createRef(mlir::OpBuilder& builder, compiler::dialect::tuples::ColumnManager& attrManager) {
+   compiler::dialect::tuples::ColumnRefAttr createRef(mlir::OpBuilder& builder, compiler::dialect::tuples::ColumnManager& attrManager) {
       auto ref = attrManager.createRef(this->scope, name);
       ref.getColumn().type = resultType.toMlirType(builder.getContext());
       return ref;
    };
 
-   virtual compiler::dialect::tuples::ColumnDefAttr createDef(mlir::OpBuilder& builder, compiler::dialect::tuples::ColumnManager& attrManager) {
+   compiler::dialect::tuples::ColumnDefAttr createDef(mlir::OpBuilder& builder, compiler::dialect::tuples::ColumnManager& attrManager) {
       auto def = attrManager.createDef(this->scope, name);
       def.getColumn().type = resultType.toMlirType(builder.getContext());
       return def;
    };
-   virtual compiler::dialect::tuples::ColumnDefAttr createDef(mlir::OpBuilder& builder, compiler::dialect::tuples::ColumnManager& attrManager, mlir::Attribute fromExisting) {
+   compiler::dialect::tuples::ColumnDefAttr createDef(mlir::OpBuilder& builder, compiler::dialect::tuples::ColumnManager& attrManager, mlir::Attribute fromExisting) {
       auto def = attrManager.createDef(this->scope, name, fromExisting);
       def.getColumn().type = resultType.toMlirType(builder.getContext());
       return def;
@@ -52,7 +52,8 @@ struct ColumnRefHash {
 struct ColumnRefEq {
    using is_transparent = void;
    bool operator()(const std::pair<std::shared_ptr<ast::ColumnReference>, size_t> a,
-                   const std::pair<std::shared_ptr<ast::ColumnReference>, size_t> b) const noexcept {
+                   const std::pair<std::shared_ptr<ast::ColumnReference>, size_t>
+                      b) const noexcept {
       return a.first->scope == b.first->scope && a.first->name == b.first->name;
    }
 };
@@ -64,3 +65,4 @@ struct TargetInfo {
    }
 };
 } // namespace lingodb::ast
+#endif

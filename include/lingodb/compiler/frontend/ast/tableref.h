@@ -1,4 +1,6 @@
-#pragma once
+#ifndef LINGODB_COMPILER_FRONTEND_AST_TABLEREF_H
+#define LINGODB_COMPILER_FRONTEND_AST_TABLEREF_H
+
 #include "ast_node.h"
 #include "lingodb/catalog/TableCatalogEntry.h"
 #include "table_producer.h"
@@ -47,8 +49,8 @@ class TableDescription {
 };
 class BaseTableRef : public TableRef {
    public:
-   static constexpr TableReferenceType TYPE = TableReferenceType::BASE_TABLE;
-   BaseTableRef(TableDescription tableDescription) : TableRef(TYPE), catalogName(tableDescription.database), schemaName(tableDescription.schema), tableName(tableDescription.table) {}
+   static constexpr TableReferenceType cType = TableReferenceType::BASE_TABLE;
+   BaseTableRef(TableDescription tableDescription) : TableRef(cType), catalogName(tableDescription.database), schemaName(tableDescription.schema), tableName(tableDescription.table) {}
 
    //! The catalog name.
    std::string catalogName;
@@ -93,10 +95,10 @@ enum class JoinType : uint8_t {
 };
 using jointCondOrUsingCols = std::variant<std::shared_ptr<ParsedExpression>, std::vector<std::shared_ptr<ColumnRefExpression>>>;
 class JoinRef : public TableRef {
-   static constexpr TableReferenceType TYPE = TableReferenceType::JOIN;
+   static constexpr TableReferenceType cType = TableReferenceType::JOIN;
 
    public:
-   JoinRef(JoinType type, JoinCondType refType) : TableRef(TYPE), type(type), refType(refType) {}
+   JoinRef(JoinType type, JoinCondType refType) : TableRef(cType), type(type), refType(refType) {}
 
    //! The left hand side of the join
    //! QueryNode as variant is needed for pipe syntax. Example: FROM Test |> join ok on id1=id2
@@ -114,17 +116,18 @@ class JoinRef : public TableRef {
 };
 
 class CrossProductRef : public TableRef {
-   static constexpr TableReferenceType TYPE = TableReferenceType::CROSS_PRODUCT;
+   static constexpr TableReferenceType cType = TableReferenceType::CROSS_PRODUCT;
+
    public:
-   CrossProductRef() :  TableRef(TYPE) {}
+   CrossProductRef() : TableRef(cType) {}
    std::vector<std::shared_ptr<TableProducer>> tables;
 };
 
 class SubqueryRef : public TableRef {
-   static constexpr TableReferenceType TYPE = TableReferenceType::SUBQUERY;
+   static constexpr TableReferenceType cType = TableReferenceType::SUBQUERY;
 
    public:
-   SubqueryRef(std::shared_ptr<TableProducer> subSelectNode) : TableRef(TYPE), subSelectNode(std::move(subSelectNode)) {}
+   SubqueryRef(std::shared_ptr<TableProducer> subSelectNode) : TableRef(cType), subSelectNode(std::move(subSelectNode)) {}
 
    //! The subquery
    std::shared_ptr<TableProducer> subSelectNode;
@@ -137,12 +140,12 @@ class SubqueryRef : public TableRef {
  */
 class ExpressionListRef : public TableRef {
    public:
-   static constexpr TableReferenceType TYPE = TableReferenceType::EXPRESSION_LIST;
-   ExpressionListRef(std::vector<std::vector<std::shared_ptr<ParsedExpression>>> values) :  TableRef(TYPE), values(std::move(values)) {}
+   static constexpr TableReferenceType cType = TableReferenceType::EXPRESSION_LIST;
+   ExpressionListRef(std::vector<std::vector<std::shared_ptr<ParsedExpression>>> values) : TableRef(cType), values(std::move(values)) {}
 
    //! The expressions in the list
    std::vector<std::vector<std::shared_ptr<ParsedExpression>>> values;
-
 };
 
 } // namespace lingodb::ast
+#endif

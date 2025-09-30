@@ -1,4 +1,6 @@
-#pragma once
+#ifndef LINGODB_COMPILER_FRONTEND_AST_CONSTANT_VALUE_H
+#define LINGODB_COMPILER_FRONTEND_AST_CONSTANT_VALUE_H
+
 #include <cstdint>
 #include <stdexcept>
 #include <string>
@@ -109,3 +111,4 @@ class DateValue : public Value {
 };
 
 } // namespace lingodb::ast
+#endif

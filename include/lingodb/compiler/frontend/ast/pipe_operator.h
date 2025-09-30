@@ -1,4 +1,6 @@
-#pragma once
+#ifndef LINGODB_COMPILER_FRONTEND_AST_PIPE_OPERATOR_H
+#define LINGODB_COMPILER_FRONTEND_AST_PIPE_OPERATOR_H
+
 #include "parsed_expression.h"
 #include "table_producer.h"
 #include "tableref.h"
@@ -24,10 +26,11 @@ enum class PipeOperatorType : uint8_t {
 };
 class PipeOperator : public TableProducer {
    public:
-   PipeOperator(PipeOperatorType pipeOpType, std::shared_ptr<AstNode> node) : TableProducer(NodeType::PIPE_OP), node(node), pipeOpType(pipeOpType) {}
+   PipeOperator(PipeOperatorType pipeOpType, std::shared_ptr<AstNode> node) : TableProducer(NodeType::PIPE_OP), pipeOpType(pipeOpType), node(node) {}
    PipeOperatorType pipeOpType;
    std::shared_ptr<AstNode> node;
 
    std::shared_ptr<TableProducer> input = nullptr;
 };
 } // namespace lingodb::ast
+#endif

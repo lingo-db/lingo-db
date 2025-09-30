@@ -2,7 +2,6 @@
 
 #include "lingodb/compiler/frontend/frontend_error.h"
 
-#include <iostream>
 namespace lingodb::analyzer {
 using ResolverScope = llvm::ScopedHashTable<std::string, std::shared_ptr<ast::ColumnReference>, StringInfo>::ScopeTy;
 ASTTransformContext::ASTTransformContext() : currentScope(std::make_shared<ASTTransformScope>()) {
@@ -78,7 +77,7 @@ std::shared_ptr<ast::ColumnReference> SQLContext::getColumnReference(location lo
    if (!resolver.count(name)) {
       std::stringstream ss;
 
-      throw frontend_error("Could not resolve '" + name + "'", loc);
+      throw FrontendError("Could not resolve '" + name + "'", loc);
    }
    const auto res = resolver.lookup(name);
    return res;
@@ -87,7 +86,7 @@ std::shared_ptr<ast::ColumnReference> SQLContext::getColumnReference(location lo
 void SQLContext::replace(ResolverScope& scope, std::shared_ptr<ast::ColumnReference> old, std::shared_ptr<ast::ColumnReference> value) {
    std::vector<std::pair<std::string, std::shared_ptr<ast::ColumnReference>>> toReplace;
    std::ranges::copy_if(definedAttributes.top(), std::back_inserter(toReplace), [&](auto& p) { return p.second == old; });
-   for (auto& c: toReplace) {
+   for (auto& c : toReplace) {
       mapAttribute(scope, c.first, value);
    }
 }

@@ -1,5 +1,5 @@
-   #ifndef LINGODB_TARGET_LIST_H
-#define LINGODB_TARGET_LIST_H
+#ifndef LINGODB_COMPILER_FRONTEND_AST_TARGET_LIST_H
+#define LINGODB_COMPILER_FRONTEND_AST_TARGET_LIST_H
 #include "ast_node.h"
 #include "parsed_expression.h"
 
@@ -14,4 +14,4 @@ class TargetList : public AstNode {
 };
 } // namespace lingodb::ast
 
-#endif //LINGODB_TARGET_LIST_H
+#endif // LINGODB_COMPILER_FRONTEND_AST_TARGET_LIST_H

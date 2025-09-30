@@ -1,4 +1,5 @@
-#pragma once
+#ifndef LINGODB_COMPILER_FRONTEND_AST_BOUND_BOUND_PIPE_OPERATOR_H
+#define LINGODB_COMPILER_FRONTEND_AST_BOUND_BOUND_PIPE_OPERATOR_H
 
 #include "lingodb/compiler/frontend/ast/pipe_operator.h"
 #include "lingodb/compiler/frontend/column_semantic.h"
@@ -20,3 +21,4 @@ class BoundSetPipeOperator : public PipeOperator {
    std::shared_ptr<analyzer::SQLScope> rightScope;
 };
 } // namespace lingodb::ast
+#endif

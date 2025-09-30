@@ -115,4 +115,4 @@ bool NullableType::operator!=(NullableType& other) {
       default: return false;
    }
 }
-}
+} // namespace lingodb
