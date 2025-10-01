@@ -55,6 +55,9 @@ select 1 between 1 and 2;
 --//CHECK: %{{.*}} = db.oneof %{{.*}} : i32 ? %{{.*}}, %{{.*}} : i32, i32
 select 1 in (1,2);
 --//CHECK: module
+--//CHECK: %{{.*}} = db.constant(false) : i1
+select false;
+--//CHECK: module
 --//CHECK: %{{.*}} = db.null : <none>
 --//CHECK: %{{.*}} = db.isnull %{{.*}} : <none>
 select null is null;
@@ -209,8 +212,19 @@ copy test from 't.csv' csv escape '\' delimiter '|' null '';
 --//CHECK:       tuples.return %{{.*}} : i32
 --//CHECK: }
 select x,sum(distinct y) from (values (1,2)) t(x,y) group by x;
+--//CHECK: %{{.*}} = relalg.map %1 computes : [@{{.*}}::@{{.*}}({type = i32})] (%arg0: !tuples.tuple){
+--//CHECK:       %{{.*}} = db.add %{{.*}} : i32, %{{.*}} : i32
+--//CHECK: %{{.*}} = relalg.aggregation %{{.*}} [@{{.*}}{{.*}}::@const{{.*}}] computes : [@{{.*}}::@{{.*}}({type = i32})] (%arg0: !tuples.tuplestream,%arg1: !tuples.tuple){
+--//CHECK:       %{{.*}} = relalg.aggrfn sum @{{.*}}::@{{.*}} %{{.*}} : i32
+--//CHECK:       tuples.return %{{.*}} : i32
+--//CHECK: }
+select x,sum(y+1) from (values (1,2)) t(x,y) group by x;
 --//CHECK: %{{.*}} = relalg.sort %{{.*}} [(@{{.*}}::@const{{.*}},asc),(@{{.*}}::@const{{.*}},desc),(@{{.*}}::@const{{.*}},asc)]
 select * from (values (1,2,3)) t(x,y,z) order by x, y desc, z asc;
+--//CHECK: %{{.*}} = relalg.sort %{{.*}} [(@{{.*}}::@const{{.*}},asc),(@{{.*}}::@const{{.*}},desc),(@{{.*}}::@const{{.*}},asc)]
+select * from (values (1,2,3)) t(x,y,z) order by 1, 2 desc, 3 asc;
+--//CHECK: %{{.*}} = relalg.sort %{{.*}} [(@{{.*}}::@const{{.*}},asc),(@{{.*}}::@const{{.*}},desc),(@{{.*}}::@const{{.*}},asc)]
+with t (x,y,z) as (select * from (values (1,2,3)) t(x,y,z) order by x, y desc, z asc) select * from t where x=1;
 --//CHECK: %{{.*}} = relalg.aggregation
 --//CHECK: %{{.*}} = relalg.aggregation
 --//CHECK: %{{.*}} = relalg.aggregation
@@ -236,12 +250,17 @@ select sum(x) over (partition by y order by z rows between 100 preceding and 100
 select * from test union select * from test;
 --//CHECK: %{{.*}}  = relalg.union all
 select * from test union all select * from test;
+--//CHECK: %{{.*}}  = relalg.union distinct
+--//CHECK: %{{.*}}  = relalg.limit 1 {{.*}}
+select * from test union select * from test LIMIT 1;
 --//CHECK: %{{.*}}  = relalg.outerjoin
 select * from test t1 left outer join test t2 on t1.bool=t2.bool;
 --//CHECK: %{{.*}}  = relalg.outerjoin
 select * from test t1 right outer join test t2 on t1.bool=t2.bool;
 --//CHECK: %{{.*}}  = relalg.fullouterjoin
 select * from test t1 full outer join test t2 on t1.bool=t2.bool;
+--//CHECK: %{{.*}}  = relalg.join
+select * from test t1 join test t2 on t1.bool=t2.bool;
 --//CHECK: module
 --//CHECK: %{{.*}} = relalg.map %{{.*}} computes :
 --//CHECK:       %{{.*}} = relalg.exists %{{.*}}
@@ -269,3 +288,92 @@ select 1=all(select 1);
 select 1=any(select 1);
 --//CHECK: call @{{.*}}RelationHelper{{.*}}setPersist{{.*}}(%true) : (i1) -> ()
 set persist=1;
+--//CHECK: module
+select case when x=1 then 10 when x=2 then 20 else 0 end from (values (1)) t(x) group by case when x=1 then 10 when x=2 then 20 else 0 end;
+--//CHECK: module
+--//CHECK:  %{{.*}} = db.runtime_call "AbsInt"({{.*}}) : (i32) -> i32
+--//CHECK: }
+--//CHECK:  %{{.*}} = relalg.aggregation {{.*}} [@{{.*}}::@{{.*}}] computes : [] (%arg0: !tuples.tuplestream,%arg1: !tuples.tuple){
+select abs(x+1) from (values (1)) t(x) group by abs(x+1);
+--//CHECK: module
+--//CHECK:  %{{.*}} = db.compare eq %{{.*}} : i32, %{{.*}} : i32
+--//CHECK: }
+--//CHECK:  %{{.*}} = relalg.aggregation {{.*}} [@{{.*}}::@{{.*}}] computes : [] (%arg0: !tuples.tuplestream,%arg1: !tuples.tuple){
+select x=1 and y=2 from (values (1,2)) t(x,y) group by x=1 and y=2 ;
+--//CHECK: module
+--//CHECK:  %{{.*}} = db.between %{{.*}} : i32 between %{{.*}} : i32, %{{.*}} : i32, lowerInclusive : true, upperInclusive : true
+--//CHECK: }
+--//CHECK:  {{.*}} = relalg.aggregation {{.*}} [@{{.*}}::@{{.*}}] computes : [] (%arg0: !tuples.tuplestream,%arg1: !tuples.tuple){
+select x between 0 and 1 from (values (1)) t(x) group by x between 0 and 1;
+--//CHECK: module
+--//CHECK:  %{{.*}} = relalg.map %{{.*}} computes : [@{{.*}}::@{{.*}}({type = !db.nullable<i32>})] (%arg0: !tuples.tuple){
+--//CHECK:      %{{.*}} = relalg.const_relation columns :
+--//CHECK:      %{{.*}} = relalg.const_relation columns :
+--//CHECK:      %{{.*}} = relalg.crossproduct %{{.*}}, %{{.*}}
+--//CHECK: }
+--//CHECK:  {{.*}} = relalg.aggregation {{.*}} [@{{.*}}::@{{.*}}] computes : [] (%arg0: !tuples.tuplestream,%arg1: !tuples.tuple){
+--//CHECK: }
+--//CHECK:  %{{.*}} = relalg.materialize %{{.*}} [@{{.*}}::@{{.*}}] => [""] : !subop.local_table<[{{.*}}$0 : !db.nullable<i32>], [""]>
+select (select x from (values (1)) t(x), (values (2)) z(y)) from (values (1)) t(x) group by (select x from (values (1)) t(x), (values (2)) z(y));
+--//CHECK: module
+--//CHECK:  %{{.*}} = db.cast {{.*}} : i32 -> f64
+--//CHECK: }
+--//CHECK:  %{{.*}} = relalg.aggregation {{.*}} [@{{.*}}::@{{.*}}] computes : [] (%arg0: !tuples.tuplestream,%arg1: !tuples.tuple){
+select x::float from (values (1)) t(x) group by x::float;
+--//CHECK: module
+--//CHECK:  %{{.*}} = db.runtime_call "Concatenate"({{.*}}, {{.*}}) : (!db.string, !db.string) -> !db.string
+--//CHECK:  %{{.*}} = db.runtime_call "ToUpper"({{.*}}) : (!db.string) -> !db.string
+--//CHECK: }
+--//CHECK:  %{{.*}} = relalg.aggregation %2 [@{{.*}}::@{{.*}}] computes : [@{{.*}}::@{{.*}}({type = i32})] (%arg0: !tuples.tuplestream,%arg1: !tuples.tuple){
+--//CHECK:      %5 = relalg.aggrfn min @{{.*}}::@{{.*}} %arg0 : i32
+select UPPER(y || 'extra'), min(y) from (values ('Value1', 1), ('VALUE2', 2), ('VALUE3', 3) ) t(x,y) group by UPPER(y || 'extra');
+--//CHECK: %{{.*}} = relalg.aggregation
+--//CHECK: %{{.*}} = relalg.aggregation
+--//CHECK: %{{.*}} = relalg.aggregation
+--//CHECK: %{{.*}} = relalg.union all
+--//CHECK: %{{.*}} = relalg.union all
+--//CHECK:  %{{.*}} = relalg.map %{{.*}} computes : [@{{.*}}::@{{.*}}({type = i64})] (%arg0: !tuples.tuple)
+--//CHECK:      %{{.*}} = arith.constant 1 : i64
+--//CHECK:      %{{.*}} = arith.shrui %{{.*}}, %{{.*}} : i64
+--//CHECK:      %{{.*}} = arith.constant 1 : i64
+--//CHECK:      %{{.*}} = arith.andi %{{.*}}, %{{.*}} : i64
+--//CHECK:      tuples.return %{{.*}} : i64
+--//CHECK:  %{{.*}} = relalg.map %{{.*}} computes : [@{{.*}}::@{{.*}}({type = i64})] (%arg0: !tuples.tuple)
+--//CHECK:      %{{.*}} = arith.constant 0 : i64
+--//CHECK:      %{{.*}} = arith.shrui %{{.*}}, %{{.*}} : i64
+--//CHECK:      %{{.*}} = arith.constant 1 : i64
+--//CHECK:      %{{.*}} = arith.andi %{{.*}}, %{{.*}} : i64
+--//CHECK:      tuples.return %{{.*}} : i64
+select x,y, sum(z), grouping(x), grouping(y) from (values (1,2,3)) t(x,y,z) group by rollup(x,y) order by x;
+--//CHECK: %{{.*}} = db.compare eq {{.*}} : i32, %5 : i32
+select x from (values (1), (2), (3)) t(x) where x=1;
+--//CHECK: %{{.*}} = db.compare lt {{.*}} : i32, %5 : i32
+select x from (values (1), (2), (3)) t(x) where x<1;
+--//CHECK: %{{.*}} = db.compare gt {{.*}} : i32, %5 : i32
+select x from (values (1), (2), (3)) t(x) where x>1;
+--//CHECK: %{{.*}} = db.compare lte {{.*}} : i32, %5 : i32
+select x from (values (1), (2), (3)) t(x) where x<=1;
+--//CHECK: %{{.*}} = db.compare gte {{.*}} : i32, %5 : i32
+select x from (values (1), (2), (3)) t(x) where x>=1;
+--//CHECK: %{{.*}} = db.compare neq {{.*}} : i32, %5 : i32
+select x from (values (1), (2), (3)) t(x) where x<>1;
+--//CHECK: %{{.*}} = relalg.limit 2 {{.*}}
+select x from (values (1), (2), (3)) t(x) LIMIT 2;
+--//CHECK:  %{{.*}} = relalg.materialize %1 [@{{.*}}::@{{.*}}] => ["y"] : !subop.local_table<[const_u_1$0 : i32], ["y"]>
+from (values (1,1), (2,2), (3,3)) t(x,y)
+|> select *
+|> DROP x;
+--//CHECK:   %{{.*}} = relalg.materialize %1 [@{{.*}}::@const,@{{.*}}::@{{.*}},@{{.*}}::@const] => ["x", "y", "x"] : !subop.local_table<[const$0 : i32, const_u_1$0 : i32, const$1 : i32], ["x", "y", "x"]>
+from (values (1,1), (2,2), (3,3)) t(x,y)
+|> select *
+|> EXTEND x;
+--//CHECK:  %{{.*}} = relalg.map %1 computes : [@{{.*}}::@{{.*}}({type = i32})] (%arg0: !tuples.tuple){
+--//CHECK:  %{{.*}} = db.add %{{.*}} : i32, %{{.*}} : i32
+from (values (1,1), (2,2), (3,3)) t(x,y)
+|> select *
+|> SET y=y+1;
+--//CHECK: %{{.*}}  = relalg.limit 1 {{.*}}
+--//CHECK  %{{.*}} = relalg.union all
+from test
+|> LIMIT 1
+|> union all (select * from test);
