@@ -9,21 +9,18 @@ namespace lingodb::execution::baseline {
 using namespace compiler;
 
 class TupleHelper {
-   mlir::TupleType tupleType;
-
    public:
-   explicit TupleHelper(const mlir::TupleType tupleType) : tupleType(tupleType) {
-   }
+   TupleHelper() = default;
 
-   static std::pair<unsigned, size_t> getCxxAlignAndSize(const mlir::Type elem) {
+   [[nodiscard]] static std::pair<unsigned, size_t> getCxxAlignAndSize(const mlir::Type elem) noexcept {
       unsigned elemAlign = 0;
       size_t elemSize = 0;
       llvm::TypeSwitch<mlir::Type>(elem)
-         .Case<dialect::util::RefType>([&](dialect::util::RefType t) {
+         .Case<dialect::util::RefType>([&](auto) {
             elemSize = sizeof(void*);
             elemAlign = alignof(void*);
          })
-         .Case<mlir::IntegerType>([&](mlir::IntegerType t) {
+         .Case<mlir::IntegerType>([&](const mlir::IntegerType t) {
             elemSize = (t.getIntOrFloatBitWidth() + 7) / 8;
             switch (elemSize) {
                case 1:
@@ -62,8 +59,8 @@ class TupleHelper {
                   elemAlign = 1; // fallback to 1 byte alignment
             }
          })
-         .Case<mlir::TupleType>([&](mlir::TupleType tupleType) {
-            auto [size, align] = TupleHelper{tupleType}.sizeAndPadding();
+         .Case<mlir::TupleType>([&](const mlir::TupleType tupleType) {
+            auto [size, align] = sizeAndPadding(tupleType);
             elemSize = size;
             elemAlign = align;
          })
@@ -81,7 +78,7 @@ class TupleHelper {
       return {elemAlign, elemSize};
    }
 
-   [[nodiscard]] unsigned getElementOffset(const uint32_t index) const noexcept {
+   [[nodiscard]] static unsigned getElementOffset(const mlir::TupleType tupleType, const uint32_t index) noexcept {
       size_t offset = 0;
       assert(index < tupleType.getTypes().size() && "Index out of bounds for tuple type");
       for (size_t i = 0; i <= index; ++i) {
@@ -98,7 +95,7 @@ class TupleHelper {
       return offset;
    }
 
-   [[nodiscard]] std::pair<size_t, unsigned> sizeAndPadding() const noexcept {
+   [[nodiscard]] static std::pair<size_t, unsigned> sizeAndPadding(const mlir::TupleType tupleType) noexcept {
       size_t offset = 0;
       unsigned maxAlign = 0;
       for (const mlir::Type elem : tupleType.getTypes()) {
@@ -116,6 +113,50 @@ class TupleHelper {
       if (offset % maxAlign != 0)
          offset += maxAlign - offset % maxAlign;
       return {offset, maxAlign};
+   }
+
+   [[nodiscard]] static size_t numSlots(const mlir::TupleType tupleType) noexcept {
+      size_t count = 0;
+      // TODO: make more efficient / not recursive!
+      for (size_t i = 0; i < tupleType.getTypes().size(); ++i) {
+         auto type = tupleType.getType(i);
+         count += mlir::TypeSwitch<mlir::Type, uint32_t>(type)
+                     .Case<mlir::IntegerType>([](auto intType) {
+                        return (intType.getIntOrFloatBitWidth() + 64 - 1) / 64;
+                     })
+                     .template Case<dialect::util::VarLen32Type, dialect::util::BufferType>([](auto) { return 2; })
+                     .template Case<mlir::TupleType>([](const mlir::TupleType t) { return TupleHelper::numSlots(t); })
+                     .Default([](mlir::Type t) { return 1; });
+      }
+      return count;
+   }
+
+   [[nodiscard]] static mlir::Type typeAtSlot(const mlir::TupleType tupleType, const uint32_t pos) noexcept {
+      size_t count = 0;
+      for (const mlir::Type elem : tupleType.getTypes()) {
+         const size_t elemCount = mlir::TypeSwitch<mlir::Type, size_t>(elem).Case<mlir::TupleType>([&](const mlir::TupleType t) {
+                                                                               return numSlots(t);
+                                                                            })
+                                     .template Case<mlir::IntegerType>([](auto intType) {
+                                        return (intType.getIntOrFloatBitWidth() + 64 - 1) / 64;
+                                     })
+                                     .template Case<dialect::util::VarLen32Type, dialect::util::BufferType>([](auto) { return 2; })
+                                     .Default([&](mlir::Type) {
+                                        return 1;
+                                     });
+         if (pos < count + elemCount) {
+            // the requested position is within this element
+            return mlir::TypeSwitch<mlir::Type, mlir::Type>(elem).Case<mlir::TupleType>([&](const mlir::TupleType t) {
+                                                                    return typeAtSlot(t, pos - count);
+                                                                 })
+               .Default([&](const mlir::Type t) {
+                  return t;
+               });
+         }
+         count += elemCount;
+      }
+      assert(false && "Position out of bounds for tuple type");
+      return nullptr;
    }
 };
 } // namespace lingodb::execution::baseline

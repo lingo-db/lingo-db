@@ -123,7 +123,7 @@ int main(int argc, char** argv) {
    std::stringstream query;
 
    while (true) {
-      const char* promptStr = prompt ? (query.str().empty() ? "sql> " : "   -> ") : "";
+      const char* promptStr = prompt.getValue() ? (query.str().empty() ? "sql> " : "   -> ") : "";
       char* input = linenoise(promptStr);
 
       if (input == nullptr) {

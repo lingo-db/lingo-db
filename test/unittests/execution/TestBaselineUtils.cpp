@@ -27,55 +27,47 @@ TEST_CASE("TupleHelper::getElementOffset and sizeAndPadding with real MLIR types
    auto t5 = mlir::TupleType::get(&ctx, {t5H, i8});
 
    SECTION("getElementOffset returns correct offsets") {
-      TupleHelper helper(t1);
-      REQUIRE(helper.getElementOffset(0) == 0);
-      REQUIRE(helper.getElementOffset(1) == 4);
-      REQUIRE(helper.getElementOffset(2) == 8);
-      REQUIRE(helper.getElementOffset(3) == 16);
-      REQUIRE(helper.getElementOffset(4) == 24);
+      TupleHelper helper;
+      REQUIRE(helper.getElementOffset(t1, 0) == 0);
+      REQUIRE(helper.getElementOffset(t1, 1) == 4);
+      REQUIRE(helper.getElementOffset(t1, 2) == 8);
+      REQUIRE(helper.getElementOffset(t1, 3) == 16);
+      REQUIRE(helper.getElementOffset(t1, 4) == 24);
 
-      helper = TupleHelper(t2);
-      REQUIRE(helper.getElementOffset(0) == 0);
-      REQUIRE(helper.getElementOffset(1) == 8);
-      REQUIRE(helper.getElementOffset(2) == 16);
+      REQUIRE(helper.getElementOffset(t2, 0) == 0);
+      REQUIRE(helper.getElementOffset(t2, 1) == 8);
+      REQUIRE(helper.getElementOffset(t2, 2) == 16);
 
-      helper = TupleHelper(t3);
-      REQUIRE(helper.getElementOffset(0) == 0);
-      REQUIRE(helper.getElementOffset(1) == 8);
+      REQUIRE(helper.getElementOffset(t3, 0) == 0);
+      REQUIRE(helper.getElementOffset(t3, 1) == 8);
 
-      helper = TupleHelper(t4);
-      REQUIRE(helper.getElementOffset(0) == 0);
-      REQUIRE(helper.getElementOffset(1) == 32);
-      REQUIRE(helper.getElementOffset(2) == 56);
+      REQUIRE(helper.getElementOffset(t4, 0) == 0);
+      REQUIRE(helper.getElementOffset(t4, 1) == 32);
+      REQUIRE(helper.getElementOffset(t4, 2) == 56);
 
-      helper = TupleHelper(t5);
-      REQUIRE(helper.getElementOffset(0) == 0);
-      REQUIRE(helper.getElementOffset(1) == 1);
+      REQUIRE(helper.getElementOffset(t5, 0) == 0);
+      REQUIRE(helper.getElementOffset(t5, 1) == 1);
    }
 
    SECTION("sizeAndPadding returns correct size and alignment") {
-      TupleHelper helper(t1);
-      auto [size, align] = helper.sizeAndPadding();
+      TupleHelper helper;
+      auto [size, align] = helper.sizeAndPadding(t1);
       REQUIRE(size == 32);
       REQUIRE(align == 8);
 
-      helper = TupleHelper(t2);
-      std::tie(size, align) = helper.sizeAndPadding();
+      std::tie(size, align) = helper.sizeAndPadding(t2);
       REQUIRE(size == 24);
       REQUIRE(align == 8);
 
-      helper = TupleHelper(t3);
-      std::tie(size, align) = helper.sizeAndPadding();
+      std::tie(size, align) = helper.sizeAndPadding(t3);
       REQUIRE(size == 16);
       REQUIRE(align == 8);
 
-      helper = TupleHelper(t4);
-      std::tie(size, align) = helper.sizeAndPadding();
+      std::tie(size, align) = helper.sizeAndPadding(t4);
       REQUIRE(size == 64);
       REQUIRE(align == 8);
 
-      helper = TupleHelper(t5);
-      std::tie(size, align) = helper.sizeAndPadding();
+      std::tie(size, align) = helper.sizeAndPadding(t5);
       REQUIRE(size == 2);
       REQUIRE(align == 1);
    }
