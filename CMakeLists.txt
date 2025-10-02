@@ -69,7 +69,7 @@ include_directories(${CLANG_INCLUDE_DIRS})
 
 include_directories(${PROJECT_SOURCE_DIR}/include)
 include_directories(${PROJECT_SOURCE_DIR}/vendored)
-add_subdirectory(${PROJECT_SOURCE_DIR}/vendored/libpg_query/ EXCLUDE_FROM_ALL)
+
 add_subdirectory(${PROJECT_SOURCE_DIR}/vendored/linenoise-ng/ EXCLUDE_FROM_ALL)
 
 
@@ -172,11 +172,14 @@ set(LIBS
         MLIRTransforms
         MLIRMathTransforms
 )
+
+find_package(BISON REQUIRED)
+find_package(FLEX REQUIRED)
 set(PRECOMPILED_CC_PATH "${CMAKE_CURRENT_BINARY_DIR}/precompiled_bitcode.cc")
 add_subdirectory(src/catalog)
 add_subdirectory(src/runtime)
 add_subdirectory(src/execution)
-add_subdirectory(src/compiler/frontend/SQL)
+add_subdirectory(src/compiler/frontend)
 add_subdirectory(src/tools)
 add_subdirectory(tools)
 if (ENABLE_TESTS)

@@ -1,6 +1,9 @@
 #ifndef LINGODB_CATALOG_TYPES_H
 #define LINGODB_CATALOG_TYPES_H
 
+#include <mlir/Dialect/Func/Transforms/Passes.h.inc>
+#include <mlir/IR/Builders.h>
+
 #include <memory>
 #include <optional>
 #include <string>
@@ -24,6 +27,8 @@ enum class LogicalTypeId : uint8_t {
    INTERVAL = 9,
    CHAR = 10,
    STRING = 11,
+   NONE = 12,
+   INDEX = 13,
 };
 class TypeInfo {
    protected:
@@ -53,7 +58,7 @@ class Type {
    public:
    Type(LogicalTypeId id, std::shared_ptr<TypeInfo> info);
    std::string toString() const;
-   LogicalTypeId getTypeId() { return id; }
+   LogicalTypeId getTypeId() const { return id; }
    template <class T>
    std::shared_ptr<T> getInfo() {
       return std::dynamic_pointer_cast<T>(info);
@@ -75,7 +80,10 @@ class Type {
    static Type timestamp();
    static Type intervalDaytime();
    static Type intervalMonths();
+   static Type noneType();
+   static Type index();
 };
+
 class IntTypeInfo : public TypeInfo {
    bool isSigned;
    size_t bitWidth;
