@@ -34,9 +34,6 @@ class BaselineBackend : public ExecutionBackend {
       pm2.enableVerifier(verify);
       addLingoDBInstrumentation(pm2, serializationState);
       pm2.addPass(mlir::createConvertSCFToCFPass());
-      pm2.addPass(createDecomposeTuplePass());
-      pm2.addPass(mlir::createCanonicalizerPass());
-      pm2.addPass(mlir::createCSEPass()); // TODO: evaluate whether we need this
       if (mlir::failed(pm2.run(moduleOp))) {
          return false;
       }
