@@ -5,6 +5,8 @@
 #include "CompilerConfig.hpp"
 #include "snippet_encoders_x64.hpp"
 
+#include <llvm/Support/TargetSelect.h>
+#include <llvm/TargetParser/Host.h>
 #include <tpde/ValueRef.hpp>
 #include <tpde/x64/CompilerX64.hpp>
 
@@ -31,8 +33,45 @@ struct IRCompilerX64
    std::variant<std::monostate, tpde::x64::CCAssignerSysV> cc_assigners;
 
    explicit IRCompilerX64(std::unique_ptr<IRAdaptor>&& adaptor)
-      : Base{adaptor.get()},
+      : Base{adaptor.get(), autodetect_native_target_features()},
         adaptor(std::move(adaptor)) { static_assert(tpde::Compiler<IRCompilerX64, tpde::x64::PlatformConfig>); }
+
+   static CPU_FEATURES autodetect_native_target_features() noexcept {
+      llvm::InitializeNativeTarget();
+      llvm::StringMap<bool> host_features = llvm::sys::getHostCPUFeatures();
+
+      static const llvm::DenseMap<const char*, CPU_FEATURES> feature_map = {
+         {"cx16", CPU_CMPXCHG16B},
+         {"popcnt", CPU_POPCNT},
+         {"sse3", CPU_SSE3},
+         {"ssse3", CPU_SSSE3},
+         {"sse4.1", CPU_SSE4_1},
+         {"sse4.2", CPU_SSE4_2},
+         {"avx", CPU_AVX},
+         {"avx2", CPU_AVX2},
+         {"bmi", CPU_BMI1},
+         {"bmi2", CPU_BMI2},
+         {
+            "f16c",
+            CPU_F16C,
+         },
+         {"fma", CPU_FMA},
+         {"lzcnt", CPU_LZCNT},
+         {"movbe", CPU_MOVBE},
+         {"avx512f", CPU_AVX512F},
+         {"avx512bw", CPU_AVX512BW},
+         {"avx512cd", CPU_AVX512CD},
+         {"avx512dq", CPU_AVX512DQ},
+         {"avx512vl", CPU_AVX512VL}};
+
+      CPU_FEATURES detected_features = CPU_BASELINE;
+      for (const auto& [llvm_feature, flag] : feature_map) {
+         if (host_features.find(llvm_feature)->second) {
+            detected_features = static_cast<CPU_FEATURES>(detected_features | flag);
+         }
+      }
+      return detected_features;
+   }
 
    void load_address_of_global(const SymRef global_sym, const AsmReg dst) {
       ASM(MOV64rm, dst, FE_MEM(FE_IP, 0, FE_NOREG, -1));
