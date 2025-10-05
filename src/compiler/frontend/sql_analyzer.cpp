@@ -9,12 +9,13 @@
 #include "lingodb/compiler/frontend/ast/bound/bound_query_node.h"
 #include "lingodb/compiler/frontend/ast/bound/bound_tableref.h"
 #include "lingodb/runtime/RecordBatchInfo.h"
-
 #include <cctype>
 #include <chrono>
 #include <ranges>
+#include <sys/resource.h>
 namespace lingodb::analyzer {
 using ResolverScope = llvm::ScopedHashTable<std::string, std::shared_ptr<ast::NamedResult>, StringInfo>::ScopeTy;
+
 
 
 /*
@@ -590,6 +591,7 @@ std::shared_ptr<T> SQLCanonicalizer::canonicalizeCast(std::shared_ptr<ast::Table
 SQLQueryAnalyzer::SQLQueryAnalyzer(std::shared_ptr<catalog::Catalog> catalog) : catalog(std::move(catalog)) {
 }
 std::shared_ptr<ast::AstNode> SQLQueryAnalyzer::canonicalizeAndAnalyze(std::shared_ptr<ast::AstNode> astRootNode, std::shared_ptr<SQLContext> context) {
+   stackGuard.reset();
    auto startCanonicalizeAndAnalyze = std::chrono::high_resolution_clock::now();
 
    auto rootNode = std::dynamic_pointer_cast<ast::TableProducer>(astRootNode);
@@ -1628,8 +1630,31 @@ std::shared_ptr<ast::BoundResultModifier> SQLQueryAnalyzer::analyzeResultModifie
 /*
     * Expressions
     */
+size_t get_stack_size() {
+   pthread_attr_t attr;
+   pthread_getattr_np(pthread_self(), &attr);
+
+   void *stack_addr;
+   size_t stack_size;
+   pthread_attr_getstack(&attr, &stack_addr, &stack_size);
+
+   pthread_attr_destroy(&attr);
+   return stack_size;
+}
 
 std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::shared_ptr<ast::ParsedExpression> rootNode, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope) {
+   if (stackGuard.check()) {
+      throw std::runtime_error("Stack overflow");
+   }
+
+
+
+
+
+
+
+
+
    switch (rootNode->exprClass) {
       case ast::ExpressionClass::CONSTANT: {
          auto constExpr = std::static_pointer_cast<ast::ConstantExpression>(rootNode);
