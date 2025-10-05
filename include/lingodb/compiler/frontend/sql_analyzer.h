@@ -5,9 +5,10 @@
 #include "lingodb/compiler/frontend/ast/query_node.h"
 #include "lingodb/compiler/frontend/driver.h"
 #include "sql_context.h"
-#define DEBUG true
+#define DEBUG false
 
 #include <functional>
+#include <sys/resource.h>
 namespace lingodb::analyzer {
 using ResolverScope = llvm::ScopedHashTable<std::string, std::shared_ptr<ast::NamedResult>, StringInfo>::ScopeTy;
 #define error(message, loc)                       \
@@ -17,7 +18,46 @@ using ResolverScope = llvm::ScopedHashTable<std::string, std::shared_ptr<ast::Na
       throw std::runtime_error(s.str());          \
    }
 
-class Analyzer;
+class StackGuard {
+   public:
+   StackGuard() {
+      rlimit rlp{};
+      auto suc = getrlimit(RLIMIT_STACK, &rlp);
+      if (suc != 0) {
+        limit = 0;
+      }
+      limit = 0.09*rlp.rlim_cur;
+
+   }
+   void reset() {
+      startFameAddress = nullptr;
+   }
+   bool check() {
+      rlimit rlp{};
+      auto suc = getrlimit(RLIMIT_STACK, &rlp);
+      if (startFameAddress == nullptr) {
+         startFameAddress = __builtin_frame_address(0);
+         return false;
+      }
+      void* currentFrameAddress = __builtin_frame_address(0);
+      if (currentFrameAddress>startFameAddress) {
+         startFameAddress = currentFrameAddress;
+         return false;
+      }
+      size_t size = reinterpret_cast<size_t>(startFameAddress) - reinterpret_cast<size_t>(currentFrameAddress);
+
+      if (size > limit) {
+         std::cerr << "StackLimit: " << rlp.rlim_cur << " Max: " << rlp.rlim_max << " recorded size: " << size << " Perc: " << ((size*1.0)/rlp.rlim_cur) * 100 << std::endl;
+         return true;
+      }
+      return false;
+   }
+   private:
+   void* startFameAddress;
+   size_t limit;
+
+};
+
 class SQLCanonicalizer {
    public:
    /**
@@ -72,8 +112,10 @@ class SQLCanonicalizer {
 
    driver drv{};
 };
+
 class SQLQueryAnalyzer {
    public:
+   StackGuard stackGuard{};
    SQLQueryAnalyzer(std::shared_ptr<catalog::Catalog> catalog);
    std::shared_ptr<SQLContext> context = std::make_shared<SQLContext>();
 
