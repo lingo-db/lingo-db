@@ -11,6 +11,7 @@
 #include "lingodb/runtime/RecordBatchInfo.h"
 
 #include <cctype>
+#include <chrono>
 #include <ranges>
 namespace lingodb::analyzer {
 using ResolverScope = llvm::ScopedHashTable<std::string, std::shared_ptr<ast::NamedResult>, StringInfo>::ScopeTy;
@@ -592,6 +593,8 @@ std::shared_ptr<T> SQLCanonicalizer::canonicalizeCast(std::shared_ptr<ast::Table
 SQLQueryAnalyzer::SQLQueryAnalyzer(std::shared_ptr<catalog::Catalog> catalog) : catalog(std::move(catalog)) {
 }
 std::shared_ptr<ast::AstNode> SQLQueryAnalyzer::canonicalizeAndAnalyze(std::shared_ptr<ast::AstNode> astRootNode, std::shared_ptr<SQLContext> context) {
+   auto startCanonicalizeAndAnalyze = std::chrono::high_resolution_clock::now();
+
    auto rootNode = std::dynamic_pointer_cast<ast::TableProducer>(astRootNode);
    if (!rootNode) {
       //RootNode is not a TableProducer
@@ -599,7 +602,8 @@ std::shared_ptr<ast::AstNode> SQLQueryAnalyzer::canonicalizeAndAnalyze(std::shar
          case ast::NodeType::CREATE_NODE: {
             auto createNode = std::static_pointer_cast<ast::CreateNode>(astRootNode);
             auto scope = context->createResolverScope();
-
+            auto endCanonicalizeAndAnalyze = std::chrono::high_resolution_clock::now();
+            this->totalTime = std::chrono::duration_cast<std::chrono::microseconds>(endCanonicalizeAndAnalyze - startCanonicalizeAndAnalyze).count() / 1000.0;
             return analyzeCreateNode(createNode, context, scope);
             ;
          }
@@ -611,6 +615,8 @@ std::shared_ptr<ast::AstNode> SQLQueryAnalyzer::canonicalizeAndAnalyze(std::shar
             insertNode->producer = sqlCanonicalizer.canonicalize(insertNode->producer, std::make_shared<ASTTransformContext>());
             auto i = analyzeInsertNode(insertNode, context, scope);
             //context->popCurrentScope();
+            auto endCanonicalizeAndAnalyze = std::chrono::high_resolution_clock::now();
+            this->totalTime = std::chrono::duration_cast<std::chrono::microseconds>(endCanonicalizeAndAnalyze - startCanonicalizeAndAnalyze).count() / 1000.0;
             return i;
          }
          default: throw std::runtime_error("Invalid root node type");
@@ -631,6 +637,9 @@ std::shared_ptr<ast::AstNode> SQLQueryAnalyzer::canonicalizeAndAnalyze(std::shar
       context->pushNewScope();
       auto scope = context->createResolverScope();
       transformed = analyzeTableProducer(transformed, context, scope);
+      auto endCanonicalizeAndAnalyze = std::chrono::high_resolution_clock::now();
+      this->totalTime = std::chrono::duration_cast<std::chrono::microseconds>(endCanonicalizeAndAnalyze - startCanonicalizeAndAnalyze).count() / 1000.0;
+
       return transformed;
    }
 }

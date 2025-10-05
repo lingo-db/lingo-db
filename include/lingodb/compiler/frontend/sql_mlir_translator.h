@@ -35,10 +35,14 @@ class SQLMlirTranslator {
    compiler::dialect::tuples::ColumnManager& attrManager;
 
    std::optional<mlir::Value> translateStart(mlir::OpBuilder& builder, std::shared_ptr<ast::AstNode> astNode, std::shared_ptr<analyzer::SQLContext> context);
+   double getTiming() {
+      return timing;
+   }
 
    private:
    std::shared_ptr<TranslationContext> translationContext;
    std::shared_ptr<catalog::Catalog> catalog;
+   double timing;
 
    mlir::Value translateTableProducer(mlir::OpBuilder& builder, std::shared_ptr<ast::TableProducer> tableProducer, std::shared_ptr<analyzer::SQLContext> context);
 

@@ -82,10 +82,15 @@ class SQLQueryAnalyzer {
    std::shared_ptr<ast::CreateNode> analyzeCreateNode(std::shared_ptr<ast::CreateNode> createNode, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope);
    std::shared_ptr<ast::BoundInsertNode> analyzeInsertNode(std::shared_ptr<ast::InsertNode> insertNode, std::shared_ptr<SQLContext> context, SQLContext::ResolverScope& resolverScope);
 
+   double getTiming() {
+      return totalTime;
+   }
+
    private:
    std::shared_ptr<catalog::Catalog> catalog;
    driver drv{};
    SQLCanonicalizer sqlCanonicalizer{};
+   double totalTime;
 
    private:
    std::shared_ptr<ast::TableProducer> analyzePipeOperator(std::shared_ptr<ast::PipeOperator> pipeOperator, std::shared_ptr<SQLContext>& context, ResolverScope& resolverScope);
