@@ -15,6 +15,7 @@ add_library(MLIRSQLFrontendGen
         ${BISON_parser_OUTPUTS}
         ${FLEX_lexer_OUTPUTS}
 )
+add_dependencies(MLIRSQLFrontendGen build_dialect_includes )
 add_dependencies(build_includes MLIRSQLFrontendGen)
 include_directories(lingo-db-sql-translator ${GEN_OUTPUT_DIR})
 add_library(MLIRSQLFrontend

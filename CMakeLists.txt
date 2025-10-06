@@ -91,6 +91,8 @@ else ()
 endif ()
 
 add_custom_target(build_includes)
+add_custom_target(build_dialect_includes)
+add_dependencies(build_includes build_dialect_includes)
 set(runtime_funcs_ptr_libs "")
 add_subdirectory(include)
 add_subdirectory(tools/build-tools)
