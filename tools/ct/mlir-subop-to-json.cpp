@@ -424,6 +424,10 @@ class ToJson {
       }
       return result;
    }
+   std::string memberId(subop::MemberAttr memberAttr) {
+      auto& memberManager = memberAttr.getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
+      return memberManager.getName(memberAttr.getMember());
+   }
    nlohmann::json convertOperation(mlir::Operation* op, std::function<nlohmann::json(mlir::BlockArgument, bool)> resolveBlockArgs = nullptr) {
       nlohmann::json result;
       result["ref"] = getOperationReference(op);
@@ -753,24 +757,24 @@ class ToJson {
             result["reference"] = columnToJSON(op.getRef());
             result["updated"] = nlohmann::json::array();
             for (auto [member, computed] : llvm::zip(op.getMembers(), op.getRegion().front().getTerminator()->getOperands())) {
-               result["updated"].push_back({{"member", mlir::cast<mlir::StringAttr>(member).str()}, {"expression", convertExpression(computed, [&](mlir::BlockArgument ba, bool isExpression) {
-                                                                                                        if (ba.getOwner()->getParentOp() == op.getOperation()) {
-                                                                                                           auto argNr = ba.getArgNumber();
-                                                                                                           if (argNr < op.getColumns().size()) {
-                                                                                                              auto accessedTuple = mlir::cast<tuples::ColumnRefAttr>(op.getColumns()[argNr]);
-                                                                                                              ;
-                                                                                                              return columnToJSON(accessedTuple);
-                                                                                                           } else {
-                                                                                                              return nlohmann::json{{"type", "expression_leaf"}, {"leaf_type", "member"}, {"member", mlir::cast<mlir::StringAttr>(op.getMembers()[argNr - op.getColumns().size()]).str()}};
-                                                                                                           }
-                                                                                                        } else {
-                                                                                                           if (resolveBlockArgs) {
-                                                                                                              return resolveBlockArgs(ba, true);
-                                                                                                           } else {
-                                                                                                              return nlohmann::json{{"type", "expression_leaf"}, {"leaf_type", "unknown"}};
-                                                                                                           }
-                                                                                                        }
-                                                                                                     })}});
+               result["updated"].push_back({{"member", memberId(mlir::cast<subop::MemberAttr>(member))}, {"expression", convertExpression(computed, [&](mlir::BlockArgument ba, bool isExpression) {
+                                                                                                             if (ba.getOwner()->getParentOp() == op.getOperation()) {
+                                                                                                                auto argNr = ba.getArgNumber();
+                                                                                                                if (argNr < op.getColumns().size()) {
+                                                                                                                   auto accessedTuple = mlir::cast<tuples::ColumnRefAttr>(op.getColumns()[argNr]);
+                                                                                                                   ;
+                                                                                                                   return columnToJSON(accessedTuple);
+                                                                                                                } else {
+                                                                                                                   return nlohmann::json{{"type", "expression_leaf"}, {"leaf_type", "member"}, {"member", memberId(mlir::cast<subop::MemberAttr>(op.getMembers()[argNr - op.getColumns().size()]))}};
+                                                                                                                }
+                                                                                                             } else {
+                                                                                                                if (resolveBlockArgs) {
+                                                                                                                   return resolveBlockArgs(ba, true);
+                                                                                                                } else {
+                                                                                                                   return nlohmann::json{{"type", "expression_leaf"}, {"leaf_type", "unknown"}};
+                                                                                                                }
+                                                                                                             }
+                                                                                                          })}});
             }
             return result;
          })
