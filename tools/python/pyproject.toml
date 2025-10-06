@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lingodb"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
-    "lingodb-bridge===0.0.4"
+    "lingodb-bridge===0.0.5"
 ]

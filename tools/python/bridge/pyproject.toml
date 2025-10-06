@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "lingodb-bridge"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
     "numpy===1.26.4",
     "pyarrow===21.0.0"
