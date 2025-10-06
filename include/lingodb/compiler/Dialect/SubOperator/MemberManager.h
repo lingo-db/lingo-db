@@ -49,6 +49,7 @@ class MemberManager {
    Member createMember(std::string name, mlir::Type type) {
       auto uniqueName = getUniqueName(name);
       auto member = std::make_shared<internal::MemberInternal>(uniqueName, type);
+      assert(!members.count(uniqueName));
       members[uniqueName] = member;
       return member.get();
    }
@@ -59,6 +60,11 @@ class MemberManager {
       } else {
          auto member = std::make_shared<internal::MemberInternal>(name, type);
          members[name] = member;
+         if (name.find("$") != std::string::npos) {
+            auto baseName = name.substr(0, name.find("$"));
+            size_t id = std::stoi(name.substr(name.find("$") + 1));
+            counts[baseName] = std::max(counts[baseName], id + 1);
+         }
          return member.get();
       }
    }
