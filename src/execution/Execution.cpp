@@ -30,6 +30,8 @@ namespace {
 namespace utility = lingodb::utility;
 utility::GlobalSetting<std::string> executionModeSetting("system.execution_mode", "DEFAULT");
 utility::GlobalSetting<std::string> subopOptPassesSetting("system.subop.opt", "ReuseLocal,Specialize,PullGatherUp,Compression");
+utility::GlobalSetting<bool> cleanupAfterSubOp("system.opt.cleanup_after_subop", false);
+utility::GlobalSetting<bool> cleanupAfterImperative("system.opt.cleanup_after_imperative", false);
 utility::Tracer::Event queryOptimizationEvent("Compilation", "Query Opt.");
 utility::Tracer::Event lowerRelalgEvent("Compilation", "Lower RelAlg");
 utility::Tracer::Event lowerSubOpEvent("Compilation", "Lower SubOp");
@@ -142,8 +144,10 @@ class SubOpLoweringStep : public LoweringStep {
 
       subop::setCompressionEnabled(enabledPasses.contains("Compression"));
       lowerSubOpPm.addPass(subop::createLowerSubOpPass());
-      lowerSubOpPm.addPass(mlir::createCanonicalizerPass());
-      lowerSubOpPm.addPass(mlir::createCSEPass());
+      if (cleanupAfterSubOp.getValue()) {
+         lowerSubOpPm.addPass(mlir::createCanonicalizerPass());
+         lowerSubOpPm.addPass(mlir::createCSEPass());
+      }
       if (mlir::failed(lowerSubOpPm.run(moduleOp))) {
          error.emit() << "Lowering of Sub-Operators to imperative operations failed";
          return;
@@ -174,8 +178,10 @@ class DefaultImperativeLowering : public LoweringStep {
       addLingoDBInstrumentation(lowerArrowPm, getSerializationState());
       lowerArrowPm.addPass(arrow::createLowerToStdPass());
       lowerArrowPm.addPass(mlir::createCanonicalizerPass());
-      lowerArrowPm.addPass(mlir::createLoopInvariantCodeMotionPass());
-      lowerArrowPm.addPass(mlir::createCSEPass());
+      if (cleanupAfterImperative.getValue()) {
+         lowerArrowPm.addPass(mlir::createLoopInvariantCodeMotionPass());
+         lowerArrowPm.addPass(mlir::createCSEPass());
+      }
       if (mlir::failed(lowerArrowPm.run(moduleOp))) {
          error.emit() << "Lowering of arrow failed";
          return;
