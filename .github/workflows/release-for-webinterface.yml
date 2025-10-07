@@ -24,7 +24,7 @@ jobs:
           export PATH=/built-llvm/bin/:$PATH
           mkdir build
           cmake -G Ninja . -B build -DCMAKE_BUILD_TYPE=Release -DClang_DIR=/built-llvm/lib/cmake/clang -DArrow_DIR=/built-arrow/lib64/cmake/Arrow -DArrowCompute_DIR=/built-arrow/lib64/cmake/ArrowCompute -DENABLE_TESTS=OFF -DENABLE_BASELINE_BACKEND=True
-          cmake --build build --target sql run-sql run-mlir mlir-db-opt sql-to-mlir
+          cmake --build build
       - uses: actions/upload-artifact@master
         with:
           name: release-build
