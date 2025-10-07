@@ -175,7 +175,7 @@ class DefaultImperativeLowering : public LoweringStep {
       lowerArrowPm.addPass(arrow::createLowerToStdPass());
       lowerArrowPm.addPass(mlir::createCanonicalizerPass());
       lowerArrowPm.addPass(mlir::createLoopInvariantCodeMotionPass());
-      lowerArrowPm.addPass(mlir::createCSEPass());
+      //lowerArrowPm.addPass(mlir::createCSEPass());
       if (mlir::failed(lowerArrowPm.run(moduleOp))) {
          error.emit() << "Lowering of arrow failed";
          return;
