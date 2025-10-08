@@ -139,6 +139,13 @@ jobs:
         with:
           name: ${{ matrix.build_type }}-build
           path: build/lingodb-${{ matrix.build_type }}
+      - name: Clean up build directory to save space
+        shell: bash
+        run: |
+          shopt -s extglob
+          cd build/lingodb-${{ matrix.build_type }}
+          rm -rf !("sql"|"sqlite-tester"|".buildstamp"|".stamp")
+          cd ../..
       - name: Prepare Binaries
         run: |
           chmod +x build/lingodb-${{ matrix.build_type }}/*
