@@ -452,3 +452,10 @@ from studenten s
 28106	3	28106
 29120	2	29120
 29555	2	58675
+
+query tsv rowsort pipesql
+select * from studenten s
+|> where s.semester > 10
+----
+24002	Xenokrates	18
+25403	Jonas	12
