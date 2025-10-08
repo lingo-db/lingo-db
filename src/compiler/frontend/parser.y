@@ -512,6 +512,7 @@ select_no_parens:
     //TODO | with_clause select_clause opt_sort_clause select_limit opt_for_locking_clause
   ;
 pipe_sql_no_parens:
+    | select_no_parens {$$ = $1;}
     | from_clause
     {
 
