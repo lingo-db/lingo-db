@@ -219,7 +219,7 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
             }
             if (bitWidth <= 64) {
                assert(part == 0);
-               return ValuePartRef(this, containedInt.getRawData()[0], bitWidth / 8, Config::GP_BANK);
+               return ValuePartRef(this, containedInt.getRawData()[0], std::max<uint32_t>(1, (bitWidth + 7) / 8), Config::GP_BANK);
             }
             if (bitWidth == 128) {
                assert(part < 2 && "Part index out of range for 128-bit integer");
@@ -280,7 +280,7 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
          auto ret_type = undef_op.getRes().getType();
          if (mlir::isa<mlir::IntegerType>(ret_type)) {
             const unsigned width = ret_type.getIntOrFloatBitWidth();
-            const unsigned register_width = width == 128 ? 8 : width / 8;
+            const unsigned register_width = width == 128 ? 8 : std::max<unsigned>(1, (width + 7) / 8);
             return ValuePartRef(this, 0, register_width, Config::GP_BANK);
          } else if (mlir::isa<mlir::FloatType>(ret_type)) {
             return ValuePartRef(this, 0, ret_type.getIntOrFloatBitWidth() / 8, Config::FP_BANK);
@@ -824,72 +824,72 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
       return derived()->encode_arith_extf_f32_f64(std::move(src_vpr), res.part(0));
    }
 
-   bool compile_arith_select_op(const mlir::arith::SelectOp op) {
-      mlir::Value cond = op->getOperand(0);
-      mlir::Value lhs = op->getOperand(1);
-      mlir::Value rhs = op->getOperand(2);
-      auto [_, cond_vpr] = this->val_ref_single(cond);
+   bool compile_arith_select_op(mlir::arith::SelectOp op) {
+      mlir::Value cond = op.getCondition();
+      mlir::Value lhs = op.getTrueValue();
+      mlir::Value rhs = op.getFalseValue();
+      auto cond_vr = this->val_ref(cond);
       auto lhs_vr = this->val_ref(lhs);
       auto rhs_vr = this->val_ref(rhs);
-      auto res = this->result_ref(op->getResult(0));
+      auto res = this->result_ref(op.getResult());
 
       assert(lhs.getType() == rhs.getType() && "Both operands of select must be of the same type");
-      return llvm::TypeSwitch<mlir::Type, bool>(lhs.getType())
-         .Case<mlir::IntegerType>([&](auto) {
-            switch (lhs.getType().getIntOrFloatBitWidth()) {
-               case 1:
-               case 8:
-               case 16:
-               case 32: return derived()->encode_arith_select_i32(std::move(cond_vpr), lhs_vr.part(0),
-                                                                  rhs_vr.part(0),
-                                                                  res.part(0));
-               case 64: return derived()->encode_arith_select_i64(std::move(cond_vpr), lhs_vr.part(0),
-                                                                  rhs_vr.part(0),
-                                                                  res.part(0));
-               case 128: {
-                  return derived()->encode_arith_select_i128(std::move(cond_vpr),
-                                                             lhs_vr.part(0),
-                                                             lhs_vr.part(1),
-                                                             rhs_vr.part(0),
-                                                             rhs_vr.part(1),
-                                                             res.part(0),
-                                                             res.part(1));
-               }
-               default:
-                  assert(0 && "Unsupported integer type width for select operation");
-                  return false;
-            }
-         })
-         .template Case<mlir::FloatType>([&](auto) {
-            switch (lhs.getType().getIntOrFloatBitWidth()) {
-               case 32: return derived()->encode_arith_select_f32(std::move(cond_vpr), lhs_vr.part(0),
-                                                                  rhs_vr.part(0),
-                                                                  res.part(0));
-               case 64: return derived()->encode_arith_select_f64(std::move(cond_vpr), lhs_vr.part(0),
-                                                                  rhs_vr.part(0),
-                                                                  res.part(0));
-               default:
-                  assert(0 && "Unsupported integer type width for select operation");
-                  return false;
-            }
-         })
-         .template Case<dialect::util::RefType, mlir::IndexType>([&](auto) {
-            return derived()->encode_arith_select_i64(std::move(cond_vpr), lhs_vr.part(0), rhs_vr.part(0), res.part(0));
-         })
-         .template Case<dialect::util::BufferType, dialect::util::VarLen32Type>([&](auto) {
-            return derived()->encode_arith_select_i128(std::move(cond_vpr),
-                                                       lhs_vr.part(0),
-                                                       lhs_vr.part(1),
-                                                       rhs_vr.part(0),
-                                                       rhs_vr.part(1),
-                                                       res.part(0),
-                                                       res.part(1));
-         })
-         .Default([&](auto t) {
-            t.dump();
-            assert(0 && "Unsupported type for select operation");
-            return false;
-         });
+      bool success = true;
+      const auto tupleType = mlir::dyn_cast_or_null<mlir::TupleType>(lhs.getType());
+      const size_t loopIterations = tupleType ? TupleHelper::numSlots(tupleType) : 1;
+      size_t i = 0;
+      while (i < loopIterations) {
+         success &= llvm::TypeSwitch<mlir::Type, bool>(tupleType ? TupleHelper::typeAtSlot(tupleType, i) : lhs.getType())
+                       .template Case<mlir::IntegerType>([&](const mlir::IntegerType t) {
+                          switch (t.getIntOrFloatBitWidth()) {
+                             case 1:
+                             case 8:
+                             case 16:
+                             case 32: return derived()->encode_arith_select_i32(cond_vr.part_unowned(0), lhs_vr.part(i), rhs_vr.part(i), res.part(i));
+                             case 64: return derived()->encode_arith_select_i64(cond_vr.part_unowned(0), lhs_vr.part(i), rhs_vr.part(i), res.part(i));
+                             case 128: {
+                                const auto ret = derived()->encode_arith_select_i128(
+                                   cond_vr.part_unowned(0),
+                                   lhs_vr.part(i), lhs_vr.part(i + 1),
+                                   rhs_vr.part(i), rhs_vr.part(i + 1),
+                                   res.part(i), res.part(i + 1));
+                                i++;
+                                return ret;
+                             }
+                             default:
+                                assert(0 && "Unsupported integer type width for select operation");
+                                return false;
+                          }
+                       })
+                       .template Case<mlir::FloatType>([&](const mlir::FloatType t) {
+                          switch (t.getIntOrFloatBitWidth()) {
+                             case 32: return derived()->encode_arith_select_f32(cond_vr.part_unowned(0), lhs_vr.part(i), rhs_vr.part(i), res.part(i));
+                             case 64: return derived()->encode_arith_select_f64(cond_vr.part_unowned(0), lhs_vr.part(i), rhs_vr.part(i), res.part(i));
+                             default:
+                                assert(0 && "Unsupported float type width for select operation");
+                                return false;
+                          }
+                       })
+                       .template Case<dialect::util::RefType, mlir::IndexType>([&](auto) {
+                          return derived()->encode_arith_select_i64(cond_vr.part_unowned(0), lhs_vr.part(i), rhs_vr.part(i), res.part(i));
+                       })
+                       .template Case<dialect::util::BufferType, dialect::util::VarLen32Type>([&](auto) {
+                          const auto ret = derived()->encode_arith_select_i128(
+                             cond_vr.part_unowned(0),
+                             lhs_vr.part(i), lhs_vr.part(i + 1),
+                             rhs_vr.part(i), rhs_vr.part(i + 1),
+                             res.part(i), res.part(i + 1));
+                          i++;
+                          return ret;
+                       })
+                       .Default([&](const auto t) {
+                          t.dump();
+                          assert(0 && "Unsupported type for select operation");
+                          return false;
+                       });
+         i++;
+      }
+      return success;
    }
 
    bool compile_arith_index_cast_op(const mlir::arith::IndexCastOp op) {
