@@ -174,7 +174,7 @@ class DefaultImperativeLowering : public LoweringStep {
       addLingoDBInstrumentation(lowerArrowPm, getSerializationState());
       lowerArrowPm.addPass(arrow::createLowerToStdPass());
       lowerArrowPm.addPass(mlir::createCanonicalizerPass());
-      lowerArrowPm.addPass(mlir::createLoopInvariantCodeMotionPass());
+      //lowerArrowPm.addPass(mlir::createLoopInvariantCodeMotionPass());
       //lowerArrowPm.addPass(mlir::createCSEPass());
       if (mlir::failed(lowerArrowPm.run(moduleOp))) {
          error.emit() << "Lowering of arrow failed";
