@@ -11,6 +11,8 @@
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
+#include <lingodb/compiler/Dialect/util/UtilOps.h>
+
 namespace {
 #include "EliminateNulls.inc"
 
@@ -61,11 +63,11 @@ class WrapWithNullCheck : public mlir::RewritePattern {
          }
          return;
       } else {
-         rewriter.replaceOpWithNewOp<mlir::scf::IfOp>(
-            op, isAnyNull, [&](mlir::OpBuilder& b, mlir::Location loc) {
+         auto ifOp = rewriter.create<mlir::scf::IfOp>(
+            op->getLoc(), isAnyNull, [&](mlir::OpBuilder& b, mlir::Location loc) {
                if(op->getNumResults()==1){
-                  mlir::Value nullResult=b.create<db::NullOp>(op->getLoc(),op->getResultTypes()[0]);
-                  b.create<mlir::scf::YieldOp>(loc,nullResult);
+                  mlir::Value undef=b.create<lingodb::compiler::dialect::util::UndefOp>(op->getLoc(),getBaseType(op->getResultTypes()[0]));
+                  b.create<mlir::scf::YieldOp>(loc,undef);
                }else{
                   b.create<mlir::scf::YieldOp>(loc);
                } }, [&](mlir::OpBuilder& b, mlir::Location loc) {
@@ -78,11 +80,11 @@ class WrapWithNullCheck : public mlir::RewritePattern {
                auto *cloned=b.clone(*op,mapping);
                if(op->getNumResults()==1){
                   cloned->getResult(0).setType(getBaseType(cloned->getResult(0).getType()));
-                  mlir::Value nullResult=b.create<db::AsNullableOp>(op->getLoc(),op->getResultTypes()[0],cloned->getResult(0));
-                  b.create<mlir::scf::YieldOp>(loc,nullResult);
+                  b.create<mlir::scf::YieldOp>(loc,cloned->getResult(0));
                }else{
                   b.create<mlir::scf::YieldOp>(loc);
                } });
+         rewriter.replaceOpWithNewOp<db::AsNullableOp>(op, op->getResultTypes()[0], ifOp.getResults()[0], isAnyNull);
       }
    }
 };
@@ -186,4 +188,4 @@ class PrepareLowering : public mlir::PassWrapper<PrepareLowering, mlir::Operatio
 };
 } // end anonymous namespace
 
-std::unique_ptr<mlir::Pass> lingodb::compiler::dialect::db::createPrepareLoweringPass(){ return std::make_unique<PrepareLowering>(); } // NOLINT(misc-use-internal-linkage)
+std::unique_ptr<mlir::Pass> lingodb::compiler::dialect::db::createPrepareLoweringPass() { return std::make_unique<PrepareLowering>(); } // NOLINT(misc-use-internal-linkage)
