@@ -20,6 +20,7 @@ class GrowingBuffer {
    GrowingBuffer(size_t cap, size_t typeSize) : values(cap, typeSize) {}
    uint8_t* insert();
    static GrowingBuffer* create(GrowingBufferAllocator* allocator, size_t sizeOfType, size_t initialCapacity);
+   static ThreadLocal* createThreadLocal(size_t sizeOfType);
    size_t getLen() const;
    size_t getTypeSize() const;
    runtime::Buffer sort(bool (*compareFn)(uint8_t*, uint8_t*));
