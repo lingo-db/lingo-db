@@ -11,7 +11,7 @@ add_mlir_dialect_library(MLIRDB
         DBOpsEnums.cpp
         DBTypes.cpp
         RuntimeFunctions/RuntimeFunctions.cpp
-        Transforms/EliminateNulls.cpp
+        Transforms/PrepareLowering.cpp
         Transforms/OptimizeRuntimeFunctions.cpp
         ADDITIONAL_HEADER_DIRS
         ../../../../include/lingodb/compiler/Dialect/DB
