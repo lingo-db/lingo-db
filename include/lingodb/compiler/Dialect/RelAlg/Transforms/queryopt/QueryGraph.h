@@ -188,14 +188,14 @@ class QueryGraph {
          nodes[n].selections.push_back(edgeid);
       }
    }
-
-   void iterateNodesDesc(const std::function<void(Node&)>& fn) {
+   template <class Fn>
+   void iterateNodesDesc(const Fn& fn) {
       for (auto it = nodes.rbegin(); it != nodes.rend(); it++) {
          fn(*it);
       }
    }
-
-   static void iterateSetDec(const NodeSet& s, const std::function<void(size_t)>& fn) {
+   template <class Fn>
+   static void iterateSetDec(const NodeSet& s, const Fn& fn) {
       std::vector<size_t> positions;
       for (auto v : s) {
          positions.push_back(v);
@@ -246,7 +246,8 @@ class QueryGraph {
       return joins;
    }
 
-   void iterateNodes(NodeSet& s, const std::function<void(Node&)>& fn) {
+   template <class Fn>
+   void iterateNodes(NodeSet& s, const Fn& fn) {
       for (auto v : s) {
          if (v >= nodes.size()) {
             //pseudo node
@@ -256,8 +257,8 @@ class QueryGraph {
          fn(n);
       }
    }
-
-   void iterateJoinEdges(NodeSet& s, const std::function<void(JoinEdge&)>& fn) {
+   template <class Fn>
+   void iterateJoinEdges(NodeSet& s, const Fn& fn) {
       iterateNodes(s, [&](Node& n) {
          for (auto edgeid : n.edges) {
             auto& edge = joins[edgeid];
@@ -265,7 +266,8 @@ class QueryGraph {
          }
       });
    }
-   void iterateSelectionEdges(NodeSet& s, const std::function<void(SelectionEdge&)>& fn) {
+   template <class Fn>
+   void iterateSelectionEdges(NodeSet& s, const Fn& fn) {
       iterateNodes(s, [&](Node& n) {
          for (auto edgeid : n.selections) {
             auto& edge = selections[edgeid];

@@ -36,29 +36,6 @@ void fix(Operator tree) {
 }
 } // namespace
 namespace lingodb::compiler::dialect::relalg {
-void NodeSet::iterateSubsets(const std::function<void(NodeSet)>& fn) const {
-   if (!storage.any()) return;
-   NodeSet s = *this;
-   auto s1 = s & s.negate();
-   while (s1 != s) {
-      fn(s1);
-      auto s1flipped = s1.flip();
-      auto s2 = s & s1flipped;
-      s1 = s & s2.negate();
-   }
-   fn(s);
-}
-NodeSet NodeSet::negate() const {
-   NodeSet res = *this;
-   size_t pos = res.findFirst();
-   size_t flipLen = res.storage.size() - pos - 1;
-   if (flipLen) {
-      llvm::SmallBitVector flipVector(res.storage.size());
-      flipVector.set(pos + 1, res.storage.size());
-      res.storage ^= flipVector;
-   }
-   return res;
-}
 
 std::string Plan::dumpNode() {
    std::string firstNodeName;
@@ -113,7 +90,6 @@ Operator Plan::realizePlanRec() {
          x.getLambdaBlock().getOperations().splice(x.getLambdaBlock().end(), innerJoin.getLambdaBlock().getOperations());
          op = x;
       }
-      op->setAttr("cost", mlir::FloatAttr::get(mlir::Float64Type::get(op.getContext()), cost));
       op->setAttr("rows", mlir::FloatAttr::get(mlir::Float64Type::get(op.getContext()), rows));
       if (lastNode) {
          lastNode.setChildren({op});
@@ -144,7 +120,6 @@ Operator Plan::realizePlanRec() {
          } else if (mlir::isa<relalg::InnerJoinOp>(currop.getOperation()) && children.size() == 1) {
             assert(false && "need to implement Join -> Selection transition");
          }
-         currop->setAttr("cost", mlir::FloatAttr::get(mlir::Float64Type::get(op.getContext()), cost));
          currop->setAttr("rows", mlir::FloatAttr::get(mlir::Float64Type::get(op.getContext()), rows));
       } else if (!currop && children.size() == 2) {
          mlir::OpBuilder builder(children[0]->isBeforeInBlock(children[1]) ? children[1].getOperation() : children[0].getOperation());
