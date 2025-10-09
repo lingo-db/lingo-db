@@ -381,7 +381,7 @@ def CastOp : DB_Op<"cast",[DB_NeedsNullWrap,DB_MaySupportInvalidValues,Pure]> {
     let assemblyFormat = "$val `:` type($val) `->` type($res) attr-dict";
     let hasFolder = 1;
 }
-def LoadArrowOp : DB_Op<"arrow.load"> {
+def LoadArrowOp : DB_Op<"arrow.load", [Pure]> {
     let summary = "loads value from arrow array";
 
     let arguments = (ins Arrow_Array:$array, Index: $offset);
