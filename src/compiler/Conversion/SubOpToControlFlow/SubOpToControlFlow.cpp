@@ -1394,6 +1394,23 @@ class InFlightLowering : public SubOpConversionPattern<subop::InFlightOp> {
       return success();
    }
 };
+class CreateThreadLocalBufferLowering : public SubOpConversionPattern<subop::GenericCreateOp> {
+   public:
+   using SubOpConversionPattern<subop::GenericCreateOp>::SubOpConversionPattern;
+   LogicalResult matchAndRewrite(subop::GenericCreateOp createOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
+      auto threadLocalType = mlir::dyn_cast_or_null<subop::ThreadLocalType>(createOp.getType());
+      if (!threadLocalType) return failure();
+      auto bufferType=mlir::dyn_cast_or_null<subop::BufferType>(threadLocalType.getWrapped());
+      if (!bufferType) return failure();
+      auto loc = createOp->getLoc();
+      EntryStorageHelper storageHelper(createOp, bufferType.getMembers(), bufferType.hasLock(), typeConverter);
+      auto elementType = storageHelper.getStorageType();
+      auto typeSize = rewriter.create<util::SizeOfOp>(loc, rewriter.getIndexType(), elementType);
+      mlir::Value vector = rt::GrowingBuffer::createThreadLocal(rewriter, loc)({ typeSize})[0];
+      rewriter.replaceOp(createOp, vector);
+      return mlir::success();
+   }
+};
 
 class CreateBufferLowering : public SubOpConversionPattern<subop::GenericCreateOp> {
    public:
@@ -4345,6 +4362,7 @@ void handleExecutionStepCPU(subop::ExecutionStepOp step, subop::ExecutionGroupOp
    rewriter.insertPattern<CreateArrayLowering>(typeConverter, ctxt);
    //ThreadLocal
    rewriter.insertPattern<CreateThreadLocalLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<CreateThreadLocalBufferLowering>(typeConverter, ctxt);
    rewriter.insertPattern<MergeThreadLocalResultTable>(typeConverter, ctxt);
    rewriter.insertPattern<MergeThreadLocalBuffer>(typeConverter, ctxt);
    rewriter.insertPattern<MergeThreadLocalHeap>(typeConverter, ctxt);
