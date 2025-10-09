@@ -100,7 +100,8 @@ static std::vector<Type> unpackTypes(subop::StateMembersAttr membersAttr) {
       res.push_back(memberManager.getType(x));
    }
    return res;
-};class ColumnMapping {
+};
+class ColumnMapping {
    llvm::SmallDenseMap<const tuples::Column*, mlir::Value> mapping;
 
    public:
@@ -532,11 +533,12 @@ class SubOpRewriter {
    auto getI1Type() { return builder.getI1Type(); }
    auto getI64Type() { return builder.getI64Type(); }
    auto getStringAttr(const Twine& bytes) { return builder.getStringAttr(bytes); }
-   mlir::Value storeStepRequirements() {
+   mlir::Value storeStepRequirements(mlir::Value exclude = {}) {
       auto outerMapping = executionStepContexts.top().outerMapping;
       auto executionStep = executionStepContexts.top().executionStep;
       std::vector<mlir::Type> types;
       for (auto [param, arg, isThreadLocal] : llvm::zip(executionStep.getInputs(), executionStep.getSubOps().front().getArguments(), executionStep.getIsThreadLocal())) {
+         if (exclude && arg == exclude && arg.hasOneUse()) continue;
          mlir::Value input = outerMapping.lookup(param);
          types.push_back(input.getType());
       }
@@ -544,6 +546,7 @@ class SubOpRewriter {
       mlir::Value contextPtr = create<util::AllocaOp>(builder.getUnknownLoc(), util::RefType::get(getContext(), tupleType), mlir::Value());
       size_t offset = 0;
       for (auto [param, arg, isThreadLocal] : llvm::zip(executionStep.getInputs(), executionStep.getSubOps().front().getArguments(), executionStep.getIsThreadLocal())) {
+         if (exclude && arg == exclude && arg.hasOneUse()) continue;
          mlir::Value input = outerMapping.lookup(param);
          auto memberRef = create<util::TupleElementPtrOp>(builder.getUnknownLoc(), util::RefType::get(getContext(), input.getType()), contextPtr, offset++);
          create<util::StoreOp>(builder.getUnknownLoc(), input, memberRef, mlir::Value());
@@ -571,11 +574,12 @@ class SubOpRewriter {
          rewriter.valueMapping.pop_back();
       }
    };
-   Guard loadStepRequirements(mlir::Value contextPtr, mlir::TypeConverter* typeConverter) {
+   Guard loadStepRequirements(mlir::Value contextPtr, mlir::TypeConverter* typeConverter, mlir::Value exclude = {}) {
       auto outerMapping = executionStepContexts.top().outerMapping;
       auto executionStep = executionStepContexts.top().executionStep;
       std::vector<mlir::Type> types;
       for (auto [param, arg, isThreadLocal] : llvm::zip(executionStep.getInputs(), executionStep.getSubOps().front().getArguments(), executionStep.getIsThreadLocal())) {
+         if (exclude && arg == exclude && arg.hasOneUse()) continue;
          mlir::Value input = outerMapping.lookup(param);
          types.push_back(input.getType());
       }
@@ -584,6 +588,7 @@ class SubOpRewriter {
       Guard guard(*this);
       size_t offset = 0;
       for (auto [param, arg, isThreadLocal] : llvm::zip(executionStep.getInputs(), executionStep.getSubOps().front().getArguments(), executionStep.getIsThreadLocal())) {
+         if (exclude && arg == exclude && arg.hasOneUse()) continue;
          mlir::Value input = outerMapping.lookup(param);
          auto memberRef = create<util::TupleElementPtrOp>(builder.getUnknownLoc(), util::RefType::get(getContext(), input.getType()), contextPtr, offset++);
          mlir::Value value = create<util::LoadOp>(builder.getUnknownLoc(), memberRef);
@@ -617,7 +622,7 @@ class SubOpRewriter {
       }
       return v;
    }
-   template<class Fn>
+   template <class Fn>
    void atStartOf(mlir::Block* block, const Fn& fn) {
       mlir::OpBuilder::InsertionGuard guard(builder);
       builder.setInsertionPointToStart(block);
@@ -711,13 +716,13 @@ class SubOpRewriter {
    }
    subop::InFlightOp createInFlight(ColumnMapping mapping) {
       auto newInFlight = mapping.createInFlight(builder);
-      inFlightTupleStreams[newInFlight] = InFlightTupleStream{mlir::cast<subop::InFlightOp>(newInFlight.getDefiningOp()),mapping};
+      inFlightTupleStreams[newInFlight] = InFlightTupleStream{mlir::cast<subop::InFlightOp>(newInFlight.getDefiningOp()), mapping};
       return mlir::cast<subop::InFlightOp>(newInFlight.getDefiningOp());
    }
    void replaceTupleStream(mlir::Value tupleStream, ColumnMapping& mapping) {
-      mlir::Value newInFlight = builder.create<subop::InFlightOp>(builder.getUnknownLoc(), mlir::ValueRange{},mlir::ArrayAttr::get(getContext(), {}));
+      mlir::Value newInFlight = builder.create<subop::InFlightOp>(builder.getUnknownLoc(), mlir::ValueRange{}, mlir::ArrayAttr::get(getContext(), {}));
       eraseOp(newInFlight.getDefiningOp());
-      inFlightTupleStreams[tupleStream] = InFlightTupleStream{mlir::cast<subop::InFlightOp>(newInFlight.getDefiningOp()),std::move(mapping)};
+      inFlightTupleStreams[tupleStream] = InFlightTupleStream{mlir::cast<subop::InFlightOp>(newInFlight.getDefiningOp()), std::move(mapping)};
       if (auto* definingOp = tupleStream.getDefiningOp()) {
          eraseOp(definingOp);
       }
@@ -829,13 +834,13 @@ class SubOpRewriter {
    mlir::Operation* getCurrentStreamLoc() {
       return currentStreamLoc;
    }
-   template<class Fn>
+   template <class Fn>
    mlir::LogicalResult implementStreamConsumer(mlir::Value stream, const Fn& impl) {
       auto& streamInfo = inFlightTupleStreams[stream];
       ColumnMapping mapping;
       if (stream.hasOneUse()) {
          mapping = std::move(streamInfo.columnMapping);
-      }  else{
+      } else {
          mapping = streamInfo.columnMapping;
       }
 
@@ -1160,9 +1165,9 @@ class ScanRefsTableLowering : public SubOpConversionPattern<subop::ScanRefsOp> {
       mlir::Value recordBatchPointer = funcBody->addArgument(ptrType, loc);
       mlir::Value contextPtr = funcBody->addArgument(ptrType, loc);
       funcOp.getBody().push_back(funcBody);
-      auto ptr = rewriter.storeStepRequirements();
+      auto ptr = rewriter.storeStepRequirements(scanOp.getState());
       rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
-         rewriter.loadStepRequirements(contextPtr, typeConverter);
+         rewriter.loadStepRequirements(contextPtr, typeConverter, scanOp.getState());
          recordBatchPointer = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(getContext(), recordBatchInfoRepr), recordBatchPointer);
          mlir::Value lenRef = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(rewriter.getIndexType()), recordBatchPointer, 0);
          mlir::Value offsetRef = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(rewriter.getIndexType()), recordBatchPointer, 1);
@@ -1400,13 +1405,13 @@ class CreateThreadLocalBufferLowering : public SubOpConversionPattern<subop::Gen
    LogicalResult matchAndRewrite(subop::GenericCreateOp createOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
       auto threadLocalType = mlir::dyn_cast_or_null<subop::ThreadLocalType>(createOp.getType());
       if (!threadLocalType) return failure();
-      auto bufferType=mlir::dyn_cast_or_null<subop::BufferType>(threadLocalType.getWrapped());
+      auto bufferType = mlir::dyn_cast_or_null<subop::BufferType>(threadLocalType.getWrapped());
       if (!bufferType) return failure();
       auto loc = createOp->getLoc();
       EntryStorageHelper storageHelper(createOp, bufferType.getMembers(), bufferType.hasLock(), typeConverter);
       auto elementType = storageHelper.getStorageType();
       auto typeSize = rewriter.create<util::SizeOfOp>(loc, rewriter.getIndexType(), elementType);
-      mlir::Value vector = rt::GrowingBuffer::createThreadLocal(rewriter, loc)({ typeSize})[0];
+      mlir::Value vector = rt::GrowingBuffer::createThreadLocal(rewriter, loc)({typeSize})[0];
       rewriter.replaceOp(createOp, vector);
       return mlir::success();
    }
@@ -3617,7 +3622,6 @@ class ReduceContinuousRefLowering : public SubOpTupleStreamConsumerConversionPat
          values.store();
          rewriter.eraseOp(reduceOp);
       });
-
    }
 };
 static void implementAtomicReduce(subop::ReduceOp reduceOp, SubOpRewriter& rewriter, mlir::Value valueRef, ColumnMapping& mapping) {
@@ -3744,7 +3748,6 @@ class ReduceContinuousRefAtomicLowering : public SubOpTupleStreamConsumerConvers
       auto elementRef = rewriter.create<util::ArrayElementPtrOp>(reduceOp->getLoc(), ptrType, baseRef, unpackedReference[0]);
       auto valueRef = storageHelper.getPointer(elementRef, mlir::cast<subop::MemberAttr>(reduceOp.getMembers()[0]).getMember(), rewriter, loc);
       implementAtomicReduce(reduceOp, rewriter, valueRef, mapping);
-
    }
 };
 class ReduceOpLowering : public SubOpTupleStreamConsumerConversionPattern<subop::ReduceOp> {
@@ -3795,7 +3798,6 @@ class ReduceOpLowering : public SubOpTupleStreamConsumerConversionPattern<subop:
             rewriter.eraseOp(reduceOp);
          });
       }
-
    }
 };
 
@@ -4049,7 +4051,6 @@ class NestedMapLowering : public SubOpTupleStreamConsumerConversionPattern<subop
       }
       auto nestedExecutionGroup = mlir::cast<subop::NestedExecutionGroupOp>(&nestedMapOp.getRegion().front().front());
 
-
       mlir::IRMapping outerMapping;
       for (auto [i, b] : llvm::zip(nestedExecutionGroup.getInputs(), nestedExecutionGroup.getRegion().front().getArguments())) {
          outerMapping.map(b, rewriter.getMapped(i));
@@ -4079,7 +4080,6 @@ class NestedMapLowering : public SubOpTupleStreamConsumerConversionPattern<subop
          }
       }
       rewriter.eraseOp(nestedMapOp);
-
    }
 };
 template <class T>
