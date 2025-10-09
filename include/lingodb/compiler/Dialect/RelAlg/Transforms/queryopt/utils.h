@@ -19,7 +19,17 @@ class NodeSet {
    public:
    NodeSet() = default;
    explicit NodeSet(size_t size) : storage(size) {}
-   [[nodiscard]] NodeSet negate() const;
+   [[nodiscard]] NodeSet negate() const {
+      NodeSet res = *this;
+      size_t pos = res.findFirst();
+      size_t flipLen = res.storage.size() - pos - 1;
+      if (flipLen) {
+         llvm::SmallBitVector flipVector(res.storage.size());
+         flipVector.set(pos + 1, res.storage.size());
+         res.storage ^= flipVector;
+      }
+      return res;
+   }
    static NodeSet ones(size_t size) {
       NodeSet res(size);
       res.storage.set();
@@ -105,7 +115,19 @@ class NodeSet {
       res.storage.flip();
       return res;
    }
-   void iterateSubsets(const std::function<void(NodeSet)>& fn) const;
+   template <class Fn>
+   void iterateSubsets(const Fn& fn) const {
+      if (!storage.any()) return;
+      NodeSet s = *this;
+      auto s1 = s & s.negate();
+      while (s1 != s) {
+         fn(s1);
+         auto s1flipped = s1.flip();
+         auto s2 = s & s1flipped;
+         s1 = s & s2.negate();
+      }
+      fn(s);
+   }
    [[nodiscard]] size_t hash() const {
       return llvm::DenseMapInfo<llvm::SmallBitVector>::getHashValue(storage);
    }
