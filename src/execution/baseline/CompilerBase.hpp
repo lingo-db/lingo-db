@@ -839,17 +839,18 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
       const size_t loopIterations = tupleType ? TupleHelper::numSlots(tupleType) : 1;
       size_t i = 0;
       while (i < loopIterations) {
+         auto cond_vpr = loopIterations > 1 ? cond_vr.part_unowned(0) : cond_vr.part(0);
          success &= llvm::TypeSwitch<mlir::Type, bool>(tupleType ? TupleHelper::typeAtSlot(tupleType, i) : lhs.getType())
                        .template Case<mlir::IntegerType>([&](const mlir::IntegerType t) {
                           switch (t.getIntOrFloatBitWidth()) {
                              case 1:
                              case 8:
                              case 16:
-                             case 32: return derived()->encode_arith_select_i32(cond_vr.part_unowned(0), lhs_vr.part(i), rhs_vr.part(i), res.part(i));
-                             case 64: return derived()->encode_arith_select_i64(cond_vr.part_unowned(0), lhs_vr.part(i), rhs_vr.part(i), res.part(i));
+                             case 32: return derived()->encode_arith_select_i32(std::move(cond_vpr), lhs_vr.part(i), rhs_vr.part(i), res.part(i));
+                             case 64: return derived()->encode_arith_select_i64(std::move(cond_vpr), lhs_vr.part(i), rhs_vr.part(i), res.part(i));
                              case 128: {
                                 const auto ret = derived()->encode_arith_select_i128(
-                                   cond_vr.part_unowned(0),
+                                   std::move(cond_vpr),
                                    lhs_vr.part(i), lhs_vr.part(i + 1),
                                    rhs_vr.part(i), rhs_vr.part(i + 1),
                                    res.part(i), res.part(i + 1));
@@ -863,19 +864,19 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
                        })
                        .template Case<mlir::FloatType>([&](const mlir::FloatType t) {
                           switch (t.getIntOrFloatBitWidth()) {
-                             case 32: return derived()->encode_arith_select_f32(cond_vr.part_unowned(0), lhs_vr.part(i), rhs_vr.part(i), res.part(i));
-                             case 64: return derived()->encode_arith_select_f64(cond_vr.part_unowned(0), lhs_vr.part(i), rhs_vr.part(i), res.part(i));
+                             case 32: return derived()->encode_arith_select_f32(std::move(cond_vpr), lhs_vr.part(i), rhs_vr.part(i), res.part(i));
+                             case 64: return derived()->encode_arith_select_f64(std::move(cond_vpr), lhs_vr.part(i), rhs_vr.part(i), res.part(i));
                              default:
                                 assert(0 && "Unsupported float type width for select operation");
                                 return false;
                           }
                        })
                        .template Case<dialect::util::RefType, mlir::IndexType>([&](auto) {
-                          return derived()->encode_arith_select_i64(cond_vr.part_unowned(0), lhs_vr.part(i), rhs_vr.part(i), res.part(i));
+                          return derived()->encode_arith_select_i64(std::move(cond_vpr), lhs_vr.part(i), rhs_vr.part(i), res.part(i));
                        })
                        .template Case<dialect::util::BufferType, dialect::util::VarLen32Type>([&](auto) {
                           const auto ret = derived()->encode_arith_select_i128(
-                             cond_vr.part_unowned(0),
+                             std::move(cond_vpr),
                              lhs_vr.part(i), lhs_vr.part(i + 1),
                              rhs_vr.part(i), rhs_vr.part(i + 1),
                              res.part(i), res.part(i + 1));
