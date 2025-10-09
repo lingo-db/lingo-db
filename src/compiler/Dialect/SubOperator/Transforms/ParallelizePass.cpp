@@ -424,14 +424,19 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
             builder.setInsertionPoint(createOp);
             auto mergedType = createOp->getResultTypes()[0];
             auto threadLocalType = subop::ThreadLocalType::get(builder.getContext(), mlir::cast<subop::State>(createOp->getResultTypes()[0]));
-            auto createThreadLocal = builder.create<subop::CreateThreadLocalOp>(createOp->getLoc(), threadLocalType);
-            auto* block = new mlir::Block;
-            createThreadLocal.getInitFn().push_back(block);
-            builder.setInsertionPointToStart(block);
-            auto* clonedCreate = builder.clone(*createOp);
-            clonedCreate->setAttr("allocateOnHeap", builder.getUnitAttr());
-            builder.create<tuples::ReturnOp>(createOp->getLoc(), clonedCreate->getResult(0));
-            createOp->getResult(0).replaceAllUsesWith(createThreadLocal.getRes());
+            if (mlir::isa<subop::BufferType>(createOp->getResultTypes()[0])) {
+               auto createThreadLocal = builder.create<subop::GenericCreateOp>(createOp->getLoc(), threadLocalType);
+               createOp->getResult(0).replaceAllUsesWith(createThreadLocal.getRes());
+            } else {
+               auto createThreadLocal = builder.create<subop::CreateThreadLocalOp>(createOp->getLoc(), threadLocalType);
+               auto* block = new mlir::Block;
+               createThreadLocal.getInitFn().push_back(block);
+               builder.setInsertionPointToStart(block);
+               auto* clonedCreate = builder.clone(*createOp);
+               clonedCreate->setAttr("allocateOnHeap", builder.getUnitAttr());
+               builder.create<tuples::ReturnOp>(createOp->getLoc(), clonedCreate->getResult(0));
+               createOp->getResult(0).replaceAllUsesWith(createThreadLocal.getRes());
+            }
 
             auto loc = createOp->getLoc();
             createOp->erase();

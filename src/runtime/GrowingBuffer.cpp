@@ -142,3 +142,6 @@ lingodb::runtime::GrowingBufferAllocator* lingodb::runtime::GrowingBufferAllocat
       return newAllocator;
    }
 }
+lingodb::runtime::ThreadLocal* lingodb::runtime::GrowingBuffer::createThreadLocal(size_t sizeOfType) {
+   return ThreadLocal::create([](uint8_t* arg) -> uint8_t* { return (uint8_t*) GrowingBuffer::create(GrowingBufferAllocator::getDefaultAllocator(), (size_t) arg, 1024); }, (uint8_t*) sizeOfType);
+}
