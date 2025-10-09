@@ -541,11 +541,12 @@ class SubOpRewriter {
    auto getI1Type() { return builder.getI1Type(); }
    auto getI64Type() { return builder.getI64Type(); }
    auto getStringAttr(const Twine& bytes) { return builder.getStringAttr(bytes); }
-   mlir::Value storeStepRequirements() {
+   mlir::Value storeStepRequirements(mlir::Value exclude={}) {
       auto outerMapping = executionStepContexts.top().outerMapping;
       auto executionStep = executionStepContexts.top().executionStep;
       std::vector<mlir::Type> types;
       for (auto [param, arg, isThreadLocal] : llvm::zip(executionStep.getInputs(), executionStep.getSubOps().front().getArguments(), executionStep.getIsThreadLocal())) {
+         if (exclude&&arg==exclude&&arg.hasOneUse())continue;
          mlir::Value input = outerMapping.lookup(param);
          types.push_back(input.getType());
       }
@@ -553,6 +554,7 @@ class SubOpRewriter {
       mlir::Value contextPtr = create<util::AllocaOp>(builder.getUnknownLoc(), util::RefType::get(getContext(), tupleType), mlir::Value());
       size_t offset = 0;
       for (auto [param, arg, isThreadLocal] : llvm::zip(executionStep.getInputs(), executionStep.getSubOps().front().getArguments(), executionStep.getIsThreadLocal())) {
+         if (exclude&&arg==exclude&&arg.hasOneUse())continue;
          mlir::Value input = outerMapping.lookup(param);
          auto memberRef = create<util::TupleElementPtrOp>(builder.getUnknownLoc(), util::RefType::get(getContext(), input.getType()), contextPtr, offset++);
          create<util::StoreOp>(builder.getUnknownLoc(), input, memberRef, mlir::Value());
@@ -580,11 +582,12 @@ class SubOpRewriter {
          rewriter.valueMapping.pop_back();
       }
    };
-   Guard loadStepRequirements(mlir::Value contextPtr, mlir::TypeConverter* typeConverter) {
+   Guard loadStepRequirements(mlir::Value contextPtr, mlir::TypeConverter* typeConverter, mlir::Value exclude={}) {
       auto outerMapping = executionStepContexts.top().outerMapping;
       auto executionStep = executionStepContexts.top().executionStep;
       std::vector<mlir::Type> types;
       for (auto [param, arg, isThreadLocal] : llvm::zip(executionStep.getInputs(), executionStep.getSubOps().front().getArguments(), executionStep.getIsThreadLocal())) {
+         if (exclude&&arg==exclude&&arg.hasOneUse())continue;
          mlir::Value input = outerMapping.lookup(param);
          types.push_back(input.getType());
       }
@@ -593,6 +596,7 @@ class SubOpRewriter {
       Guard guard(*this);
       size_t offset = 0;
       for (auto [param, arg, isThreadLocal] : llvm::zip(executionStep.getInputs(), executionStep.getSubOps().front().getArguments(), executionStep.getIsThreadLocal())) {
+         if (exclude&&arg==exclude&&arg.hasOneUse())continue;
          mlir::Value input = outerMapping.lookup(param);
          auto memberRef = create<util::TupleElementPtrOp>(builder.getUnknownLoc(), util::RefType::get(getContext(), input.getType()), contextPtr, offset++);
          mlir::Value value = create<util::LoadOp>(builder.getUnknownLoc(), memberRef);
@@ -1153,9 +1157,9 @@ class ScanRefsTableLowering : public SubOpConversionPattern<subop::ScanRefsOp> {
       mlir::Value recordBatchPointer = funcBody->addArgument(ptrType, loc);
       mlir::Value contextPtr = funcBody->addArgument(ptrType, loc);
       funcOp.getBody().push_back(funcBody);
-      auto ptr = rewriter.storeStepRequirements();
+      auto ptr = rewriter.storeStepRequirements(scanOp.getState());
       rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
-         rewriter.loadStepRequirements(contextPtr, typeConverter);
+         rewriter.loadStepRequirements(contextPtr, typeConverter,scanOp.getState());
          recordBatchPointer = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(getContext(), recordBatchInfoRepr), recordBatchPointer);
          mlir::Value lenRef = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(rewriter.getIndexType()), recordBatchPointer, 0);
          mlir::Value offsetRef = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(rewriter.getIndexType()), recordBatchPointer, 1);
