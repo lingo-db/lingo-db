@@ -38,6 +38,16 @@ class HashJoinUtils {
       mlir::Block* block;
       std::vector<mlir::Attribute> createdColumns;
    };
+   static void collectAndedResults(std::vector<mlir::Value>& results, std::vector<db::AndOp>& andOps, mlir::Value v) {
+      if (auto andOp = mlir::dyn_cast_or_null<db::AndOp>(v.getDefiningOp())) {
+         for (auto v : andOp.getVals()) {
+            collectAndedResults(results, andOps, v);
+         }
+         andOps.push_back(andOp);
+      } else {
+         results.push_back(v);
+      }
+   }
    static std::pair<std::vector<mlir::Attribute>, std::vector<mlir::Attribute>> extractKeys(mlir::Block* block, relalg::ColumnSet keyAttributes, relalg::ColumnSet otherAttributes, MapBlockInfo& mapBlockInfo) {
       std::vector<mlir::Attribute> toHash;
       std::vector<mlir::Attribute> nullsEqual;
@@ -45,67 +55,84 @@ class HashJoinUtils {
       mlir::IRMapping mapping;
       mapping.map(block->getArgument(0), mapBlockInfo.block->getArgument(0));
       size_t i = 0;
-      block->walk([&](mlir::Operation* op) {
-         if (auto getAttr = mlir::dyn_cast_or_null<tuples::GetColumnOp>(op)) {
-            required.insert({getAttr.getResult(), relalg::ColumnSet::from(getAttr.getAttr())});
-         } else if (auto cmpOp = mlir::dyn_cast_or_null<relalg::CmpOpInterface>(op)) {
-            if (cmpOp.isEqualityPred(true) && isAndedResult(op)) {
-               auto leftAttributes = required[cmpOp.getLeft()];
-               auto rightAttributes = required[cmpOp.getRight()];
-               mlir::Value keyVal;
-               if (leftAttributes.isSubsetOf(keyAttributes) && rightAttributes.isSubsetOf(otherAttributes)) {
-                  keyVal = cmpOp.getLeft();
-               } else if (rightAttributes.isSubsetOf(keyAttributes) && leftAttributes.isSubsetOf(otherAttributes)) {
-                  keyVal = cmpOp.getRight();
-               }
-               if (keyVal) {
-                  if (auto getColOp = mlir::dyn_cast_or_null<tuples::GetColumnOp>(keyVal.getDefiningOp())) {
-                     toHash.push_back(getColOp.getAttr());
-                  } else {
-                     //todo: remove nasty hack:
-                     mlir::OpBuilder builder(cmpOp->getContext());
-                     builder.setInsertionPointToEnd(mapBlockInfo.block);
-                     auto helperOp = builder.create<mlir::arith::ConstantOp>(cmpOp.getLoc(), builder.getIndexAttr(0));
-
-                     relalg::detail::inlineOpIntoBlock(keyVal.getDefiningOp(), keyVal.getDefiningOp()->getParentOp(), mapBlockInfo.block, mapping, helperOp);
-                     helperOp->remove();
-                     helperOp->destroy();
-
-                     auto& colManager = builder.getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
-                     auto def = colManager.createDef(colManager.getUniqueScope("join"), "key" + std::to_string(i++));
-                     def.getColumn().type = keyVal.getType();
-                     auto ref = colManager.createRef(&def.getColumn());
-                     mapBlockInfo.createdColumns.push_back(def);
-                     mapBlockInfo.results.push_back(mapping.lookupOrNull(keyVal));
-                     toHash.push_back(ref);
-                     {
-                        mlir::OpBuilder builder2(cmpOp->getContext());
-                        builder2.setInsertionPointToStart(block);
-                        keyVal.replaceAllUsesWith(builder2.create<tuples::GetColumnOp>(builder2.getUnknownLoc(), keyVal.getType(), ref, block->getArgument(0)));
-                     }
-                  }
-                  mlir::OpBuilder builder2(cmpOp->getContext());
-                  nullsEqual.push_back(builder2.getI8IntegerAttr(!cmpOp.isEqualityPred(false)));
-                  builder2.setInsertionPoint(cmpOp);
-                  mlir::Value constTrue = builder2.create<mlir::arith::ConstantIntOp>(builder2.getUnknownLoc(), 1, 1);
-                  if (mlir::isa<db::NullableType>(cmpOp->getResult(0).getType())) {
-                     constTrue = builder2.create<db::AsNullableOp>(builder2.getUnknownLoc(), cmpOp->getResult(0).getType(), constTrue);
-                  }
-                  cmpOp->replaceAllUsesWith(mlir::ValueRange{constTrue});
-               }
-            }
-         } else {
-            relalg::ColumnSet attributes;
-            for (auto operand : op->getOperands()) {
-               if (required.count(operand)) {
-                  attributes.insert(required[operand]);
-               }
-            }
-            for (auto result : op->getResults()) {
-               required.insert({result, attributes});
-            }
+      std::vector<mlir::Value> andedResults;
+      std::vector<db::AndOp> andOps;
+      if (auto returnOp = mlir::dyn_cast_or_null<tuples::ReturnOp>(block->getTerminator())) {
+         if (returnOp.getNumOperands() > 0) {
+            collectAndedResults(andedResults, andOps, returnOp.getOperand(0));
          }
-      });
+
+         block->walk([&](mlir::Operation* op) {
+            if (auto getAttr = mlir::dyn_cast_or_null<tuples::GetColumnOp>(op)) {
+               required.insert({getAttr.getResult(), relalg::ColumnSet::from(getAttr.getAttr())});
+            } else if (auto cmpOp = mlir::dyn_cast_or_null<relalg::CmpOpInterface>(op)) {
+               if (cmpOp.isEqualityPred(true) && isAndedResult(op)) {
+                  auto leftAttributes = required[cmpOp.getLeft()];
+                  auto rightAttributes = required[cmpOp.getRight()];
+                  mlir::Value keyVal;
+                  if (leftAttributes.isSubsetOf(keyAttributes) && rightAttributes.isSubsetOf(otherAttributes)) {
+                     keyVal = cmpOp.getLeft();
+                  } else if (rightAttributes.isSubsetOf(keyAttributes) && leftAttributes.isSubsetOf(otherAttributes)) {
+                     keyVal = cmpOp.getRight();
+                  }
+                  if (keyVal) {
+                     if (auto getColOp = mlir::dyn_cast_or_null<tuples::GetColumnOp>(keyVal.getDefiningOp())) {
+                        toHash.push_back(getColOp.getAttr());
+                     } else {
+                        //todo: remove nasty hack:
+                        mlir::OpBuilder builder(cmpOp->getContext());
+                        builder.setInsertionPointToEnd(mapBlockInfo.block);
+                        auto helperOp = builder.create<mlir::arith::ConstantOp>(cmpOp.getLoc(), builder.getIndexAttr(0));
+
+                        relalg::detail::inlineOpIntoBlock(keyVal.getDefiningOp(), keyVal.getDefiningOp()->getParentOp(), mapBlockInfo.block, mapping, helperOp);
+                        helperOp->remove();
+                        helperOp->destroy();
+
+                        auto& colManager = builder.getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+                        auto def = colManager.createDef(colManager.getUniqueScope("join"), "key" + std::to_string(i++));
+                        def.getColumn().type = keyVal.getType();
+                        auto ref = colManager.createRef(&def.getColumn());
+                        mapBlockInfo.createdColumns.push_back(def);
+                        mapBlockInfo.results.push_back(mapping.lookupOrNull(keyVal));
+                        toHash.push_back(ref);
+                        {
+                           mlir::OpBuilder builder2(cmpOp->getContext());
+                           builder2.setInsertionPointToStart(block);
+                           keyVal.replaceAllUsesWith(builder2.create<tuples::GetColumnOp>(builder2.getUnknownLoc(), keyVal.getType(), ref, block->getArgument(0)));
+                        }
+                     }
+                     nullsEqual.push_back(mlir::IntegerAttr::get(mlir::IntegerType::get(cmpOp.getContext(), 8), !cmpOp.isEqualityPred(false)));
+                     //remove cmpOp.getResult() from andedResults
+                     mlir::Value opToRemove = cmpOp->getResult(0);
+                     andedResults.erase(std::remove(andedResults.begin(), andedResults.end(), opToRemove), andedResults.end());
+                  }
+               }
+            } else {
+               relalg::ColumnSet attributes;
+               for (auto operand : op->getOperands()) {
+                  if (required.count(operand)) {
+                     attributes.insert(required[operand]);
+                  }
+               }
+               for (auto result : op->getResults()) {
+                  required.insert({result, attributes});
+               }
+            }
+         });
+         auto* context = returnOp->getContext();
+         returnOp.erase();
+         mlir::OpBuilder builder(context);
+         builder.setInsertionPointToEnd(block);
+         if (andedResults.size() == 1) {
+            builder.create<tuples::ReturnOp>(builder.getUnknownLoc(), andedResults[0]);
+         } else if (!andedResults.empty()) {
+            auto newAndOp = builder.create<db::AndOp>(builder.getUnknownLoc(), andedResults);
+            builder.create<tuples::ReturnOp>(builder.getUnknownLoc(), mlir::ValueRange{newAndOp.getResult()});
+         } else {
+            builder.create<tuples::ReturnOp>(builder.getUnknownLoc(), mlir::ValueRange{});
+         }
+      }
+
       return {toHash, nullsEqual};
    }
 };
