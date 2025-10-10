@@ -100,12 +100,28 @@ static std::vector<Type> unpackTypes(subop::StateMembersAttr membersAttr) {
       res.push_back(memberManager.getType(x));
    }
    return res;
-};
-class ColumnMapping {
-   std::unordered_map<const tuples::Column*, mlir::Value> mapping;
+};class ColumnMapping {
+   llvm::SmallDenseMap<const tuples::Column*, mlir::Value> mapping;
 
    public:
    ColumnMapping() : mapping() {}
+
+   // Move constructor
+   ColumnMapping(ColumnMapping&& other) noexcept
+      : mapping(std::move(other.mapping)) {}
+
+   // Move assignment operator
+   ColumnMapping& operator=(ColumnMapping&& other) noexcept {
+      if (this != &other) {
+         mapping = std::move(other.mapping);
+      }
+      return *this;
+   }
+
+   // Copy constructor and assignment can be defaulted or deleted as needed
+   ColumnMapping(const ColumnMapping&) = default;
+   ColumnMapping& operator=(const ColumnMapping&) = default;
+
    ColumnMapping(subop::InFlightOp inFlightOp) {
       assert(!!inFlightOp);
       assert(inFlightOp.getColumns().size() == inFlightOp.getValues().size());
@@ -115,23 +131,7 @@ class ColumnMapping {
          mapping.insert(std::make_pair(col, val));
       }
    }
-   ColumnMapping(subop::InFlightTupleOp inFlightOp) {
-      assert(inFlightOp.getColumns().size() == inFlightOp.getValues().size());
-      for (auto i = 0ul; i < inFlightOp.getColumns().size(); i++) {
-         const auto* col = &mlir::cast<tuples::ColumnDefAttr>(inFlightOp.getColumns()[i]).getColumn();
-         auto val = inFlightOp.getValues()[i];
-         mapping.insert(std::make_pair(col, val));
-      }
-   }
    void merge(subop::InFlightOp inFlightOp) {
-      assert(inFlightOp.getColumns().size() == inFlightOp.getValues().size());
-      for (auto i = 0ul; i < inFlightOp.getColumns().size(); i++) {
-         const auto* col = &mlir::cast<tuples::ColumnDefAttr>(inFlightOp.getColumns()[i]).getColumn();
-         auto val = inFlightOp.getValues()[i];
-         mapping.insert(std::make_pair(col, val));
-      }
-   }
-   void merge(subop::InFlightTupleOp inFlightOp) {
       assert(inFlightOp.getColumns().size() == inFlightOp.getValues().size());
       for (auto i = 0ul; i < inFlightOp.getColumns().size(); i++) {
          const auto* col = &mlir::cast<tuples::ColumnDefAttr>(inFlightOp.getColumns()[i]).getColumn();
@@ -168,16 +168,6 @@ class ColumnMapping {
          values.push_back(m.second);
       }
       return builder.create<subop::InFlightOp>(builder.getUnknownLoc(), values, builder.getArrayAttr(columns));
-   }
-   mlir::Value createInFlightTuple(mlir::OpBuilder& builder) {
-      std::vector<mlir::Value> values;
-      std::vector<mlir::Attribute> columns;
-
-      for (auto m : mapping) {
-         columns.push_back(builder.getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager().createDef(m.first));
-         values.push_back(m.second);
-      }
-      return builder.create<subop::InFlightTupleOp>(builder.getUnknownLoc(), values, builder.getArrayAttr(columns));
    }
    void define(tuples::ColumnDefAttr columnDefAttr, mlir::Value v) {
       mapping.insert(std::make_pair(&columnDefAttr.getColumn(), v));
@@ -490,17 +480,17 @@ class SubOpRewriter;
 class AbstractSubOpConversionPattern {
    protected:
    mlir::TypeConverter* typeConverter;
-   std::string operationName;
+   mlir::OperationName operationName;
    PatternBenefit benefit;
    mlir::MLIRContext* context;
 
    public:
-   AbstractSubOpConversionPattern(TypeConverter* typeConverter, const std::string& operationName, const PatternBenefit& benefit, MLIRContext* context) : typeConverter(typeConverter), operationName(operationName), benefit(benefit), context(context) {}
+   AbstractSubOpConversionPattern(TypeConverter* typeConverter, const mlir::OperationName& operationName, const PatternBenefit& benefit, MLIRContext* context) : typeConverter(typeConverter), operationName(operationName), benefit(benefit), context(context) {}
    virtual LogicalResult matchAndRewrite(mlir::Operation*, SubOpRewriter& rewriter) = 0;
    mlir::MLIRContext* getContext() const {
       return context;
    }
-   const std::string& getOperationName() const {
+   const mlir::OperationName& getOperationName() const {
       return operationName;
    }
    const PatternBenefit& getBenefit() const {
@@ -510,14 +500,15 @@ class AbstractSubOpConversionPattern {
 };
 struct InFlightTupleStream {
    subop::InFlightOp inFlightOp;
+   ColumnMapping columnMapping;
 };
 class SubOpRewriter {
    mlir::OpBuilder builder;
    std::vector<mlir::IRMapping> valueMapping;
-   std::unordered_map<std::string, std::vector<std::unique_ptr<AbstractSubOpConversionPattern>>> patterns;
+   llvm::DenseMap<OperationName, llvm::SmallVector<std::unique_ptr<AbstractSubOpConversionPattern>>> patterns;
    llvm::DenseMap<mlir::Value, InFlightTupleStream> inFlightTupleStreams;
    std::vector<mlir::Operation*> toErase;
-   std::unordered_set<mlir::Operation*> isErased;
+   llvm::DenseSet<mlir::Operation*> isErased;
    std::vector<mlir::Operation*> toRewrite;
    mlir::Operation* currentStreamLoc = nullptr;
    struct ExecutionStepContext {
@@ -626,7 +617,8 @@ class SubOpRewriter {
       }
       return v;
    }
-   void atStartOf(mlir::Block* block, const std::function<void(SubOpRewriter&)>& fn) {
+   template<class Fn>
+   void atStartOf(mlir::Block* block, const Fn& fn) {
       mlir::OpBuilder::InsertionGuard guard(builder);
       builder.setInsertionPointToStart(block);
       return fn(*this);
@@ -719,19 +711,13 @@ class SubOpRewriter {
    }
    subop::InFlightOp createInFlight(ColumnMapping mapping) {
       auto newInFlight = mapping.createInFlight(builder);
-      inFlightTupleStreams[newInFlight] = InFlightTupleStream{mlir::cast<subop::InFlightOp>(newInFlight.getDefiningOp())};
+      inFlightTupleStreams[newInFlight] = InFlightTupleStream{mlir::cast<subop::InFlightOp>(newInFlight.getDefiningOp()),mapping};
       return mlir::cast<subop::InFlightOp>(newInFlight.getDefiningOp());
    }
-   void replaceTupleStream(mlir::Value tupleStream, InFlightTupleStream previous) {
-      inFlightTupleStreams[tupleStream] = previous;
-      if (auto* definingOp = tupleStream.getDefiningOp()) {
-         eraseOp(definingOp);
-      }
-   }
    void replaceTupleStream(mlir::Value tupleStream, ColumnMapping& mapping) {
-      auto newInFlight = mapping.createInFlight(builder);
+      mlir::Value newInFlight = builder.create<subop::InFlightOp>(builder.getUnknownLoc(), mlir::ValueRange{},mlir::ArrayAttr::get(getContext(), {}));
       eraseOp(newInFlight.getDefiningOp());
-      inFlightTupleStreams[tupleStream] = InFlightTupleStream{mlir::cast<subop::InFlightOp>(newInFlight.getDefiningOp())};
+      inFlightTupleStreams[tupleStream] = InFlightTupleStream{mlir::cast<subop::InFlightOp>(newInFlight.getDefiningOp()),std::move(mapping)};
       if (auto* definingOp = tupleStream.getDefiningOp()) {
          eraseOp(definingOp);
       }
@@ -784,7 +770,7 @@ class SubOpRewriter {
       } else {
          builder.setInsertionPoint(op);
       }
-      for (auto& p : patterns[op->getName().getStringRef().str()]) { //todo: ordering
+      for (auto& p : patterns[op->getName()]) { //todo: ordering
          if (p->matchAndRewrite(op, *this).succeeded()) {
             std::vector<mlir::Operation*> localRewrite = std::move(toRewrite);
             for (auto* r : localRewrite) {
@@ -843,10 +829,16 @@ class SubOpRewriter {
    mlir::Operation* getCurrentStreamLoc() {
       return currentStreamLoc;
    }
-
-   mlir::LogicalResult implementStreamConsumer(mlir::Value stream, const std::function<mlir::LogicalResult(SubOpRewriter&, ColumnMapping&)>& impl) {
+   template<class Fn>
+   mlir::LogicalResult implementStreamConsumer(mlir::Value stream, const Fn& impl) {
       auto& streamInfo = inFlightTupleStreams[stream];
-      ColumnMapping mapping(streamInfo.inFlightOp);
+      ColumnMapping mapping;
+      if (stream.hasOneUse()) {
+         mapping = std::move(streamInfo.columnMapping);
+      }  else{
+         mapping = streamInfo.columnMapping;
+      }
+
       mlir::OpBuilder::InsertionGuard guard(builder);
       currentStreamLoc = streamInfo.inFlightOp.getOperation();
       builder.setInsertionPoint(streamInfo.inFlightOp);
@@ -862,7 +854,7 @@ class SubOpConversionPattern : public AbstractSubOpConversionPattern {
    using OpAdaptor = typename OpT::Adaptor;
    SubOpConversionPattern(TypeConverter& typeConverter, MLIRContext* context,
                           PatternBenefit benefit = 1)
-      : AbstractSubOpConversionPattern(&typeConverter, std::string(OpT::getOperationName()), benefit,
+      : AbstractSubOpConversionPattern(&typeConverter, OperationName(OpT::getOperationName(), context), benefit,
                                        context) {}
    LogicalResult matchAndRewrite(mlir::Operation* op, SubOpRewriter& rewriter) override {
       std::vector<mlir::Value> newOperands;
@@ -882,10 +874,16 @@ class SubOpTupleStreamConsumerConversionPattern : public AbstractSubOpConversion
    using OpAdaptor = typename OpT::Adaptor;
    SubOpTupleStreamConsumerConversionPattern(TypeConverter& typeConverter, MLIRContext* context,
                                              PatternBenefit benefit = B)
-      : AbstractSubOpConversionPattern(&typeConverter, std::string(OpT::getOperationName()), benefit,
+      : AbstractSubOpConversionPattern(&typeConverter, OperationName(OpT::getOperationName(), context), benefit,
                                        context) {}
    LogicalResult matchAndRewrite(mlir::Operation* op, SubOpRewriter& rewriter) override {
       auto castedOp = mlir::cast<OpT>(op);
+      
+      // First check if the pattern matches before doing expensive work
+      if (failed(match(castedOp))) {
+         return failure();
+      }
+      
       auto stream = castedOp.getStream();
       return rewriter.implementStreamConsumer(stream, [&](SubOpRewriter& rewriter, ColumnMapping& mapping) {
          std::vector<mlir::Value> newOperands;
@@ -893,10 +891,12 @@ class SubOpTupleStreamConsumerConversionPattern : public AbstractSubOpConversion
             newOperands.push_back(rewriter.getMapped(operand));
          }
          OpAdaptor adaptor(newOperands);
-         return matchAndRewrite(castedOp, adaptor, rewriter, mapping);
+         rewrite(castedOp, adaptor, rewriter, mapping);
+         return success();
       });
    }
-   virtual LogicalResult matchAndRewrite(OpT op, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const = 0;
+   virtual LogicalResult match(OpT op) const = 0;
+   virtual void rewrite(OpT op, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const = 0;
    virtual ~SubOpTupleStreamConsumerConversionPattern() {};
 };
 
@@ -952,9 +952,14 @@ class TableRefGatherOpLowering : public SubOpTupleStreamConsumerConversionPatter
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::GatherOp, 2>::SubOpTupleStreamConsumerConversionPattern;
 
-   LogicalResult matchAndRewrite(subop::GatherOp gatherOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::GatherOp gatherOp) const override {
       auto refType = gatherOp.getRef().getColumn().type;
       if (!mlir::isa<subop::TableEntryRefType>(refType)) { return failure(); }
+      return success();
+   }
+
+   void rewrite(subop::GatherOp gatherOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+      auto refType = gatherOp.getRef().getColumn().type;
       auto columns = mlir::cast<subop::TableEntryRefType>(refType).getMembers();
       auto tableRefVal = mapping.resolve(gatherOp, gatherOp.getRef());
       llvm::SmallVector<mlir::Value> unpacked;
@@ -974,15 +979,18 @@ class TableRefGatherOpLowering : public SubOpTupleStreamConsumerConversionPatter
          }
       }
       rewriter.replaceTupleStream(gatherOp, mapping);
-      return success();
    }
 };
 class MaterializeTableLowering : public SubOpTupleStreamConsumerConversionPattern<subop::MaterializeOp> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::MaterializeOp>::SubOpTupleStreamConsumerConversionPattern;
 
-   LogicalResult matchAndRewrite(subop::MaterializeOp materializeOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::MaterializeOp materializeOp) const override {
       if (!mlir::isa<subop::ResultTableType>(materializeOp.getState().getType())) return failure();
+      return success();
+   }
+
+   void rewrite(subop::MaterializeOp materializeOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
       auto stateType = mlir::cast<subop::ResultTableType>(materializeOp.getState().getType());
       mlir::Value loaded = rewriter.create<util::LoadOp>(materializeOp->getLoc(), adaptor.getState());
       auto columnBuilders = rewriter.create<util::UnPackOp>(materializeOp->getLoc(), loaded);
@@ -993,7 +1001,6 @@ class MaterializeTableLowering : public SubOpTupleStreamConsumerConversionPatter
          rewriter.create<db::AppendArrowOp>(materializeOp->getLoc(), asArrayBuilder, val);
       }
       rewriter.eraseOp(materializeOp);
-      return mlir::success();
    }
 };
 class CreateThreadLocalLowering : public SubOpConversionPattern<subop::CreateThreadLocalOp> {
@@ -1358,7 +1365,11 @@ class MapLowering : public SubOpTupleStreamConsumerConversionPattern<subop::MapO
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::MapOp>::SubOpTupleStreamConsumerConversionPattern;
 
-   LogicalResult matchAndRewrite(subop::MapOp mapOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::MapOp mapOp) const override {
+      return success();
+   }
+
+   void rewrite(subop::MapOp mapOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
       auto args = mapping.resolve(mapOp, mapOp.getInputCols());
       std::vector<Value> res;
 
@@ -1371,8 +1382,6 @@ class MapLowering : public SubOpTupleStreamConsumerConversionPattern<subop::MapO
       mapping.define(mapOp.getComputedCols(), res);
 
       rewriter.replaceTupleStream(mapOp, mapping);
-
-      return success();
    }
 };
 class InFlightLowering : public SubOpConversionPattern<subop::InFlightOp> {
@@ -2402,7 +2411,11 @@ class ScanMultiMapListLowering : public SubOpConversionPattern<subop::ScanListOp
 class FilterLowering : public SubOpTupleStreamConsumerConversionPattern<subop::FilterOp> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::FilterOp>::SubOpTupleStreamConsumerConversionPattern;
-   LogicalResult matchAndRewrite(subop::FilterOp filterOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::FilterOp filterOp) const override {
+      return success();
+   }
+
+   void rewrite(subop::FilterOp filterOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
       auto providedVals = mapping.resolve(filterOp, filterOp.getConditions());
       mlir::Value cond;
       if (providedVals.size() == 1) {
@@ -2421,8 +2434,6 @@ class FilterLowering : public SubOpTupleStreamConsumerConversionPattern<subop::F
       rewriter.atStartOf(ifOp.thenBlock(), [&](SubOpRewriter& rewriter) {
          rewriter.replaceTupleStream(filterOp, mapping);
       });
-
-      return success();
    }
 };
 
@@ -2430,7 +2441,11 @@ class RenameLowering : public SubOpTupleStreamConsumerConversionPattern<subop::R
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::RenamingOp>::SubOpTupleStreamConsumerConversionPattern;
 
-   LogicalResult matchAndRewrite(subop::RenamingOp renamingOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::RenamingOp renamingOp) const override {
+      return success();
+   }
+
+   void rewrite(subop::RenamingOp renamingOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
       for (mlir::Attribute attr : renamingOp.getColumns()) {
          auto relationDefAttr = mlir::dyn_cast_or_null<tuples::ColumnDefAttr>(attr);
          mlir::Attribute from = mlir::dyn_cast_or_null<mlir::ArrayAttr>(relationDefAttr.getFromExisting())[0];
@@ -2438,7 +2453,6 @@ class RenameLowering : public SubOpTupleStreamConsumerConversionPattern<subop::R
          mapping.define(relationDefAttr, mapping.resolve(renamingOp, relationRefAttr));
       }
       rewriter.replaceTupleStream(renamingOp, mapping);
-      return success();
    }
 };
 
@@ -2446,9 +2460,14 @@ class MaterializeHeapLowering : public SubOpTupleStreamConsumerConversionPattern
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::MaterializeOp>::SubOpTupleStreamConsumerConversionPattern;
 
-   LogicalResult matchAndRewrite(subop::MaterializeOp materializeOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::MaterializeOp materializeOp) const override {
       auto heapType = mlir::dyn_cast_or_null<subop::HeapType>(materializeOp.getState().getType());
       if (!heapType) return failure();
+      return success();
+   }
+
+   void rewrite(subop::MaterializeOp materializeOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+      auto heapType = mlir::cast<subop::HeapType>(materializeOp.getState().getType());
       EntryStorageHelper storageHelper(materializeOp, heapType.getMembers(), heapType.hasLock(), typeConverter);
       mlir::Value ref;
       rewriter.atStartOf(&rewriter.getCurrentStreamLoc()->getParentOfType<mlir::func::FuncOp>().getFunctionBody().front(), [&](SubOpRewriter& rewriter) {
@@ -2457,7 +2476,6 @@ class MaterializeHeapLowering : public SubOpTupleStreamConsumerConversionPattern
       storageHelper.storeFromColumns(materializeOp.getMapping(), mapping, ref, rewriter, materializeOp->getLoc());
       rt::Heap::insert(rewriter, materializeOp->getLoc())({adaptor.getState(), ref});
       rewriter.eraseOp(materializeOp);
-      return mlir::success();
    }
 };
 
@@ -2465,33 +2483,44 @@ class MaterializeVectorLowering : public SubOpTupleStreamConsumerConversionPatte
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::MaterializeOp>::SubOpTupleStreamConsumerConversionPattern;
 
-   LogicalResult matchAndRewrite(subop::MaterializeOp materializeOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::MaterializeOp materializeOp) const override {
       auto bufferType = mlir::dyn_cast_or_null<subop::BufferType>(materializeOp.getState().getType());
       if (!bufferType) return failure();
+      return success();
+   }
+
+   void rewrite(subop::MaterializeOp materializeOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+      auto bufferType = mlir::cast<subop::BufferType>(materializeOp.getState().getType());
       EntryStorageHelper storageHelper(materializeOp, bufferType.getMembers(), bufferType.hasLock(), typeConverter);
       mlir::Value ref = rt::GrowingBuffer::insert(rewriter, materializeOp->getLoc())({adaptor.getState()})[0];
       storageHelper.storeFromColumns(materializeOp.getMapping(), mapping, ref, rewriter, materializeOp->getLoc());
       rewriter.eraseOp(materializeOp);
-      return mlir::success();
    }
 };
 
 class LookupSimpleStateLowering : public SubOpTupleStreamConsumerConversionPattern<subop::LookupOp> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::LookupOp>::SubOpTupleStreamConsumerConversionPattern;
-   LogicalResult matchAndRewrite(subop::LookupOp lookupOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::LookupOp lookupOp) const override {
       if (!mlir::isa<subop::SimpleStateType>(lookupOp.getState().getType())) return failure();
+      return success();
+   }
+
+   void rewrite(subop::LookupOp lookupOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
       mapping.define(lookupOp.getRef(), adaptor.getState());
       rewriter.replaceTupleStream(lookupOp, mapping);
-      return mlir::success();
    }
 };
 
 class LookupHashIndexedViewLowering : public SubOpTupleStreamConsumerConversionPattern<subop::LookupOp> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::LookupOp>::SubOpTupleStreamConsumerConversionPattern;
-   LogicalResult matchAndRewrite(subop::LookupOp lookupOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::LookupOp lookupOp) const override {
       if (!mlir::isa<subop::HashIndexedViewType>(lookupOp.getState().getType())) return failure();
+      return success();
+   }
+
+   void rewrite(subop::LookupOp lookupOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
       auto loc = lookupOp->getLoc();
       mlir::Value hash = mapping.resolve(lookupOp, lookupOp.getKeys())[0];
       auto* context = getContext();
@@ -2513,15 +2542,17 @@ class LookupHashIndexedViewLowering : public SubOpTupleStreamConsumerConversionP
 
       mapping.define(lookupOp.getRef(), matches);
       rewriter.replaceTupleStream(lookupOp, mapping);
-      return mlir::success();
    }
 };
 class LookupSegmentTreeViewLowering : public SubOpTupleStreamConsumerConversionPattern<subop::LookupOp> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::LookupOp>::SubOpTupleStreamConsumerConversionPattern;
-   LogicalResult matchAndRewrite(subop::LookupOp lookupOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::LookupOp lookupOp) const override {
       if (!mlir::isa<subop::SegmentTreeViewType>(lookupOp.getState().getType())) return failure();
+      return success();
+   }
 
+   void rewrite(subop::LookupOp lookupOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
       auto valueMembers = mlir::cast<subop::SegmentTreeViewType>(lookupOp.getState().getType()).getValueMembers();
       mlir::TupleType stateType = mlir::TupleType::get(getContext(), unpackTypes(valueMembers));
 
@@ -2540,7 +2571,6 @@ class LookupSegmentTreeViewLowering : public SubOpTupleStreamConsumerConversionP
       rt::SegmentTreeView::lookup(rewriter, loc)({adaptor.getState(), ref, idxLeft, idxRight});
       mapping.define(lookupOp.getRef(), ref);
       rewriter.replaceTupleStream(lookupOp, mapping);
-      return mlir::success();
    }
 };
 mlir::Value hashKeys(std::vector<mlir::Value> keys, OpBuilder& rewriter, Location loc) {
@@ -2554,8 +2584,12 @@ mlir::Value hashKeys(std::vector<mlir::Value> keys, OpBuilder& rewriter, Locatio
 class PureLookupHashMapLowering : public SubOpTupleStreamConsumerConversionPattern<subop::LookupOp> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::LookupOp>::SubOpTupleStreamConsumerConversionPattern;
-   LogicalResult matchAndRewrite(subop::LookupOp lookupOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::LookupOp lookupOp) const override {
       if (!mlir::isa<subop::HashMapType>(lookupOp.getState().getType())) return failure();
+      return success();
+   }
+
+   void rewrite(subop::LookupOp lookupOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
       subop::HashMapType htStateType = mlir::cast<subop::HashMapType>(lookupOp.getState().getType());
       EntryStorageHelper keyStorageHelper(lookupOp, htStateType.getKeyMembers(), false, typeConverter);
       EntryStorageHelper valStorageHelper(lookupOp, htStateType.getValueMembers(), htStateType.hasLock(), typeConverter);
@@ -2662,15 +2696,18 @@ class PureLookupHashMapLowering : public SubOpTupleStreamConsumerConversionPatte
       currEntryPtr = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(getContext(), rewriter.getI8Type()), currEntryPtr);
       mapping.define(lookupOp.getRef(), currEntryPtr);
       rewriter.replaceTupleStream(lookupOp, mapping);
-      return mlir::success();
    }
 };
 
 class PureLookupPreAggregationHtLowering : public SubOpTupleStreamConsumerConversionPattern<subop::LookupOp> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::LookupOp>::SubOpTupleStreamConsumerConversionPattern;
-   LogicalResult matchAndRewrite(subop::LookupOp lookupOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::LookupOp lookupOp) const override {
       if (!mlir::isa<subop::PreAggrHtType>(lookupOp.getState().getType())) return failure();
+      return success();
+   }
+
+   void rewrite(subop::LookupOp lookupOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
       subop::PreAggrHtType htStateType = mlir::cast<subop::PreAggrHtType>(lookupOp.getState().getType());
       EntryStorageHelper keyStorageHelper(lookupOp, htStateType.getKeyMembers(), false, typeConverter);
       EntryStorageHelper valStorageHelper(lookupOp, htStateType.getValueMembers(), htStateType.hasLock(), typeConverter);
@@ -2775,16 +2812,20 @@ class PureLookupPreAggregationHtLowering : public SubOpTupleStreamConsumerConver
       currEntryPtr = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(getContext(), rewriter.getI8Type()), currEntryPtr);
       mapping.define(lookupOp.getRef(), currEntryPtr);
       rewriter.replaceTupleStream(lookupOp, mapping);
-      return mlir::success();
    }
 };
 
 class LookupHashMultiMapLowering : public SubOpTupleStreamConsumerConversionPattern<subop::LookupOp> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::LookupOp>::SubOpTupleStreamConsumerConversionPattern;
-   LogicalResult matchAndRewrite(subop::LookupOp lookupOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::LookupOp lookupOp) const override {
       subop::HashMultiMapType hashMultiMapType = mlir::dyn_cast_or_null<subop::HashMultiMapType>(lookupOp.getState().getType());
       if (!hashMultiMapType) return failure();
+      return success();
+   }
+
+   void rewrite(subop::LookupOp lookupOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+      subop::HashMultiMapType hashMultiMapType = mlir::cast<subop::HashMultiMapType>(lookupOp.getState().getType());
       EntryStorageHelper keyStorageHelper(lookupOp, hashMultiMapType.getKeyMembers(), false, typeConverter);
       EntryStorageHelper valStorageHelper(lookupOp, hashMultiMapType.getValueMembers(), hashMultiMapType.hasLock(), typeConverter);
       auto lookupKey = mapping.resolve(lookupOp, lookupOp.getKeys());
@@ -2887,15 +2928,19 @@ class LookupHashMultiMapLowering : public SubOpTupleStreamConsumerConversionPatt
       Value currEntryPtr = ifOpOuter.getResult(0);
       mapping.define(lookupOp.getRef(), currEntryPtr);
       rewriter.replaceTupleStream(lookupOp, mapping);
-      return mlir::success();
    }
 };
 class InsertMultiMapLowering : public SubOpTupleStreamConsumerConversionPattern<subop::InsertOp> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::InsertOp>::SubOpTupleStreamConsumerConversionPattern;
-   LogicalResult matchAndRewrite(subop::InsertOp insertOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::InsertOp insertOp) const override {
       subop::HashMultiMapType htStateType = mlir::dyn_cast_or_null<subop::HashMultiMapType>(insertOp.getState().getType());
       if (!htStateType) return failure();
+      return success();
+   }
+
+   void rewrite(subop::InsertOp insertOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+      subop::HashMultiMapType htStateType = mlir::cast<subop::HashMultiMapType>(insertOp.getState().getType());
       EntryStorageHelper keyStorageHelper(insertOp, htStateType.getKeyMembers(), false, typeConverter);
       EntryStorageHelper valStorageHelper(insertOp, htStateType.getValueMembers(), htStateType.hasLock(), typeConverter);
       auto loc = insertOp->getLoc();
@@ -3007,15 +3052,18 @@ class InsertMultiMapLowering : public SubOpTupleStreamConsumerConversionPattern<
          rewriter.create<scf::YieldOp>(loc, after->getArguments());
       });
       rewriter.eraseOp(insertOp);
-      return mlir::success();
    }
 };
 
 class LookupPreAggrHtFragment : public SubOpTupleStreamConsumerConversionPattern<subop::LookupOrInsertOp> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::LookupOrInsertOp>::SubOpTupleStreamConsumerConversionPattern;
-   LogicalResult matchAndRewrite(subop::LookupOrInsertOp lookupOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::LookupOrInsertOp lookupOp) const override {
       if (!mlir::isa<subop::PreAggrHtFragmentType>(lookupOp.getState().getType())) return failure();
+      return success();
+   }
+
+   void rewrite(subop::LookupOrInsertOp lookupOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
       subop::PreAggrHtFragmentType fragmentType = mlir::cast<subop::PreAggrHtFragmentType>(lookupOp.getState().getType());
       EntryStorageHelper keyStorageHelper(lookupOp, fragmentType.getKeyMembers(), false, typeConverter);
       EntryStorageHelper valStorageHelper(lookupOp, fragmentType.getValueMembers(), fragmentType.hasLock(), typeConverter);
@@ -3100,15 +3148,18 @@ class LookupPreAggrHtFragment : public SubOpTupleStreamConsumerConversionPattern
       Value kvAddress = rewriter.create<util::TupleElementPtrOp>(loc, kvPtrType, currEntryPtr, 2);
       mapping.define(lookupOp.getRef(), rewriter.create<util::TupleElementPtrOp>(lookupOp->getLoc(), util::RefType::get(getContext(), kvType.getType(1)), kvAddress, 1));
       rewriter.replaceTupleStream(lookupOp, mapping);
-      return mlir::success();
    }
 };
 
 class LookupHashMapLowering : public SubOpTupleStreamConsumerConversionPattern<subop::LookupOrInsertOp> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::LookupOrInsertOp>::SubOpTupleStreamConsumerConversionPattern;
-   LogicalResult matchAndRewrite(subop::LookupOrInsertOp lookupOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::LookupOrInsertOp lookupOp) const override {
       if (!mlir::isa<subop::HashMapType>(lookupOp.getState().getType())) return failure();
+      return success();
+   }
+
+   void rewrite(subop::LookupOrInsertOp lookupOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
       subop::HashMapType htStateType = mlir::cast<subop::HashMapType>(lookupOp.getState().getType());
       EntryStorageHelper keyStorageHelper(lookupOp, htStateType.getKeyMembers(), false, typeConverter);
       EntryStorageHelper valStorageHelper(lookupOp, htStateType.getValueMembers(), htStateType.hasLock(), typeConverter);
@@ -3239,16 +3290,18 @@ class LookupHashMapLowering : public SubOpTupleStreamConsumerConversionPattern<s
       Value kvAddress = rewriter.create<util::TupleElementPtrOp>(loc, kvPtrType, currEntryPtr, 2);
       mapping.define(lookupOp.getRef(), rewriter.create<util::TupleElementPtrOp>(lookupOp->getLoc(), util::RefType::get(getContext(), kvType.getType(1)), kvAddress, 1));
       rewriter.replaceTupleStream(lookupOp, mapping);
-      return mlir::success();
    }
 };
 
 class LookupExternalHashIndexLowering : public SubOpTupleStreamConsumerConversionPattern<subop::LookupOp> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::LookupOp>::SubOpTupleStreamConsumerConversionPattern;
-   LogicalResult matchAndRewrite(subop::LookupOp lookupOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::LookupOp lookupOp) const override {
       if (!mlir::isa<subop::ExternalHashIndexType>(lookupOp.getState().getType())) return failure();
+      return success();
+   }
 
+   void rewrite(subop::LookupOp lookupOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
       auto loc = lookupOp->getLoc();
 
       // Calculate hash value and perform lookup in external index hashmap
@@ -3257,28 +3310,35 @@ class LookupExternalHashIndexLowering : public SubOpTupleStreamConsumerConversio
 
       mapping.define(lookupOp.getRef(), list);
       rewriter.replaceTupleStream(lookupOp, mapping);
-      return mlir::success();
    }
 };
 class DefaultGatherOpLowering : public SubOpTupleStreamConsumerConversionPattern<subop::GatherOp> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::GatherOp>::SubOpTupleStreamConsumerConversionPattern;
 
-   LogicalResult matchAndRewrite(subop::GatherOp gatherOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::GatherOp gatherOp) const override {
+      return success();
+   }
+
+   void rewrite(subop::GatherOp gatherOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
       auto referenceType = mlir::cast<subop::StateEntryReference>(gatherOp.getRef().getColumn().type);
       EntryStorageHelper storageHelper(gatherOp, referenceType.getMembers(), referenceType.hasLock(), typeConverter);
       storageHelper.loadIntoColumns(gatherOp.getMapping(), mapping, mapping.resolve(gatherOp, gatherOp.getRef()), rewriter, gatherOp->getLoc());
       rewriter.replaceTupleStream(gatherOp, mapping);
-      return success();
    }
 };
 class ContinuousRefGatherOpLowering : public SubOpTupleStreamConsumerConversionPattern<subop::GatherOp, 2> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::GatherOp, 2>::SubOpTupleStreamConsumerConversionPattern;
 
-   LogicalResult matchAndRewrite(subop::GatherOp gatherOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::GatherOp gatherOp) const override {
       auto continuousRefEntryType = mlir::dyn_cast_or_null<subop::ContinuousEntryRefType>(gatherOp.getRef().getColumn().type);
       if (!continuousRefEntryType) { return failure(); }
+      return success();
+   }
+
+   void rewrite(subop::GatherOp gatherOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+      auto continuousRefEntryType = mlir::cast<subop::ContinuousEntryRefType>(gatherOp.getRef().getColumn().type);
       llvm::SmallVector<mlir::Value> unPackedReference;
       rewriter.createOrFold<util::UnPackOp>(unPackedReference, gatherOp->getLoc(), mapping.resolve(gatherOp, gatherOp.getRef()));
       EntryStorageHelper storageHelper(gatherOp, continuousRefEntryType.getMembers(), continuousRefEntryType.hasLock(), typeConverter);
@@ -3287,17 +3347,22 @@ class ContinuousRefGatherOpLowering : public SubOpTupleStreamConsumerConversionP
       auto elementRef = rewriter.create<util::ArrayElementPtrOp>(gatherOp->getLoc(), ptrType, baseRef, unPackedReference[0]);
       storageHelper.loadIntoColumns(gatherOp.getMapping(), mapping, elementRef, rewriter, gatherOp->getLoc());
       rewriter.replaceTupleStream(gatherOp, mapping);
-      return success();
    }
 };
 class HashMapRefGatherOpLowering : public SubOpTupleStreamConsumerConversionPattern<subop::GatherOp, 2> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::GatherOp, 2>::SubOpTupleStreamConsumerConversionPattern;
 
-   LogicalResult matchAndRewrite(subop::GatherOp gatherOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::GatherOp gatherOp) const override {
       auto refType = gatherOp.getRef().getColumn().type;
       auto referenceType = mlir::dyn_cast_or_null<subop::HashMapEntryRefType>(refType);
       if (!referenceType) { return failure(); }
+      return success();
+   }
+
+   void rewrite(subop::GatherOp gatherOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+      auto refType = gatherOp.getRef().getColumn().type;
+      auto referenceType = mlir::cast<subop::HashMapEntryRefType>(refType);
       auto keyMembers = referenceType.getHashMap().getKeyMembers();
       auto valMembers = referenceType.getHashMap().getValueMembers();
       auto loc = gatherOp->getLoc();
@@ -3309,17 +3374,22 @@ class HashMapRefGatherOpLowering : public SubOpTupleStreamConsumerConversionPatt
       keyStorageHelper.loadIntoColumns(gatherOp.getMapping(), mapping, keyRef, rewriter, loc);
       valStorageHelper.loadIntoColumns(gatherOp.getMapping(), mapping, valRef, rewriter, loc);
       rewriter.replaceTupleStream(gatherOp, mapping);
-      return success();
    }
 };
 class PreAggrHtRefGatherOpLowering : public SubOpTupleStreamConsumerConversionPattern<subop::GatherOp, 2> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::GatherOp, 2>::SubOpTupleStreamConsumerConversionPattern;
 
-   LogicalResult matchAndRewrite(subop::GatherOp gatherOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::GatherOp gatherOp) const override {
       auto refType = gatherOp.getRef().getColumn().type;
       auto referenceType = mlir::dyn_cast_or_null<subop::PreAggrHTEntryRefType>(refType);
       if (!referenceType) { return failure(); }
+      return success();
+   }
+
+   void rewrite(subop::GatherOp gatherOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+      auto refType = gatherOp.getRef().getColumn().type;
+      auto referenceType = mlir::cast<subop::PreAggrHTEntryRefType>(refType);
       auto keyMembers = referenceType.getHashMap().getKeyMembers();
       auto valMembers = referenceType.getHashMap().getValueMembers();
       auto loc = gatherOp->getLoc();
@@ -3331,16 +3401,20 @@ class PreAggrHtRefGatherOpLowering : public SubOpTupleStreamConsumerConversionPa
       keyStorageHelper.loadIntoColumns(gatherOp.getMapping(), mapping, keyRef, rewriter, loc);
       valStorageHelper.loadIntoColumns(gatherOp.getMapping(), mapping, valRef, rewriter, loc);
       rewriter.replaceTupleStream(gatherOp, mapping);
-      return success();
    }
 };
 class HashMultiMapRefGatherOpLowering : public SubOpTupleStreamConsumerConversionPattern<subop::GatherOp, 2> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::GatherOp, 2>::SubOpTupleStreamConsumerConversionPattern;
 
-   LogicalResult matchAndRewrite(subop::GatherOp gatherOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::GatherOp gatherOp) const override {
       auto refType = gatherOp.getRef().getColumn().type;
       if (!mlir::isa<subop::HashMultiMapEntryRefType>(refType)) { return failure(); }
+      return success();
+   }
+
+   void rewrite(subop::GatherOp gatherOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+      auto refType = gatherOp.getRef().getColumn().type;
       auto hashMultiMap = mlir::cast<subop::HashMultiMapEntryRefType>(refType).getHashMultimap();
       auto keyMembers = hashMultiMap.getKeyMembers();
       auto valMembers = hashMultiMap.getValueMembers();
@@ -3353,7 +3427,6 @@ class HashMultiMapRefGatherOpLowering : public SubOpTupleStreamConsumerConversio
       keyStorageHelper.loadIntoColumns(gatherOp.getMapping(), mapping, unpacked[0], rewriter, loc);
       valStorageHelper.loadIntoColumns(gatherOp.getMapping(), mapping, unpacked[1], rewriter, loc);
       rewriter.replaceTupleStream(gatherOp, mapping);
-      return success();
    }
 };
 
@@ -3361,9 +3434,14 @@ class ExternalHashIndexRefGatherOpLowering : public SubOpTupleStreamConsumerConv
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::GatherOp, 2>::SubOpTupleStreamConsumerConversionPattern;
 
-   LogicalResult matchAndRewrite(subop::GatherOp gatherOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::GatherOp gatherOp) const override {
       auto refType = gatherOp.getRef().getColumn().type;
       if (!mlir::isa<subop::ExternalHashIndexEntryRefType>(refType)) { return failure(); }
+      return success();
+   }
+
+   void rewrite(subop::GatherOp gatherOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+      auto refType = gatherOp.getRef().getColumn().type;
       auto columns = mlir::cast<subop::ExternalHashIndexEntryRefType>(refType).getMembers();
       auto tableRefVal = mapping.resolve(gatherOp, gatherOp.getRef());
       llvm::SmallVector<mlir::Value> unPacked;
@@ -3384,7 +3462,6 @@ class ExternalHashIndexRefGatherOpLowering : public SubOpTupleStreamConsumerConv
          }
       }
       rewriter.replaceTupleStream(gatherOp, mapping);
-      return success();
    }
 };
 
@@ -3400,10 +3477,15 @@ class ContinuousRefScatterOpLowering : public SubOpTupleStreamConsumerConversion
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::ScatterOp, 2>::SubOpTupleStreamConsumerConversionPattern;
 
-   LogicalResult matchAndRewrite(subop::ScatterOp scatterOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::ScatterOp scatterOp) const override {
       if (!checkAtomicStore(scatterOp)) return failure();
       auto continuousRefEntryType = mlir::dyn_cast_or_null<subop::ContinuousEntryRefType>(scatterOp.getRef().getColumn().type);
       if (!continuousRefEntryType) { return failure(); }
+      return success();
+   }
+
+   void rewrite(subop::ScatterOp scatterOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+      auto continuousRefEntryType = mlir::cast<subop::ContinuousEntryRefType>(scatterOp.getRef().getColumn().type);
       llvm::SmallVector<mlir::Value> unpackedReference;
       rewriter.createOrFold<util::UnPackOp>(unpackedReference, scatterOp->getLoc(), mapping.resolve(scatterOp, scatterOp.getRef()));
       EntryStorageHelper storageHelper(scatterOp, continuousRefEntryType.getMembers(), continuousRefEntryType.hasLock(), typeConverter);
@@ -3416,7 +3498,6 @@ class ContinuousRefScatterOpLowering : public SubOpTupleStreamConsumerConversion
       }
       values.store();
       rewriter.eraseOp(scatterOp);
-      return success();
    }
 };
 
@@ -3424,8 +3505,12 @@ class ScatterOpLowering : public SubOpTupleStreamConsumerConversionPattern<subop
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::ScatterOp>::SubOpTupleStreamConsumerConversionPattern;
 
-   LogicalResult matchAndRewrite(subop::ScatterOp scatterOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::ScatterOp scatterOp) const override {
       if (!checkAtomicStore(scatterOp)) return failure();
+      return success();
+   }
+
+   void rewrite(subop::ScatterOp scatterOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
       auto referenceType = mlir::cast<subop::StateEntryReference>(scatterOp.getRef().getColumn().type);
       auto columns = referenceType.getMembers();
       EntryStorageHelper storageHelper(scatterOp, columns, referenceType.hasLock(), typeConverter);
@@ -3436,16 +3521,20 @@ class ScatterOpLowering : public SubOpTupleStreamConsumerConversionPattern<subop
       }
       values.store();
       rewriter.eraseOp(scatterOp);
-      return success();
    }
 };
 class HashMultiMapScatterOp : public SubOpTupleStreamConsumerConversionPattern<subop::ScatterOp, 1> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::ScatterOp>::SubOpTupleStreamConsumerConversionPattern;
 
-   LogicalResult matchAndRewrite(subop::ScatterOp scatterOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::ScatterOp scatterOp) const override {
       auto hashMultiMapEntryRef = mlir::dyn_cast_or_null<subop::HashMultiMapEntryRefType>(scatterOp.getRef().getColumn().type);
       if (!hashMultiMapEntryRef) return failure();
+      return success();
+   }
+
+   void rewrite(subop::ScatterOp scatterOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+      auto hashMultiMapEntryRef = mlir::cast<subop::HashMultiMapEntryRefType>(scatterOp.getRef().getColumn().type);
       auto columns = hashMultiMapEntryRef.getHashMultimap().getValueMembers();
       EntryStorageHelper storageHelper(scatterOp, columns, hashMultiMapEntryRef.hasLock(), typeConverter);
       llvm::SmallVector<mlir::Value> unPacked;
@@ -3457,7 +3546,6 @@ class HashMultiMapScatterOp : public SubOpTupleStreamConsumerConversionPattern<s
       }
       values.store();
       rewriter.eraseOp(scatterOp);
-      return success();
    }
 };
 
@@ -3465,12 +3553,17 @@ class ReduceContinuousRefLowering : public SubOpTupleStreamConsumerConversionPat
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::ReduceOp>::SubOpTupleStreamConsumerConversionPattern;
 
-   LogicalResult matchAndRewrite(subop::ReduceOp reduceOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::ReduceOp reduceOp) const override {
       auto continuousRefEntryType = mlir::dyn_cast_or_null<subop::ContinuousEntryRefType>(reduceOp.getRef().getColumn().type);
       if (!continuousRefEntryType) { return failure(); }
       if (reduceOp->hasAttr("atomic")) {
-         return mlir::failure();
+         return failure();
       }
+      return success();
+   }
+
+   void rewrite(subop::ReduceOp reduceOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+      auto continuousRefEntryType = mlir::cast<subop::ContinuousEntryRefType>(reduceOp.getRef().getColumn().type);
       llvm::SmallVector<mlir::Value> unpackedReference;
       rewriter.createOrFold<util::UnPackOp>(unpackedReference, reduceOp->getLoc(), mapping.resolve(reduceOp, reduceOp.getRef()));
       EntryStorageHelper storageHelper(reduceOp, continuousRefEntryType.getMembers(), continuousRefEntryType.hasLock(), typeConverter);
@@ -3508,7 +3601,6 @@ class ReduceContinuousRefLowering : public SubOpTupleStreamConsumerConversionPat
          rewriter.eraseOp(reduceOp);
       });
 
-      return success();
    }
 };
 static void implementAtomicReduce(subop::ReduceOp reduceOp, SubOpRewriter& rewriter, mlir::Value valueRef, ColumnMapping& mapping) {
@@ -3615,12 +3707,17 @@ class ReduceContinuousRefAtomicLowering : public SubOpTupleStreamConsumerConvers
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::ReduceOp>::SubOpTupleStreamConsumerConversionPattern;
 
-   LogicalResult matchAndRewrite(subop::ReduceOp reduceOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::ReduceOp reduceOp) const override {
       auto continuousRefEntryType = mlir::dyn_cast_or_null<subop::ContinuousEntryRefType>(reduceOp.getRef().getColumn().type);
       if (!continuousRefEntryType) { return failure(); }
       if (!reduceOp->hasAttr("atomic")) {
-         return mlir::failure();
+         return failure();
       }
+      return success();
+   }
+
+   void rewrite(subop::ReduceOp reduceOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+      auto continuousRefEntryType = mlir::cast<subop::ContinuousEntryRefType>(reduceOp.getRef().getColumn().type);
       auto loc = reduceOp->getLoc();
       llvm::SmallVector<mlir::Value> unpackedReference;
       rewriter.createOrFold<util::UnPackOp>(unpackedReference, reduceOp->getLoc(), mapping.resolve(reduceOp, reduceOp.getRef()));
@@ -3631,14 +3728,17 @@ class ReduceContinuousRefAtomicLowering : public SubOpTupleStreamConsumerConvers
       auto valueRef = storageHelper.getPointer(elementRef, mlir::cast<subop::MemberAttr>(reduceOp.getMembers()[0]).getMember(), rewriter, loc);
       implementAtomicReduce(reduceOp, rewriter, valueRef, mapping);
 
-      return success();
    }
 };
 class ReduceOpLowering : public SubOpTupleStreamConsumerConversionPattern<subop::ReduceOp> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::ReduceOp>::SubOpTupleStreamConsumerConversionPattern;
 
-   LogicalResult matchAndRewrite(subop::ReduceOp reduceOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::ReduceOp reduceOp) const override {
+      return success();
+   }
+
+   void rewrite(subop::ReduceOp reduceOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
       auto referenceType = mlir::cast<subop::StateEntryReference>(reduceOp.getRef().getColumn().type);
       auto members = referenceType.getMembers();
       auto ref = mapping.resolve(reduceOp, reduceOp.getRef());
@@ -3679,7 +3779,6 @@ class ReduceOpLowering : public SubOpTupleStreamConsumerConversionPattern<subop:
          });
       }
 
-      return success();
    }
 };
 
@@ -3720,31 +3819,41 @@ class CreateContinuousViewLowering : public SubOpConversionPattern<subop::Create
 class GetBeginLowering : public SubOpTupleStreamConsumerConversionPattern<subop::GetBeginReferenceOp> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::GetBeginReferenceOp>::SubOpTupleStreamConsumerConversionPattern;
-   LogicalResult matchAndRewrite(subop::GetBeginReferenceOp getBeginReferenceOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::GetBeginReferenceOp getBeginReferenceOp) const override {
+      return success();
+   }
+
+   void rewrite(subop::GetBeginReferenceOp getBeginReferenceOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
       auto zero = rewriter.create<mlir::arith::ConstantIndexOp>(getBeginReferenceOp->getLoc(), 0);
       auto packed = rewriter.create<util::PackOp>(getBeginReferenceOp->getLoc(), mlir::ValueRange{zero, adaptor.getState()});
       mapping.define(getBeginReferenceOp.getRef(), packed);
       rewriter.replaceTupleStream(getBeginReferenceOp, mapping);
-      return success();
    }
 };
 class GetEndLowering : public SubOpTupleStreamConsumerConversionPattern<subop::GetEndReferenceOp> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::GetEndReferenceOp>::SubOpTupleStreamConsumerConversionPattern;
-   LogicalResult matchAndRewrite(subop::GetEndReferenceOp getEndReferenceOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::GetEndReferenceOp getEndReferenceOp) const override {
+      return success();
+   }
+
+   void rewrite(subop::GetEndReferenceOp getEndReferenceOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
       auto len = rewriter.create<util::BufferGetLen>(getEndReferenceOp->getLoc(), rewriter.getIndexType(), adaptor.getState());
       auto one = rewriter.create<mlir::arith::ConstantIndexOp>(getEndReferenceOp->getLoc(), 1);
       auto lastOffset = rewriter.create<mlir::arith::SubIOp>(getEndReferenceOp->getLoc(), len, one);
       auto packed = rewriter.create<util::PackOp>(getEndReferenceOp->getLoc(), mlir::ValueRange{lastOffset, adaptor.getState()});
       mapping.define(getEndReferenceOp.getRef(), packed);
       rewriter.replaceTupleStream(getEndReferenceOp, mapping);
-      return success();
    }
 };
 class EntriesBetweenLowering : public SubOpTupleStreamConsumerConversionPattern<subop::EntriesBetweenOp> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::EntriesBetweenOp>::SubOpTupleStreamConsumerConversionPattern;
-   LogicalResult matchAndRewrite(subop::EntriesBetweenOp op, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::EntriesBetweenOp op) const override {
+      return success();
+   }
+
+   void rewrite(subop::EntriesBetweenOp op, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
       llvm::SmallVector<mlir::Value> unpackedLeft;
       llvm::SmallVector<mlir::Value> unpackedRight;
       rewriter.createOrFold<util::UnPackOp>(unpackedLeft, op->getLoc(), mapping.resolve(op, op.getLeftRef()));
@@ -3755,13 +3864,16 @@ class EntriesBetweenLowering : public SubOpTupleStreamConsumerConversionPattern<
       }
       mapping.define(op.getBetween(), difference);
       rewriter.replaceTupleStream(op, mapping);
-      return success();
    }
 };
 class OffsetReferenceByLowering : public SubOpTupleStreamConsumerConversionPattern<subop::OffsetReferenceBy> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::OffsetReferenceBy>::SubOpTupleStreamConsumerConversionPattern;
-   LogicalResult matchAndRewrite(subop::OffsetReferenceBy op, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::OffsetReferenceBy op) const override {
+      return success();
+   }
+
+   void rewrite(subop::OffsetReferenceBy op, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
       llvm::SmallVector<mlir::Value> unpackedRef;
       rewriter.createOrFold<util::UnPackOp>(unpackedRef, op->getLoc(), mapping.resolve(op, op.getRef()));
       auto offset = mapping.resolve(op, op.getIdx());
@@ -3780,19 +3892,25 @@ class OffsetReferenceByLowering : public SubOpTupleStreamConsumerConversionPatte
       auto newRef = rewriter.create<util::PackOp>(op->getLoc(), mlir::ValueRange{newIdx, unpackedRef[1]});
       mapping.define(op.getNewRef(), newRef);
       rewriter.replaceTupleStream(op, mapping);
-      return success();
    }
 };
 class UnwrapOptionalHashmapRefLowering : public SubOpTupleStreamConsumerConversionPattern<subop::UnwrapOptionalRefOp> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::UnwrapOptionalRefOp>::SubOpTupleStreamConsumerConversionPattern;
-   LogicalResult matchAndRewrite(subop::UnwrapOptionalRefOp op, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::UnwrapOptionalRefOp op) const override {
       auto optionalType = mlir::dyn_cast_or_null<subop::OptionalType>(op.getOptionalRef().getColumn().type);
-      if (!optionalType) return mlir::failure();
+      if (!optionalType) return failure();
       auto lookupRefType = mlir::dyn_cast_or_null<subop::LookupEntryRefType>(optionalType.getT());
-      if (!lookupRefType) return mlir::failure();
+      if (!lookupRefType) return failure();
       auto hashmapType = mlir::dyn_cast_or_null<subop::HashMapType>(lookupRefType.getState());
-      if (!hashmapType) return mlir::failure();
+      if (!hashmapType) return failure();
+      return success();
+   }
+
+   void rewrite(subop::UnwrapOptionalRefOp op, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+      auto optionalType = mlir::cast<subop::OptionalType>(op.getOptionalRef().getColumn().type);
+      auto lookupRefType = mlir::cast<subop::LookupEntryRefType>(optionalType.getT());
+      auto hashmapType = mlir::cast<subop::HashMapType>(lookupRefType.getState());
       auto loc = op.getLoc();
       auto cond = rewriter.create<util::IsRefValidOp>(loc, rewriter.getI1Type(), mapping.resolve(op, op.getOptionalRef()));
       auto ifOp = rewriter.create<mlir::scf::IfOp>(loc, mlir::TypeRange{}, cond);
@@ -3809,19 +3927,25 @@ class UnwrapOptionalHashmapRefLowering : public SubOpTupleStreamConsumerConversi
          mapping.define(op.getRef(), valuePtr);
          rewriter.replaceTupleStream(op, mapping);
       });
-      return mlir::success();
    }
 };
 class UnwrapOptionalPreAggregationHtRefLowering : public SubOpTupleStreamConsumerConversionPattern<subop::UnwrapOptionalRefOp> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::UnwrapOptionalRefOp>::SubOpTupleStreamConsumerConversionPattern;
-   LogicalResult matchAndRewrite(subop::UnwrapOptionalRefOp op, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::UnwrapOptionalRefOp op) const override {
       auto optionalType = mlir::dyn_cast_or_null<subop::OptionalType>(op.getOptionalRef().getColumn().type);
-      if (!optionalType) return mlir::failure();
+      if (!optionalType) return failure();
       auto lookupRefType = mlir::dyn_cast_or_null<subop::LookupEntryRefType>(optionalType.getT());
-      if (!lookupRefType) return mlir::failure();
+      if (!lookupRefType) return failure();
       auto hashmapType = mlir::dyn_cast_or_null<subop::PreAggrHtType>(lookupRefType.getState());
-      if (!hashmapType) return mlir::failure();
+      if (!hashmapType) return failure();
+      return success();
+   }
+
+   void rewrite(subop::UnwrapOptionalRefOp op, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+      auto optionalType = mlir::cast<subop::OptionalType>(op.getOptionalRef().getColumn().type);
+      auto lookupRefType = mlir::cast<subop::LookupEntryRefType>(optionalType.getT());
+      auto hashmapType = mlir::cast<subop::PreAggrHtType>(lookupRefType.getState());
       auto loc = op.getLoc();
       auto cond = rewriter.create<util::IsRefValidOp>(loc, rewriter.getI1Type(), mapping.resolve(op, op.getOptionalRef()));
       auto ifOp = rewriter.create<mlir::scf::IfOp>(loc, mlir::TypeRange{}, cond);
@@ -3838,7 +3962,6 @@ class UnwrapOptionalPreAggregationHtRefLowering : public SubOpTupleStreamConsume
          mapping.define(op.getRef(), valuePtr);
          rewriter.replaceTupleStream(op, mapping);
       });
-      return mlir::success();
    }
 };
 
@@ -3889,10 +4012,7 @@ class NestedMapLowering : public SubOpTupleStreamConsumerConversionPattern<subop
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::NestedMapOp>::SubOpTupleStreamConsumerConversionPattern;
 
-   LogicalResult matchAndRewrite(subop::NestedMapOp nestedMapOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
-      for (auto [p, a] : llvm::zip(nestedMapOp.getParameters(), nestedMapOp.getRegion().front().getArguments().drop_front())) {
-         rewriter.map(a, mapping.resolve(nestedMapOp, mlir::cast<tuples::ColumnRefAttr>(p)));
-      }
+   LogicalResult match(subop::NestedMapOp nestedMapOp) const override {
       auto nestedExecutionGroup = mlir::dyn_cast_or_null<subop::NestedExecutionGroupOp>(&nestedMapOp.getRegion().front().front());
       if (!nestedExecutionGroup) {
          nestedMapOp.emitError("NestedMapOp should have a NestedExecutionGroupOp as the first operation in the region");
@@ -3903,6 +4023,16 @@ class NestedMapLowering : public SubOpTupleStreamConsumerConversionPattern<subop
          nestedMapOp.emitError("NestedMapOp should not return any values for the lowering");
          return failure();
       }
+      return success();
+   }
+
+   void rewrite(subop::NestedMapOp nestedMapOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+      for (auto [p, a] : llvm::zip(nestedMapOp.getParameters(), nestedMapOp.getRegion().front().getArguments().drop_front())) {
+         rewriter.map(a, mapping.resolve(nestedMapOp, mlir::cast<tuples::ColumnRefAttr>(p)));
+      }
+      auto nestedExecutionGroup = mlir::cast<subop::NestedExecutionGroupOp>(&nestedMapOp.getRegion().front().front());
+
+
       mlir::IRMapping outerMapping;
       for (auto [i, b] : llvm::zip(nestedExecutionGroup.getInputs(), nestedExecutionGroup.getRegion().front().getArguments())) {
          outerMapping.map(b, rewriter.getMapped(i));
@@ -3914,7 +4044,6 @@ class NestedMapLowering : public SubOpTupleStreamConsumerConversionPattern<subop
                mlir::Value input = outerMapping.lookup(param);
                rewriter.map(arg, input);
             }
-            mlir::IRMapping cloneMapping;
             std::vector<mlir::Operation*> ops;
             for (auto& op : step.getSubOps().front()) {
                if (&op == step.getSubOps().front().getTerminator())
@@ -3934,7 +4063,6 @@ class NestedMapLowering : public SubOpTupleStreamConsumerConversionPattern<subop
       }
       rewriter.eraseOp(nestedMapOp);
 
-      return success();
    }
 };
 template <class T>
@@ -3999,7 +4127,6 @@ class LoopLowering : public SubOpConversionPattern<subop::LoopOp> {
                   mlir::Value input = outerMapping.lookup(param);
                   rewriter.map(arg, input);
                }
-               mlir::IRMapping cloneMapping;
                std::vector<mlir::Operation*> ops;
                for (auto& op : step.getSubOps().front()) {
                   if (&op == step.getSubOps().front().getTerminator())
@@ -4060,7 +4187,6 @@ class NestedExecutionGroupLowering : public SubOpConversionPattern<subop::Nested
                mlir::Value input = outerMapping.lookup(param);
                rewriter.map(arg, input);
             }
-            mlir::IRMapping cloneMapping;
             std::vector<mlir::Operation*> ops;
             for (auto& op : step.getSubOps().front()) {
                if (&op == step.getSubOps().front().getTerminator())
@@ -4110,12 +4236,19 @@ class LockLowering : public SubOpTupleStreamConsumerConversionPattern<subop::Loc
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::LockOp>::SubOpTupleStreamConsumerConversionPattern;
 
-   LogicalResult matchAndRewrite(subop::LockOp lockOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+   LogicalResult match(subop::LockOp lockOp) const override {
       auto refType = lockOp.getRef().getColumn().type;
       auto entryRefType = mlir::dyn_cast_or_null<subop::LookupEntryRefType>(refType);
       if (!entryRefType) return failure();
       auto hashMapType = mlir::dyn_cast_or_null<subop::PreAggrHtType>(entryRefType.getState());
       if (!hashMapType || !hashMapType.getWithLock()) return failure();
+      return success();
+   }
+
+   void rewrite(subop::LockOp lockOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+      auto refType = lockOp.getRef().getColumn().type;
+      auto entryRefType = mlir::cast<subop::LookupEntryRefType>(refType);
+      auto hashMapType = mlir::cast<subop::PreAggrHtType>(entryRefType.getState());
       assert(hashMapType.hasLock());
       auto storageHelper = EntryStorageHelper(lockOp, hashMapType.getValueMembers(), hashMapType.hasLock(), typeConverter);
       auto ref = mapping.resolve(lockOp, lockOp.getRef());
@@ -4131,7 +4264,6 @@ class LockLowering : public SubOpTupleStreamConsumerConversionPattern<subop::Loc
          }
       });
       rt::EntryLock::unlock(rewriter, lockOp->getLoc())({lockPtr});
-      return success();
    }
 };
 }; // namespace

@@ -913,14 +913,7 @@ def InFlightOp : SubOperator_Op<"in_flight", [Pure,SubOperator]> {
 
     let arguments = (ins Variadic<AnyType> : $values, ArrayAttr : $columns );
     let results = (outs TupleStream : $res);
-    let assemblyFormat = [{  $values `:` type($values) `=` `>` custom<CustDefArr>($columns) attr-dict }];
-}
-def InFlightTupleOp : SubOperator_Op<"in_flight_tuple", [Pure,SubOperator]> {
-    let summary = "operation symbolizes 'in flight' tuple -> values => columns";
-
-    let arguments = (ins Variadic<AnyType> : $values, ArrayAttr : $columns );
-    let results = (outs TupleStream_Tuple : $res);
-    let assemblyFormat = [{  $values `:` type($values) `=` `>` custom<CustDefArr>($columns) attr-dict }];
+    let assemblyFormat = [{ ($values^ `:` type($values))? `=` `>` custom<CustDefArr>($columns) attr-dict }];
 }
 
 def CombineTupleOp : SubOperator_Op<"combine_tuple", [Pure,SubOperator]> {
