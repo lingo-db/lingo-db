@@ -3,7 +3,7 @@
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOps.h"
 namespace lingodb::compiler::dialect::relalg {
 class ColumnCreatorAnalysis {
-   std::unordered_map<const lingodb::compiler::dialect::tuples::Column*, Operator> creatorForColumn;
+   llvm::DenseMap<const lingodb::compiler::dialect::tuples::Column*, Operator> creatorForColumn;
 
    public:
    Operator getCreator(const lingodb::compiler::dialect::tuples::Column* col) {
