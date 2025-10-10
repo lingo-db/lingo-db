@@ -126,7 +126,7 @@ class NormalizeSubOpPass : public mlir::PassWrapper<NormalizeSubOpPass, mlir::Op
       }
    }
    void runOnOperation() override {
-      std::unordered_map<mlir::Operation*, size_t> unionStreamCount;
+      llvm::DenseMap<mlir::Operation*, size_t> unionStreamCount;
       auto columnUsageAnalysis = getAnalysis<subop::ColumnUsageAnalysis>();
       auto columnCreationAnalysis = getAnalysis<subop::ColumnCreationAnalysis>();
 

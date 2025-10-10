@@ -6,7 +6,7 @@ using namespace lingodb::compiler::dialect::subop;
 mlir::Type SubOpStateUsageTransformer::getNewRefType(mlir::Operation* op, mlir::Type oldRefType) {
    return getNewRefTypeFn(op, oldRefType);
 }
-void SubOpStateUsageTransformer::mapMembers(const std::unordered_map<subop::Member, subop::Member>& memberMapping) {
+void SubOpStateUsageTransformer::mapMembers(const llvm::DenseMap<subop::Member, subop::Member>& memberMapping) {
    this->memberMapping.insert(memberMapping.begin(), memberMapping.end());
 }
 void SubOpStateUsageTransformer::updateValue(mlir::Value oldValue, mlir::Type newType) {

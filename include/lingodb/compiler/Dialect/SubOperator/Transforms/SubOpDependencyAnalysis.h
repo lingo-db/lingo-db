@@ -10,19 +10,19 @@
 namespace lingodb::compiler::dialect::subop {
 
 struct SubOpRootAnalysis {
-   std::unordered_map<mlir::Operation*, std::vector<mlir::Operation*>> roots;
+   llvm::DenseMap<mlir::Operation*, std::vector<mlir::Operation*>> roots;
    SubOpRootAnalysis(mlir::Operation* op);
    const std::vector<mlir::Operation*>& getRoots(mlir::Operation* op) {
       return roots[op];
    }
 };
 struct SubOpDependencyAnalysis {
-   std::unordered_map<mlir::Operation*, std::unordered_set<mlir::Operation*>> dependencies;
-   std::unordered_map<mlir::Operation*, std::unordered_set<mlir::Operation*>> inverseDependencies;
-   std::unordered_map<Member, std::unordered_set<mlir::Operation*>> readMembers;
-   std::unordered_map<Member, std::unordered_set<mlir::Operation*>> writtenMembers;
-   std::unordered_map<mlir::Block*, std::vector<mlir::Operation*>> validOrder;
-   void addNonTupleStreamDependencies(mlir::Value x, std::vector<mlir::Operation*>& roots, mlir::Operation* subopRoot, std::unordered_map<mlir::Operation*, std::vector<mlir::Operation*>>& pipelineRequirements);
+   llvm::DenseMap<mlir::Operation*, std::unordered_set<mlir::Operation*>> dependencies;
+   llvm::DenseMap<mlir::Operation*, std::unordered_set<mlir::Operation*>> inverseDependencies;
+   llvm::DenseMap<Member, std::unordered_set<mlir::Operation*>> readMembers;
+   llvm::DenseMap<Member, std::unordered_set<mlir::Operation*>> writtenMembers;
+   llvm::DenseMap<mlir::Block*, std::vector<mlir::Operation*>> validOrder;
+   void addNonTupleStreamDependencies(mlir::Value x, std::vector<mlir::Operation*>& roots, mlir::Operation* subopRoot, llvm::DenseMap<mlir::Operation*, std::vector<mlir::Operation*>>& pipelineRequirements);
    SubOpDependencyAnalysis(mlir::Operation* op, mlir::AnalysisManager& am);
    bool isDependentOn(mlir::Operation* curr, mlir::Operation* other);
    bool areIndependent(mlir::Operation* op, mlir::Operation* op2);

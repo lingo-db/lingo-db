@@ -8,9 +8,9 @@
 namespace lingodb::compiler::dialect::subop {
 
 struct ColumnCreationAnalysis {
-   std::unordered_map<mlir::Operation*, std::unordered_set<dialect::tuples::Column*>> createdColumns;
+   llvm::DenseMap<mlir::Operation*, std::unordered_set<dialect::tuples::Column*>> createdColumns;
 
-   std::unordered_map<dialect::tuples::Column*, mlir::Operation*> columnCreators;
+   llvm::DenseMap<dialect::tuples::Column*, mlir::Operation*> columnCreators;
    ColumnCreationAnalysis(mlir::Operation* op);
    void analyze(mlir::Operation* op, mlir::Attribute attr);
    const std::unordered_set<dialect::tuples::Column*>& getCreatedColumns(mlir::Operation* op) {

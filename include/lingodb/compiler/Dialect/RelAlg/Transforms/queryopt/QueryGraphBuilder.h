@@ -9,7 +9,7 @@ class QueryGraphBuilder {
    llvm::SmallPtrSet<mlir::Operation*, 12>& alreadyOptimized;
    size_t numNodes;
    QueryGraph qg;
-   std::unordered_map<const tuples::Column*, size_t> attrToNodes;
+   llvm::DenseMap<const tuples::Column*, size_t> attrToNodes;
 
    size_t addNode(Operator op) {
       QueryGraph::Node n(op);
@@ -25,9 +25,9 @@ class QueryGraphBuilder {
 
    NodeSet calcSES(Operator op) const;
 
-   std::unordered_map<mlir::Operation*, NodeSet> ts;
-   std::unordered_map<mlir::Operation*, NodeSet> teSs;
-   std::unordered_map<mlir::Operation*, size_t> nodeForOp;
+   llvm::DenseMap<mlir::Operation*, NodeSet> ts;
+   llvm::DenseMap<mlir::Operation*, NodeSet> teSs;
+   llvm::DenseMap<mlir::Operation*, size_t> nodeForOp;
 
    NodeSet calcT(Operator op) {
       if (ts.count(op.getOperation())) {

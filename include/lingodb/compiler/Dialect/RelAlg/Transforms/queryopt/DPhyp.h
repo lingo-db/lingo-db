@@ -10,7 +10,7 @@
 
 namespace lingodb::compiler::dialect::relalg {
 class DPHyp {
-   std::unordered_map<NodeSet, std::shared_ptr<Plan>, HashNodeSet> dpTable;
+   llvm::DenseMap<NodeSet, std::shared_ptr<Plan>, HashNodeSet> dpTable;
    QueryGraph& queryGraph;
 
    public:
