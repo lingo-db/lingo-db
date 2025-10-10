@@ -222,7 +222,7 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
    void runOnOperation() override {
       mlir::RewritePatternSet patterns(&getContext());
       patterns.insert<DecomposeInnerJoin>(&getContext());
-      if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
+      if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns),mlir::GreedyRewriteConfig{.enableRegionSimplification=mlir::GreedySimplifyRegionLevel::Disabled,.fold = false, .cseConstants = false}).failed()) {
          signalPassFailure();
       }
       std::vector<mlir::Operation*> toErase;

@@ -352,7 +352,7 @@ class ReuseLocalPass : public mlir::PassWrapper<ReuseLocalPass, mlir::OperationP
       patterns.insert<AvoidArrayMaterialization>(&getContext(), columnUsageAnalysis);
       patterns.insert<AvoidDeadMaterialization>(&getContext());
       patterns.insert<ReuseHashtable>(&getContext(), columnUsageAnalysis);
-      if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
+      if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns),mlir::GreedyRewriteConfig{.enableRegionSimplification=mlir::GreedySimplifyRegionLevel::Disabled,.fold = false, .cseConstants = false}).failed()) {
          signalPassFailure();
       }
    }
