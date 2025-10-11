@@ -142,8 +142,8 @@ class SubOpLoweringStep : public LoweringStep {
 
       subop::setCompressionEnabled(enabledPasses.contains("Compression"));
       lowerSubOpPm.addPass(subop::createLowerSubOpPass());
-      lowerSubOpPm.addPass(mlir::createCanonicalizerPass());
-      lowerSubOpPm.addPass(mlir::createCSEPass());
+//      lowerSubOpPm.addPass(mlir::createCanonicalizerPass());
+//      lowerSubOpPm.addPass(mlir::createCSEPass());
       if (mlir::failed(lowerSubOpPm.run(moduleOp))) {
          error.emit() << "Lowering of Sub-Operators to imperative operations failed";
          return;
@@ -174,8 +174,8 @@ class DefaultImperativeLowering : public LoweringStep {
       addLingoDBInstrumentation(lowerArrowPm, getSerializationState());
       lowerArrowPm.addPass(arrow::createLowerToStdPass());
       lowerArrowPm.addPass(mlir::createCanonicalizerPass());
-      lowerArrowPm.addPass(mlir::createLoopInvariantCodeMotionPass());
-      lowerArrowPm.addPass(mlir::createCSEPass());
+      //lowerArrowPm.addPass(mlir::createLoopInvariantCodeMotionPass());
+      //lowerArrowPm.addPass(mlir::createCSEPass());
       if (mlir::failed(lowerArrowPm.run(moduleOp))) {
          error.emit() << "Lowering of arrow failed";
          return;
@@ -350,7 +350,9 @@ std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(execution::Exec
       runMode = ExecutionMode::C;
    }
 #endif
-   if (runMode == ExecutionMode::DEBUGGING) {
+   if (runMode == ExecutionMode::CHEAP) {
+      config->executionBackend = createDefaultLLVMBackend(false);
+   }else if (runMode == ExecutionMode::DEBUGGING) {
       config->executionBackend = createLLVMDebugBackend();
    } else if (runMode == ExecutionMode::C) {
       config->executionBackend = createCBackend();
@@ -370,7 +372,7 @@ std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(execution::Exec
       config->executionBackend = createDefaultLLVMBackend();
    }
    config->resultProcessor = execution::createTablePrinter();
-   if (runMode == ExecutionMode::SPEED || runMode == ExecutionMode::BASELINE_SPEED) {
+   if (runMode == ExecutionMode::SPEED || runMode == ExecutionMode::BASELINE_SPEED || runMode == ExecutionMode::CHEAP) {
       config->queryOptimizer->disableVerification();
       config->executionBackend->disableVerification();
       for (auto& loweringStep : config->loweringSteps) {

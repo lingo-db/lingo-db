@@ -50,7 +50,7 @@ class FoldColumnsPass : public mlir::PassWrapper<FoldColumnsPass, mlir::Operatio
    void runOnOperation() override {
       mlir::RewritePatternSet patterns(&getContext());
       patterns.insert<PushRenamingUp>(&getContext());
-      if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
+      if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns),mlir::GreedyRewriteConfig{.enableRegionSimplification=mlir::GreedySimplifyRegionLevel::Disabled,.fold = false, .cseConstants = false}).failed()) {
          signalPassFailure();
       }
    }

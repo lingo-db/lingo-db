@@ -324,7 +324,7 @@ class SpecializeSubOpPass : public mlir::PassWrapper<SpecializeSubOpPass, mlir::
       patterns.insert<MapAsHashMap>(&getContext(), columnUsageAnalysis);
       patterns.insert<MultiMapAsHashMultiMap>(&getContext(), columnUsageAnalysis);
 
-      if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
+      if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns),mlir::GreedyRewriteConfig{.enableRegionSimplification=mlir::GreedySimplifyRegionLevel::Disabled,.fold = false, .cseConstants = false}).failed()) {
          assert(false && "should not happen");
       }
    }

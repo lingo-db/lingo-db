@@ -11,6 +11,8 @@
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
+#include <lingodb/compiler/Dialect/util/UtilOps.h>
+
 namespace {
 #include "EliminateNulls.inc"
 
@@ -61,11 +63,11 @@ class WrapWithNullCheck : public mlir::RewritePattern {
          }
          return;
       } else {
-         rewriter.replaceOpWithNewOp<mlir::scf::IfOp>(
-            op, isAnyNull, [&](mlir::OpBuilder& b, mlir::Location loc) {
+         auto ifOp=rewriter.create<mlir::scf::IfOp>(
+            op->getLoc(), isAnyNull, [&](mlir::OpBuilder& b, mlir::Location loc) {
                if(op->getNumResults()==1){
-                  mlir::Value nullResult=b.create<db::NullOp>(op->getLoc(),op->getResultTypes()[0]);
-                  b.create<mlir::scf::YieldOp>(loc,nullResult);
+                  mlir::Value undef=b.create<lingodb::compiler::dialect::util::UndefOp>(op->getLoc(),getBaseType(op->getResultTypes()[0]));
+                  b.create<mlir::scf::YieldOp>(loc,undef);
                }else{
                   b.create<mlir::scf::YieldOp>(loc);
                } }, [&](mlir::OpBuilder& b, mlir::Location loc) {
@@ -78,11 +80,12 @@ class WrapWithNullCheck : public mlir::RewritePattern {
                auto *cloned=b.clone(*op,mapping);
                if(op->getNumResults()==1){
                   cloned->getResult(0).setType(getBaseType(cloned->getResult(0).getType()));
-                  mlir::Value nullResult=b.create<db::AsNullableOp>(op->getLoc(),op->getResultTypes()[0],cloned->getResult(0));
-                  b.create<mlir::scf::YieldOp>(loc,nullResult);
+                  b.create<mlir::scf::YieldOp>(loc,cloned->getResult(0));
                }else{
                   b.create<mlir::scf::YieldOp>(loc);
                } });
+         rewriter.replaceOpWithNewOp<db::AsNullableOp>(op,op->getResultTypes()[0],ifOp.getResults()[0],isAnyNull);
+
       }
    }
 };
@@ -158,14 +161,14 @@ class SimplifyCompareISAPattern : public mlir::RewritePattern {
    }
 };
 //Pattern that optimizes the join order
-class EliminateNulls : public mlir::PassWrapper<EliminateNulls, mlir::OperationPass<mlir::ModuleOp>> {
-   virtual llvm::StringRef getArgument() const override { return "eliminate-nulls"; }
+class PrepareLowering : public mlir::PassWrapper<PrepareLowering, mlir::OperationPass<mlir::ModuleOp>> {
+   virtual llvm::StringRef getArgument() const override { return "db-prepare-lowering"; }
    void getDependentDialects(mlir::DialectRegistry& registry) const override {
       registry.insert<mlir::scf::SCFDialect>();
    }
 
    public:
-   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(EliminateNulls)
+   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(PrepareLowering)
    void runOnOperation() override {
       //transform "standalone" aggregation functions
       {
@@ -177,7 +180,8 @@ class EliminateNulls : public mlir::PassWrapper<EliminateNulls, mlir::OperationP
          patterns.insert<SimplifyCompareISAPattern>(&getContext());
          //patterns.insert<SimplifyNullableCondSkip>(&getContext());
          patterns.insert<WrapWithNullCheck>(&getContext());
-         if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
+         lingodb::compiler::dialect::db::addOptimizeRuntimeFunctionPatterns(patterns);
+         if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns), mlir::GreedyRewriteConfig{.enableRegionSimplification=mlir::GreedySimplifyRegionLevel::Disabled,.fold = false, .cseConstants = false}).failed()) {
             assert(false && "should not happen");
          }
       }
@@ -185,4 +189,4 @@ class EliminateNulls : public mlir::PassWrapper<EliminateNulls, mlir::OperationP
 };
 } // end anonymous namespace
 
-std::unique_ptr<mlir::Pass> lingodb::compiler::dialect::db::createEliminateNullsPass() { return std::make_unique<EliminateNulls>(); } // NOLINT(misc-use-internal-linkage)
+std::unique_ptr<mlir::Pass> lingodb::compiler::dialect::db::createPrepareLoweringPass(){ return std::make_unique<PrepareLowering>(); } // NOLINT(misc-use-internal-linkage)

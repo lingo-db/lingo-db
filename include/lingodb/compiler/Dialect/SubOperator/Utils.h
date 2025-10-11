@@ -5,7 +5,7 @@
 #include <unordered_map>
 namespace lingodb::compiler::dialect::subop {
 class MapCreationHelper {
-   std::unordered_map<dialect::tuples::Column*, size_t> columnToIndex;
+   llvm::DenseMap<dialect::tuples::Column*, size_t> columnToIndex;
    std::vector<mlir::Attribute> colRefs;
    mlir::Block* mapBlock;
    mlir::MLIRContext* context;

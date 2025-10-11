@@ -136,7 +136,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
       mlir::OpBuilder builder(join.getOperation());
       if (joinDependent) {
          Operator toRename = renameRight ? newRight : newLeft;
-         std::unordered_map<const tuples::Column*, const tuples::Column*> renamed;
+         llvm::DenseMap<const tuples::Column*, const tuples::Column*> renamed;
          std::string scope = attributeManager.getUniqueScope("renaming");
          std::vector<Attribute> renamingDefsAsAttr;
          size_t i = 0;

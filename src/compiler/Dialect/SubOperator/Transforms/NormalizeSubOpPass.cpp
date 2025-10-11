@@ -126,7 +126,7 @@ class NormalizeSubOpPass : public mlir::PassWrapper<NormalizeSubOpPass, mlir::Op
       }
    }
    void runOnOperation() override {
-      std::unordered_map<mlir::Operation*, size_t> unionStreamCount;
+      llvm::DenseMap<mlir::Operation*, size_t> unionStreamCount;
       auto columnUsageAnalysis = getAnalysis<subop::ColumnUsageAnalysis>();
       auto columnCreationAnalysis = getAnalysis<subop::ColumnCreationAnalysis>();
 
@@ -283,7 +283,7 @@ class NormalizeSubOpPass : public mlir::PassWrapper<NormalizeSubOpPass, mlir::Op
       patterns.insert<SplitTableScan>(&getContext());
       patterns.insert<SplitGenericScan>(&getContext());
 
-      if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
+      if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns),mlir::GreedyRewriteConfig{.enableRegionSimplification=mlir::GreedySimplifyRegionLevel::Disabled,.fold = false, .cseConstants = false}).failed()) {
          assert(false && "should not happen");
       }
    }

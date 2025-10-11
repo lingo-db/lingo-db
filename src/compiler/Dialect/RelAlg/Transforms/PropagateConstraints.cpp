@@ -71,7 +71,7 @@ class ReduceAggrKeyPattern : public mlir::RewritePattern {
          aggr.setGroupByColsAttr(reducedKeys.asRefArrayAttr(aggr->getContext()));
          auto& colManager = getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
          auto scope = colManager.getUniqueScope("aggr");
-         std::unordered_map<const tuples::Column*, const tuples::Column*> mapping;
+         llvm::DenseMap<const tuples::Column*, const tuples::Column*> mapping;
          std::vector<mlir::Attribute> computedCols(aggr.getComputedCols().begin(), aggr.getComputedCols().end());
          auto* terminator = aggr.getAggrFunc().begin()->getTerminator();
          rewriter.setInsertionPoint(terminator);
@@ -110,7 +110,7 @@ class ReduceAggrKeys : public mlir::PassWrapper<ReduceAggrKeys, mlir::OperationP
          mlir::RewritePatternSet patterns(&getContext());
          patterns.insert<ReduceAggrKeyPattern>(&getContext());
 
-         if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
+         if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns),mlir::GreedyRewriteConfig{.enableRegionSimplification=mlir::GreedySimplifyRegionLevel::Disabled,.fold = false, .cseConstants = false}).failed()) {
             assert(false && "should not happen");
          }
       }
@@ -160,7 +160,7 @@ class ExpandTransitiveEqualities : public mlir::PassWrapper<ExpandTransitiveEqua
 
    public:
    void runOnOperation() override {
-      std::unordered_map<mlir::Operation*, llvm::EquivalenceClasses<const tuples::Column*>> equalities;
+      llvm::DenseMap<mlir::Operation*, llvm::EquivalenceClasses<const tuples::Column*>> equalities;
 
       getOperation().walk([&](Operator op) {
          llvm::EquivalenceClasses<const tuples::Column*> localEqualities;
