@@ -774,6 +774,10 @@ class GPULLVMBackend : public execution::ExecutionBackend {
 #endif
 
 class DefaultCPULLVMBackend : public execution::ExecutionBackend {
+   bool optimize;
+
+   public:
+   DefaultCPULLVMBackend(bool optimize) : optimize(optimize) {}
    void execute(mlir::ModuleOp& moduleOp, runtime::ExecutionContext* executionContext) override {
       mlir::registerBuiltinDialectTranslation(*moduleOp->getContext());
       mlir::registerLLVMDialectTranslation(*moduleOp->getContext());
@@ -797,6 +801,10 @@ class DefaultCPULLVMBackend : public execution::ExecutionBackend {
       double llvmPassesTime;
 
       auto optimizeFn = [&](llvm::Module* module) -> llvm::Error {
+         if (!optimize) {
+            llvmPassesTime = 0.0;
+            return llvm::Error::success();
+         }
          auto startLLVMIRPasses = std::chrono::high_resolution_clock::now();
          auto error = performDefaultLLVMPasses(module);
          auto endLLVMIRPasses = std::chrono::high_resolution_clock::now();
@@ -806,7 +814,7 @@ class DefaultCPULLVMBackend : public execution::ExecutionBackend {
       auto startJIT = std::chrono::high_resolution_clock::now();
       utility::Tracer::Trace traceCodeGen(llvmCodeGen);
 
-      auto maybeEngine = LLVMBackend::create(moduleOp, {.llvmModuleBuilder = convertFn, .transformer = optimizeFn, .jitCodeGenOptLevel = llvm::CodeGenOptLevel::Default, .enableObjectDump = false});
+      auto maybeEngine = LLVMBackend::create(moduleOp, {.llvmModuleBuilder = convertFn, .transformer = optimizeFn, .jitCodeGenOptLevel = optimize ? llvm::CodeGenOptLevel::Default : llvm::CodeGenOptLevel::None, .enableObjectDump = false});
       if (!maybeEngine) {
          error.emit() << "Could not create execution engine";
          return;
@@ -1061,8 +1069,8 @@ class CPULLVMProfilingBackend : public execution::ExecutionBackend {
 
 } // namespace
 
-std::unique_ptr<execution::ExecutionBackend> execution::createDefaultLLVMBackend() {
-   return std::make_unique<DefaultCPULLVMBackend>();
+std::unique_ptr<execution::ExecutionBackend> execution::createDefaultLLVMBackend(bool optimize) {
+   return std::make_unique<DefaultCPULLVMBackend>(optimize);
 }
 std::unique_ptr<execution::ExecutionBackend> execution::createLLVMDebugBackend() {
    return std::make_unique<CPULLVMDebugBackend>();

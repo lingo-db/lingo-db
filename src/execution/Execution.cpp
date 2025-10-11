@@ -356,7 +356,9 @@ std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(execution::Exec
       runMode = ExecutionMode::C;
    }
 #endif
-   if (runMode == ExecutionMode::DEBUGGING) {
+   if (runMode == ExecutionMode::CHEAP) {
+      config->executionBackend = createDefaultLLVMBackend(false);
+   } else if (runMode == ExecutionMode::DEBUGGING) {
       config->executionBackend = createLLVMDebugBackend();
    } else if (runMode == ExecutionMode::C) {
       config->executionBackend = createCBackend();
@@ -376,7 +378,7 @@ std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(execution::Exec
       config->executionBackend = createDefaultLLVMBackend();
    }
    config->resultProcessor = execution::createTablePrinter();
-   if (runMode == ExecutionMode::SPEED || runMode == ExecutionMode::BASELINE_SPEED) {
+   if (runMode == ExecutionMode::SPEED || runMode == ExecutionMode::BASELINE_SPEED || runMode == ExecutionMode::CHEAP) {
       config->queryOptimizer->disableVerification();
       config->executionBackend->disableVerification();
       for (auto& loweringStep : config->loweringSteps) {
