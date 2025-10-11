@@ -142,8 +142,8 @@ class SubOpLoweringStep : public LoweringStep {
 
       subop::setCompressionEnabled(enabledPasses.contains("Compression"));
       lowerSubOpPm.addPass(subop::createLowerSubOpPass());
-      lowerSubOpPm.addPass(mlir::createCanonicalizerPass());
-      lowerSubOpPm.addPass(mlir::createCSEPass());
+      //      lowerSubOpPm.addPass(mlir::createCanonicalizerPass());
+      //      lowerSubOpPm.addPass(mlir::createCSEPass());
       if (mlir::failed(lowerSubOpPm.run(moduleOp))) {
          error.emit() << "Lowering of Sub-Operators to imperative operations failed";
          return;
