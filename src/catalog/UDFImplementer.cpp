@@ -15,9 +15,9 @@
 #include <mlir/IR/Value.h>
 #include <mlir/Parser/Parser.h>
 
-#include <dlfcn.h>
 #include <filesystem>
-#include <mlir/Dialect/Func/Transforms/Passes.h.inc>
+
+#include <dlfcn.h>
 namespace {
 lingodb::utility::GlobalSetting<std::string> cUDFCompilerDriver("system.compilation.c_udf_compiler_driver", "cc");
 
@@ -26,6 +26,7 @@ class CUDFImplementer : public lingodb::catalog::MLIRUDFImplementor {
    std::string code;
    std::vector<lingodb::catalog::Type> argumentTypes;
    lingodb::catalog::Type returnType;
+
    public:
    CUDFImplementer(std::string functionName, std::string code, std::vector<lingodb::catalog::Type> argumentTypes, lingodb::catalog::Type returnType) : functionName(std::move(functionName)), code(std::move(code)), argumentTypes(std::move(argumentTypes)), returnType(std::move(returnType)) {}
 
@@ -35,18 +36,16 @@ class CUDFImplementer : public lingodb::catalog::MLIRUDFImplementor {
       auto pathToSOFile = currPath + "/" + functionName + ".o";
       //1. write c file
       std::ofstream outputFile(pathToCFile);
-      outputFile <<  "#include <stdlib.h>\n"
-                     "#include <string.h>\n"
-                     "#include <stdint.h>\n"
-                     "#include <stdbool.h>\n";
+      outputFile << "#include <stdlib.h>\n"
+                    "#include <string.h>\n"
+                    "#include <stdint.h>\n"
+                    "#include <stdbool.h>\n";
       outputFile << code;
       outputFile.close();
-
 
       std::string cmd = cUDFCompilerDriver.getValue() + std::string(" -march=native -shared -O0 -g -gdwarf-4 -fPIC -Wl,--export-dynamic -I ") + std::string(SOURCE_DIR) + "/include " + pathToCFile + " -o " + pathToSOFile;
       auto* pPipe = ::popen(cmd.c_str(), "r");
       if (pPipe == nullptr) {
-
          throw std::runtime_error("Could not compile query module statically (Pipe could not be opened)");
       }
       std::array<char, 256> buffer;
@@ -57,7 +56,6 @@ class CUDFImplementer : public lingodb::catalog::MLIRUDFImplementor {
       }
       auto rc = ::pclose(pPipe);
       if (WEXITSTATUS(rc)) {
-
          throw std::runtime_error("Could not compile query module statically (Pipe could not be closed)");
       }
 
@@ -69,7 +67,8 @@ class CUDFImplementer : public lingodb::catalog::MLIRUDFImplementor {
       assert(reinterpret_cast<lingodb::execution::mainFnType>(dlsym(handle, functionName.c_str())));
       lingodb::catalog::FunctionCatalogEntry::getUdfFunctions().insert(std::pair(functionName, dlsym(handle, functionName.c_str())));
 
-      mlir::func::FuncOp func = moduleOp.lookupSymbol<mlir::func::FuncOp>(functionName);;
+      mlir::func::FuncOp func = moduleOp.lookupSymbol<mlir::func::FuncOp>(functionName);
+      ;
       if (!func) {
          std::vector<mlir::Type> argMLIRTypes;
          for (auto argType : argumentTypes) {
@@ -81,7 +80,7 @@ class CUDFImplementer : public lingodb::catalog::MLIRUDFImplementor {
          func = builder.create<mlir::func::FuncOp>(loc, functionName, funcType);
          func.setPrivate();
       }
-      return builder.create<mlir::func::CallOp>(builder.getUnknownLoc(), func,args).getResult(0);
+      return builder.create<mlir::func::CallOp>(builder.getUnknownLoc(), func, args).getResult(0);
    }
 };
 

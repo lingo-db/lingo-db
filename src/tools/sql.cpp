@@ -143,9 +143,9 @@ int main(int argc, char** argv) {
       // Trim trailing whitespace
       std::string trimmed = line;
       trimmed.erase(trimmed.find_last_not_of(" \t\r\n") + 1);
-      count+= std::ranges::count(trimmed.begin(), trimmed.end(), '$');
+      count += std::ranges::count(trimmed.begin(), trimmed.end(), '$');
 
-      if (!trimmed.empty() && trimmed.back() == ';' && count%4 == 0) {
+      if (!trimmed.empty() && trimmed.back() == ';' && count % 4 == 0) {
          // Done reading the full statement
          linenoiseHistoryAdd(query.str().c_str()); // optional: add to history
 

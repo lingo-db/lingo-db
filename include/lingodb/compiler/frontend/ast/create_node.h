@@ -82,8 +82,6 @@ class FunctionArgument {
    std::shared_ptr<ParsedExpression> defaultValue;
 };
 
-
-
 class CreateFunctionInfo : public CreateInfo {
    public:
    CreateFunctionInfo(std::string functionName, bool replace)
@@ -96,8 +94,6 @@ class CreateFunctionInfo : public CreateInfo {
    std::vector<FunctionArgument> argumentTypes;
    LogicalTypeWithMods returnType;
    std::vector<std::pair<std::string, std::string>> options;
-
-
 };
 } // namespace lingodb::ast
 #endif

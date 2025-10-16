@@ -14,7 +14,6 @@ void FunctionCatalogEntry::serializeEntry(lingodb::utility::Serializer& serializ
    serializer.writeProperty(3, code);
    serializer.writeProperty(4, returnType);
    serializer.writeProperty(5, argumentTypes);
-
 }
 std::shared_ptr<FunctionCatalogEntry> FunctionCatalogEntry::deserialize(lingodb::utility::Deserializer& deserializer) {
    auto entryType = deserializer.readProperty<CatalogEntryType>(1);
@@ -22,7 +21,7 @@ std::shared_ptr<FunctionCatalogEntry> FunctionCatalogEntry::deserialize(lingodb:
       case CatalogEntryType::C_FUNCTION_ENTRY:
          return CFunctionCatalogEntry::deserialize(deserializer);
       default:
-            throw std::runtime_error("Should not happen");
+         throw std::runtime_error("Should not happen");
    }
 }
 
@@ -34,9 +33,9 @@ std::shared_ptr<FunctionCatalogEntry> CFunctionCatalogEntry::deserialize(lingodb
    return std::make_shared<CFunctionCatalogEntry>(name, code, returnType, argumentTypes);
 }
 
-void visitUDFFunctions1(const std::function<void(std::string, void*)>& fn){
+void visitUDFFunctions1(const std::function<void(std::string, void*)>& fn) {
    auto f = lingodb::catalog::FunctionCatalogEntry::getUdfFunctions();
-   for (auto udf: f) {
+   for (auto udf : f) {
       fn(udf.first, udf.second);
    }
 }

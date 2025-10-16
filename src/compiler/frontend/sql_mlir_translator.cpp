@@ -1,8 +1,6 @@
 #include "lingodb/compiler/frontend/sql_mlir_translator.h"
 
 #include "lingodb/catalog/Defs.h"
-#include "lingodb/catalog/FunctionCatalogEntry.h"
-#include "lingodb/catalog/MLIRTypes.h"
 #include "lingodb/catalog/TableCatalogEntry.h"
 #include "lingodb/compiler/Dialect/RelAlg/Transforms/queryopt/QueryGraph.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorDialect.h"
@@ -26,11 +24,9 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 
-#include <filesystem>
-#include <dlfcn.h>
 #include <lingodb/compiler/runtime/ExecutionContext.h>
 #include <lingodb/compiler/runtime/RelationHelper.h>
-#include <mlir-c/IR.h>
+
 namespace lingodb::translator {
 
 using namespace lingodb::compiler::dialect;
@@ -203,7 +199,6 @@ void SQLMlirTranslator::translateCreateFunction(mlir::OpBuilder& builder, std::s
    auto language = boundCreateFunctionInfo->language;
    auto returnType = boundCreateFunctionInfo->returnType;
    if (language == "c") {
-
       lingodb::catalog::CreateFunctionDef createFunctionDef(
          functionName,
          boundCreateFunctionInfo->language,
@@ -215,11 +210,6 @@ void SQLMlirTranslator::translateCreateFunction(mlir::OpBuilder& builder, std::s
    } else {
       translatorError("UDF language not supported " << language, createNode->loc);
    }
-
-
-
-
-
 }
 
 void SQLMlirTranslator::translateInsertNode(mlir::OpBuilder& builder, std::shared_ptr<ast::BoundInsertNode> insertNode, std::shared_ptr<analyzer::SQLContext> context) {
@@ -917,7 +907,7 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
          auto func = function->udfFunction;
          if (func.has_value() && func.value()) {
             std::vector<mlir::Value> values;
-            for (auto arg: function->arguments) {
+            for (auto arg : function->arguments) {
                auto translatedArg = translateExpression(builder, arg, context);
                translatedArg = arg->resultType->castValue(builder, translatedArg);
                values.push_back(translatedArg);

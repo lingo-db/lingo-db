@@ -3,6 +3,7 @@
 
 #include "lingodb/catalog/Catalog.h"
 #include "lingodb/compiler/frontend/ast/create_node.h"
+#include "lingodb/compiler/frontend/frontend_type.h"
 
 namespace lingodb::ast {
 /**
@@ -38,8 +39,6 @@ class BoundCreateFunctionInfo : public CreateInfo {
    std::vector<std::string> argumentNames;
 
    std::vector<std::pair<std::string, std::string>> options;
-
-
 };
 
 } // namespace lingodb::ast

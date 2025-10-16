@@ -1,10 +1,10 @@
 #ifndef LINGODB_COMPILER_FRONTEND_SQL_MLIR_TRANSLATOR_H
 #define LINGODB_COMPILER_FRONTEND_SQL_MLIR_TRANSLATOR_H
 
+#include "ast/bound/bound_create_node.h"
 #include "ast/bound/bound_insert_node.h"
 #include "ast/bound/bound_pipe_operator.h"
 #include "ast/create_node.h"
-#include "ast/bound/bound_create_node.h"
 #include "lingodb/compiler/Dialect/TupleStream/ColumnManager.h"
 #include "lingodb/compiler/frontend/ast/bound/bound_aggregation.h"
 #include "lingodb/compiler/frontend/ast/bound/bound_resultmodifier.h"
@@ -28,7 +28,7 @@
 #include <lingodb/compiler/Dialect/util/UtilOps.h>
 
 namespace lingodb::translator {
-#define translatorError(message, loc)              \
+#define translatorError(message, loc)    \
    {                                     \
       std::ostringstream s{};            \
       s << message;                      \

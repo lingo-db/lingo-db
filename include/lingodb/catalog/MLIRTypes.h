@@ -1,9 +1,8 @@
 #ifndef LINGODB_CATALOG_MLIRTYPES_H
 #define LINGODB_CATALOG_MLIRTYPES_H
-#include <memory>
-#include <mlir/IR/BuiltinOps.h.inc>
 #include <mlir/IR/Builders.h>
-#include <mlir/IR/Value.h>
+
+#include <memory>
 namespace mlir {
 class Type;
 class MLIRContext;

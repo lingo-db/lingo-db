@@ -122,7 +122,6 @@ std::shared_ptr<MLIRTypeCreator> createIndexTypeCreator() {
    return std::make_shared<GenericTypeCreator<mlir::IndexType>>();
 }
 
-
 } // namespace lingodb::catalog
 #else
 namespace lingodb::catalog {
