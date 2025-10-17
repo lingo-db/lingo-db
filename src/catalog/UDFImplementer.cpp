@@ -42,8 +42,11 @@ class CUDFImplementer : public lingodb::catalog::MLIRUDFImplementor {
                     "#include <stdbool.h>\n";
       outputFile << code;
       outputFile.close();
-
+#ifdef __APPLE__
+      std::string cmd = cUDFCompilerDriver.getValue() + std::string(" -march=native -shared -O0 -g -gdwarf-4 -fPIC -Wl, -I ") + std::string(SOURCE_DIR) + "/include " + pathToCFile + " -o " + pathToSOFile;
+#else
       std::string cmd = cUDFCompilerDriver.getValue() + std::string(" -march=native -shared -O0 -g -gdwarf-4 -fPIC -Wl,--export-dynamic -I ") + std::string(SOURCE_DIR) + "/include " + pathToCFile + " -o " + pathToSOFile;
+#endif
       auto* pPipe = ::popen(cmd.c_str(), "r");
       if (pPipe == nullptr) {
          throw std::runtime_error("Could not compile query module statically (Pipe could not be opened)");
