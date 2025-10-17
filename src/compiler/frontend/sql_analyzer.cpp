@@ -906,14 +906,14 @@ std::shared_ptr<ast::CreateNode> SQLQueryAnalyzer::analyzeFunctionCreate(std::sh
             }
             size_t l = std::reinterpret_pointer_cast<ast::UnsignedIntValue>(type.typeModifiers[0])->iVal;
             if (l > 1) {
-               return "char*";
+               error("Chars with length>1 are not supported", createNode->loc);
             } else {
                return "char";
             }
             break;
          }
          case catalog::LogicalTypeId::STRING: {
-            return "char*";
+            error("Chars with length>1 are not supported", createNode->loc);
          }
          case catalog::LogicalTypeId::FLOAT: {
             if (type.typeModifiers.size() >= 1) {
