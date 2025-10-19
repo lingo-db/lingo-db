@@ -33,7 +33,7 @@ std::shared_ptr<FunctionCatalogEntry> CFunctionCatalogEntry::deserialize(lingodb
    return std::make_shared<CFunctionCatalogEntry>(name, code, returnType, argumentTypes);
 }
 
-void visitUDFFunctions1(const std::function<void(std::string, void*)>& fn) {
+void visitUDFFunctions(const std::function<void(std::string, void*)>& fn) {
    auto f = lingodb::catalog::FunctionCatalogEntry::getUdfFunctions();
    for (auto udf : f) {
       fn(udf.first, udf.second);

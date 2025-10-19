@@ -345,9 +345,6 @@
 %type<std::pair<std::string, std::string>> createfunc_opt_item common_func_opt_item
 
 
-/**
-* Testing for PL SQL
-*/
 %type<std::string> param_name func_as
 %type<bool> opt_or_replace
 %type<lingodb::ast::LogicalTypeWithMods> func_type func_return
@@ -3551,10 +3548,6 @@ set_list:
     }
 
 
-
-/**
-* Testing for PL SQL
-*/
 CreateFunctionStmt:
     CREATE opt_or_replace FUNCTION func_name func_args_with_defaults 
     RETURNS func_return opt_createfunc_opt_list opt_routine_body

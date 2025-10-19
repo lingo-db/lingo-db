@@ -4,7 +4,6 @@
 #include "lingodb/catalog/MLIRTypes.h"
 #include "lingodb/catalog/TableCatalogEntry.h"
 #include "lingodb/execution/Execution.h"
-#include "lingodb/runtime/StringRuntime.h"
 #include "lingodb/utility/Serialization.h"
 #include "lingodb/utility/Setting.h"
 
@@ -32,8 +31,9 @@ class CUDFImplementer : public lingodb::catalog::MLIRUDFImplementor {
 
    mlir::Value callFunction(mlir::ModuleOp& moduleOp, mlir::OpBuilder& builder, mlir::Location loc, mlir::ValueRange args) override {
       auto currPath = std::filesystem::current_path().string();
-      auto pathToCFile = currPath + "/" + functionName + ".c";
-      auto pathToSOFile = currPath + "/" + functionName + ".o";
+      auto pathToCFile = currPath + "/tmp_udf/" + functionName + ".c";
+      auto pathToSOFile = currPath + "/tmp_udf/" + functionName + ".o";
+      std::filesystem::create_directories(currPath + "/tmp_udf/");
       //1. write c file
       std::ofstream outputFile(pathToCFile);
       outputFile << "#include <stdlib.h>\n"
@@ -43,9 +43,9 @@ class CUDFImplementer : public lingodb::catalog::MLIRUDFImplementor {
       outputFile << code;
       outputFile.close();
 #ifdef __APPLE__
-      std::string cmd = cUDFCompilerDriver.getValue() + std::string(" -march=native -shared -O0 -g -gdwarf-4 -fPIC -Wl, -I ") + std::string(SOURCE_DIR) + "/include " + pathToCFile + " -o " + pathToSOFile;
+      std::string cmd = cUDFCompilerDriver.getValue() + std::string(" -march=native -shared -O3 -g -gdwarf-4 -fPIC -Wl, -I ") + std::string(SOURCE_DIR) + "/include " + pathToCFile + " -o " + pathToSOFile;
 #else
-      std::string cmd = cUDFCompilerDriver.getValue() + std::string(" -march=native -shared -O0 -g -gdwarf-4 -fPIC -Wl,--export-dynamic -I ") + std::string(SOURCE_DIR) + "/include " + pathToCFile + " -o " + pathToSOFile;
+      std::string cmd = cUDFCompilerDriver.getValue() + std::string(" -march=native -shared -O3 -g -gdwarf-4 -fPIC -Wl,--export-dynamic -I ") + std::string(SOURCE_DIR) + "/include " + pathToCFile + " -o " + pathToSOFile;
 #endif
       auto* pPipe = ::popen(cmd.c_str(), "r");
       if (pPipe == nullptr) {

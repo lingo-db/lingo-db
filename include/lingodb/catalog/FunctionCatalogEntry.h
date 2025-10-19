@@ -39,6 +39,6 @@ class CFunctionCatalogEntry : public FunctionCatalogEntry {
    static std::shared_ptr<FunctionCatalogEntry> deserialize(lingodb::utility::Deserializer& deserializer);
 };
 
-void visitUDFFunctions1(const std::function<void(std::string, void*)>& fn);
+void visitUDFFunctions(const std::function<void(std::string, void*)>& fn);
 } // namespace lingodb::catalog
 #endif

@@ -31,7 +31,6 @@ class BoundCreateFunctionInfo : public CreateInfo {
    bool replace;
    std::string aliasOf;
 
-   std::string filePath;
    std::string language;
    std::string code;
    NullableType returnType;

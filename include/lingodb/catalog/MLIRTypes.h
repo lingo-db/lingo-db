@@ -1,7 +1,5 @@
 #ifndef LINGODB_CATALOG_MLIRTYPES_H
 #define LINGODB_CATALOG_MLIRTYPES_H
-#include <mlir/IR/Builders.h>
-
 #include <memory>
 namespace mlir {
 class Type;
@@ -41,7 +39,6 @@ std::shared_ptr<MLIRTypeCreator> createNoneTypeCreator();
  * @return MLIRTypeCreator for index types
  */
 std::shared_ptr<MLIRTypeCreator> createIndexTypeCreator();
-
 } // namespace lingodb::catalog
 
 #endif //LINGODB_CATALOG_MLIRTYPES_H
