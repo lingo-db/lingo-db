@@ -2709,6 +2709,9 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeFunctionExpressio
             auto bound = analyzeExpression(function->arguments.at(i), context, resolverScope);
             auto nullableUDFArgumentType = NullableType(entry.value()->getArgumentTypes()[i]);
             assert(bound->resultType.has_value());
+            if (bound->resultType.value().type.getTypeId() == catalog::LogicalTypeId::NONE && !nullableUDFArgumentType.isNullable) {
+               error("Cannot pass NULL to non-nullable parameter", bound->loc);
+            }
             auto commonTypes = SQLTypeUtils::toCommonTypes(std::vector{nullableUDFArgumentType, bound->resultType.value()});
             bound->resultType = commonTypes[1];
             boundArgs.emplace_back(bound);
