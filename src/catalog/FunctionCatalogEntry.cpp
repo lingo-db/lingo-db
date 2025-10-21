@@ -36,7 +36,7 @@ std::shared_ptr<FunctionCatalogEntry> CFunctionCatalogEntry::deserialize(lingodb
 void visitUDFFunctions(const std::function<void(std::string, void*)>& fn) {
    auto f = lingodb::catalog::FunctionCatalogEntry::getUdfFunctions();
    for (auto udf : f) {
-      fn(udf.first, udf.second);
+      fn(udf.first, udf.second.addrPtr);
    }
 }
 } // namespace lingodb::catalog

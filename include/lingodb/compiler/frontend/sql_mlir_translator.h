@@ -36,8 +36,9 @@ namespace lingodb::translator {
    }
 class SQLMlirTranslator {
    public:
-   SQLMlirTranslator(mlir::ModuleOp moduleOp);
+   SQLMlirTranslator(mlir::ModuleOp moduleOp, catalog::Catalog* catalog);
    mlir::ModuleOp moduleOp;
+   catalog::Catalog* catalog;
    compiler::dialect::tuples::ColumnManager& attrManager;
 
    std::optional<mlir::Value> translateStart(mlir::OpBuilder& builder, std::shared_ptr<ast::AstNode> astNode, std::shared_ptr<analyzer::SQLContext> context);

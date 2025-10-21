@@ -16,8 +16,12 @@ class FunctionCatalogEntry : public CatalogEntry {
 
    public:
    static constexpr std::array<CatalogEntryType, 1> entryTypes = {CatalogEntryType::C_FUNCTION_ENTRY};
-   static std::unordered_map<std::string, void*>& getUdfFunctions() {
-      static std::unordered_map<std::string, void*> udfFunctions;
+   struct UDFHandle {
+      void* handle;
+      void* addrPtr;
+   };
+   static std::unordered_map<std::string, UDFHandle>& getUdfFunctions() {
+      static std::unordered_map<std::string, UDFHandle> udfFunctions;
       return udfFunctions;
    }
    FunctionCatalogEntry(std::string name, std::string code, Type returnType, std::vector<Type> argumentTypes)

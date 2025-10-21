@@ -29,50 +29,82 @@ class CUDFImplementer : public lingodb::catalog::MLIRUDFImplementor {
    public:
    CUDFImplementer(std::string functionName, std::string code, std::vector<lingodb::catalog::Type> argumentTypes, lingodb::catalog::Type returnType) : functionName(std::move(functionName)), code(std::move(code)), argumentTypes(std::move(argumentTypes)), returnType(std::move(returnType)) {}
 
-   mlir::Value callFunction(mlir::ModuleOp& moduleOp, mlir::OpBuilder& builder, mlir::Location loc, mlir::ValueRange args) override {
-      auto currPath = std::filesystem::current_path().string();
-      auto pathToCFile = currPath + "/tmp_udf/" + functionName + ".c";
-      auto pathToSOFile = currPath + "/tmp_udf/" + functionName + ".o";
-      std::filesystem::create_directories(currPath + "/tmp_udf/");
-      //1. write c file
-      std::ofstream outputFile(pathToCFile);
-      outputFile << "#include <stdlib.h>\n"
-                    "#include <string.h>\n"
-                    "#include <stdint.h>\n"
-                    "#include <stdbool.h>\n";
-      outputFile << code;
-      outputFile.close();
-#ifdef __APPLE__
-      std::string cmd = cUDFCompilerDriver.getValue() + std::string(" -march=native -shared -O3 -g -gdwarf-4 -fPIC -Wl, -I ") + std::string(SOURCE_DIR) + "/include " + pathToCFile + " -o " + pathToSOFile;
-#else
-      std::string cmd = cUDFCompilerDriver.getValue() + std::string(" -march=native -shared -O3 -g -gdwarf-4 -fPIC -Wl,--export-dynamic -I ") + std::string(SOURCE_DIR) + "/include " + pathToCFile + " -o " + pathToSOFile;
-#endif
-      auto* pPipe = ::popen(cmd.c_str(), "r");
-      if (pPipe == nullptr) {
-         throw std::runtime_error("Could not compile query module statically (Pipe could not be opened)");
-      }
-      std::array<char, 256> buffer;
-      std::string result;
-      while (not std::feof(pPipe)) {
-         auto bytes = std::fread(buffer.data(), 1, buffer.size(), pPipe);
-         result.append(buffer.data(), bytes);
-      }
-      auto rc = ::pclose(pPipe);
-      if (WEXITSTATUS(rc)) {
-         throw std::runtime_error("Could not compile query module statically (Pipe could not be closed)");
-      }
+   mlir::Value callFunction(mlir::ModuleOp& moduleOp, mlir::OpBuilder& builder, mlir::Location loc, mlir::ValueRange args, lingodb::catalog::Catalog* catalog) override {
+      //Check if function has already been added before
+      bool functionExists = lingodb::catalog::FunctionCatalogEntry::getUdfFunctions().contains(functionName);
+      if (!functionExists) {
+         auto currPath = std::filesystem::current_path().string();
+         std::string pathToCFile = "";
+         std::string pathToSOFile = "";
+         try {
+            bool soFileAlreadyExists = false;
+            //Determine path to so file and check if so file already exists in db directory
+            if (catalog->getDbDir().empty()) {
+               char tempSoFileTemplate[] = "/tmp/c_udf_XXXXXX";
+               int soFd = mkstemp(tempSoFileTemplate);
+               if (soFd == -1) {
+                  throw std::runtime_error("Failed to create temporary file.");
+               }
+               pathToSOFile = tempSoFileTemplate;
+            } else {
+               std::filesystem::create_directories(catalog->getDbDir() + "/udf");
+               pathToSOFile = catalog->getDbDir() + "/udf/" + functionName + ".so";
+               soFileAlreadyExists = std::filesystem::exists(pathToSOFile);
+            }
+            if (!soFileAlreadyExists) {
+               char tempCFileTemplate[] = "/tmp/c_udf_XXXXXX";
+               int fd = mkstemp(tempCFileTemplate);
+               if (fd == -1) {
+                  throw std::runtime_error("Failed to create temporary file.");
+               }
+               pathToCFile = std::string(tempCFileTemplate) + ".c";
+               std::filesystem::rename(tempCFileTemplate, pathToCFile);
 
-      void* handle = dlopen(std::string(pathToSOFile).c_str(), RTLD_LAZY | RTLD_GLOBAL);
-      const char* dlsymError = dlerror();
-      if (dlsymError) {
-         throw std::runtime_error(dlsymError);
+               std::ofstream tempFile(pathToCFile, std::ios::out | std::ios::trunc);
+
+               tempFile << "#include <stdlib.h>\n"
+                           "#include <string.h>\n"
+                           "#include <stdint.h>\n"
+                           "#include <stdbool.h>\n";
+               tempFile << code;
+               tempFile.close();
+
+#ifdef __APPLE__
+               std::string cmd = cUDFCompilerDriver.getValue() + std::string(" -march=native -shared -O3 -g -gdwarf-4 -fPIC -Wl, -I ") + std::string(SOURCE_DIR) + "/include " + pathToCFile + " -o " + pathToSOFile;
+#else
+               std::string cmd = cUDFCompilerDriver.getValue() + std::string(" -march=native -shared -O3 -g -gdwarf-4 -fPIC -Wl,--export-dynamic -I ") + std::string(SOURCE_DIR) + "/include " + pathToCFile + " -o " + pathToSOFile;
+#endif
+               auto* pPipe = ::popen(cmd.c_str(), "r");
+               if (pPipe == nullptr) {
+                  throw std::runtime_error("Could not compile query module statically (Pipe could not be opened)");
+               }
+               std::array<char, 256> buffer;
+               std::string result;
+               while (not std::feof(pPipe)) {
+                  auto bytes = std::fread(buffer.data(), 1, buffer.size(), pPipe);
+                  result.append(buffer.data(), bytes);
+               }
+               auto rc = ::pclose(pPipe);
+               if (WEXITSTATUS(rc)) {
+                  throw std::runtime_error("Could not compile query module statically (Pipe could not be closed)");
+               }
+            }
+         } catch (std::exception& e) {
+            throw std::runtime_error(std::string("Error during compilation of c udf: ") + e.what());
+         }
+
+         void* handle = dlopen(std::string(pathToSOFile).c_str(), RTLD_LAZY | RTLD_GLOBAL);
+         const char* dlsymError = dlerror();
+         if (dlsymError) {
+            throw std::runtime_error(dlsymError);
+         }
+         assert(reinterpret_cast<lingodb::execution::mainFnType>(dlsym(handle, functionName.c_str())));
+         lingodb::catalog::FunctionCatalogEntry::UDFHandle udfHandle{handle, dlsym(handle, functionName.c_str())};
+         lingodb::catalog::FunctionCatalogEntry::getUdfFunctions().insert(std::pair(functionName, udfHandle));
       }
-      assert(reinterpret_cast<lingodb::execution::mainFnType>(dlsym(handle, functionName.c_str())));
-      lingodb::catalog::FunctionCatalogEntry::getUdfFunctions().insert(std::pair(functionName, dlsym(handle, functionName.c_str())));
 
       mlir::func::FuncOp func = moduleOp.lookupSymbol<mlir::func::FuncOp>(functionName);
-      ;
-      if (!func) {
+      if (!func || !functionExists) {
          std::vector<mlir::Type> argMLIRTypes;
          for (auto argType : argumentTypes) {
             argMLIRTypes.push_back(argType.getMLIRTypeCreator()->createType(builder.getContext()));

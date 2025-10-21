@@ -30,8 +30,8 @@
 namespace lingodb::translator {
 
 using namespace lingodb::compiler::dialect;
-SQLMlirTranslator::SQLMlirTranslator(mlir::ModuleOp moduleOp) : moduleOp(moduleOp),
-                                                                attrManager(moduleOp->getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager()), translationContext(std::make_shared<TranslationContext>()) {
+SQLMlirTranslator::SQLMlirTranslator(mlir::ModuleOp moduleOp, catalog::Catalog* catalog) : moduleOp(moduleOp), catalog(catalog),
+                                                                                           attrManager(moduleOp->getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager()), translationContext(std::make_shared<TranslationContext>()) {
    moduleOp.getContext()->getLoadedDialect<util::UtilDialect>()->getFunctionHelper().setParentModule(moduleOp);
 }
 std::optional<mlir::Value> SQLMlirTranslator::translateStart(mlir::OpBuilder& builder, std::shared_ptr<ast::AstNode> astNode, std::shared_ptr<analyzer::SQLContext> context) {
@@ -912,7 +912,8 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
                translatedArg = arg->resultType->castValue(builder, translatedArg);
                values.push_back(translatedArg);
             }
-            return compiler::frontend::getUDFImplementer(func.value())->callFunction(moduleOp, builder, exprLocation, values);
+
+            return compiler::frontend::getUDFImplementer(func.value())->callFunction(moduleOp, builder, exprLocation, values, catalog);
          }
 
          translatorError("Function '" << function->functionName << "' not implemented", expression->loc);

@@ -9,7 +9,7 @@
 namespace lingodb::catalog {
 class MLIRUDFImplementor {
    public:
-   virtual mlir::Value callFunction(mlir::ModuleOp& moduleOp, mlir::OpBuilder& builder, mlir::Location loc, mlir::ValueRange args) = 0;
+   virtual mlir::Value callFunction(mlir::ModuleOp& moduleOp, mlir::OpBuilder& builder, mlir::Location loc, mlir::ValueRange args, lingodb::catalog::Catalog* catalog) = 0;
    virtual ~MLIRUDFImplementor() = default;
 };
 } // namespace lingodb::catalog
