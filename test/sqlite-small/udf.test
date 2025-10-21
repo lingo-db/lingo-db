@@ -68,6 +68,20 @@ select addOne(-2);
 ----
 -1
 
+statement ok
+create or replace function addOne(x int)
+returns int
+language c
+as
+$$
+return x+x;
+$$
+
+query 1.1
+select addOne(2);
+----
+4
+
 query 3
 select * from ints i ,dups d where equal(i.i,d.i);
 ----
