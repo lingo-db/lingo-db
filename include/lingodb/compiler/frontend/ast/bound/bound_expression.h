@@ -1,6 +1,7 @@
 #ifndef LINGODB_COMPILER_FRONTEND_AST_BOUND_BOUND_EXPRESSION_H
 #define LINGODB_COMPILER_FRONTEND_AST_BOUND_BOUND_EXPRESSION_H
 
+#include "lingodb/catalog/FunctionCatalogEntry.h"
 #include "lingodb/compiler/frontend/ast/ast_node.h"
 #include "lingodb/compiler/frontend/ast/parsed_expression.h"
 #include "lingodb/compiler/frontend/column_semantic.h"
@@ -75,6 +76,8 @@ class BoundFunctionExpression : public BoundExpression {
    std::string functionName;
    std::string scope;
    bool distinct;
+   //Is set if function is a UDF
+   std::optional<std::shared_ptr<lingodb::catalog::FunctionCatalogEntry>> udfFunction;
 
    std::vector<std::shared_ptr<BoundExpression>> arguments;
 };

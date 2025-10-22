@@ -9,6 +9,10 @@
 # include <algorithm>
 #include <lingodb/compiler/frontend/generated/location.hh>
 
+// State for dollar-quoted strings
+static std::string literal_buffer;
+static std::string dolq_tag;
+
 %}
 
 %{
@@ -92,9 +96,9 @@
 %{
   // A number symbol corresponding to the value in S.
 
-  
-%}
 
+%}
+%x xdolq
 
 space				[ \t\f\v]+
 newline				[\n\r]
@@ -117,6 +121,14 @@ squote			\'
 dquote			\"
 strChars ([^'])
 str       {squote}({strChars}|{op_chars}|[ ])*{squote}
+
+
+
+dolq_start		[A-Za-z\200-\377_]
+dolq_cont		[A-Za-z\200-\377_0-9]
+dolqdelim		\$({dolq_start}{dolq_cont}*)?\$
+dolqfailed		\${dolq_start}{dolq_cont}*
+dolqinside		[^$]+
 
 operator		{op_chars}+
 
@@ -206,6 +218,7 @@ FOR         { MAKE_KEYWORD(FOR); }
 FROM        { MAKE_KEYWORD(FROM); }
 FULL        { MAKE_KEYWORD(FULL); }
 FOLLOWING   { MAKE_KEYWORD(FOLLOWING); }
+FUNCTION    { MAKE_KEYWORD(FUNCTION); }
 
 GROUP       { MAKE_KEYWORD(GROUP_P); }
 
@@ -226,6 +239,7 @@ JOIN        { MAKE_KEYWORD(JOIN); }
 
 KEY         { MAKE_KEYWORD(KEY); }
 
+LANGUAGE    { MAKE_KEYWORD(LANGUAGE); }
 LEFT        { MAKE_KEYWORD(LEFT); }
 LIKE        { MAKE_KEYWORD(LIKE); }
 LIMIT       { MAKE_KEYWORD(LIMIT); }
@@ -249,6 +263,8 @@ PARTITION   { MAKE_KEYWORD(PARTITION); }
 PRECEDING   { MAKE_KEYWORD(PRECEDING); }
 PRIMARY     { MAKE_KEYWORD(PRIMARY); }
 
+RETURNS     { MAKE_KEYWORD(RETURNS); }
+REPLACE     { MAKE_KEYWORD(REPLACE); }
 RIGHT       { MAKE_KEYWORD(RIGHT); }
 ROLLUP      { MAKE_KEYWORD(ROLLUP); }
 ROW         { MAKE_KEYWORD(ROW); }
@@ -332,6 +348,52 @@ YEAR        { MAKE_KEYWORD(YEAR_P); }
 
   return lingodb::parser::make_Op(std::move(ident), loc);
 }
+
+
+<xdolq>{dolqinside} {
+    literal_buffer.append(yytext, yyleng);
+    // Handle newlines inside the string for correct location tracking
+    for (int i = 0; i < yyleng; ++i) {
+        if (yytext[i] == '\\n' || yytext[i] == '\\r') {
+            loc.lines();
+        }
+    }
+    loc.columns(yyleng);
+}
+
+<xdolq>"$" {
+    literal_buffer.append("$");
+    loc.columns(1);
+}
+
+<xdolq>{dolqdelim} {
+    if (dolq_tag == yytext) {
+        BEGIN(INITIAL);
+        loc.columns(yyleng);
+        return lingodb::parser::make_STRING_VALUE(std::move(literal_buffer), loc);
+    } else {
+        literal_buffer.append(yytext, yyleng);
+        loc.columns(yyleng);
+    }
+}
+
+<xdolq><<EOF>> {
+    return lingodb::parser::make_YYEOF(loc);
+}
+
+{dolqdelim} {
+    dolq_tag = std::string(yytext);
+    literal_buffer.clear();
+    BEGIN(xdolq);
+    loc.step();
+}
+
+{dolqfailed} {
+    yyless(1);
+    loc.step();
+    return lingodb::parser::make_Op("$", loc);
+}
+
 %%
 
 

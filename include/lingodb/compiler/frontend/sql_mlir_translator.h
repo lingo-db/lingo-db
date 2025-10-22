@@ -1,6 +1,7 @@
 #ifndef LINGODB_COMPILER_FRONTEND_SQL_MLIR_TRANSLATOR_H
 #define LINGODB_COMPILER_FRONTEND_SQL_MLIR_TRANSLATOR_H
 
+#include "ast/bound/bound_create_node.h"
 #include "ast/bound/bound_insert_node.h"
 #include "ast/bound/bound_pipe_operator.h"
 #include "ast/create_node.h"
@@ -27,7 +28,7 @@
 #include <lingodb/compiler/Dialect/util/UtilOps.h>
 
 namespace lingodb::translator {
-#define error(message, loc)              \
+#define translatorError(message, loc)    \
    {                                     \
       std::ostringstream s{};            \
       s << message;                      \
@@ -35,8 +36,9 @@ namespace lingodb::translator {
    }
 class SQLMlirTranslator {
    public:
-   SQLMlirTranslator(mlir::ModuleOp moduleOp);
+   SQLMlirTranslator(mlir::ModuleOp moduleOp, catalog::Catalog* catalog);
    mlir::ModuleOp moduleOp;
+   catalog::Catalog* catalog;
    compiler::dialect::tuples::ColumnManager& attrManager;
 
    std::optional<mlir::Value> translateStart(mlir::OpBuilder& builder, std::shared_ptr<ast::AstNode> astNode, std::shared_ptr<analyzer::SQLContext> context);
@@ -47,6 +49,7 @@ class SQLMlirTranslator {
    mlir::Value translateTableProducer(mlir::OpBuilder& builder, std::shared_ptr<ast::TableProducer> tableProducer, std::shared_ptr<analyzer::SQLContext> context);
 
    void translateCreateNode(mlir::OpBuilder& builder, std::shared_ptr<ast::CreateNode> createNode, std::shared_ptr<analyzer::SQLContext> context);
+   void translateCreateFunction(mlir::OpBuilder& builder, std::shared_ptr<ast::CreateNode> createNode, std::shared_ptr<ast::BoundCreateFunctionInfo> boundCreateFunctionInfo, std::shared_ptr<analyzer::SQLContext> context);
    void translateInsertNode(mlir::OpBuilder& builder, std::shared_ptr<ast::BoundInsertNode> insertNode, std::shared_ptr<analyzer::SQLContext> context);
    void translateSetNode(mlir::OpBuilder& builder, std::shared_ptr<ast::SetNode> insertNode, std::shared_ptr<analyzer::SQLContext> context);
    void translateCopyNode(mlir::OpBuilder& builder, std::shared_ptr<ast::CopyNode> copyStmt, std::shared_ptr<analyzer::SQLContext> context);

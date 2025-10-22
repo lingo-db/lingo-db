@@ -124,7 +124,7 @@ class SQLFrontend : public lingodb::execution::Frontend {
             mlir::OpBuilder builder(&context);
 
             mlir::ModuleOp moduleOp = builder.create<mlir::ModuleOp>(builder.getUnknownLoc());
-            lingodb::translator::SQLMlirTranslator translator{moduleOp};
+            lingodb::translator::SQLMlirTranslator translator{moduleOp, catalog};
             builder.setInsertionPointToStart(moduleOp.getBody());
             auto* queryBlock = new mlir::Block;
             std::vector<mlir::Type> returnTypes;

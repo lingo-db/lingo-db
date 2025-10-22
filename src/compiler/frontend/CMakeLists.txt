@@ -40,6 +40,9 @@ add_library(MLIRSQLFrontend
 
 )
 
+set(COMPILE_DEFS "SOURCE_DIR=\"${CMAKE_SOURCE_DIR}\"")
+target_compile_definitions(MLIRSQLFrontend PRIVATE ${COMPILE_DEFS})
+
 add_dependencies(MLIRSQLFrontend ec-rt-defs MLIRSQLFrontendGen)
 target_link_libraries(MLIRSQLFrontend PUBLIC ${dialect_libs}
         ${conversion_libs}

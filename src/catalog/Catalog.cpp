@@ -1,4 +1,6 @@
 #include "lingodb/catalog/Catalog.h"
+
+#include "lingodb/catalog/FunctionCatalogEntry.h"
 #include "lingodb/catalog/IndexCatalogEntry.h"
 #include "lingodb/catalog/TableCatalogEntry.h"
 #include "lingodb/catalog/Types.h"
@@ -34,12 +36,20 @@ std::shared_ptr<CatalogEntry> CatalogEntry::deserialize(lingodb::utility::Deseri
          return LingoDBTableCatalogEntry::deserialize(deserializer);
       case CatalogEntryType::LINGODB_HASH_INDEX_ENTRY:
          return LingoDBHashIndexEntry::deserialize(deserializer);
+      case CatalogEntryType::C_FUNCTION_ENTRY:
+         return FunctionCatalogEntry::deserialize(deserializer);
+      default:
+         throw std::runtime_error("deserialize: unknown catalog entry type");
    }
 }
 
-void Catalog::insertEntry(std::shared_ptr<CatalogEntry> entry) {
+void Catalog::insertEntry(std::shared_ptr<CatalogEntry> entry, bool replace) {
    if (entries.contains(entry->getName())) {
-      throw std::runtime_error("catalog entry already exists");
+      if (replace) {
+         entries.erase(entry->getName());
+      } else {
+         throw std::runtime_error("catalog entry already exists");
+      }
    }
    entry->setCatalog(this);
    entry->setDBDir(dbDir);

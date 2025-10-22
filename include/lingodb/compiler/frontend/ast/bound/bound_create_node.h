@@ -1,7 +1,9 @@
 #ifndef LINGODB_COMPILER_FRONTEND_AST_BOUND_BOUND_CREATE_NODE_H
 #define LINGODB_COMPILER_FRONTEND_AST_BOUND_BOUND_CREATE_NODE_H
 
+#include "lingodb/catalog/Catalog.h"
 #include "lingodb/compiler/frontend/ast/create_node.h"
+#include "lingodb/compiler/frontend/frontend_type.h"
 
 namespace lingodb::ast {
 /**
@@ -18,6 +20,24 @@ class BoundColumnElement : public TableElement {
 
    bool unique;
    bool primary;
+};
+
+class BoundCreateFunctionInfo : public CreateInfo {
+   public:
+   BoundCreateFunctionInfo(std::string functionName, bool replace, NullableType returnType)
+      : CreateInfo(catalog::CatalogEntry::CatalogEntryType::C_FUNCTION_ENTRY, std::move(""), std::move(""), false), functionName(functionName), replace(replace), returnType(returnType) {}
+
+   std::string functionName;
+   bool replace;
+   std::string aliasOf;
+
+   std::string language;
+   std::string code;
+   NullableType returnType;
+   std::vector<std::pair<std::string, catalog::Type>> argumentTypes;
+   std::vector<std::string> argumentNames;
+
+   std::vector<std::pair<std::string, std::string>> options;
 };
 
 } // namespace lingodb::ast
