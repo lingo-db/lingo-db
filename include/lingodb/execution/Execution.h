@@ -112,15 +112,21 @@ class QueryExecuter {
    std::unique_ptr<runtime::ExecutionContext> executionContext;
    std::optional<std::string> data;
    std::optional<std::string> file;
+   bool exitOnError = true;
+   std::shared_ptr<Error> error{};
 
    public:
-   QueryExecuter(std::unique_ptr<QueryExecutionConfig> queryExecutionConfig, std::unique_ptr<runtime::ExecutionContext> executionContext) : queryExecutionConfig(std::move(queryExecutionConfig)), executionContext(std::move(executionContext)), data(), file() {}
+   QueryExecuter(std::unique_ptr<QueryExecutionConfig> queryExecutionConfig, std::unique_ptr<runtime::ExecutionContext> executionContext) : queryExecutionConfig(std::move(queryExecutionConfig)), executionContext(std::move(executionContext)), data(), file(), error(std::make_shared<Error>()) {}
    void fromData(std::string data) {
       this->data = data;
    }
    void fromFile(std::string file) {
       this->file = file;
    }
+   void setExitOnError(bool exitOnError) {
+      this->exitOnError = exitOnError;
+   }
+   std::shared_ptr<Error>& getError() { return error; }
    virtual void execute() = 0;
    QueryExecutionConfig& getConfig() { return *queryExecutionConfig; }
    static std::unique_ptr<QueryExecuter> createDefaultExecuter(std::unique_ptr<QueryExecutionConfig> queryExecutionConfig, runtime::Session& session);

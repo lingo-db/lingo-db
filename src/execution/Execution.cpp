@@ -240,11 +240,25 @@ ExecutionMode getExecutionMode() {
 }
 
 class DefaultQueryExecuter : public QueryExecuter {
-   void handleError(std::string phase, Error& e) {
+   template <Error::ErrorPhase P>
+   bool handleError(Error& e) {
+      error->setErrorPhase(P);
       if (e) {
-         std::cerr << phase << ": " << e.getMessage() << std::endl;
-         exit(1);
+         if (exitOnError) {
+            constexpr const char* phaseName =
+               (P == Error::frontend)       ? "FRONTEND" :
+               (P == Error::optimizer)      ? "OPTIMIZER" :
+               (P == Error::tuple_tracking) ? "TUPLE_TRACKING" :
+               (P == Error::lowering)       ? "LOWERING" :
+                                              "BACKEND";
+            std::cerr << phaseName << ": " << e.getMessage() << std::endl;
+            exit(1);
+         } else {
+            error->emit() << e.getMessage();
+            return true;
+         }
       }
+      return false;
    }
    void handleTiming(const std::unordered_map<std::string, double>& timing) {
       if (queryExecutionConfig->timingProcessor) {
@@ -280,10 +294,7 @@ class DefaultQueryExecuter : public QueryExecuter {
 
       auto serializationState = std::make_shared<SnapshotState>();
       serializationState->serialize = true;
-      if (frontend.getError()) {
-         std::cerr << frontend.getError().getMessage() << std::endl;
-         return;
-      }
+      if (handleError<Error::ErrorPhase::frontend>(frontend.getError())) return;
       mlir::ModuleOp& moduleOp = *queryExecutionConfig->frontend->getModule();
       snapshotImportantStep("canonical", moduleOp, serializationState);
       if (queryExecutionConfig->queryOptimizer) {
@@ -291,7 +302,7 @@ class DefaultQueryExecuter : public QueryExecuter {
          queryOptimizer.setCatalog(catalog);
          queryOptimizer.setSerializationState(serializationState);
          queryOptimizer.optimize(moduleOp);
-         handleError("OPTIMIZER", queryOptimizer.getError());
+         if (handleError<Error::ErrorPhase::optimizer>(queryOptimizer.getError())) return;
          handleTiming(queryOptimizer.getTiming());
          if (queryExecutionConfig->trackTupleCount) {
             mlir::PassManager pm(moduleOp.getContext());
@@ -299,7 +310,7 @@ class DefaultQueryExecuter : public QueryExecuter {
             if (pm.run(moduleOp).failed()) {
                Error e;
                e.emit() << "createTrackTuplesPass failed";
-               handleError("TUPLE_TRACKING", e);
+               if (handleError<Error::ErrorPhase::tuple_tracking>(e)) return;
             }
          }
          snapshotImportantStep("qopt", moduleOp, serializationState);
@@ -316,7 +327,7 @@ class DefaultQueryExecuter : public QueryExecuter {
          loweringStep.setSerializationState(serializationState);
          loweringStep.implement(moduleOp);
          snapshotImportantStep(loweringStep.getShortName(), moduleOp, serializationState);
-         handleError("LOWERING", loweringStep.getError());
+         if (handleError<Error::ErrorPhase::lowering>(loweringStep.getError())) return;
          handleTiming(loweringStep.getTiming());
       }
       if (queryExecutionConfig->executionBackend) {
@@ -326,7 +337,7 @@ class DefaultQueryExecuter : public QueryExecuter {
 #ifdef TRACER
          utility::Tracer::dump();
 #endif
-         handleError("BACKEND", executionBackend.getError());
+         if (handleError<Error::ErrorPhase::backend>(executionBackend.getError())) return;
          handleTiming(executionBackend.getTiming());
          if (queryExecutionConfig->resultProcessor) {
             auto& resultProcessor = *queryExecutionConfig->resultProcessor;

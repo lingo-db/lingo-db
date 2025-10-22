@@ -459,3 +459,6 @@ select * from studenten s
 ----
 24002	Xenokrates	18
 25403	Jonas	12
+
+statement error No Catalog found
+select * from student s
