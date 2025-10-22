@@ -238,7 +238,7 @@ static std::vector<std::string> split(std::string_view input, char del = ' ')
    return result;
 }
 
-void runStatement(runtime::Session& session, const std::vector<std::string>& lines, size_t& line) {
+void runStatement(runtime::Session& session, const std::vector<std::string>& lines, size_t& line, std::function<void(execution::Error& error)> onError) {
    auto parts = split(lines[line]);
    line++;
    std::string statement;
@@ -257,7 +257,12 @@ void runStatement(runtime::Session& session, const std::vector<std::string>& lin
    queryExecutionConfig->resultProcessor = std::unique_ptr<execution::ResultProcessor>();
    auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), session);
    executer->fromData(statement);
+   executer->setExitOnError(false);
+   std::shared_ptr<execution::Error> e = executer->getError();
    scheduler::awaitEntryTask(std::make_unique<execution::QueryExecutionTask>(std::move(executer)));
+   if (e && *e) {
+      onError(*e.get());
+   }
 }
 inline std::string& rtrim(std::string& s, const char* t) {
    s.erase(s.find_last_not_of(t) + 1);
@@ -410,10 +415,67 @@ int main(int argc, char** argv) {
       }
       if (parts[0] == "statement") {
          try {
-            runStatement(*session, lines, line);
+            bool gotError = false;
+            runStatement(*session, lines, line, [&](execution::Error& error) {
+               gotError = true;
+               std::string errorMessage = error.getMessage();
+               if (parts.size() > 1) {
+                  std::string expectedError = parts[1];
+                  if (expectedError == "ok") {
+                     std::cerr << "ERROR: Expected no error, but one was thrown: " << errorMessage << std::endl;
+                     exit(1);
+                  }
+                  if (expectedError.starts_with("frontend-error")) {
+                     if (error.getErrorPhase() != execution::Error::ErrorPhase::frontend) {
+                        std::cerr << "ERROR: expected frontend error but got '" << errorMessage << "'" << std::endl;
+                        std::cerr << "while executing statement: " << lines[line] << std::endl;
+                        exit(1);
+                     }
+
+                  } else if (expectedError.starts_with("backend-error")) {
+                     if (error.getErrorPhase() != execution::Error::ErrorPhase::backend) {
+                        std::cerr << "ERROR: expected backend error but got '" << errorMessage << "'" << std::endl;
+                        std::cerr << "while executing statement: " << lines[line] << std::endl;
+                        exit(1);
+                     }
+
+                  } else if (!expectedError.starts_with("runtime-error") && !expectedError.starts_with("error")) {
+                     //Invalid check type
+                     std::cerr << "ERROR: invalid check type '" << expectedError << "'" << std::endl;
+                     exit(1);
+                  }
+                  if (parts.size() > 2) {
+                     std::string expectedErrorMessage = parts[2];
+                     for (size_t i = 3; i < parts.size(); i++) {
+                        expectedErrorMessage += " " + parts[i];
+                     }
+                     //Remove new lines form error message
+
+                     std::regex regex(expectedErrorMessage);
+
+                     if (!std::regex_search(errorMessage, regex)) {
+                        std::cerr << "ERROR: error message did not match expected pattern\n"
+                                  << "  expected regex: " << expectedErrorMessage << "\n"
+                                  << "  actual message: " << errorMessage << "\n";
+                        std::cerr << "while executing statement: " << lines[line] << std::endl;
+                        exit(1);
+                     }
+                  }
+
+               } else {
+                  std::cerr << "ERROR: " << errorMessage << std::endl;
+                  std::cerr << "while executing statement: " << lines[line] << std::endl;
+               }
+            });
+            if (gotError == false && parts.size() > 1 && parts[1] != "ok") {
+               std::cerr << "ERROR: expected error but got success" << std::endl;
+               std::cerr << "while executing statement: " << lines[line] << std::endl;
+               exit(1);
+            }
          } catch (const std::exception& e) {
             std::cerr << "ERROR: " << e.what() << std::endl;
             std::cerr << "while executing statement: " << lines[line] << std::endl;
+            exit(1);
          }
       }
       if (parts[0] == "query") {
