@@ -34,7 +34,7 @@ class BoundCreateFunctionInfo : public CreateInfo {
    std::string language;
    std::string code;
    NullableType returnType;
-   std::vector<catalog::Type> argumentTypes;
+   std::vector<std::pair<std::string, catalog::Type>> argumentTypes;
    std::vector<std::string> argumentNames;
 
    std::vector<std::pair<std::string, std::string>> options;

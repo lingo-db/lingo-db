@@ -945,25 +945,13 @@ std::shared_ptr<ast::CreateNode> SQLQueryAnalyzer::analyzeFunctionCreate(std::sh
    }
 
    if (language == "c") {
-      std::string returnTypeStringRepresentation = logicalTypeToCTypeString(createFunctionInfo->returnType);
       NullableType returnType = SQLTypeUtils::typemodsToCatalogType(createFunctionInfo->returnType.logicalTypeId, createFunctionInfo->returnType.typeModifiers);
 
-      std::string argumentsStringRepresentation = "(";
-      for (size_t i = 0; i < createFunctionInfo->argumentTypes.size(); i++) {
-         auto functionArgument = createFunctionInfo->argumentTypes[i];
-         argumentsStringRepresentation += logicalTypeToCTypeString(functionArgument.type) + " " + functionArgument.name;
-         if (i + 1 < createFunctionInfo->argumentTypes.size()) {
-            argumentsStringRepresentation += ", ";
-         }
-      }
-      argumentsStringRepresentation += ")";
-
-      code = returnTypeStringRepresentation + " " + createFunctionInfo->functionName + argumentsStringRepresentation + " { " + code + "}";
       auto boundCreateFunctionInfo = std::make_shared<ast::BoundCreateFunctionInfo>(createFunctionInfo->functionName, createFunctionInfo->replace, returnType);
       boundCreateFunctionInfo->language = language;
       boundCreateFunctionInfo->code = code;
       for (auto& fArgument : createFunctionInfo->argumentTypes) {
-         boundCreateFunctionInfo->argumentTypes.push_back(SQLTypeUtils::typemodsToCatalogType(fArgument.type.logicalTypeId, fArgument.type.typeModifiers).type);
+         boundCreateFunctionInfo->argumentTypes.emplace_back(fArgument.name, SQLTypeUtils::typemodsToCatalogType(fArgument.type.logicalTypeId, fArgument.type.typeModifiers).type);
       }
 
       createNode->createInfo = boundCreateFunctionInfo;

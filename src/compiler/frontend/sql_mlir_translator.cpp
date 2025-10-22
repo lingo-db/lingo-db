@@ -199,11 +199,59 @@ void SQLMlirTranslator::translateCreateFunction(mlir::OpBuilder& builder, std::s
    auto language = boundCreateFunctionInfo->language;
    auto returnType = boundCreateFunctionInfo->returnType;
    if (language == "c") {
+      auto logicalTypeToCTypeString = [createNode](catalog::Type& type) -> std::string {
+         switch (type.getTypeId()) {
+            case catalog::LogicalTypeId::INT: {
+               auto intInfo = type.getInfo<catalog::IntTypeInfo>();
+               assert(intInfo->getBitWidth() == 32 || intInfo->getBitWidth() == 64);
+               if (intInfo->getBitWidth() >= 8) {
+                  return "int64_t";
+               }
+               return "int32_t";
+            }
+            case catalog::LogicalTypeId::CHAR: {
+               auto charInfo = type.getInfo<catalog::CharTypeInfo>();
+               if (charInfo->getLength() > 1) {
+                  translatorError("Chars with length>1 are not supported", createNode->loc);
+               }
+               return "char";
+            }
+            case catalog::LogicalTypeId::STRING: {
+               translatorError("Strings are not supported in C UDFs", createNode->loc);
+            }
+            case catalog::LogicalTypeId::DOUBLE: {
+               return "double";
+            }
+            case catalog::LogicalTypeId::FLOAT: {
+               return "float";
+            }
+            case catalog::LogicalTypeId::BOOLEAN: {
+               return "bool";
+            }
+
+            default: translatorError("return type for c-udf not implemented", createNode->loc);
+         }
+      };
+      std::vector<catalog::Type> standaloneArgumentTypes;
+      standaloneArgumentTypes.reserve(boundCreateFunctionInfo->argumentTypes.size());
+      //Create method head
+      std::string returnTypeStringRepresentation = logicalTypeToCTypeString(boundCreateFunctionInfo->returnType.type);
+      std::string argumentsStringRepresentation = "(";
+      for (size_t i = 0; i < boundCreateFunctionInfo->argumentTypes.size(); i++) {
+         standaloneArgumentTypes.emplace_back(boundCreateFunctionInfo->argumentTypes[i].second);
+         auto functionArgument = boundCreateFunctionInfo->argumentTypes[i];
+         argumentsStringRepresentation += logicalTypeToCTypeString(functionArgument.second) + " " + functionArgument.first;
+         if (i + 1 < boundCreateFunctionInfo->argumentTypes.size()) {
+            argumentsStringRepresentation += ", ";
+         }
+      }
+      argumentsStringRepresentation += ")";
+      code = returnTypeStringRepresentation + " " + boundCreateFunctionInfo->functionName + argumentsStringRepresentation + " { " + code + "}";
       lingodb::catalog::CreateFunctionDef createFunctionDef(
          functionName,
          boundCreateFunctionInfo->language,
          code,
-         returnType.type, boundCreateFunctionInfo->argumentTypes);
+         returnType.type, std::move(standaloneArgumentTypes));
       auto descriptionValue = createStringValue(builder, utility::serializeToHexString(createFunctionDef));
       compiler::runtime::RelationHelper::createFunction(builder, builder.getUnknownLoc())(mlir::ValueRange({descriptionValue}));
 
