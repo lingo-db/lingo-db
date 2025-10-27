@@ -691,6 +691,11 @@ std::shared_ptr<ast::AstNode> SQLQueryAnalyzer::canonicalizeAndAnalyze(std::shar
       context->pushNewScope();
       auto scope = context->createResolverScope();
       transformed = analyzeTableProducer(transformed, context, scope);
+      for (auto target : context->currentScope->targetInfo.targetColumns) {
+         if (!target->isSelectable) {
+            error("Column " + target->displayName + " is not available after aggregation", transformed->loc);
+         }
+      }
 
       return transformed;
    }
@@ -1087,9 +1092,12 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
             auto boundExpr = analyzeExpression(expr, context, resolverScope);
             assert(boundExpr->exprClass == ast::ExpressionClass::BOUND_FUNCTION);
             auto boundFunction = std::static_pointer_cast<ast::BoundFunctionExpression>(boundExpr);
-            //Check if count
             auto fName = boundFunction->functionName;
             std::ranges::transform(fName, fName.begin(), ::toupper);
+            /**
+             * Updadte nullable flag for count aggregation.
+             * If empty group by clause set nullable=true else false
+             */
             if (fName != "COUNT" && fName != "COUNT*" && nullable) {
                boundExpr->resultType->isNullable = nullable;
                boundExpr->columnReference.value()->resultType.isNullable = nullable;
@@ -1109,6 +1117,25 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                return boundExpression->columnReference.value();
             });
          }
+         if (!groupColumnReferences.empty() || !boundAggregationExpressions.empty()) {
+            for (auto& c : context->getTopDefinedColumns()) {
+               auto found = std::ranges::find_if(groupColumnReferences, [&](auto cRef) {
+                  return cRef->name == c.second->name && cRef->scope == c.second->scope;
+               });
+               auto found2 = std::ranges::find_if(boundAggregationExpressions, [&](auto& cExpr) {
+                  return cExpr->columnReference.value()->name == c.second->name && cExpr->columnReference.value()->scope == c.second->scope;
+               });
+               /*
+                * If a column reference is not part of the GROUP BY, mark it as not selectable.
+                * It cannot be removed from defined columns because aggregation functions may still reference it.
+                * A future scope-lookup redesign could allow safely pruning such columns instead of toggling selectability.
+                */
+               if (found == groupColumnReferences.end() && found2 == boundAggregationExpressions.end()) {
+                  c.second->isSelectable = false;
+               }
+            }
+         }
+
          auto boundGroupByNode = drv.nf.node<ast::BoundGroupByNode>(aggregationNode->groupByNode ? aggregationNode->groupByNode->loc : aggregationNode->loc, groupColumnReferences);
          std::vector<std::shared_ptr<ast::BoundExpression>> toMap{};
 

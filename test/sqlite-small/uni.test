@@ -487,3 +487,15 @@ select s.matrnr, count(*) from studenten s group by x.matrnr;
 
 statement frontend-error: Could not resolve '.*'
 select s.matrnr, count(*) from studenten s group by hoeren.matrnr;
+
+statement frontend-error: not available after aggregation at
+select s.matrnr, count(*) from studenten s, hoeren h group by h.matrnr;
+
+statement frontend-error: not available after aggregation at
+select * from studenten s, hoeren h group by h.matrnr;
+
+statement frontend-error: not available after aggregation at
+select h.matrnr, count(*) from studenten s, hoeren h;
+
+statement frontend-error: not available after aggregation at
+select s.matrnr, x.vorlnr from studenten s, (select h.vorlnr from hoeren h group by h.matrnr) as x;

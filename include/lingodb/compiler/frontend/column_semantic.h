@@ -16,6 +16,11 @@ class ColumnReference {
    NullableType resultType;
    std::string name;
    std::string displayName{};
+   /**
+    * Indicates whether the column is selectable. Set to false when the column is not included
+    * in the GROUP BY clause.
+   */
+   bool isSelectable = true;
    ColumnReference(std::string scope, NullableType resultType, std::string name) : scope(scope), resultType(resultType), name(name) {}
    ColumnReference(std::string scope, catalog::Column c) : scope(scope), resultType(NullableType(c.getLogicalType(), c.getIsNullable())), name(c.getColumnName()), displayName(c.getColumnName()) {}
 
