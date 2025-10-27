@@ -177,7 +177,7 @@ select min(x),max(x),sum(x),count(x), count(*)  from (values (1)) t(x);
 --//CHECK-DAG:       %{{.*}} = relalg.aggrfn min @{{.*}}{{.*}}::@const{{.*}} %arg0 : i32
 --//CHECK:       tuples.return
 --//CHECK: }
-select y, min(x),max(x),sum(x),count(x), count(*) from (values (1,2)) t(x,y) group by x;
+select y, min(x),max(x),sum(x),count(x), count(*) from (values (1,2)) t(x,y) group by y;
 --//CHECK: module
 --//CHECK: call @{{.*}}RelationHelper{{.*}}createTable{{.*}}(%{{.*}}) : (!util.varlen32) -> ()
 create table test_tmp(
