@@ -5,6 +5,7 @@
 
 #include <iostream>
 
+#include "json.h"
 #include <arrow/record_batch.h>
 
 namespace lingodb::compiler::dialect::relalg {
@@ -54,7 +55,66 @@ void QueryGraph::print(llvm::raw_ostream& out) {
    out << "]\n";
    out << "}\n";
 }
+std::unique_ptr<lingodb::compiler::support::eval::expr> buildConstant(mlir::Type type, std::variant<int64_t, double, std::string> parseArg) {
+   ::arrow::Type::type typeConstant = ::arrow::Type::type::NA;
+   uint32_t param1 = 0, param2 = 0;
+   if (isIntegerType(type, 1)) {
+      typeConstant = ::arrow::Type::type::BOOL;
+   } else if (auto intWidth = getIntegerWidth(type, false)) {
+      switch (intWidth) {
+         case 8: typeConstant = ::arrow::Type::type::INT8; break;
+         case 16: typeConstant = ::arrow::Type::type::INT16; break;
+         case 32: typeConstant = ::arrow::Type::type::INT32; break;
+         case 64: typeConstant = ::arrow::Type::type::INT64; break;
+      }
+   } else if (auto uIntWidth = getIntegerWidth(type, true)) {
+      switch (uIntWidth) {
+         case 8: typeConstant = ::arrow::Type::type::UINT8; break;
+         case 16: typeConstant = ::arrow::Type::type::UINT16; break;
+         case 32: typeConstant = ::arrow::Type::type::UINT32; break;
+         case 64: typeConstant = ::arrow::Type::type::UINT64; break;
+      }
+   } else if (auto decimalType = mlir::dyn_cast_or_null<db::DecimalType>(type)) {
+      typeConstant = ::arrow::Type::type::DECIMAL128;
+      param1 = decimalType.getP();
+      param2 = decimalType.getS();
+   } else if (auto floatType = mlir::dyn_cast_or_null<mlir::FloatType>(type)) {
+      switch (floatType.getWidth()) {
+         case 16: typeConstant = ::arrow::Type::type::HALF_FLOAT; break;
+         case 32: typeConstant = ::arrow::Type::type::FLOAT; break;
+         case 64: typeConstant = ::arrow::Type::type::DOUBLE; break;
+      }
+   } else if (auto stringType = mlir::dyn_cast_or_null<db::StringType>(type)) {
+      typeConstant = ::arrow::Type::type::STRING;
+   } else if (auto dateType = mlir::dyn_cast_or_null<db::DateType>(type)) {
+      if (dateType.getUnit() == db::DateUnitAttr::day) {
+         typeConstant = ::arrow::Type::type::DATE32;
+      } else {
+         typeConstant = ::arrow::Type::type::DATE64;
+      }
+   } else if (auto charType = mlir::dyn_cast_or_null<db::CharType>(type)) {
+      // we need to multiply by 4 to get the maximum number of required bytes (4 bytes per character utf-8)
+      if (charType.getLen() <= 1) {
+         typeConstant = ::arrow::Type::type::FIXED_SIZE_BINARY;
+         param1 = charType.getLen() * 4;
+      } else {
+         typeConstant = ::arrow::Type::type::STRING;
+      }
+   } else if (auto intervalType = mlir::dyn_cast_or_null<db::IntervalType>(type)) {
+      if (intervalType.getUnit() == db::IntervalUnitAttr::months) {
+         typeConstant = ::arrow::Type::type::INTERVAL_MONTHS;
+      } else {
+         typeConstant = ::arrow::Type::type::INTERVAL_DAY_TIME;
+      }
+   } else if (auto timestampType = mlir::dyn_cast_or_null<db::TimestampType>(type)) {
+      typeConstant = ::arrow::Type::type::TIMESTAMP;
+      param1 = static_cast<uint32_t>(timestampType.getUnit());
+   }
+   assert(typeConstant != ::arrow::Type::type::NA);
 
+   auto parseResult = support::parse(parseArg, typeConstant, param1);
+   return support::eval::createLiteral(parseResult, std::make_tuple(typeConstant, param1, param2));
+}
 std::unique_ptr<lingodb::compiler::support::eval::expr> buildEvalExpr(mlir::Value val, llvm::DenseMap<const tuples::Column*, std::string>& mapping) {
    auto* op = val.getDefiningOp();
    if (!op) return support::eval::createInvalid();
@@ -70,64 +130,7 @@ std::unique_ptr<lingodb::compiler::support::eval::expr> buildEvalExpr(mlir::Valu
          return support::eval::createInvalid();
       }
       auto type = constantOp.getType();
-      ::arrow::Type::type typeConstant = ::arrow::Type::type::NA;
-      uint32_t param1 = 0, param2 = 0;
-      if (isIntegerType(type, 1)) {
-         typeConstant = ::arrow::Type::type::BOOL;
-      } else if (auto intWidth = getIntegerWidth(type, false)) {
-         switch (intWidth) {
-            case 8: typeConstant = ::arrow::Type::type::INT8; break;
-            case 16: typeConstant = ::arrow::Type::type::INT16; break;
-            case 32: typeConstant = ::arrow::Type::type::INT32; break;
-            case 64: typeConstant = ::arrow::Type::type::INT64; break;
-         }
-      } else if (auto uIntWidth = getIntegerWidth(type, true)) {
-         switch (uIntWidth) {
-            case 8: typeConstant = ::arrow::Type::type::UINT8; break;
-            case 16: typeConstant = ::arrow::Type::type::UINT16; break;
-            case 32: typeConstant = ::arrow::Type::type::UINT32; break;
-            case 64: typeConstant = ::arrow::Type::type::UINT64; break;
-         }
-      } else if (auto decimalType = mlir::dyn_cast_or_null<db::DecimalType>(type)) {
-         typeConstant = ::arrow::Type::type::DECIMAL128;
-         param1 = decimalType.getP();
-         param2 = decimalType.getS();
-      } else if (auto floatType = mlir::dyn_cast_or_null<mlir::FloatType>(type)) {
-         switch (floatType.getWidth()) {
-            case 16: typeConstant = ::arrow::Type::type::HALF_FLOAT; break;
-            case 32: typeConstant = ::arrow::Type::type::FLOAT; break;
-            case 64: typeConstant = ::arrow::Type::type::DOUBLE; break;
-         }
-      } else if (auto stringType = mlir::dyn_cast_or_null<db::StringType>(type)) {
-         typeConstant = ::arrow::Type::type::STRING;
-      } else if (auto dateType = mlir::dyn_cast_or_null<db::DateType>(type)) {
-         if (dateType.getUnit() == db::DateUnitAttr::day) {
-            typeConstant = ::arrow::Type::type::DATE32;
-         } else {
-            typeConstant = ::arrow::Type::type::DATE64;
-         }
-      } else if (auto charType = mlir::dyn_cast_or_null<db::CharType>(type)) {
-         // we need to multiply by 4 to get the maximum number of required bytes (4 bytes per character utf-8)
-         if (charType.getLen() <= 1) {
-            typeConstant = ::arrow::Type::type::FIXED_SIZE_BINARY;
-            param1 = charType.getLen() * 4;
-         } else {
-            typeConstant = ::arrow::Type::type::STRING;
-         }
-      } else if (auto intervalType = mlir::dyn_cast_or_null<db::IntervalType>(type)) {
-         if (intervalType.getUnit() == db::IntervalUnitAttr::months) {
-            typeConstant = ::arrow::Type::type::INTERVAL_MONTHS;
-         } else {
-            typeConstant = ::arrow::Type::type::INTERVAL_DAY_TIME;
-         }
-      } else if (auto timestampType = mlir::dyn_cast_or_null<db::TimestampType>(type)) {
-         typeConstant = ::arrow::Type::type::TIMESTAMP;
-         param1 = static_cast<uint32_t>(timestampType.getUnit());
-      }
-      assert(typeConstant != ::arrow::Type::type::NA);
-
-      auto parseResult = support::parse(parseArg, typeConstant, param1);
-      return support::eval::createLiteral(parseResult, std::make_tuple(typeConstant, param1, param2));
+      return buildConstant(type, parseArg);
    } else if (auto attrRefOp = mlir::dyn_cast_or_null<tuples::GetColumnOp>(op)) {
       return support::eval::createAttrRef(mapping.at(&attrRefOp.getAttr().getColumn()));
    } else if (auto cmpOp = mlir::dyn_cast_or_null<CmpOpInterface>(op)) {
@@ -198,17 +201,58 @@ std::unique_ptr<lingodb::compiler::support::eval::expr> buildEvalExpr(mlir::Valu
 namespace {
 std::optional<double> estimateUsingSample(QueryGraph::Node& n) {
    if (!n.op) return {};
-   if (n.additionalPredicates.empty()) return {};
+   if (n.additionalPredicates.empty() && !n.op->hasAttr("restriction")) return {};
    if (auto baseTableOp = mlir::dyn_cast_or_null<BaseTableOp>(n.op.getOperation())) {
       llvm::DenseMap<const tuples::Column*, std::string> mapping;
+      std::unordered_map<std::string, mlir::Type> typeMapping;
       for (auto c : baseTableOp.getColumns()) {
          mapping[&mlir::cast<tuples::ColumnDefAttr>(c.getValue()).getColumn()] = c.getName().str();
+         typeMapping[c.getName().str()] = mlir::cast<tuples::ColumnDefAttr>(c.getValue()).getColumn().type;
       }
       auto meta = mlir::dyn_cast_or_null<TableMetaDataAttr>(baseTableOp->getAttr("meta"));
       if (!meta) return {};
       auto sample = meta.getMeta()->getSample();
       if (!sample) return {};
       std::vector<std::unique_ptr<lingodb::compiler::support::eval::expr>> expressions;
+      if (baseTableOp->hasAttr("restriction")) {
+         auto restrictionsStr = baseTableOp->getAttr("restriction").cast<mlir::StringAttr>().getValue();
+         auto restrictions = nlohmann::json::parse(restrictionsStr.str()).get<nlohmann::json::array_t>();
+         for (auto& r : restrictions) {
+            auto cmp = r["cmp"].get<std::string>();
+            auto columnName = r["column"].get<std::string>();
+            auto value = r["value"];
+            auto type = typeMapping.at(columnName);
+            std::variant<int64_t, double, std::string> parseArg;
+            if (value.is_string()) {
+               parseArg = value.get<std::string>();
+            } else if (value.is_number_integer()) {
+               parseArg = value.get<int64_t>();
+            } else if (value.is_number_float()) {
+               parseArg = value.get<double>();
+            } else {
+               assert(false);
+               continue;
+            }
+            auto colExpr = support::eval::createAttrRef(columnName);
+            auto valueExpr = buildConstant(type, parseArg);
+            if (cmp == "eq") {
+               expressions.push_back(support::eval::createEq(std::move(colExpr), std::move(valueExpr)));
+            } else if (cmp == "neq") {
+               expressions.push_back(support::eval::createNot(support::eval::createEq(std::move(colExpr), std::move(valueExpr))));
+            } else if (cmp == "lt") {
+               expressions.push_back(support::eval::createLt(std::move(colExpr), std::move(valueExpr)));
+            } else if (cmp == "lte") {
+               expressions.push_back(support::eval::createLte(std::move(colExpr), std::move(valueExpr)));
+            } else if (cmp == "gt") {
+               expressions.push_back(support::eval::createGt(std::move(colExpr), std::move(valueExpr)));
+            } else if (cmp == "gte") {
+               expressions.push_back(support::eval::createGte(std::move(colExpr), std::move(valueExpr)));
+            } else {
+               assert(false);
+               continue;
+            }
+         }
+      }
       for (auto pred : n.additionalPredicates) {
          if (auto selOp = mlir::dyn_cast_or_null<SelectionOp>(pred.getOperation())) {
             auto v = mlir::cast<tuples::ReturnOp>(selOp.getPredicateBlock().getTerminator()).getResults()[0];
@@ -286,6 +330,7 @@ void QueryGraph::estimate() {
             auto estimation = estimateUsingSample(node);
             if (estimation.has_value()) {
                node.selectivity = estimation.value();
+//               node.rows = node.selectivity * node.rows;
             } else {
                for (auto predicate : predicates) {
                   if (predicate.isEq) {
