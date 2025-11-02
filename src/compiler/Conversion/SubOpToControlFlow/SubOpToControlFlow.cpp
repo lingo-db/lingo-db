@@ -1130,7 +1130,8 @@ class ScanRefsTableLowering : public SubOpConversionPattern<subop::ScanRefsOp> {
    using SubOpConversionPattern<subop::ScanRefsOp>::SubOpConversionPattern;
 
    LogicalResult matchAndRewrite(subop::ScanRefsOp scanOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
-      if (!mlir::isa<subop::TableType>(scanOp.getState().getType())) return failure();
+      auto tableType = mlir::dyn_cast_or_null<subop::TableType>(scanOp.getState().getType());
+      if (!tableType) return failure();
       auto& memberManager = getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
       auto loc = scanOp->getLoc();
       auto refType = mlir::cast<subop::TableEntryRefType>(scanOp.getRef().getColumn().type);
@@ -1171,7 +1172,10 @@ class ScanRefsTableLowering : public SubOpConversionPattern<subop::ScanRefsOp> {
          recordBatchPointer = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(getContext(), recordBatchInfoRepr), recordBatchPointer);
          mlir::Value lenRef = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(rewriter.getIndexType()), recordBatchPointer, 0);
          mlir::Value offsetRef = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(rewriter.getIndexType()), recordBatchPointer, 1);
-         mlir::Value selVecPtrRef = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(util::RefType::get(i16T)), recordBatchPointer, 2);
+         mlir::Value selVecPtrRef;
+         if (tableType.getFiltered()) {
+            selVecPtrRef = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(util::RefType::get(i16T)), recordBatchPointer, 2);
+         }
          mlir::Value ptrRef = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(util::RefType::get(arrow::ArrayType::get(ctxt))), recordBatchPointer, 3);
          mlir::Value ptrToColumns = rewriter.create<util::LoadOp>(loc, ptrRef);
          std::vector<mlir::Value> arrays;
@@ -1183,14 +1187,20 @@ class ScanRefsTableLowering : public SubOpConversionPattern<subop::ScanRefsOp> {
          auto arraysVal = rewriter.create<util::PackOp>(loc, arrays);
          auto start = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
          auto end = rewriter.create<util::LoadOp>(loc, lenRef);
-         auto selVecPtr = rewriter.create<util::LoadOp>(loc, selVecPtrRef);
+         mlir::Value selVecPtr;
+         if (tableType.getFiltered()) {
+            selVecPtr = rewriter.create<util::LoadOp>(loc, selVecPtrRef);
+         }
          auto globalOffset = rewriter.create<util::LoadOp>(loc, offsetRef);
          auto c1 = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
          auto forOp2 = rewriter.create<mlir::scf::ForOp>(loc, start, end, c1, mlir::ValueRange{});
          rewriter.atStartOf(forOp2.getBody(), [&](SubOpRewriter& rewriter) {
-            auto idx = rewriter.create<util::LoadOp>(loc, selVecPtr, forOp2.getInductionVar());
-            auto idxAsIndex = rewriter.create<mlir::arith::IndexCastOp>(loc, rewriter.getIndexType(), idx);
-            auto withOffset = rewriter.create<mlir::arith::AddIOp>(loc, idxAsIndex, globalOffset);
+            mlir::Value index = forOp2.getInductionVar();
+            if (tableType.getFiltered()) {
+               auto idx = rewriter.create<util::LoadOp>(loc, selVecPtr, index);
+               index = rewriter.create<mlir::arith::IndexCastOp>(loc, rewriter.getIndexType(), idx);
+            }
+            auto withOffset = rewriter.create<mlir::arith::AddIOp>(loc, index, globalOffset);
             auto currentRecord = rewriter.create<util::PackOp>(loc, mlir::ValueRange{withOffset, arraysVal});
             mapping.define(scanOp.getRef(), currentRecord);
             rewriter.replaceTupleStream(scanOp, mapping);

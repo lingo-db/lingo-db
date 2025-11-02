@@ -183,8 +183,8 @@ def ThreadLocal : SubOperator_Type<"ThreadLocal", "thread_local"> {
 }
 def Table : SubOperator_Type<"Table", "table",[State]> {
     let summary = "external table";
-    let parameters = (ins "StateMembersAttr":$members);
-    let assemblyFormat = "`<` custom<StateMembers>($members) `>`";
+    let parameters = (ins "StateMembersAttr":$members, "bool":$filtered);
+    let assemblyFormat = "`<` custom<StateMembers>($members) `,` $filtered `>`";
 }
 def LocalTable : SubOperator_Type<"LocalTable", "local_table",[State]> {
     let summary = "local table";

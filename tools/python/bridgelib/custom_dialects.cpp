@@ -266,7 +266,7 @@ bool mlirAttributeIsASubOpMemberAttribute(MlirAttribute attribute) {
 }
 
 MlirType mlirSubOpTableTypeGet(MlirAttribute members) {
-   return wrap(subop::TableType::get(unwrap(members).getContext(), mlir::cast<subop::StateMembersAttr>(unwrap(members))));
+   return wrap(subop::TableType::get(unwrap(members).getContext(), mlir::cast<subop::StateMembersAttr>(unwrap(members)), false));
 }
 MlirTypeID mlirSubOpTableTypeGetTypeID() {
    return wrap(subop::TableType::getTypeID());
