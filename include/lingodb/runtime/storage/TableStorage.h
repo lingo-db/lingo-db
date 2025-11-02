@@ -6,12 +6,29 @@
 #include <functional>
 #include <memory>
 
+#include <variant>
 #include <arrow/type_fwd.h>
 
 namespace lingodb::runtime {
+enum class FilterOp {
+   EQ,
+   NEQ,
+   LT,
+   LTE,
+   GT,
+   GTE
+
+};
+struct FilterDescription {
+   std::string columnName;
+   size_t columnId;
+   FilterOp op;
+   std::variant<std::string, int64_t, double> value;
+};
 struct ScanConfig {
    bool parallel;
    std::vector<std::string> columns;
+   std::vector<FilterDescription> filters;
    std::function<void(lingodb::runtime::BatchView*)> cb;
 };
 class TableStorage {

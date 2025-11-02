@@ -101,6 +101,10 @@ class BaseTableLowering : public OpConversionPattern<relalg::BaseTableOp> {
       llvm::SmallVector<subop::DefMappingPairT> defMapping;
 
       std::vector<mlir::Type> types;
+      std::string restrictions="[]";
+      if (baseTableOp->hasAttr("restriction")) {
+         restrictions = mlir::cast<mlir::StringAttr>(baseTableOp->getAttr("restriction")).getValue().str();
+      }
       std::string tableName = mlir::cast<mlir::StringAttr>(baseTableOp->getAttr("table_identifier")).str();
       std::string scanDescription = R"({ "table": ")" + tableName + R"(", "mapping": { )";
       bool first = true;
@@ -120,7 +124,7 @@ class BaseTableLowering : public OpConversionPattern<relalg::BaseTableOp> {
             defMapping.push_back({member, attrDef});
          }
       }
-      scanDescription += "} }";
+      scanDescription += "}, \"restrictions\": "+restrictions+"}";
       auto tableRefType = subop::TableType::get(rewriter.getContext(), createStateMembersAttr(rewriter.getContext(), members));
       mlir::Value tableRef = rewriter.create<subop::GetExternalOp>(baseTableOp->getLoc(), tableRefType, rewriter.getStringAttr(scanDescription));
       rewriter.replaceOpWithNewOp<subop::ScanOp>(baseTableOp, tableRef, createColumnDefMemberMappingAttr(rewriter.getContext(), defMapping));

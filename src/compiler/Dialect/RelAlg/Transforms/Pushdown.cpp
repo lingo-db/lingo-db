@@ -11,6 +11,7 @@
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
+#include "json.h"
 namespace {
 using namespace lingodb::compiler::dialect;
 bool isNotNullCheckOnColumn(relalg::ColumnSet relevantColumns, relalg::SelectionOp selectionOp) {
@@ -142,10 +143,119 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
    public:
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(Pushdown)
    private:
+   llvm::DenseSet<mlir::Operation*> toErase;
    size_t countUses(Operator o) {
       size_t uses = 0;
       for (auto& u : o->getUses()) uses++; // NOLINT(clang-diagnostic-unused-variable)
       return uses;
+   }
+   std::string reverseCmpMode(std::string cmpMode) {
+      if (cmpMode == "eq") return "eq";
+      if (cmpMode == "neq") return "neq";
+      if (cmpMode == "lt") return "gt";
+      if (cmpMode == "gt") return "lt";
+      if (cmpMode == "lte") return "gte";
+      if (cmpMode == "gte") return "lte";
+      if (cmpMode == "isa") return "isa";
+      return "";
+   }
+   bool getColumnName(mlir::Value val, relalg::BaseTableOp baseTableOp, std::string& outColumnName) {
+      auto getColOp = mlir::dyn_cast_or_null<tuples::GetColumnOp>(val.getDefiningOp());
+      if (auto castOp= mlir::dyn_cast_or_null<db::CastOp>(val.getDefiningOp())){
+         if (mlir::isa<db::StringType>(castOp.getType())&&mlir::isa<db::CharType>(castOp.getVal().getType())) {
+            getColOp = mlir::dyn_cast_or_null<tuples::GetColumnOp>(castOp.getVal().getDefiningOp());
+         }
+      }
+      if (!getColOp) return false;
+      auto& column = getColOp.getAttr().getColumn();
+      for (auto x : baseTableOp.getColumns()) {
+         if (&mlir::cast<tuples::ColumnDefAttr>(x.getValue()).getColumn() == &column) {
+            outColumnName = x.getName().str();
+            return true;
+         }
+      }
+      return false;
+   }
+   bool getConstant(mlir::Value val, nlohmann::json& outConst) {
+      auto constOp = mlir::dyn_cast_or_null<db::ConstantOp>(val.getDefiningOp());
+      if (!constOp) return false;
+      if (auto strAttr = mlir::dyn_cast_or_null<mlir::StringAttr>(constOp.getValue())) {
+         outConst = strAttr.getValue();
+         return true;
+      } else if (auto intAttr = mlir::dyn_cast_or_null<mlir::IntegerAttr>(constOp.getValue())) {
+         outConst = intAttr.getInt();
+         return true;
+      }
+      return false;
+   }
+   bool appendRestrictions(relalg::BaseTableOp baseTableOp, nlohmann::json::array_t restrictions) {
+      nlohmann::json::array_t existingRestrictions;
+      if (baseTableOp->hasAttr("restriction")) {
+         auto existingRestrictionsStr = baseTableOp->getAttr("restriction").cast<mlir::StringAttr>().getValue();
+         existingRestrictions = nlohmann::json::parse(existingRestrictionsStr.str()).get<nlohmann::json::array_t>();
+      }
+      for (auto& r : restrictions) {
+         existingRestrictions.push_back(r);
+      }
+      auto restrictionsStr = nlohmann::json(existingRestrictions).dump();
+      baseTableOp->setAttr("restriction", mlir::StringAttr::get(baseTableOp.getContext(), restrictionsStr));
+      return true;
+   }
+   bool tryPushdownIntoBasetable(relalg::SelectionOp selectionOp, relalg::BaseTableOp baseTableOp) {
+      if (selectionOp.getPredicate().empty()) return false;
+      auto returnOp = mlir::dyn_cast_or_null<tuples::ReturnOp>(selectionOp.getPredicate().front().getTerminator());
+      if (!returnOp) return false;
+      if (returnOp.getResults().size() != 1) return false;
+      if (auto condOp = mlir::dyn_cast_or_null<db::CmpOp>(returnOp.getResults()[0].getDefiningOp())) {
+         if (condOp.getLeft().getType()!=condOp.getRight().getType()) return false;
+         auto left = condOp.getLeft().getDefiningOp();
+         auto right = condOp.getRight().getDefiningOp();
+         if (!left || !right) return false;
+         nlohmann::json constValue;
+         std::string columnName;
+         std::string cmpMode = stringifyDBCmpPredicate(condOp.getPredicate()).str();
+         if (getColumnName(condOp.getLeft(), baseTableOp, columnName) &&
+             getConstant(condOp.getRight(), constValue)) {
+            // left is column, right is constant
+         } else if (getColumnName(condOp.getRight(), baseTableOp, columnName) &&
+                    getConstant(condOp.getLeft(), constValue)) {
+            // right is column, left is constant
+            // reverse cmp mode
+            cmpMode = reverseCmpMode(cmpMode);
+         }else{
+            return false;
+         }
+         assert (!columnName.empty() && "one side must be column");
+         appendRestrictions(baseTableOp, nlohmann::json::array_t{{
+                                            {"column", columnName},
+                                            {"cmp", cmpMode},
+                                            {"value", constValue},
+                                         }});
+         return true;
+      }
+      if (auto betweenOp = mlir::dyn_cast_or_null<db::BetweenOp>(returnOp.getResults()[0].getDefiningOp())) {
+         std::string columnName;
+         nlohmann::json lowerConst;
+         nlohmann::json upperConst;
+         if (betweenOp.getVal().getType()!=betweenOp.getLower().getType()) return false;
+         if (betweenOp.getVal().getType()!=betweenOp.getUpper().getType()) return false;
+         if (getColumnName(betweenOp.getVal(), baseTableOp, columnName) &&
+             getConstant(betweenOp.getLower(), lowerConst) &&
+             getConstant(betweenOp.getUpper(), upperConst)) {
+            appendRestrictions(baseTableOp, nlohmann::json::array_t{{
+                                                                       {"column", columnName},
+                                                                       {"cmp", betweenOp.getLowerInclusive() ? "gte" : "gt"},
+                                                                       {"value", lowerConst},
+                                                                    },
+                                                                    {
+                                                                       {"column", columnName},
+                                                                       {"cmp", betweenOp.getUpperInclusive() ? "lte" : "lt"},
+                                                                       {"value", upperConst},
+                                                                    }});
+            return true;
+         }
+      }
+      return false;
    }
    Operator pushdown(Operator topush, Operator curr, relalg::ColumnCreatorAnalysis& columnCreatorAnalysis) {
       if (countUses(curr) > 1) {
@@ -240,6 +350,18 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
                        topush.setChildren({nestedOp});
                        return topush;
                     })
+                    .Case<relalg::BaseTableOp>([&](relalg::BaseTableOp baseTableOp) -> Operator {
+                       auto successful = tryPushdownIntoBasetable(mlir::cast<relalg::SelectionOp>(topush.getOperation()), baseTableOp);
+                       if (successful) {
+                          topush->dropAllReferences();
+                          topush->remove();
+                          toErase.insert(topush.getOperation());
+                          return baseTableOp;
+                       } else {
+                          topush.setChildren({baseTableOp});
+                          return topush;
+                       }
+                    })
                     .Default([&](mlir::Operation* others) {
                        topush.setChildren({mlir::cast<Operator>(others)});
                        return topush;
@@ -262,6 +384,9 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
             });
          }
       });
+      for (auto* op : toErase) {
+         op->erase();
+      }
       mlir::RewritePatternSet patterns(&getContext());
       patterns.insert<OuterJoinToInnerJoin>(&getContext());
       patterns.insert<SingleJoinToInnerJoin>(&getContext());

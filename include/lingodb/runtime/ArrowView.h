@@ -1,6 +1,7 @@
 #ifndef LINGODB_RUNTIME_ARROWVIEW_H
 #define LINGODB_RUNTIME_ARROWVIEW_H
 #include <array>
+#include <cstddef>
 #include <cstdint>
 
 namespace lingodb::runtime {
@@ -20,9 +21,10 @@ struct ArrayView {
 
 struct BatchView {
    static std::array<uint16_t, 65536> defaultSelectionVector;
+   static constexpr size_t maxBatchSize = 65536;
    int64_t length;
    int64_t offset;
-   int16_t* selectionVector;
+   uint16_t* selectionVector;
    const ArrayView** arrays;
 };
 } // namespace lingodb::runtime
