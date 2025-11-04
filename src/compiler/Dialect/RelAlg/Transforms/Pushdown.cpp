@@ -159,7 +159,7 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
       if (cmpMode == "isa") return "isa";
       return "";
    }
-   bool getColumnName(mlir::Value val, relalg::BaseTableOp baseTableOp, std::string& outColumnName) {
+   bool getColumnName(mlir::Value val, relalg::BaseTableOp baseTableOp, std::string& outColumnName, bool& nullable) {
       auto getColOp = mlir::dyn_cast_or_null<tuples::GetColumnOp>(val.getDefiningOp());
       if (auto castOp= mlir::dyn_cast_or_null<db::CastOp>(val.getDefiningOp())){
          if (mlir::isa<db::StringType>(castOp.getType())&&mlir::isa<db::CharType>(castOp.getVal().getType())) {
@@ -168,6 +168,11 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
       }
       if (!getColOp) return false;
       auto& column = getColOp.getAttr().getColumn();
+      if (mlir::isa<db::NullableType>(column.type)) {
+         nullable = true;
+      } else {
+         nullable = false;
+      }
       for (auto x : baseTableOp.getColumns()) {
          if (&mlir::cast<tuples::ColumnDefAttr>(x.getValue()).getColumn() == &column) {
             outColumnName = x.getName().str();
@@ -206,18 +211,34 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
       auto returnOp = mlir::dyn_cast_or_null<tuples::ReturnOp>(selectionOp.getPredicate().front().getTerminator());
       if (!returnOp) return false;
       if (returnOp.getResults().size() != 1) return false;
+      if (auto notOp = mlir::dyn_cast_or_null<db::NotOp>(returnOp.getResults()[0].getDefiningOp())) {
+         if (auto isNullOp = mlir::dyn_cast_or_null<db::IsNullOp>(notOp.getVal().getDefiningOp())) {
+            std::string columnName;
+            bool colNullable;
+            if (getColumnName(isNullOp.getVal(), baseTableOp, columnName, colNullable)) {
+               assert(!columnName.empty() && "must be column");
+               appendRestrictions(baseTableOp, nlohmann::json::array_t{{
+                                                  {"column", columnName},
+                                                  {"cmp", "isnotnull"},
+                                                  {"value", 0},
+                                               }});
+               return true;
+            }
+         }
+      }
       if (auto condOp = mlir::dyn_cast_or_null<db::CmpOp>(returnOp.getResults()[0].getDefiningOp())) {
-         if (condOp.getLeft().getType()!=condOp.getRight().getType()) return false;
+         if (getBaseType(condOp.getLeft().getType())!=getBaseType(condOp.getRight().getType())) return false;
          auto left = condOp.getLeft().getDefiningOp();
          auto right = condOp.getRight().getDefiningOp();
          if (!left || !right) return false;
          nlohmann::json constValue;
          std::string columnName;
+         bool colNullable;
          std::string cmpMode = stringifyDBCmpPredicate(condOp.getPredicate()).str();
-         if (getColumnName(condOp.getLeft(), baseTableOp, columnName) &&
+         if (getColumnName(condOp.getLeft(), baseTableOp, columnName, colNullable) &&
              getConstant(condOp.getRight(), constValue)) {
             // left is column, right is constant
-         } else if (getColumnName(condOp.getRight(), baseTableOp, columnName) &&
+         } else if (getColumnName(condOp.getRight(), baseTableOp, columnName, colNullable) &&
                     getConstant(condOp.getLeft(), constValue)) {
             // right is column, left is constant
             // reverse cmp mode
@@ -226,6 +247,13 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
             return false;
          }
          assert (!columnName.empty() && "one side must be column");
+         if (colNullable){
+            appendRestrictions(baseTableOp, nlohmann::json::array_t{{
+                                               {"column", columnName},
+                                               {"cmp", "isnotnull"},
+                                               {"value", 0},
+                                            }});
+         }
          appendRestrictions(baseTableOp, nlohmann::json::array_t{{
                                             {"column", columnName},
                                             {"cmp", cmpMode},
@@ -237,11 +265,19 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
          std::string columnName;
          nlohmann::json lowerConst;
          nlohmann::json upperConst;
+         bool colNullable;
          if (betweenOp.getVal().getType()!=betweenOp.getLower().getType()) return false;
          if (betweenOp.getVal().getType()!=betweenOp.getUpper().getType()) return false;
-         if (getColumnName(betweenOp.getVal(), baseTableOp, columnName) &&
+         if (getColumnName(betweenOp.getVal(), baseTableOp, columnName, colNullable) &&
              getConstant(betweenOp.getLower(), lowerConst) &&
              getConstant(betweenOp.getUpper(), upperConst)) {
+            if (colNullable){
+               appendRestrictions(baseTableOp, nlohmann::json::array_t{{
+                                                  {"column", columnName},
+                                                  {"cmp", "isnotnull"},
+                                                  {"value", 0},
+                                               }});
+            }
             appendRestrictions(baseTableOp, nlohmann::json::array_t{{
                                                                        {"column", columnName},
                                                                        {"cmp", betweenOp.getLowerInclusive() ? "gte" : "gt"},

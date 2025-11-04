@@ -221,7 +221,12 @@ std::optional<double> estimateUsingSample(QueryGraph::Node& n) {
             auto cmp = r["cmp"].get<std::string>();
             auto columnName = r["column"].get<std::string>();
             auto value = r["value"];
-            auto type = typeMapping.at(columnName);
+            if (cmp == "isnotnull") {
+               auto colExpr = support::eval::createAttrRef(columnName);
+               expressions.push_back(support::eval::createNot(support::eval::createIsNull(std::move(colExpr))));
+               continue;
+            }
+            auto type = getBaseType(typeMapping.at(columnName));
             std::variant<int64_t, double, std::string> parseArg;
             if (value.is_string()) {
                parseArg = value.get<std::string>();

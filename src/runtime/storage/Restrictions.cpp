@@ -53,7 +53,105 @@ struct LtE {
       return a <= b;
    }
 };
+// does not need to look in the currSelVec, -> directly iterate over bitmap
+// first loop: make sure that we are aligned to byte boundary
+// second loop: process 8 at a time
+// last loop: process remaining elements
+// again: currSelVector is just 0 to len-1, so we can directly iterate over the validity bitmap
+class FirstNotNullFilter : public lingodb::runtime::Filter {
+   public:
+   FirstNotNullFilter() {}
+   size_t filter(size_t len, uint16_t* currSelVec, uint16_t* nextSelVec, const lingodb::runtime::ArrayView* arrayView, size_t offset) override {
+      if (arrayView->nullCount==0) {
+         //fast path: no nulls
+         std::memcpy(nextSelVec, currSelVec, len * sizeof(uint16_t));
+         return len;
+      }
+      const uint8_t* validData = reinterpret_cast<const uint8_t*>(arrayView->buffers[0]);
+      auto* writer = nextSelVec;
+      size_t i = 0;
+      //align to byte boundary
+      for (; i < len && ( (i+offset + arrayView->offset) % 8) != 0; i++) {
+         size_t index0 = i+offset + arrayView->offset;
+         *writer = i;
+         writer += (bool)((validData[index0 / 8] >> (index0 % 8)) & 1);
+      }
+      assert ((i+ offset + arrayView->offset) %8 ==0 || i==len);
+      size_t len8 = len & ~7;
+      for (; i < len8; i += 8) {
+         uint8_t byte = validData[(i + offset + arrayView->offset) / 8];
+         *writer = i;
+         writer += (bool)(byte & 1);
+         *writer = i + 1;
+         writer += (bool)(byte & 2);
+         *writer = i + 2;
+         writer += (bool)(byte & 4);
+         *writer = i + 3;
+         writer += (bool)(byte & 8);
+         *writer = i + 4;
+         writer += (bool)(byte & 16);
+         *writer = i + 5;
+         writer += (bool)(byte & 32);
+         *writer = i + 6;
+         writer += (bool)(byte & 64);
+         *writer = i + 7;
+         writer += (bool)(byte & 128);
+      }
+      for (;i<len; i++) {
+         size_t index0 = i+offset + arrayView->offset;
+         *writer = i;
+         writer += (bool)((validData[index0 / 8] >> (index0 % 8)) & 1);
+      }
+      return writer - nextSelVec;
+   }
+};
 
+class NotNullFilter : public lingodb::runtime::Filter {
+   public:
+   NotNullFilter() {}
+   size_t filter(size_t len, uint16_t* currSelVec, uint16_t* nextSelVec, const lingodb::runtime::ArrayView* arrayView, size_t offset) override {
+      if (arrayView->nullCount==0) {
+         //fast path: no nulls
+         std::memcpy(nextSelVec, currSelVec, len * sizeof(uint16_t));
+         return len;
+      }
+      const uint8_t* validData = reinterpret_cast<const uint8_t*>(arrayView->buffers[0]);
+      auto* writer = nextSelVec;
+      size_t len8 = len & ~7;
+      for (size_t i = 0; i < len8; i += 8) {
+         size_t index0 = currSelVec[i]+offset + arrayView->offset;
+         size_t index1 = currSelVec[i + 1]+offset + arrayView->offset;
+         size_t index2 = currSelVec[i + 2]+offset + arrayView->offset;
+         size_t index3 = currSelVec[i + 3]+offset + arrayView->offset;
+         size_t index4 = currSelVec[i + 4]+offset + arrayView->offset;
+         size_t index5 = currSelVec[i + 5]+offset + arrayView->offset;
+         size_t index6 = currSelVec[i + 6]+offset + arrayView->offset;
+         size_t index7 = currSelVec[i + 7]+offset + arrayView->offset;
+         *writer = currSelVec[i];
+         writer += (bool)((validData[index0 / 8] >> (index0 % 8)) & 1);
+         *writer = currSelVec[i + 1];
+         writer += (bool)((validData[index1 / 8] >> (index1 % 8)) & 1);
+         *writer = currSelVec[i + 2];
+         writer += (bool)((validData[index2 / 8] >> (index2 % 8)) & 1);
+         *writer = currSelVec[i + 3];
+         writer += (bool)((validData[index3 / 8] >> (index3 % 8)) & 1);
+         *writer = currSelVec[i + 4];
+         writer += (bool)((validData[index4 / 8] >> (index4 % 8)) & 1);
+         *writer = currSelVec[i + 5];
+         writer += (bool)((validData[index5 / 8] >> (index5 % 8)) & 1);
+         *writer = currSelVec[i + 6];
+         writer += (bool)((validData[index6 / 8] >> (index6 % 8)) & 1);
+         *writer = currSelVec[i + 7];
+         writer += (bool)((validData[index7 / 8] >> (index7 % 8)) & 1);
+      }
+      for (size_t i = len8; i < len; i++) {
+         size_t index0 = currSelVec[i];
+         *writer = index0;
+         writer += (bool)((validData[(index0 + offset + arrayView->offset) / 8] >> ((index0 + offset + arrayView->offset) % 8)) & 1);
+      }
+      return writer - nextSelVec;
+   }
+};
 template <class T, template <class> class CMP>
 class SimpleTypeFilter : public lingodb::runtime::Filter {
    T value;
@@ -154,6 +252,7 @@ std::unique_ptr<lingodb::runtime::Filter> createSimpleTypeFilter(lingodb::runtim
 }
 std::pair<size_t, uint16_t*> lingodb::runtime::Restrictions::applyFilters(size_t offset, size_t length, uint16_t* selVec1, uint16_t* selVec2, std::function<const ArrayView*(size_t)> getArrayView) {
    uint16_t* currentSelVec = selVec1;
+   assert(length <= BatchView::maxBatchSize);
    std::memcpy(currentSelVec, lingodb::runtime::BatchView::defaultSelectionVector.data(), length * sizeof(uint16_t));
    uint16_t* nextSelVec = selVec2;
    size_t currentLen = length;
@@ -163,6 +262,7 @@ std::pair<size_t, uint16_t*> lingodb::runtime::Restrictions::applyFilters(size_t
       const lingodb::runtime::ArrayView* arrayView = getArrayView(colId);
       currentLen = filter->filter(currentLen, currentSelVec, nextSelVec, arrayView, offset);
       std::swap(currentSelVec, nextSelVec);
+      assert(currentLen <= length);
    }
    assert(currentSelVec[currentLen - 1] < length);
    return {currentLen, currentSelVec};
@@ -175,12 +275,21 @@ std::unique_ptr<lingodb::runtime::Restrictions> lingodb::runtime::Restrictions::
       if (colId == static_cast<size_t>(-1)) {
          throw std::runtime_error("unknown column in filter");
       }
+      if (filterDesc.op==FilterOp::NOTNULL){
+         if (restrictions->filters.empty()){ //todo: this can go wrong if data is already prefiltered
+         restrictions->filters.push_back({std::make_unique<FirstNotNullFilter>(), colId});
+         }else {
+            restrictions->filters.push_back({std::make_unique<NotNullFilter>(), colId});
+         }
+         continue;
+      }
       auto type = schema.field(colId)->type();
       switch (type->id()) {
          case arrow::Type::FIXED_SIZE_BINARY: {
             auto fixedSizedType = std::static_pointer_cast<arrow::FixedSizeBinaryType>(type);
             if (fixedSizedType->byte_width() == 4) {
                std::string strVal = std::get<std::string>(filterDesc.value);
+               assert(strVal.size() <=4);
                int32_t intVal = 0;
                std::memcpy(&intVal, strVal.data(), std::min(sizeof(intVal), strVal.size()));
                restrictions->filters.push_back({createSimpleTypeFilter<int32_t>(filterDesc.op, intVal), colId});

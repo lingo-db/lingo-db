@@ -72,7 +72,8 @@ lingodb::runtime::DataSource* lingodb::runtime::DataSource::get(lingodb::runtime
             filterDesc.op = FilterOp::EQ;
          } else if (op == "neq") {
             filterDesc.op = FilterOp::NEQ;
-
+         } else if (op == "isnotnull") {
+            filterDesc.op = FilterOp::NOTNULL;
          } else {
             throw std::runtime_error("unsupported filter op");
          }
