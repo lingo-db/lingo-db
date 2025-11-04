@@ -7,55 +7,9 @@
 
 #include "json.h"
 #include <arrow/record_batch.h>
-
-namespace lingodb::compiler::dialect::relalg {
-void QueryGraph::print(llvm::raw_ostream& out) {
-   out << "QueryGraph:{\n";
-   out << "Nodes: [\n";
-   for (auto& n : nodes) {
-      out << "{" << n.id << ",";
-      n.op->print(out);
-      out << ", selectivity=" << n.selectivity;
-      out << ", predicates={";
-      for (auto op : n.additionalPredicates) {
-         op->print(out);
-         out << ",";
-      }
-
-      out << "}}";
-      out << "},\n";
-   }
-   out << "]\n";
-   out << "Joins: [\n";
-   for (auto& e : joins) {
-      out << "{ v=";
-      printReadable(e.left, out);
-      out << ", u=";
-      printReadable(e.right, out);
-      out << ", op=\n";
-      if (e.op) {
-         e.op->print(out);
-      }
-      out << ", selectivity=" << e.selectivity;
-
-      out << "},\n";
-   }
-   out << "]\n";
-   out << "Selections: [\n";
-   for (auto& e : selections) {
-      out << "{ required=";
-      printReadable(e.required, out);
-      out << ", op=\n";
-      if (e.op) {
-         e.op->print(out);
-      }
-      out << ", selectivity=" << e.selectivity;
-      out << "},\n";
-   }
-   out << "]\n";
-   out << "}\n";
-}
+namespace {
 std::unique_ptr<lingodb::compiler::support::eval::expr> buildConstant(mlir::Type type, std::variant<int64_t, double, std::string> parseArg) {
+   namespace db = lingodb::compiler::dialect::db;
    ::arrow::Type::type typeConstant = ::arrow::Type::type::NA;
    uint32_t param1 = 0, param2 = 0;
    if (isIntegerType(type, 1)) {
@@ -112,9 +66,58 @@ std::unique_ptr<lingodb::compiler::support::eval::expr> buildConstant(mlir::Type
    }
    assert(typeConstant != ::arrow::Type::type::NA);
 
-   auto parseResult = support::parse(parseArg, typeConstant, param1);
-   return support::eval::createLiteral(parseResult, std::make_tuple(typeConstant, param1, param2));
+   auto parseResult = lingodb::compiler::support::parse(parseArg, typeConstant, param1);
+   return lingodb::compiler::support::eval::createLiteral(parseResult, std::make_tuple(typeConstant, param1, param2));
 }
+} //namespace
+namespace lingodb::compiler::dialect::relalg {
+void QueryGraph::print(llvm::raw_ostream& out) {
+   out << "QueryGraph:{\n";
+   out << "Nodes: [\n";
+   for (auto& n : nodes) {
+      out << "{" << n.id << ",";
+      n.op->print(out);
+      out << ", selectivity=" << n.selectivity;
+      out << ", predicates={";
+      for (auto op : n.additionalPredicates) {
+         op->print(out);
+         out << ",";
+      }
+
+      out << "}}";
+      out << "},\n";
+   }
+   out << "]\n";
+   out << "Joins: [\n";
+   for (auto& e : joins) {
+      out << "{ v=";
+      printReadable(e.left, out);
+      out << ", u=";
+      printReadable(e.right, out);
+      out << ", op=\n";
+      if (e.op) {
+         e.op->print(out);
+      }
+      out << ", selectivity=" << e.selectivity;
+
+      out << "},\n";
+   }
+   out << "]\n";
+   out << "Selections: [\n";
+   for (auto& e : selections) {
+      out << "{ required=";
+      printReadable(e.required, out);
+      out << ", op=\n";
+      if (e.op) {
+         e.op->print(out);
+      }
+      out << ", selectivity=" << e.selectivity;
+      out << "},\n";
+   }
+   out << "]\n";
+   out << "}\n";
+}
+
 std::unique_ptr<lingodb::compiler::support::eval::expr> buildEvalExpr(mlir::Value val, llvm::DenseMap<const tuples::Column*, std::string>& mapping) {
    auto* op = val.getDefiningOp();
    if (!op) return support::eval::createInvalid();
@@ -215,7 +218,7 @@ std::optional<double> estimateUsingSample(QueryGraph::Node& n) {
       if (!sample) return {};
       std::vector<std::unique_ptr<lingodb::compiler::support::eval::expr>> expressions;
       if (baseTableOp->hasAttr("restriction")) {
-         auto restrictionsStr = baseTableOp->getAttr("restriction").cast<mlir::StringAttr>().getValue();
+         auto restrictionsStr = cast<mlir::StringAttr>(baseTableOp->getAttr("restriction")).getValue();
          auto restrictions = nlohmann::json::parse(restrictionsStr.str()).get<nlohmann::json::array_t>();
          for (auto& r : restrictions) {
             auto cmp = r["cmp"].get<std::string>();
@@ -335,7 +338,6 @@ void QueryGraph::estimate() {
             auto estimation = estimateUsingSample(node);
             if (estimation.has_value()) {
                node.selectivity = estimation.value();
-//               node.rows = node.selectivity * node.rows;
             } else {
                for (auto predicate : predicates) {
                   if (predicate.isEq) {
