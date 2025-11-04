@@ -5,8 +5,8 @@
 
 #include <functional>
 #include <memory>
-
 #include <variant>
+
 #include <arrow/type_fwd.h>
 
 namespace lingodb::runtime {
@@ -25,6 +25,12 @@ struct FilterDescription {
    size_t columnId;
    FilterOp op;
    std::variant<std::string, int64_t, double> value;
+   bool operator==(const FilterDescription& other) const noexcept {
+      return columnName == other.columnName &&
+         columnId == other.columnId &&
+         op == other.op &&
+         value == other.value;
+   }
 };
 struct ScanConfig {
    bool parallel;
@@ -42,4 +48,32 @@ class TableStorage {
    virtual ~TableStorage() = default;
 };
 } // namespace lingodb::runtime
+namespace std {
+
+template <>
+struct hash<lingodb::runtime::FilterDescription> {
+   size_t operator()(const lingodb::runtime::FilterDescription& f) const noexcept {
+      size_t h = 0;
+
+      // helper lambda to combine hashes
+      auto combine = [&h](auto const& v) {
+         std::hash<std::decay_t<decltype(v)>> hasher;
+         h ^= hasher(v) + 0x9e3779b9 + (h << 6) + (h >> 2);
+      };
+
+      combine(f.columnName);
+      combine(f.columnId);
+      combine(static_cast<std::underlying_type_t<lingodb::runtime::FilterOp>>(f.op));
+
+      std::visit([&](auto const& val) {
+         combine(val);
+      },
+                 f.value);
+
+      return h;
+   }
+};
+
+} // namespace std
+
 #endif //LINGODB_RUNTIME_STORAGE_TABLESTORAGE_H

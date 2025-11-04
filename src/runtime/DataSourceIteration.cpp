@@ -54,6 +54,7 @@ lingodb::runtime::DataSource* lingodb::runtime::DataSource::get(lingodb::runtime
    lingodb::runtime::ExecutionContext* executionContext = lingodb::runtime::getCurrentExecutionContext();
    nlohmann::json descr = nlohmann::json::parse(description.str());
    std::string tableName = descr["table"];
+   std::unordered_set<FilterDescription> uniqueRestrictions;
    std::vector<FilterDescription> restrictions;
    if (descr.contains("restrictions")) {
       for (auto r : descr["restrictions"].get<nlohmann::json::array_t>()) {
@@ -86,6 +87,10 @@ lingodb::runtime::DataSource* lingodb::runtime::DataSource::get(lingodb::runtime
          } else {
             throw std::runtime_error("unsupported filter value type");
          }
+         if (uniqueRestrictions.contains(filterDesc)) {
+            continue;
+         }
+         uniqueRestrictions.insert(filterDesc);
          restrictions.push_back(filterDesc);
       }
    }
