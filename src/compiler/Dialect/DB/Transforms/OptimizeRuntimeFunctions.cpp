@@ -3,7 +3,7 @@
 
 #include <iostream>
 
-#include "lingodb/compiler/Dialect/RelAlg/Passes.h"
+#include "lingodb/compiler/Dialect/DB/Passes.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include <optional>
@@ -107,39 +107,24 @@ class ReplaceFnWithFn : public mlir::RewritePattern {
       rewriter.replaceOpWithNewOp<db::RuntimeCall>(op, op->getResultTypes(), newFuncName, mlir::ValueRange{values});
    }
 };
-//Pattern that optimizes the join order
-class OptimizeRuntimeFunctions : public mlir::PassWrapper<OptimizeRuntimeFunctions, mlir::OperationPass<mlir::ModuleOp>> {
-   virtual llvm::StringRef getArgument() const override { return "db-optimize-runtime-functions"; }
-
-   public:
-   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(OptimizeRuntimeFunctions)
-   void runOnOperation() override {
-      //transform "standalone" aggregation functions
-      {
-         mlir::RewritePatternSet patterns(&getContext());
-         patterns.insert<ReplaceFnWithFn>(&getContext(), "ExtractFromDate", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("year"), std::make_shared<AnyMatcher>()}, "ExtractYearFromDate");
-         patterns.insert<ReplaceFnWithFn>(&getContext(), "ExtractFromDate", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("month"), std::make_shared<AnyMatcher>()}, "ExtractMonthFromDate");
-         patterns.insert<ReplaceFnWithFn>(&getContext(), "ExtractFromDate", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("day"), std::make_shared<AnyMatcher>()}, "ExtractDayFromDate");
-         patterns.insert<ReplaceFnWithFn>(&getContext(), "ExtractFromDate", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("hour"), std::make_shared<AnyMatcher>()}, "ExtractHourFromDate");
-         patterns.insert<ReplaceFnWithFn>(&getContext(), "ExtractFromDate", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("minute"), std::make_shared<AnyMatcher>()}, "ExtractMinuteFromDate");
-         patterns.insert<ReplaceFnWithFn>(&getContext(), "ExtractFromDate", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("second"), std::make_shared<AnyMatcher>()}, "ExtractSecondFromDate");
-
-         patterns.insert<ReplaceFnWithFn>(&getContext(), "DateDiff", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("second"), std::make_shared<AnyMatcher>(), std::make_shared<AnyMatcher>()}, "DateDiffSecond");
-         patterns.insert<ReplaceFnWithFn>(&getContext(), "DateDiff", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("minute"), std::make_shared<AnyMatcher>(), std::make_shared<AnyMatcher>()}, "DateDiffMinute");
-         patterns.insert<ReplaceFnWithFn>(&getContext(), "DateDiff", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("hour"), std::make_shared<AnyMatcher>(), std::make_shared<AnyMatcher>()}, "DateDiffHour");
-         patterns.insert<ReplaceFnWithFn>(&getContext(), "DateDiff", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("day"), std::make_shared<AnyMatcher>(), std::make_shared<AnyMatcher>()}, "DateDiffDay");
-
-         patterns.insert<ReplaceFnWithFn>(&getContext(), "Like", std::vector<std::shared_ptr<Matcher>>{std::make_shared<AnyMatcher>(), std::make_shared<ConstantDeterministicPatternMatcher>()}, "ConstLike");
-         if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
-            assert(false && "should not happen");
-         }
-      }
-   }
-};
 } // end anonymous namespace
 
 namespace lingodb::compiler::dialect::db {
 
-std::unique_ptr<mlir::Pass> createOptimizeRuntimeFunctionsPass() { return std::make_unique<OptimizeRuntimeFunctions>(); } // NOLINT(misc-use-internal-linkage)
+void addOptimizeRuntimeFunctionPatterns(mlir::RewritePatternSet& patterns) {
+   auto* ctxt = patterns.getContext();
+   patterns.insert<ReplaceFnWithFn>(ctxt, "ExtractFromDate", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("year"), std::make_shared<AnyMatcher>()}, "ExtractYearFromDate");
+   patterns.insert<ReplaceFnWithFn>(ctxt, "ExtractFromDate", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("month"), std::make_shared<AnyMatcher>()}, "ExtractMonthFromDate");
+   patterns.insert<ReplaceFnWithFn>(ctxt, "ExtractFromDate", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("day"), std::make_shared<AnyMatcher>()}, "ExtractDayFromDate");
+   patterns.insert<ReplaceFnWithFn>(ctxt, "ExtractFromDate", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("hour"), std::make_shared<AnyMatcher>()}, "ExtractHourFromDate");
+   patterns.insert<ReplaceFnWithFn>(ctxt, "ExtractFromDate", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("minute"), std::make_shared<AnyMatcher>()}, "ExtractMinuteFromDate");
+   patterns.insert<ReplaceFnWithFn>(ctxt, "ExtractFromDate", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("second"), std::make_shared<AnyMatcher>()}, "ExtractSecondFromDate");
 
+   patterns.insert<ReplaceFnWithFn>(ctxt, "DateDiff", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("second"), std::make_shared<AnyMatcher>(), std::make_shared<AnyMatcher>()}, "DateDiffSecond");
+   patterns.insert<ReplaceFnWithFn>(ctxt, "DateDiff", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("minute"), std::make_shared<AnyMatcher>(), std::make_shared<AnyMatcher>()}, "DateDiffMinute");
+   patterns.insert<ReplaceFnWithFn>(ctxt, "DateDiff", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("hour"), std::make_shared<AnyMatcher>(), std::make_shared<AnyMatcher>()}, "DateDiffHour");
+   patterns.insert<ReplaceFnWithFn>(ctxt, "DateDiff", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("day"), std::make_shared<AnyMatcher>(), std::make_shared<AnyMatcher>()}, "DateDiffDay");
+
+   patterns.insert<ReplaceFnWithFn>(ctxt, "Like", std::vector<std::shared_ptr<Matcher>>{std::make_shared<AnyMatcher>(), std::make_shared<ConstantDeterministicPatternMatcher>()}, "ConstLike");
+}
 } // end namespace lingodb::compiler::dialect::db

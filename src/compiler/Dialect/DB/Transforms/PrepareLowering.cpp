@@ -158,14 +158,14 @@ class SimplifyCompareISAPattern : public mlir::RewritePattern {
    }
 };
 //Pattern that optimizes the join order
-class EliminateNulls : public mlir::PassWrapper<EliminateNulls, mlir::OperationPass<mlir::ModuleOp>> {
-   virtual llvm::StringRef getArgument() const override { return "eliminate-nulls"; }
+class PrepareLowering : public mlir::PassWrapper<PrepareLowering, mlir::OperationPass<mlir::ModuleOp>> {
+   virtual llvm::StringRef getArgument() const override { return "db-prepare-lowering"; }
    void getDependentDialects(mlir::DialectRegistry& registry) const override {
       registry.insert<mlir::scf::SCFDialect>();
    }
 
    public:
-   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(EliminateNulls)
+   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(PrepareLowering)
    void runOnOperation() override {
       //transform "standalone" aggregation functions
       {
@@ -177,6 +177,7 @@ class EliminateNulls : public mlir::PassWrapper<EliminateNulls, mlir::OperationP
          patterns.insert<SimplifyCompareISAPattern>(&getContext());
          //patterns.insert<SimplifyNullableCondSkip>(&getContext());
          patterns.insert<WrapWithNullCheck>(&getContext());
+         lingodb::compiler::dialect::db::addOptimizeRuntimeFunctionPatterns(patterns);
          if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
             assert(false && "should not happen");
          }
@@ -185,4 +186,4 @@ class EliminateNulls : public mlir::PassWrapper<EliminateNulls, mlir::OperationP
 };
 } // end anonymous namespace
 
-std::unique_ptr<mlir::Pass> lingodb::compiler::dialect::db::createEliminateNullsPass() { return std::make_unique<EliminateNulls>(); } // NOLINT(misc-use-internal-linkage)
+std::unique_ptr<mlir::Pass> lingodb::compiler::dialect::db::createPrepareLoweringPass(){ return std::make_unique<PrepareLowering>(); } // NOLINT(misc-use-internal-linkage)

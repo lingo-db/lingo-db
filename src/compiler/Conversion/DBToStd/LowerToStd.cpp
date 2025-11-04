@@ -1193,16 +1193,12 @@ db::createLowerToStdPass() {
    return std::make_unique<DBToStdLoweringPass>();
 }
 void db::createLowerDBPipeline(mlir::OpPassManager& pm) {
-   pm.addPass(createEliminateNullsPass());
-   pm.addPass(createOptimizeRuntimeFunctionsPass());
+   pm.addPass(createPrepareLoweringPass());
    pm.addPass(createLowerToStdPass());
 }
 void db::registerDBConversionPasses() {
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
-      return createOptimizeRuntimeFunctionsPass();
-   });
-   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
-      return createEliminateNullsPass();
+      return createPrepareLoweringPass();
    });
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return createLowerToStdPass();
