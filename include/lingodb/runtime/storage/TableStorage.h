@@ -16,7 +16,8 @@ enum class FilterOp {
    LT,
    LTE,
    GT,
-   GTE
+   GTE,
+   NOTNULL
 
 };
 struct FilterDescription {
