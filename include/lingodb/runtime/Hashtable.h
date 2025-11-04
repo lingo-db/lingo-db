@@ -3,7 +3,9 @@
 #include "ThreadLocal.h"
 #include "lingodb/runtime/Buffer.h"
 #include "lingodb/runtime/helpers.h"
+
 namespace lingodb::runtime {
+struct HashtableIterator;
 class Hashtable {
    struct Entry {
       Entry* next;
@@ -15,20 +17,48 @@ class Hashtable {
    size_t hashMask;
    runtime::FlexibleBuffer values;
    size_t typeSize;
-   //initial value follows...
+   bool (*isEq)(uint8_t*, uint8_t*);
+
    Hashtable(size_t initialCapacity, size_t typeSize) : ht(initialCapacity * 2), hashMask(initialCapacity * 2 - 1), values(initialCapacity, typeSize), typeSize(typeSize) {}
 
    public:
    void resize();
+   void setEqFn(bool (*isEq)(uint8_t*, uint8_t*));
    Entry* insert(size_t hash);
-   static void lock(Entry* entry, size_t subtract);
-   static void unlock(Entry* entry, size_t subtract);
+   bool contains(size_t hash, uint8_t* keyVal);
+   uint8_t* lookup(size_t hash, uint8_t* keyVal);
+   uint8_t* lookUpOrInsert(size_t hash, uint8_t* keyVal);
    static Hashtable* create(size_t typeSize, size_t initialCapacity);
    static void destroy(Hashtable*);
+   size_t size();
    void mergeEntries(bool (*isEq)(uint8_t*, uint8_t*), void (*merge)(uint8_t*, uint8_t*), Hashtable* other);
    static runtime::Hashtable* merge(ThreadLocal*, bool (*eq)(uint8_t*, uint8_t*), void (*combine)(uint8_t*, uint8_t*));
 
    runtime::BufferIterator* createIterator();
+
+   static HashtableIterator* createHtIterator(Hashtable* ht);
+
+   friend struct HashtableIterator;
+};
+//allows iterating over the single elements of a hashtable using the BufferIterator interface
+struct HashtableIterator {
+   runtime::BufferIterator* bufferIt;
+   size_t typeSize;
+   size_t currPosInBuffer;
+   runtime::Buffer currBuffer;
+   bool valid;
+   HashtableIterator(runtime::BufferIterator* bufferIt, size_t typeSize)
+      : bufferIt(bufferIt), typeSize(typeSize), currPosInBuffer(0), currBuffer({0, 0}), valid(false) {
+      if (bufferIt->isValid()) {
+         currBuffer = bufferIt->getCurrentBuffer();
+         valid = currPosInBuffer * typeSize < currBuffer.numElements;
+      } else {
+         valid = false;
+      }
+   }
+   bool isValid();
+   void next();
+   uint8_t* getCurrent();
 };
 
 } // end namespace lingodb::runtime

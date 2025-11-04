@@ -88,17 +88,98 @@ void lingodb::runtime::Hashtable::mergeEntries(bool (*isEq)(uint8_t*, uint8_t*),
 
    //todo migrate buffers?
 }
-void lingodb::runtime::Hashtable::lock(lingodb::runtime::Hashtable::Entry* entry, size_t subtract) {
-   entry = reinterpret_cast<Entry*>(reinterpret_cast<uint8_t*>(entry) - subtract);
-   uintptr_t& nextPtr = reinterpret_cast<uintptr_t&>(entry->next);
-   std::atomic_ref<uintptr_t> l(nextPtr);
-   uintptr_t mask = 0xffff000000000000;
-   while (l.exchange(nextPtr | mask) & mask) {
+
+uint8_t* lingodb::runtime::Hashtable::lookup(size_t hash, uint8_t* keyVal) {
+   //try to find an existing entry
+   auto pos = hash & hashMask;
+   auto* candidate = ht.at(pos);
+   candidate = lingodb::runtime::filterTagged(candidate, hash);
+   while (candidate) {
+      if (candidate->hashValue == hash) {
+         auto* candidateContent = reinterpret_cast<uint8_t*>(&candidate->content);
+         if (isEq(candidateContent, keyVal)) {
+            return &candidate->content[0];
+         }
+      }
+      candidate = candidate->next;
+   }
+   throw std::runtime_error("Hashtable: lookup failed, no entry found for hash " + std::to_string(hash));
+}
+
+uint8_t* lingodb::runtime::Hashtable::lookUpOrInsert(size_t hash, uint8_t* keyVal) {
+   //try to find an existing entry
+   auto pos = hash & hashMask;
+   auto* candidate = ht.at(pos);
+   candidate = lingodb::runtime::filterTagged(candidate, hash);
+   while (candidate) {
+      if (candidate->hashValue == hash) {
+         auto* candidateContent = reinterpret_cast<uint8_t*>(&candidate->content);
+         if (isEq(candidateContent, keyVal)) {
+            return &candidate->content[0];
+         }
+      }
+      candidate = candidate->next;
+   }
+   //not found, insert a new entry
+   return &insert(hash)->content[0];
+}
+
+size_t lingodb::runtime::Hashtable::size() {
+   return values.getLen();
+}
+
+void lingodb::runtime::Hashtable::setEqFn(bool (*isEq)(uint8_t*, uint8_t*)) {
+   this->isEq = isEq;
+}
+
+bool lingodb::runtime::Hashtable::contains(size_t hash, uint8_t* keyVal) {
+   //try to find an existing entry
+   auto pos = hash & hashMask;
+   auto* candidate = ht.at(pos);
+   candidate = lingodb::runtime::filterTagged(candidate, hash);
+   while (candidate) {
+      if (candidate->hashValue == hash) {
+         auto* candidateContent = reinterpret_cast<uint8_t*>(&candidate->content);
+         if (isEq(candidateContent, keyVal)) {
+            return true;
+         }
+      }
+      candidate = candidate->next;
+   }
+   return false;
+}
+
+bool lingodb::runtime::HashtableIterator::isValid() {
+   return valid;
+}
+
+void lingodb::runtime::HashtableIterator::next() {
+   if (!valid) {
+      throw std::runtime_error("HashtableIterator: next called on invalid iterator");
+   }
+   currPosInBuffer++;
+   if (currPosInBuffer * typeSize >= currBuffer.numElements) {
+      bufferIt->next();
+      if (bufferIt->isValid()) {
+         currBuffer = bufferIt->getCurrentBuffer();
+         currPosInBuffer = 0;
+         valid = currPosInBuffer * typeSize < currBuffer.numElements;
+      } else {
+         valid = false;
+      }
    }
 }
-void lingodb::runtime::Hashtable::unlock(lingodb::runtime::Hashtable::Entry* entry, size_t subtract) {
-   entry = reinterpret_cast<Entry*>(reinterpret_cast<uint8_t*>(entry) - subtract);
-   uintptr_t& nextPtr = reinterpret_cast<uintptr_t&>(entry->next);
-   std::atomic_ref<uintptr_t> l(nextPtr);
-   l.store(nextPtr & ~0xffff000000000000);
+
+lingodb::runtime::HashtableIterator* lingodb::runtime::Hashtable::createHtIterator(Hashtable* ht) {
+   auto* bufferIt = ht->values.createIterator();
+   auto* it = new HashtableIterator(bufferIt, ht->typeSize);
+   runtime::getCurrentExecutionContext()->registerState({it, [](void* ptr) { delete reinterpret_cast<HashtableIterator*>(ptr); }});
+   return it;
+}
+
+uint8_t* lingodb::runtime::HashtableIterator::getCurrent() {
+   if (!valid) {
+      throw std::runtime_error("HashtableIterator: getCurrent called on invalid iterator");
+   }
+   return &reinterpret_cast<Hashtable::Entry*>(&currBuffer.ptr[currPosInBuffer * typeSize])->content[0];
 }

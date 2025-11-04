@@ -74,6 +74,14 @@ MLIR_CAPI_EXPORTED MlirType mlirDBListTypeGet(MlirType elementType);
 MLIR_CAPI_EXPORTED MlirTypeID mlirDBListTypeGetTypeID();
 MLIR_CAPI_EXPORTED bool mlirTypeIsADBListType(MlirType type);
 
+MLIR_CAPI_EXPORTED MlirType mlirDBDictTypeGet(MlirType keyType, MlirType valueType);
+MLIR_CAPI_EXPORTED MlirTypeID mlirDBDictTypeGetTypeID();
+MLIR_CAPI_EXPORTED bool mlirTypeIsADBDictType(MlirType type);
+
+MLIR_CAPI_EXPORTED MlirType mlirDBDictIterTypeGet(MlirType keyType, MlirType valueType);
+MLIR_CAPI_EXPORTED MlirTypeID mlirDBDictIterTypeGetTypeID();
+MLIR_CAPI_EXPORTED bool mlirTypeIsADBDictIterType(MlirType type);
+
 //----------------------------------------------------------------------------------------------------------------------
 // RelAlg Dialect
 //----------------------------------------------------------------------------------------------------------------------
