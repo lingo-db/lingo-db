@@ -4,6 +4,7 @@
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "lingodb/compiler/Dialect/RelAlg/Passes.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
+#include "lingodb/utility/Setting.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 #include "lingodb/compiler/Dialect/RelAlg/Transforms/ColumnCreatorAnalysis.h"
@@ -13,6 +14,7 @@
 
 #include "json.h"
 namespace {
+lingodb::utility::GlobalSetting<bool> pushdownRestrictions("system.opt.pushdown_restrictions", true);
 using namespace lingodb::compiler::dialect;
 bool isNotNullCheckOnColumn(relalg::ColumnSet relevantColumns, relalg::SelectionOp selectionOp) {
    if (selectionOp.getPredicate().empty()) return false;
@@ -387,6 +389,10 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
                        return topush;
                     })
                     .Case<relalg::BaseTableOp>([&](relalg::BaseTableOp baseTableOp) -> Operator {
+                       if (!pushdownRestrictions.getValue()) {
+                          topush.setChildren({baseTableOp});
+                          return topush;
+                       }
                        auto successful = tryPushdownIntoBasetable(mlir::cast<relalg::SelectionOp>(topush.getOperation()), baseTableOp);
                        if (successful) {
                           topush->dropAllReferences();
