@@ -168,6 +168,26 @@ bool mlirTypeIsADBListType(MlirType type) {
    return llvm::isa<db::ListType>(unwrap(type));
 }
 
+MlirType mlirDBDictTypeGet(MlirType keyType, MlirType valueType) {
+   return wrap(db::DictType::get(unwrap(keyType).getContext(), unwrap(keyType), unwrap(valueType)));
+}
+MlirTypeID mlirDBDictTypeGetTypeID() {
+   return wrap(db::DictType::getTypeID());
+}
+bool mlirTypeIsADBDictType(MlirType type) {
+   return llvm::isa<db::DictType>(unwrap(type));
+}
+
+MlirType mlirDBDictIterTypeGet(MlirType keyType, MlirType valueType) {
+   return wrap(db::DictIterType::get(unwrap(keyType).getContext(), unwrap(keyType), unwrap(valueType)));
+}
+MlirTypeID mlirDBDictIterTypeGetTypeID() {
+   return wrap(db::DictIterType::getTypeID());
+}
+bool mlirTypeIsADBDictIterType(MlirType type) {
+   return llvm::isa<db::DictIterType>(unwrap(type));
+}
+
 //----------------------------------------------------------------------------------------------------------------------
 // RelAlg Dialect
 //----------------------------------------------------------------------------------------------------------------------

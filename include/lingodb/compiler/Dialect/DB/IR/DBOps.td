@@ -133,7 +133,18 @@ def ListType: DB_Type<"List", "list">{
   let parameters = (ins "mlir::Type":$elementType);
   let assemblyFormat = "`<` $elementType `>`";
 }
-
+def DictType : DB_Type<"Dict", "dict">{
+  let parameters = (ins "mlir::Type":$keyType, "mlir::Type":$valueType);
+  let assemblyFormat = "`<` $keyType `,` $valueType `>`";
+}
+def DictIterType : DB_Type<"DictIter", "dict_iter"> {
+    let summary = "dict iterator";
+    let description = [{
+        Iterator over a dict, yielding key-value pairs.
+    }];
+    let parameters = (ins "mlir::Type":$keyType, "mlir::Type":$valueType);
+    let assemblyFormat = "`<` $keyType `,` $valueType `>`";
+}
 
 def AnyBool: AnyTypeOf<[I1,NullableType]>;
 def NullableDBType: AnyTypeOf<[AnyType,NullableType]>;
@@ -182,6 +193,74 @@ def ListLengthOp : DB_Op<"list_length", []> {
     let arguments = (ins ListType:$list);
     let results = (outs Index:$length);
     let assemblyFormat = "$list `:` type($list) attr-dict";
+}
+
+def CreateDictOp : DB_Op<"create_dict", []> {
+    let summary = "Create dict";
+    let arguments =(ins SymbolRefAttr:$cmpKeyFn);
+    let results = (outs DictType:$dict);
+    let assemblyFormat = "$cmpKeyFn `->` type($dict) attr-dict";
+}
+def DB_DictGetOp : DB_Op<"dict_get", []> {
+    let summary = "Get value from dict";
+
+    let arguments = (ins DictType:$dict, AnyType:$key, Index: $hash);
+    let results = (outs AnyType:$value);
+    let assemblyFormat = "$dict `:` type($dict) `[` $key `:` type($key) `->` $hash`]` `:` type($value) attr-dict";
+}
+def DB_DictSetOp : DB_Op<"dict_set", []> {
+    let summary = "Set value in dict";
+
+    let arguments = (ins DictType:$dict, AnyType:$key, Index: $hash,  AnyType:$value);
+    let assemblyFormat = "$dict `:` type($dict) `[` $key `:` type($key)  `->` $hash `]` `=` $value `:` type($value) attr-dict";
+}
+def DB_DictLengthOp : DB_Op<"dict_length", []> {
+    let summary = "Get length of dict";
+
+    let arguments = (ins DictType:$dict);
+    let results = (outs Index:$length);
+    let assemblyFormat = "$dict `:` type($dict) attr-dict";
+}
+def DB_DictGetIter : DB_Op<"dict_get_iter", []> {
+
+    let summary = "Get iterator over dict";
+    let arguments = (ins DictType:$dict);
+    let results = (outs DictIterType:$iter);
+    let assemblyFormat = "$dict `:` type($dict) `->` type($iter) attr-dict";
+}
+def DB_DictIterGetKey : DB_Op<"dict_iter_get_key", []> {
+    let summary = "Get key from dict iterator";
+
+    let arguments = (ins DictIterType:$iter);
+    let results = (outs AnyType:$key);
+    let assemblyFormat = "$iter `:` type($iter) `->` type($key) attr-dict";
+}
+def DB_DictIterGetValue : DB_Op<"dict_iter_get_value", []> {
+    let summary = "Get value from dict iterator";
+
+    let arguments = (ins DictIterType:$iter);
+    let results = (outs AnyType:$value);
+    let assemblyFormat = "$iter `:` type($iter) `->` type($value) attr-dict";
+}
+def DB_DictIterNext : DB_Op<"dict_iter_next", []> {
+    let summary = "Move to next element in dict iterator";
+
+    let arguments = (ins DictIterType:$iter);
+    let assemblyFormat = "$iter `:` type($iter) attr-dict";
+}
+def DB_DictIterValid : DB_Op<"dict_iter_valid", []> {
+    let summary = "Check whether dict iterator is valid";
+
+    let arguments = (ins DictIterType:$iter);
+    let results = (outs I1:$isValid);
+    let assemblyFormat = "$iter `:` type($iter) attr-dict";
+}
+def DB_DictContainsOp : DB_Op<"dict_contains", []> {
+    let summary = "Check whether dict contains key";
+
+    let arguments = (ins DictType:$dict, AnyType:$key, Index: $hash);
+    let results = (outs I1:$contains);
+    let assemblyFormat = "$dict `:` type($dict) `[` $key `:` type($key) `->` $hash `]` attr-dict";
 }
 
 def DB_NullOp : DB_Op<"null", [Pure]> {

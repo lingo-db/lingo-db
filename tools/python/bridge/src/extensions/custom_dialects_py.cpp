@@ -133,6 +133,20 @@ NB_MODULE(mlir_lingodb, m) {
             return cls(mlirDBListTypeGet(elementType));
          },
          nb::arg("cls"), nb::arg("elementType"));
+   mlir::python::nanobind_adaptors::mlir_type_subclass(dbModule, "DictType", mlirTypeIsADBDictType, mlirDBDictTypeGetTypeID)
+      .def_classmethod(
+         "get",
+         [](nb::object cls, MlirType keyType, MlirType valueType) {
+            return cls(mlirDBDictTypeGet(keyType, valueType));
+         },
+         nb::arg("cls"), nb::arg("keyType"), nb::arg("valueType"));
+   mlir::python::nanobind_adaptors::mlir_type_subclass(dbModule, "DictIterType", mlirTypeIsADBDictIterType, mlirDBDictIterTypeGetTypeID)
+      .def_classmethod(
+         "get",
+         [](nb::object cls, MlirType keyType, MlirType valueType) {
+            return cls(mlirDBDictIterTypeGet(keyType, valueType));
+         },
+         nb::arg("cls"), nb::arg("keyType"), nb::arg("valueType"));
    //----------------------------------------------------------------------------------------------------------------------
    // RelAlg Dialect
    //----------------------------------------------------------------------------------------------------------------------

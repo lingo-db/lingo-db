@@ -10,6 +10,7 @@ add_mlir_conversion_library(MLIRDBToArrowStd
         list-rt-defs
         date-rt-defs
         decimal-rt-defs
+        ht-rt-defs
         LINK_COMPONENTS
         Core
 
