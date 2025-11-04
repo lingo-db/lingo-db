@@ -18,6 +18,6 @@ class Restrictions {
    std::pair<size_t, uint16_t*> applyFilters(size_t offset, size_t length, uint16_t* selVec1, uint16_t* selVec2, std::function<const ArrayView*(size_t)> getArrayView);
    static std::unique_ptr<Restrictions> create(std::vector<FilterDescription> filterDescs, const arrow::Schema& schema);
 };
-};
+} // namespace lingodb::runtime
 
 #endif //LINGODB_RUNTIME_STORAGE_RESTRICTIONS_H

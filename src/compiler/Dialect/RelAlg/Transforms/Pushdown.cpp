@@ -161,8 +161,8 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
    }
    bool getColumnName(mlir::Value val, relalg::BaseTableOp baseTableOp, std::string& outColumnName, bool& nullable) {
       auto getColOp = mlir::dyn_cast_or_null<tuples::GetColumnOp>(val.getDefiningOp());
-      if (auto castOp= mlir::dyn_cast_or_null<db::CastOp>(val.getDefiningOp())){
-         if (mlir::isa<db::StringType>(castOp.getType())&&mlir::isa<db::CharType>(castOp.getVal().getType())) {
+      if (auto castOp = mlir::dyn_cast_or_null<db::CastOp>(val.getDefiningOp())) {
+         if (mlir::isa<db::StringType>(castOp.getType()) && mlir::isa<db::CharType>(castOp.getVal().getType())) {
             getColOp = mlir::dyn_cast_or_null<tuples::GetColumnOp>(castOp.getVal().getDefiningOp());
          }
       }
@@ -196,7 +196,7 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
    bool appendRestrictions(relalg::BaseTableOp baseTableOp, nlohmann::json::array_t restrictions) {
       nlohmann::json::array_t existingRestrictions;
       if (baseTableOp->hasAttr("restriction")) {
-         auto existingRestrictionsStr = baseTableOp->getAttr("restriction").cast<mlir::StringAttr>().getValue();
+         auto existingRestrictionsStr = cast<mlir::StringAttr>(baseTableOp->getAttr("restriction")).getValue();
          existingRestrictions = nlohmann::json::parse(existingRestrictionsStr.str()).get<nlohmann::json::array_t>();
       }
       for (auto& r : restrictions) {
@@ -227,9 +227,9 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
          }
       }
       if (auto condOp = mlir::dyn_cast_or_null<db::CmpOp>(returnOp.getResults()[0].getDefiningOp())) {
-         if (getBaseType(condOp.getLeft().getType())!=getBaseType(condOp.getRight().getType())) return false;
-         auto left = condOp.getLeft().getDefiningOp();
-         auto right = condOp.getRight().getDefiningOp();
+         if (getBaseType(condOp.getLeft().getType()) != getBaseType(condOp.getRight().getType())) return false;
+         auto* left = condOp.getLeft().getDefiningOp();
+         auto* right = condOp.getRight().getDefiningOp();
          if (!left || !right) return false;
          nlohmann::json constValue;
          std::string columnName;
@@ -243,11 +243,11 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
             // right is column, left is constant
             // reverse cmp mode
             cmpMode = reverseCmpMode(cmpMode);
-         }else{
+         } else {
             return false;
          }
-         assert (!columnName.empty() && "one side must be column");
-         if (colNullable){
+         assert(!columnName.empty() && "one side must be column");
+         if (colNullable) {
             appendRestrictions(baseTableOp, nlohmann::json::array_t{{
                                                {"column", columnName},
                                                {"cmp", "isnotnull"},
@@ -266,12 +266,12 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
          nlohmann::json lowerConst;
          nlohmann::json upperConst;
          bool colNullable;
-         if (betweenOp.getVal().getType()!=betweenOp.getLower().getType()) return false;
-         if (betweenOp.getVal().getType()!=betweenOp.getUpper().getType()) return false;
+         if (betweenOp.getVal().getType() != betweenOp.getLower().getType()) return false;
+         if (betweenOp.getVal().getType() != betweenOp.getUpper().getType()) return false;
          if (getColumnName(betweenOp.getVal(), baseTableOp, columnName, colNullable) &&
              getConstant(betweenOp.getLower(), lowerConst) &&
              getConstant(betweenOp.getUpper(), upperConst)) {
-            if (colNullable){
+            if (colNullable) {
                appendRestrictions(baseTableOp, nlohmann::json::array_t{{
                                                   {"column", columnName},
                                                   {"cmp", "isnotnull"},
