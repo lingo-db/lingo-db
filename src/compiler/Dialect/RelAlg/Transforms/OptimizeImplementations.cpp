@@ -395,7 +395,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                auto firstStream = selections[selections.size() - 1].getRel();
                relalg::BaseTableOp baseTableOp = mlir::dyn_cast_or_null<relalg::BaseTableOp>(selections[selections.size() - 1].getRel().getDefiningOp());
                if (baseTableOp) {
-                  std::unordered_map<const tuples::Column*, std::string> mapping;
+                  llvm::DenseMap<const tuples::Column*, std::string> mapping;
                   for (auto c : baseTableOp.getColumns()) {
                      mapping[&mlir::cast<tuples::ColumnDefAttr>(c.getValue()).getColumn()] = c.getName().str();
                   }

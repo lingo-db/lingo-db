@@ -269,7 +269,7 @@ class ReuseHashtable : public mlir::RewritePattern {
             for (auto m : keyMembers) {
                hashedColumns.push_back(&insertOp.getMapping().getColumnRef(m).getColumn());
             }
-            std::unordered_map<subop::Member, subop::Member> memberMapping;
+            llvm::DenseMap<subop::Member, subop::Member> memberMapping;
             for (auto m : insertOp.getMapping().getMapping()) {
                auto colDef = colManager.createDef(&m.second.getColumn());
                auto hmMember = scanOp.getMapping().getMember(colDef);
@@ -279,7 +279,7 @@ class ReuseHashtable : public mlir::RewritePattern {
                }
             }
             std::unordered_set<tuples::Column*> hashMapKey;
-            std::unordered_map<subop::Member, tuples::Column*> keyMemberToColumn;
+            llvm::DenseMap<subop::Member, tuples::Column*> keyMemberToColumn;
             auto htKeyMembers = htType.getKeyMembers().getMembers();
             for (auto keyMember : htKeyMembers) {
                auto colDef = scanOp.getMapping().getColumnDef(keyMember);
@@ -313,7 +313,7 @@ class ReuseHashtable : public mlir::RewritePattern {
                   lookupHashedColumns.push_back(&mlir::cast<tuples::ColumnRefAttr>(c).getColumn());
                }
                if (lookupHashedColumns.size() != hashedColumns.size()) return mlir::failure();
-               std::unordered_map<tuples::Column*, tuples::Column*> columnMapping;
+               llvm::DenseMap<tuples::Column*, tuples::Column*> columnMapping;
                for (auto z : llvm::zip(lookupHashedColumns, hashedColumns)) {
                   columnMapping.insert({std::get<1>(z), std::get<0>(z)});
                }

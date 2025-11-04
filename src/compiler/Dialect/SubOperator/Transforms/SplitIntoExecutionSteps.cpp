@@ -19,8 +19,8 @@ class SplitIntoExecutionSteps : public mlir::PassWrapper<SplitIntoExecutionSteps
    void runOnOperation() override {
       // Step 1: split into different streams
       getOperation()->walk([&](subop::ExecutionGroupOp executionGroup) {
-         std::unordered_map<mlir::Operation*, std::vector<mlir::Operation*>> steps;
-         std::unordered_map<mlir::Operation*, mlir::Operation*> opToStep;
+         llvm::DenseMap<mlir::Operation*, std::vector<mlir::Operation*>> steps;
+         llvm::DenseMap<mlir::Operation*, mlir::Operation*> opToStep;
          for (mlir::Operation& op : executionGroup.getSubOps().front()) {
             if (mlir::isa<subop::ExecutionGroupReturnOp>(op)) {
                continue;
@@ -45,14 +45,14 @@ class SplitIntoExecutionSteps : public mlir::PassWrapper<SplitIntoExecutionSteps
          }
          // Step 2: collect required/produced state for each step
          // -> also deal with GetLocal operations (that do belong to the same step that accesses the state)
-         std::unordered_map<mlir::Operation*, std::vector<std::tuple<mlir::Value, mlir::Value>>> requiredState;
-         std::unordered_map<mlir::Operation*, std::vector<mlir::Value>> producedState;
+         llvm::DenseMap<mlir::Operation*, std::vector<std::tuple<mlir::Value, mlir::Value>>> requiredState;
+         llvm::DenseMap<mlir::Operation*, std::vector<mlir::Value>> producedState;
          enum Kind {
             READ,
             WRITE
          };
 
-         std::unordered_map<subop::Member, std::vector<std::tuple<subop::SubOperator, mlir::Operation*, Kind>>> memberUsage;
+         llvm::DenseMap<subop::Member, std::vector<std::tuple<subop::SubOperator, mlir::Operation*, Kind>>> memberUsage;
          for (auto& step : steps) {
             for (auto* op : step.second) {
                for (auto result : op->getResults()) {
@@ -85,7 +85,7 @@ class SplitIntoExecutionSteps : public mlir::PassWrapper<SplitIntoExecutionSteps
                });
             }
          }
-         std::unordered_map<mlir::Operation*, std::unordered_set<mlir::Operation*>> dependencies;
+         llvm::DenseMap<mlir::Operation*, std::unordered_set<mlir::Operation*>> dependencies;
          for (auto& [step, vals] : requiredState) {
             for (auto val : vals) {
                if (auto* producer = std::get<0>(val).getDefiningOp()) {
@@ -132,7 +132,7 @@ class SplitIntoExecutionSteps : public mlir::PassWrapper<SplitIntoExecutionSteps
          }
 
          // Step 4: create ExecutionStepOps in correct order and handle states
-         std::unordered_map<mlir::Operation*, size_t> dependCount;
+         llvm::DenseMap<mlir::Operation*, size_t> dependCount;
          std::queue<mlir::Operation*> queue;
          llvm::DenseMap<mlir::Value, mlir::Value> stateMapping;
 
@@ -142,7 +142,7 @@ class SplitIntoExecutionSteps : public mlir::PassWrapper<SplitIntoExecutionSteps
                queue.push(step);
             }
          }
-         std::unordered_map<mlir::Operation*, std::unordered_set<mlir::Operation*>> inverseDependencies;
+         llvm::DenseMap<mlir::Operation*, std::unordered_set<mlir::Operation*>> inverseDependencies;
          for (auto& [a, b] : dependencies) {
             for (auto* c : b) {
                inverseDependencies[c].insert(a);

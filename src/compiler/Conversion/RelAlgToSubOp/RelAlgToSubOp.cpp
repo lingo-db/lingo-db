@@ -375,7 +375,7 @@ class MaterializationHelper {
    DefMappingCollector defMapping;
    RefMappingCollector refMapping;
    MemberCollector members;
-   std::unordered_map<const tuples::Column*, size_t> colToMemberPos;
+   llvm::DenseMap<const tuples::Column*, size_t> colToMemberPos;
    mlir::MLIRContext* context;
    subop::MemberManager& memberManager;
 
@@ -2011,8 +2011,8 @@ void performAggrFuncReduce(mlir::Location loc, mlir::OpBuilder& rewriter, std::v
    mlir::Block* reduceBlock = new Block;
    mlir::Block* combineBlock = new Block;
    std::vector<mlir::Attribute> relevantColumns;
-   std::unordered_map<tuples::Column*, mlir::Value> stateMap;
-   std::unordered_map<tuples::Column*, mlir::Value> argMap;
+   llvm::DenseMap<tuples::Column*, mlir::Value> stateMap;
+   llvm::DenseMap<tuples::Column*, mlir::Value> argMap;
    for (auto aggrFn : distAggrFuncs) {
       auto sourceColumn = aggrFn->getSourceAttribute();
       if (sourceColumn) {
@@ -2138,7 +2138,7 @@ class WindowLowering : public OpConversionPattern<relalg::WindowOp> {
 
    void analyze(relalg::WindowOp windowOp, AnalyzedWindow& analyzedWindow) const {
       tuples::ReturnOp terminator = mlir::cast<tuples::ReturnOp>(windowOp.getAggrFunc().front().getTerminator());
-      std::unordered_map<mlir::Operation*, std::pair<relalg::OrderedAttributes, std::vector<std::shared_ptr<DistAggrFunc>>>> distinct;
+      llvm::DenseMap<mlir::Operation*, std::pair<relalg::OrderedAttributes, std::vector<std::shared_ptr<DistAggrFunc>>>> distinct;
       distinct.insert({nullptr, {relalg::OrderedAttributes::fromVec({}), {}}});
       for (size_t i = 0; i < windowOp.getComputedCols().size(); i++) {
          auto destColumnAttr = mlir::cast<tuples::ColumnDefAttr>(windowOp.getComputedCols()[i]);
@@ -2173,7 +2173,7 @@ class WindowLowering : public OpConversionPattern<relalg::WindowOp> {
                   distinct[tupleStream.getDefiningOp()] = {relalg::OrderedAttributes::fromRefArr(projectionOp.getCols()), {}};
                }
             }
-            distinct.at(tupleStream.getDefiningOp()).second.push_back(distAggrFunc);
+            distinct[tupleStream.getDefiningOp()].second.push_back(distAggrFunc);
          }
       };
       for (auto d : distinct) {
@@ -2340,7 +2340,7 @@ class WindowLowering : public OpConversionPattern<relalg::WindowOp> {
 
    std::tuple<Value, subop::ColumnDefMemberMappingAttr> buildSegmentTree(Location loc, ConversionPatternRewriter& rewriter, std::vector<std::shared_ptr<DistAggrFunc>> aggrFuncs, Value continuousView, subop::ColumnDefMemberMappingAttr continuousViewMapping) const {
       llvm::SmallVector<Attribute> relevantMembers;
-      std::unordered_map<tuples::Column*, mlir::Value> stateMap;
+      llvm::DenseMap<tuples::Column*, mlir::Value> stateMap;
       auto* initBlock = new Block;
       {
          std::vector<mlir::Value> initialValues;
@@ -2495,7 +2495,7 @@ class AggregationLowering : public OpConversionPattern<relalg::AggregationOp> {
 
    void analyze(relalg::AggregationOp aggregationOp, AnalyzedAggregation& analyzedAggregation) const {
       tuples::ReturnOp terminator = mlir::cast<tuples::ReturnOp>(aggregationOp.getAggrFunc().front().getTerminator());
-      std::unordered_map<mlir::Operation*, std::pair<relalg::OrderedAttributes, std::vector<std::shared_ptr<DistAggrFunc>>>> distinct;
+      llvm::DenseMap<mlir::Operation*, std::pair<relalg::OrderedAttributes, std::vector<std::shared_ptr<DistAggrFunc>>>> distinct;
       distinct.insert({nullptr, {relalg::OrderedAttributes::fromVec({}), {}}});
       for (size_t i = 0; i < aggregationOp.getComputedCols().size(); i++) {
          auto destColumnAttr = mlir::cast<tuples::ColumnDefAttr>(aggregationOp.getComputedCols()[i]);
@@ -2535,7 +2535,7 @@ class AggregationLowering : public OpConversionPattern<relalg::AggregationOp> {
                distinct[tupleStream.getDefiningOp()] = {relalg::OrderedAttributes::fromRefArr(projectionOp.getCols()), {}};
             }
          }
-         distinct.at(tupleStream.getDefiningOp()).second.push_back(distAggrFunc);
+         distinct[tupleStream.getDefiningOp()].second.push_back(distAggrFunc);
       };
       for (auto d : distinct) {
          analyzedAggregation.distAggrFuncs.push_back({d.second.first, d.second.second});
@@ -2623,7 +2623,7 @@ class GroupJoinLowering : public OpConversionPattern<relalg::GroupJoinOp> {
 
    void analyze(relalg::GroupJoinOp groupJoinOp, AnalyzedAggregation& analyzedAggregation) const {
       tuples::ReturnOp terminator = mlir::cast<tuples::ReturnOp>(groupJoinOp.getAggrFunc().front().getTerminator());
-      std::unordered_map<mlir::Operation*, std::pair<relalg::OrderedAttributes, std::vector<std::shared_ptr<DistAggrFunc>>>> distinct;
+      llvm::DenseMap<mlir::Operation*, std::pair<relalg::OrderedAttributes, std::vector<std::shared_ptr<DistAggrFunc>>>> distinct;
       distinct.insert({nullptr, {relalg::OrderedAttributes::fromVec({}), {}}});
       for (size_t i = 0; i < groupJoinOp.getComputedCols().size(); i++) {
          auto destColumnAttr = mlir::cast<tuples::ColumnDefAttr>(groupJoinOp.getComputedCols()[i]);
@@ -2655,7 +2655,7 @@ class GroupJoinLowering : public OpConversionPattern<relalg::GroupJoinOp> {
                distinct[tupleStream.getDefiningOp()] = {relalg::OrderedAttributes::fromRefArr(projectionOp.getCols()), {}};
             }
          }
-         distinct.at(tupleStream.getDefiningOp()).second.push_back(distAggrFunc);
+         distinct[tupleStream.getDefiningOp()].second.push_back(distAggrFunc);
       };
       for (auto d : distinct) {
          analyzedAggregation.distAggrFuncs.push_back({d.second.first, d.second.second});

@@ -43,9 +43,9 @@ void subop::SubOpDependencyAnalysis::addToRoot(mlir::Operation* root, mlir::Oper
 }
 subop::SubOpDependencyAnalysis::SubOpDependencyAnalysis(mlir::Operation* op, mlir::AnalysisManager& am) {
    SubOpRootAnalysis& rootAnalysis = am.getAnalysis<SubOpRootAnalysis>();
-   std::unordered_map<mlir::Operation*, std::vector<mlir::Operation*>> pipelines;
-   std::unordered_map<mlir::Operation*, std::vector<mlir::Operation*>> pipelineRequirements;
-   std::unordered_map<mlir::Operation*, size_t> dependCount;
+   llvm::DenseMap<mlir::Operation*, std::vector<mlir::Operation*>> pipelines;
+   llvm::DenseMap<mlir::Operation*, std::vector<mlir::Operation*>> pipelineRequirements;
+   llvm::DenseMap<mlir::Operation*, size_t> dependCount;
    std::queue<mlir::Operation*> queue;
    op->walk([&](subop::SubOperator subop) {
       auto roots = rootAnalysis.getRoots(subop);

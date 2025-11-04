@@ -11,7 +11,7 @@
 
 namespace lingodb::compiler::dialect::subop {
 class ColumnMapping {
-   std::unordered_map<dialect::tuples::Column*, dialect::tuples::Column*> mapping;
+   llvm::DenseMap<dialect::tuples::Column*, dialect::tuples::Column*> mapping;
 
    public:
    dialect::tuples::ColumnRefAttr remap(dialect::tuples::ColumnRefAttr refAttr) {
