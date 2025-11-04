@@ -21,13 +21,19 @@ struct TaskWrapper;
 #ifdef ASAN_ACTIVE
 
 class Fiber {
-   std::thread thread;
-   std::atomic<bool> isRunning = false;
+   //related to managing pthreads manually
+   pthread_t threadHandle{};
+   bool threadHandleValid = false;
+
+   std::atomic<bool> isRunning{false};
    bool done = true;
    Worker* worker = nullptr;
    std::shared_ptr<TaskWrapper> task = nullptr;
    std::condition_variable cvMain, cvFiber;
    std::mutex mtx;
+
+   // Function to run on this fiber thread
+   std::function<void()> runFunction;
 
    public:
    void setup();
@@ -35,43 +41,45 @@ class Fiber {
    Fiber() = default;
 
    ~Fiber() {
-      if (thread.joinable()) {
-         //resume(); // just in case it's yielded
-         thread.join();
+      if (threadHandleValid) {
+         // resume(); // if you need to ensure it's not parked
+         pthread_join(threadHandle, nullptr);
+         threadHandleValid = false;
       }
    }
-   bool run(Worker* w, std::shared_ptr<TaskWrapper> tw, const std::function<void()>&& f) {
+
+   // Start (or restart) the fiber with a new task and function.
+   bool run(Worker* w, std::shared_ptr<TaskWrapper> tw, std::function<void()> f) {
       worker = w;
-      task = tw;
+      task = std::move(tw);
+      runFunction = std::move(f);
       done = false;
       isRunning = true;
+
       std::unique_lock<std::mutex> lk(mtx);
-      if (thread.joinable()) {
-         thread.join();
+
+      // If an older thread is still around, join it before making a new one.
+      if (threadHandleValid) {
+         pthread_join(threadHandle, nullptr);
+         threadHandleValid = false;
       }
-      thread = std::thread([this, f]() {
-         currentWorker = worker;
-         setup();
-         f(); // execute task
-         std::unique_lock<std::mutex> lk(mtx);
-         isRunning = false;
-         done = true;
-         teardown();
-         cvMain.notify_one(); // notify resume() that we're done
-      });
+
+      // Create the pthread with a 2MB stack (>= PTHREAD_STACK_MIN).
+      createThreadWithStack();
 
       // Wait for initial yield before we return
       cvMain.wait(lk, [&]() { return !isRunning; });
 
       return done;
    }
+
    bool resume() {
       assert(!isRunning);
       assert(!done);
       isRunning = true;
       std::unique_lock<std::mutex> lk(mtx);
       cvFiber.notify_one();
-      cvMain.wait(lk, [&]() { return !isRunning; });
+      cvMain.wait(lk, [&]() { return !isRunning.load(); });
       return done;
    }
 
@@ -86,16 +94,64 @@ class Fiber {
       setup();
    }
 
-   bool isYielded() {
-      return !isRunning;
+   bool isYielded() const {
+      return !isRunning.load();
    }
 
-   Worker* getWorker() {
-      return worker;
+   Worker* getWorker() { return worker; }
+   std::shared_ptr<TaskWrapper> getTask() { return task; }
+
+   private:
+   static void* threadEntry(void* arg) {
+      Fiber* self = static_cast<Fiber*>(arg);
+
+      // Set thread-local worker
+      currentWorker = self->worker;
+
+      // Call user setup
+      self->setup();
+
+      // Run the user function
+      self->runFunction();
+
+      // Mark completion and notify main
+      {
+         std::unique_lock<std::mutex> lk(self->mtx);
+         self->isRunning = false;
+         self->done = true;
+         self->teardown();
+         self->cvMain.notify_one();
+      }
+      return nullptr;
    }
 
-   std::shared_ptr<TaskWrapper> getTask() {
-      return task;
+   void createThreadWithStack() {
+      long stackBytes = 2 << 20;
+
+      if (stackBytes < PTHREAD_STACK_MIN)
+         stackBytes = PTHREAD_STACK_MIN;
+
+      pthread_attr_t attr;
+      int rc = pthread_attr_init(&attr);
+      if (rc != 0)
+         throw std::runtime_error("pthread_attr_init failed");
+
+      rc = pthread_attr_setstacksize(&attr, stackBytes);
+      if (rc != 0) {
+         pthread_attr_destroy(&attr);
+         throw std::runtime_error("pthread_attr_setstacksize failed");
+      }
+
+      // Optional: guard page (supported on Linux & macOS)
+      pthread_attr_setguardsize(&attr, 4096);
+
+      rc = pthread_create(&threadHandle, &attr, &Fiber::threadEntry, this);
+      pthread_attr_destroy(&attr);
+
+      if (rc != 0)
+         throw std::runtime_error("pthread_create failed");
+
+      threadHandleValid = true;
    }
 };
 
