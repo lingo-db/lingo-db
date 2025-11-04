@@ -17,7 +17,7 @@ class QueryGraph {
 
    struct SelectionEdge {
       size_t id;
-      std::unordered_map<NodeSet, double, HashNodeSet> cachedSel;
+      llvm::DenseMap<NodeSet, double, HashNodeSet> cachedSel;
       NodeSet required;
       Operator op;
       double selectivity = 1;
@@ -88,7 +88,7 @@ class QueryGraph {
    std::vector<Node> nodes;
    std::vector<JoinEdge> joins;
    std::vector<SelectionEdge> selections;
-   std::unordered_map<size_t, size_t> pseudoNodeOwner;
+   llvm::DenseMap<size_t, size_t> pseudoNodeOwner;
 
    QueryGraph(size_t numNodes) : numNodes(numNodes) {}
 

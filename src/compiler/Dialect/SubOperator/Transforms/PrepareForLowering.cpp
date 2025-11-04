@@ -29,8 +29,8 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
       for (auto containsNestedSubOps : opsWithNesting) {
          llvm::DenseMap<mlir::Value, size_t> valueToNestedExecutionGroupOperand;
 
-         std::unordered_map<mlir::Operation*, std::vector<mlir::Operation*>> steps; // {startPipelineOp, pipelineOps}
-         std::unordered_map<mlir::Operation*, mlir::Operation*> opToStep; // {pipelineOp, startPipelineOp}
+         llvm::DenseMap<mlir::Operation*, std::vector<mlir::Operation*>> steps; // {startPipelineOp, pipelineOps}
+         llvm::DenseMap<mlir::Operation*, mlir::Operation*> opToStep; // {pipelineOp, startPipelineOp}
          for (mlir::Operation& op : *containsNestedSubOps.getBody()) {
             if (&op == containsNestedSubOps.getBody()->getTerminator()) {
                continue;
@@ -55,8 +55,8 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
          }
          // Step 2: collect required/produced state for each step
          // -> also deal with GetLocal operations (that do belong to the same step that accesses the state)
-         std::unordered_map<mlir::Operation*, std::vector<std::tuple<mlir::Value, mlir::Value, bool>>> requiredState;
-         std::unordered_map<mlir::Operation*, std::vector<mlir::Value>> producedState;
+         llvm::DenseMap<mlir::Operation*, std::vector<std::tuple<mlir::Value, mlir::Value, bool>>> requiredState;
+         llvm::DenseMap<mlir::Operation*, std::vector<mlir::Value>> producedState;
          std::unordered_set<mlir::Operation*> getLocals;
 
          enum Kind {
@@ -64,7 +64,7 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
             WRITE
          };
 
-         std::unordered_map<subop::Member, std::vector<std::tuple<subop::SubOperator, mlir::Operation*, Kind>>> memberUsage;
+         llvm::DenseMap<subop::Member, std::vector<std::tuple<subop::SubOperator, mlir::Operation*, Kind>>> memberUsage;
 
          for (auto& step : steps) {
             for (auto* op : step.second) {
@@ -98,7 +98,7 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
                });
             }
          }
-         std::unordered_map<mlir::Operation*, std::unordered_set<mlir::Operation*>> dependencies;
+         llvm::DenseMap<mlir::Operation*, std::unordered_set<mlir::Operation*>> dependencies;
          for (auto& [step, vals] : requiredState) {
             for (auto val : vals) {
                if (auto* producer = std::get<0>(val).getDefiningOp()) {
@@ -145,7 +145,7 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
          }
 
          // Step 4: create ExecutionStepOps in correct order and handle states
-         std::unordered_map<mlir::Operation*, size_t> dependCount;
+         llvm::DenseMap<mlir::Operation*, size_t> dependCount;
          std::queue<mlir::Operation*> queue;
          llvm::DenseMap<mlir::Value, mlir::Value> stateMapping;
 
@@ -155,7 +155,7 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
                queue.push(step);
             }
          }
-         std::unordered_map<mlir::Operation*, std::unordered_set<mlir::Operation*>> inverseDependencies;
+         llvm::DenseMap<mlir::Operation*, std::unordered_set<mlir::Operation*>> inverseDependencies;
          for (auto& [a, b] : dependencies) {
             for (auto* c : b) {
                inverseDependencies[c].insert(a);
@@ -281,7 +281,7 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
       subop::ColumnCreationAnalysis createdColumns(getOperation());
       std::vector<mlir::Operation*> opsToErase;
       getOperation()->walk([&](subop::NestedMapOp nestedMapOp) { // for each nested map
-         std::unordered_map<tuples::Column*, size_t> colArgs;
+         llvm::DenseMap<tuples::Column*, size_t> colArgs;
          std::vector<mlir::Attribute> newParams;
          size_t argId = 1;
          for (auto colRefAttr : nestedMapOp.getParameters()) {

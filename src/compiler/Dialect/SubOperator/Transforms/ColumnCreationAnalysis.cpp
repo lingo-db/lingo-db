@@ -29,7 +29,7 @@ subop::ColumnCreationAnalysis::ColumnCreationAnalysis(mlir::Operation* op) {
          analyze(curr, attr.getValue());
       }
       if (auto* parentOp = curr->getParentOp()) {
-         auto& currUsedColumns = getCreatedColumns(curr);
+         auto currUsedColumns = getCreatedColumns(curr);
          createdColumns[parentOp].insert(currUsedColumns.begin(), currUsedColumns.end());
       }
    });

@@ -19,7 +19,7 @@ void subop::ColumnUsageAnalysis::analyze(mlir::Operation* op, mlir::Attribute at
       }
    } else if (auto columnRefAttr = mlir::dyn_cast_or_null<tuples::ColumnRefAttr>(attr)) {
       usedColumns[op].insert(&columnRefAttr.getColumn());
-      operationsUsingColumn[&columnRefAttr.getColumn()].insert(op);
+      operationsUsingColumn[&columnRefAttr.getColumn()].push_back(op);
 
    } else if (auto columnDefAttr = mlir::dyn_cast_or_null<tuples::ColumnDefAttr>(attr)) {
       analyze(op, columnDefAttr.getFromExisting());
@@ -31,7 +31,7 @@ subop::ColumnUsageAnalysis::ColumnUsageAnalysis(mlir::Operation* op) {
          analyze(curr, attr.getValue());
       }
       if (auto* parentOp = curr->getParentOp()) {
-         auto& currUsedColumns = getUsedColumns(curr);
+         auto currUsedColumns = getUsedColumns(curr);
          usedColumns[parentOp].insert(currUsedColumns.begin(), currUsedColumns.end());
       }
    });

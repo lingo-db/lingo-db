@@ -18,6 +18,7 @@ class NodeSet {
 
    public:
    NodeSet() = default;
+   explicit NodeSet(const llvm::SmallBitVector& storage) : storage(storage) {}
    explicit NodeSet(size_t size) : storage(size) {}
    [[nodiscard]] NodeSet negate() const {
       NodeSet res = *this;
@@ -136,8 +137,17 @@ class NodeSet {
    }
 };
 struct HashNodeSet {
-   size_t operator()(const NodeSet& bitset) const {
-      return bitset.hash();
+   static bool isEqual(const NodeSet& lhs, const NodeSet& rhs) {
+      return llvm::DenseMapInfo<llvm::SmallBitVector>::isEqual(lhs.storage, rhs.storage);
+   }
+   static unsigned getHashValue(const NodeSet& s) {
+      return llvm::DenseMapInfo<llvm::SmallBitVector>::getHashValue(s.storage);
+   }
+   static NodeSet getEmptyKey() {
+      return NodeSet(llvm::DenseMapInfo<llvm::SmallBitVector>::getEmptyKey());
+   }
+   static NodeSet getTombstoneKey() {
+      return NodeSet(llvm::DenseMapInfo<llvm::SmallBitVector>::getTombstoneKey());
    }
 };
 class Plan {
@@ -168,6 +178,6 @@ class Plan {
    static std::shared_ptr<Plan> joinPlans(NodeSet leftProblem, NodeSet rightProblem, std::shared_ptr<Plan> leftPlan, std::shared_ptr<Plan> rightPlan, QueryGraph& queryPlan, NodeSet& combinedProblem);
 };
 
-std::unique_ptr<support::eval::expr> buildEvalExpr(mlir::Value val, std::unordered_map<const lingodb::compiler::dialect::tuples::Column*, std::string>& mapping);
+std::unique_ptr<support::eval::expr> buildEvalExpr(mlir::Value val, llvm::DenseMap<const lingodb::compiler::dialect::tuples::Column*, std::string>& mapping);
 } // namespace lingodb::compiler::dialect::relalg
 #endif //LINGODB_COMPILER_DIALECT_RELALG_TRANSFORMS_QUERYOPT_UTILS_H

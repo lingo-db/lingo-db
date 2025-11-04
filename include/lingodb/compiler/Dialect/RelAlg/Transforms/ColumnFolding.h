@@ -4,7 +4,7 @@
 namespace lingodb::compiler::dialect::relalg {
 
 struct ColumnFoldInfo {
-   std::unordered_map<lingodb::compiler::dialect::tuples::Column*, lingodb::compiler::dialect::tuples::Column*> directMappings;
+   llvm::DenseMap<lingodb::compiler::dialect::tuples::Column*, lingodb::compiler::dialect::tuples::Column*> directMappings;
 };
 } // namespace lingodb::compiler::dialect::relalg
 

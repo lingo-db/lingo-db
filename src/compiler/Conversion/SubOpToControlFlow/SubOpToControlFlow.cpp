@@ -195,7 +195,7 @@ class EntryStorageHelper {
       mlir::Type stored;
       size_t offset;
    };
-   std::unordered_map<Member, MemberInfo> memberInfos;
+   llvm::DenseMap<Member, MemberInfo> memberInfos;
 
    public:
    static bool compressionEnabled;
@@ -263,9 +263,9 @@ class EntryStorageHelper {
    }
 
    class LazyValueMap {
-      std::unordered_map<Member, mlir::Value> values;
+      llvm::DenseMap<Member, mlir::Value> values;
       // name -> (isNull: i1) mapping
-      std::unordered_map<Member, mlir::Value> nullBitCache;
+      llvm::DenseMap<Member, mlir::Value> nullBitCache;
       std::optional<mlir::Value> nullBitSet;
       std::optional<mlir::Value> nullBitSetRef;
       mlir::Value ref;
@@ -393,7 +393,7 @@ class EntryStorageHelper {
             mlir::Value shiftedNullBit = rewriter.create<mlir::arith::ConstantIntOp>(loc, 1ull << memberInfo.nullBitOffset, esh.nullBitsetType);
             mlir::Value isNull = rewriter.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::eq, rewriter.create<mlir::arith::AndIOp>(loc, *nullBitSet, shiftedNullBit), shiftedNullBit);
             value = rewriter.create<db::AsNullableOp>(loc, db::NullableType::get(rewriter.getContext(), memberInfo.stored), value, isNull);
-            nullBitCache.emplace(member, isNull);
+            nullBitCache.insert({member, isNull});
          }
          return value;
       }
@@ -878,12 +878,12 @@ class SubOpTupleStreamConsumerConversionPattern : public AbstractSubOpConversion
                                        context) {}
    LogicalResult matchAndRewrite(mlir::Operation* op, SubOpRewriter& rewriter) override {
       auto castedOp = mlir::cast<OpT>(op);
-      
+
       // First check if the pattern matches before doing expensive work
       if (failed(match(castedOp))) {
          return failure();
       }
-      
+
       auto stream = castedOp.getStream();
       return rewriter.implementStreamConsumer(stream, [&](SubOpRewriter& rewriter, ColumnMapping& mapping) {
          std::vector<mlir::Value> newOperands;

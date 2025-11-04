@@ -55,7 +55,7 @@ void QueryGraph::print(llvm::raw_ostream& out) {
    out << "}\n";
 }
 
-std::unique_ptr<lingodb::compiler::support::eval::expr> buildEvalExpr(mlir::Value val, std::unordered_map<const tuples::Column*, std::string>& mapping) {
+std::unique_ptr<lingodb::compiler::support::eval::expr> buildEvalExpr(mlir::Value val, llvm::DenseMap<const tuples::Column*, std::string>& mapping) {
    auto* op = val.getDefiningOp();
    if (!op) return support::eval::createInvalid();
    if (auto constantOp = mlir::dyn_cast_or_null<db::ConstantOp>(op)) {
@@ -200,7 +200,7 @@ std::optional<double> estimateUsingSample(QueryGraph::Node& n) {
    if (!n.op) return {};
    if (n.additionalPredicates.empty()) return {};
    if (auto baseTableOp = mlir::dyn_cast_or_null<BaseTableOp>(n.op.getOperation())) {
-      std::unordered_map<const tuples::Column*, std::string> mapping;
+      llvm::DenseMap<const tuples::Column*, std::string> mapping;
       for (auto c : baseTableOp.getColumns()) {
          mapping[&mlir::cast<tuples::ColumnDefAttr>(c.getValue()).getColumn()] = c.getName().str();
       }
