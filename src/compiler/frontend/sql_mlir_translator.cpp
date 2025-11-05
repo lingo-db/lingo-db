@@ -30,9 +30,8 @@
 namespace lingodb::translator {
 
 using namespace lingodb::compiler::dialect;
-SQLMlirTranslator::SQLMlirTranslator(mlir::ModuleOp moduleOp, catalog::Catalog* catalog) : moduleOp(moduleOp), catalog(catalog),
-                                                                                           attrManager(moduleOp->getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager()), translationContext(std::make_shared<TranslationContext>()) {
-   moduleOp.getContext()->getLoadedDialect<util::UtilDialect>()->getFunctionHelper().setParentModule(moduleOp);
+SQLMlirTranslator::SQLMlirTranslator(mlir::ModuleOp moduleOp, catalog::Catalog* catalog) : moduleOp(moduleOp), catalog(catalog),attrManager(moduleOp->getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager()), translationContext(std::make_shared<TranslationContext>()) {
+   moduleOp.getContext()->getOrLoadDialect<util::UtilDialect>()->getFunctionHelper().setParentModule(moduleOp);
 }
 std::optional<mlir::Value> SQLMlirTranslator::translateStart(mlir::OpBuilder& builder, std::shared_ptr<ast::AstNode> astNode, std::shared_ptr<analyzer::SQLContext> context) {
    context->definedAttributes = std::stack<std::vector<std::pair<std::string, std::shared_ptr<ast::ColumnReference>>>>();
@@ -258,6 +257,19 @@ void SQLMlirTranslator::translateCreateFunction(mlir::OpBuilder& builder, std::s
       auto descriptionValue = createStringValue(builder, utility::serializeToHexString(createFunctionDef));
       compiler::runtime::RelationHelper::createFunction(builder, builder.getUnknownLoc())(mlir::ValueRange({descriptionValue}));
 
+   } else if (language == "hipy" || language == "hipy_fallback" || language =="python") {
+      std::vector<catalog::Type> standaloneArgumentTypes;
+      standaloneArgumentTypes.reserve(boundCreateFunctionInfo->argumentTypes.size());
+      for (size_t i = 0; i < boundCreateFunctionInfo->argumentTypes.size(); i++) {
+         standaloneArgumentTypes.emplace_back(boundCreateFunctionInfo->argumentTypes[i].second);
+      }
+      lingodb::catalog::CreateFunctionDef createFunctionDef(
+         functionName,
+         boundCreateFunctionInfo->language,
+         code,
+         returnType.type, std::move(standaloneArgumentTypes));
+      auto descriptionValue = createStringValue(builder, utility::serializeToHexString(createFunctionDef));
+      compiler::runtime::RelationHelper::createFunction(builder, builder.getUnknownLoc())(mlir::ValueRange({descriptionValue}));
    } else {
       translatorError("UDF language not supported " << language, createNode->loc);
    }
@@ -913,7 +925,7 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
             return builder.create<db::RuntimeCall>(exprLocation, wrapNullableType(mlirContext, builder.getI64Type(), {part, arg2}), "ExtractFromDate", mlir::ValueRange({part, arg2})).getRes();
          }
          if (upperCaseFName == "SUBSTRING" || upperCaseFName == "SUBSTR") {
-            auto str = translateExpression(builder, function->arguments[0], context);
+            auto str = function->arguments[0]->resultType->castValue(builder, translateExpression(builder, function->arguments[0], context));
             auto from = function->arguments[1] ? translateExpression(builder, function->arguments[1], context) : nullptr;
             auto to = function->arguments[2] ? translateExpression(builder, function->arguments[2], context) : nullptr;
             return builder.create<db::RuntimeCall>(exprLocation, str.getType(), "Substring", mlir::ValueRange({str, from, to})).getRes();
@@ -938,6 +950,12 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
          if (upperCaseFName == "LENGTH") {
             auto str = translateExpression(builder, function->arguments[0], context);
             return builder.create<db::RuntimeCall>(exprLocation, builder.getI64Type(), "StringLength", str).getRes();
+         }
+         if (upperCaseFName == "REPLACE") {
+            auto text = translateExpression(builder, function->arguments[0], context);
+            auto pattern = translateExpression(builder, function->arguments[1], context);
+            auto replace = translateExpression(builder, function->arguments[2], context);
+            return builder.create<db::RuntimeCall>(exprLocation, text.getType(), "Replace", mlir::ValueRange({text, pattern, replace})).getRes();
          }
          if (upperCaseFName == "REGEXP_REPLACE") {
             auto text = translateExpression(builder, function->arguments[0], context);
@@ -984,7 +1002,10 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
          }
          return translateWhenChecks(builder, boundCase, caseExprTranslated, boundCase->caseChecks, boundCase->elseExpr, context);
       }
-
+      case ast::ExpressionClass::BOUND_PARAMETER: {
+         auto paramExpr = std::static_pointer_cast<ast::BoundParameterExpression>(expression);
+         return context->params[paramExpr->paramIdx];
+      }
       default: translatorError("Expression not implemented", expression->loc);
    }
 }

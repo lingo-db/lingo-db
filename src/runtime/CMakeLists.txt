@@ -1,4 +1,5 @@
-add_library(runtime OBJECT
+# Replace inline source list with a variable so we can conditionally append files.
+set(RUNTIME_SOURCES
         helpers.cpp
         Tracing.cpp
         ArrowColumn.cpp
@@ -28,6 +29,7 @@ add_library(runtime OBJECT
         ExecutionContext.cpp
         RelationHelper.cpp
         EntryLock.cpp
+        TryExcept.cpp
         #Database.cpp
         #ArrowDirDatabase.cpp
         #ExternalArrowDatabase.cpp
@@ -37,14 +39,22 @@ add_library(runtime OBJECT
         Session.cpp
         storage/LingoDBTable.cpp
         storage/Restrictions.cpp
+        PythonRuntime.cpp
 )
+
+if (ENABLE_PYTHON STREQUAL "WASM")
+    list(APPEND RUNTIME_SOURCES WASM.cpp ${UNCOMMON_SHARED_SOURCE})
+endif()
+
+add_library(runtime OBJECT ${RUNTIME_SOURCES})
+
 set(COMPILE_DEFS "")
 if (ENABLE_GPU_BACKEND)
     list(APPEND COMPILE_DEFS "GPU_ENABLED=1")
 else ()
     list(APPEND COMPILE_DEFS "GPU_ENABLED=0")
 endif (ENABLE_GPU_BACKEND)
-
+list(APPEND COMPILE_DEFS "SOURCE_DIR=\"${CMAKE_SOURCE_DIR}\"")
 target_compile_definitions(runtime PUBLIC ${COMPILE_DEFS})
 
 #todo: should not be necessary, but it is for Arrow 23
@@ -57,3 +67,6 @@ endif()
 
 add_subdirectory(GPU)
 target_link_libraries(runtime PUBLIC GPU-rt scheduler)
+if(ENABLE_PYTHON STREQUAL "WASM")
+target_link_libraries(runtime PUBLIC cpython-wasm vmlib -lm)
+endif()

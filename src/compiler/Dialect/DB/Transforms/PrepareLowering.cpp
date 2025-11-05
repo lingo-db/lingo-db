@@ -103,6 +103,7 @@ class WrapWithNullCheck : public mlir::RewritePattern {
       }
    }
 };
+
 class SimplifySortComparePattern : public mlir::RewritePattern {
    public:
    SimplifySortComparePattern(mlir::MLIRContext* context)
@@ -192,7 +193,6 @@ class PrepareLowering : public mlir::PassWrapper<PrepareLowering, mlir::Operatio
          patterns.insert<EliminateDeriveTruthNullable>(&getContext());
          patterns.insert<SimplifySortComparePattern>(&getContext());
          patterns.insert<SimplifyCompareISAPattern>(&getContext());
-         //patterns.insert<SimplifyNullableCondSkip>(&getContext());
          patterns.insert<WrapWithNullCheck>(&getContext());
          lingodb::compiler::dialect::db::addOptimizeRuntimeFunctionPatterns(patterns);
          if (lingodb::compiler::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {

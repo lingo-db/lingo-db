@@ -2,17 +2,21 @@
 #define LINGODB_RUNTIME_HELPERS_H
 #include "ExecutionContext.h"
 
+#include <atomic>
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
+#include <new>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <string.h> // for memcpy
 #include <sys/mman.h>
 
 #define EXPORT extern "C" __attribute__((visibility("default")))
-#define INLINE __attribute__((always_inline))
+#define INLINE __attribute__((always_inline)) inline
 namespace lingodb::runtime {
 alignas(4096) extern uint16_t bloomMasks[2048];
 
@@ -67,6 +71,12 @@ static uint64_t read8PadZero(const uint8_t* p, uint32_t len) {
    return unalignedLoad64(p + len - 8) >> (64 - len * 8);
 #endif
 }
+enum class StorageClass : uint8_t {
+   GLOBAL = 0, // valid over the entire query runtime (e.g., constants, registered values
+   TRANSIENT = 1, // externally managed, but only valid during the current "morsel"
+   REFCOUNTED = 2, // reference counted memory, freed when no references remain
+   RESERVED = 3, // reserved for future use
+};
 
 class VarLen32 {
    private:
@@ -87,25 +97,97 @@ class VarLen32 {
    };
 
    private:
-   void storePtr(const uint8_t* ptr) {
-      const uint8_t** ptrloc = reinterpret_cast<const uint8_t**>((&bytes[4]));
-      *ptrloc = ptr;
+   void storePtr(const uint8_t* ptr, StorageClass storageClass) {
+      uintptr_t* ptrloc = reinterpret_cast<uintptr_t*>((&bytes[4]));
+      uintptr_t ptrVal = reinterpret_cast<uintptr_t>(ptr);
+      ptrVal <<= 2; // make space for storage class
+      ptrVal |= static_cast<uint8_t>(storageClass);
+      *ptrloc = ptrVal;
    }
 
    public:
-   static VarLen32 fromString(std::string str) {
-      if (str.size() <= shortLen) {
-         return VarLen32(reinterpret_cast<const uint8_t*>(str.data()), str.size());
+   static INLINE  VarLen32 fromDataAndLen(const char* data, size_t len, StorageClass storageClass) {
+      if (len <= shortLen) {
+         return VarLen32(reinterpret_cast<const uint8_t*>(data), len, storageClass);
       }
-      auto* ptr = getCurrentExecutionContext()->allocString(str.size());
-      memcpy(ptr, str.data(), str.size());
-      return VarLen32(ptr, str.size());
+#if ENABLE_REFCOUNT==1
+      if (storageClass == StorageClass::GLOBAL) {
+#else
+      if (storageClass == StorageClass::GLOBAL || storageClass == StorageClass::REFCOUNTED) {
+#endif
+         auto* ptr = getCurrentExecutionContext()->allocString(len);
+         memcpy(ptr, data, len);
+         return VarLen32(ptr, len, storageClass);
+      } else if (storageClass == StorageClass::TRANSIENT) {
+         return VarLen32(reinterpret_cast<const uint8_t*>(data), len, storageClass);
+      } else if (storageClass == StorageClass::REFCOUNTED) {
+         uint8_t* allocated = static_cast<uint8_t*>(malloc(len + 4));
+         reinterpret_cast<uint32_t*>(allocated)[0] = 1; //set refcount to 1
+         memcpy(allocated + 4, data, len);
+         return VarLen32(allocated + 4, len, storageClass);
+      } else {
+         assert(false);
+         return VarLen32();
+      }
+   }
+   static INLINE VarLen32 fromString(std::string_view str, StorageClass storageClass) {
+      return fromDataAndLen(str.data(), str.size(), storageClass);
+   }
+   static uint8_t* allocateForStorageClass(size_t size, StorageClass storageClass) {
+#if ENABLE_REFCOUNT==1
+      if (storageClass == StorageClass::GLOBAL) {
+#else
+      if (storageClass == StorageClass::GLOBAL || storageClass == StorageClass::REFCOUNTED) {
+#endif
+         return getCurrentExecutionContext()->allocString(size);
+      } else if (storageClass == StorageClass::TRANSIENT) {
+         return nullptr;
+      } else if (storageClass == StorageClass::REFCOUNTED) {
+         uint8_t* allocated = static_cast<uint8_t*>(malloc(size + 4));
+         reinterpret_cast<uint32_t*>(allocated)[0] = 1; //set refcount to 1
+         return allocated + 4;
+      }
+      assert(false);
+      return nullptr;
+   }
+   static runtime::VarLen32 promoteToGlobal(runtime::VarLen32 varLen32) {
+      if (varLen32.getLen() <= shortLen) return varLen32;
+      if (varLen32.getStorageClass() == StorageClass::GLOBAL) return varLen32;
+      if (varLen32.getStorageClass() == StorageClass::TRANSIENT) {
+         //todo: materialize to global (if needed)
+         return varLen32;
+         //uint8_t* newPtr = getCurrentExecutionContext()->allocString(varLen32.getLen());
+         //memcpy(newPtr, varLen32.getPtr(), varLen32.getLen());
+         //varLen32.storePtr(newPtr, StorageClass::GLOBAL);
+      } else if (varLen32.getStorageClass() == StorageClass::REFCOUNTED) {
+         auto *newPtr = allocateForStorageClass(varLen32.getLen(), StorageClass::GLOBAL);
+         memcpy(newPtr, varLen32.getPtr(), varLen32.getLen());
+         decRefCount(varLen32);
+         return VarLen32(newPtr, varLen32.getLen(), StorageClass::GLOBAL);
+      }
+   }
+   static void decRefCount(runtime::VarLen32 varLen32) {
+      if (varLen32.getLen() <= shortLen) return;
+      if (varLen32.getStorageClass() != StorageClass::REFCOUNTED) return;
+      uint8_t* ptr = varLen32.getPtr();
+      std::atomic<uint32_t>* refCountPtr = reinterpret_cast<std::atomic<uint32_t>*>(ptr) - 1;
+      uint32_t oldRefCount = refCountPtr->fetch_sub(1);
+      if (oldRefCount == 1) {
+         free(refCountPtr);
+      }
+   }
+   static void incRefCount(runtime::VarLen32 varLen32) {
+      if (varLen32.getLen() <= shortLen) return;
+      if (varLen32.getStorageClass() != StorageClass::REFCOUNTED) return;
+      uint8_t* ptr = varLen32.getPtr();
+      std::atomic<uint32_t>* refCountPtr = reinterpret_cast<std::atomic<uint32_t>*>(ptr) - 1;
+      refCountPtr->fetch_add(1);
    }
    VarLen32() : len(0), first4(0xffffffff), last8(0) {}
-   VarLen32(const uint8_t* ptr, uint32_t len) : len(len) {
+   INLINE VarLen32(const uint8_t* ptr, uint32_t len, StorageClass storageClass) : len(len) {
       if (len > shortLen) {
          this->first4 = unalignedLoad32(ptr);
-         storePtr(ptr);
+         storePtr(ptr, storageClass);
       } else if (len > 8) {
          this->first4 = unalignedLoad32(ptr);
          this->last8 = unalignedLoad64(ptr + len - 8);
@@ -124,8 +206,11 @@ class VarLen32 {
       if (len <= shortLen) {
          return bytes;
       } else {
-         return reinterpret_cast<uint8_t*>(*(uintptr_t*) (&bytes[4]));
+         return reinterpret_cast<uint8_t*>((*(uintptr_t*) (&bytes[4])) >> 2);
       }
+   }
+   StorageClass getStorageClass() {
+      return static_cast<StorageClass>(last8 & 0x3);
    }
    char* data() {
       return (char*) getPtr();
@@ -143,7 +228,24 @@ class VarLen32 {
 
    operator std::string() { return std::string((char*) getPtr(), getLen()); }
    std::string str() { return std::string((char*) getPtr(), getLen()); }
+   std::string_view strView() { return std::string_view((char*) getPtr(), getLen()); }
 };
+
+template <typename T, typename... Args>
+T* createRefCounted(Args&&... args) {
+#if ENABLE_REFCOUNT==1
+   uint8_t* allocated = static_cast<uint8_t*>(malloc(sizeof(T) + 4));
+   // initialize refcount to 1
+   reinterpret_cast<uint32_t*>(allocated)[0] = 1;
+   void* objPtr = allocated + 4;
+   T* obj = new (objPtr) T(std::forward<Args>(args)...);
+   return obj;
+#else
+   void* objPtr = getCurrentExecutionContext()->allocStateRaw(sizeof(T));
+   T* obj = new (objPtr) T(std::forward<Args>(args)...);
+   return obj;
+#endif
+}
 
 template <class T>
 struct LegacyFixedSizedBuffer {
@@ -215,5 +317,29 @@ template <typename T>
 T* untag(T* ptr) {
    return reinterpret_cast<T*>(reinterpret_cast<uintptr_t>(ptr) >> 16);
 }
+
+// New generic refcount helpers (declaration)
+// Manage a 4-byte uint32_t refcount stored immediately before the object pointer.
+// If the refcount value is UINT32_MAX (0xffffffff) do nothing (global ownership).
+template <typename T>
+inline void incRefCount(T* obj) {
+   if (!obj) return;
+   // Refcount is stored as a 32-bit value immediately before the object pointer.
+   auto* refPtr = reinterpret_cast<std::atomic<uint32_t>*>(reinterpret_cast<uint8_t*>(obj) - 4);
+   refPtr->fetch_add(1);
+}
+
+template <typename T>
+inline void decRefCount(T* obj, void (*cleanupFn)(T*)) {
+   if (!obj) return;
+   auto* refPtr = reinterpret_cast<std::atomic<uint32_t>*>(reinterpret_cast<uint8_t*>(obj) - 4);
+   uint32_t old = refPtr->fetch_sub(1);
+   if (old == 1) {
+      cleanupFn(obj);
+      obj->~T();
+      free(reinterpret_cast<void*>(refPtr));
+   }
+}
+
 } // end namespace lingodb::runtime
 #endif // LINGODB_RUNTIME_HELPERS_H

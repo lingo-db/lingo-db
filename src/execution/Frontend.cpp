@@ -1,6 +1,7 @@
 #include "lingodb/execution/Frontend.h"
 
 #include "lingodb/compiler/Dialect/Arrow/IR/ArrowDialect.h"
+#include "lingodb/compiler/Dialect/PyInterp/PyInterpDialect.h"
 #include "lingodb/compiler/Dialect/DB/IR/DBDialect.h"
 #include "lingodb/compiler/Dialect/DB/Passes.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgDialect.h"
@@ -43,6 +44,7 @@ void lingodb::execution::initializeContext(mlir::MLIRContext& context, bool incl
    registry.insert<subop::SubOperatorDialect>();
    registry.insert<db::DBDialect>();
    registry.insert<lingodb::compiler::dialect::arrow::ArrowDialect>();
+   registry.insert<lingodb::compiler::dialect::py_interp::PyInterpDialect>();
    registry.insert<mlir::func::FuncDialect>();
    registry.insert<mlir::arith::ArithDialect>();
    registry.insert<mlir::cf::ControlFlowDialect>();
@@ -112,6 +114,7 @@ class SQLFrontend : public lingodb::execution::Frontend {
    }
    void load(std::string fileOrDirect) {
       Driver drv;
+      auto* queryBlock = new mlir::Block;
       try {
          if (!drv.parse(fileOrDirect, isFile)) {
             auto results = drv.result;
@@ -124,13 +127,12 @@ class SQLFrontend : public lingodb::execution::Frontend {
             sqlContext->catalog = catalog;
             lingodb::analyzer::SQLQueryAnalyzer analyzer{catalog};
             mlir::OpBuilder builder(context);
-            mlir::ModuleOp moduleOp = builder.create<mlir::ModuleOp>(builder.getUnknownLoc());
-            auto* queryBlock = new mlir::Block;
+            module = builder.create<mlir::ModuleOp>(builder.getUnknownLoc());
             if (drv.result[0]) {
                drv.result[0] = analyzer.canonicalizeAndAnalyze(drv.result[0], sqlContext);
 
 
-               lingodb::translator::SQLMlirTranslator translator{moduleOp, catalog};
+               lingodb::translator::SQLMlirTranslator translator{*module, catalog};
                std::vector<mlir::Type> returnTypes;
                {
                   mlir::OpBuilder::InsertionGuard guard(builder);
@@ -146,15 +148,15 @@ class SQLFrontend : public lingodb::execution::Frontend {
                builder.setInsertionPointToStart(queryBlock);
                builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc());
             }
-            builder.setInsertionPointToStart(moduleOp.getBody());
+            builder.setInsertionPointToStart(module->getBody());
             mlir::func::FuncOp funcOp = builder.create<mlir::func::FuncOp>(builder.getUnknownLoc(), "main", builder.getFunctionType({}, {}));
             funcOp.getBody().push_back(queryBlock);
-            module = moduleOp;
          } else {
             error.emit() << "Error during parsing";
          }
       } catch (lingodb::FrontendError& e) {
          error.emit() << e.what();
+         delete queryBlock;
       }
    }
 

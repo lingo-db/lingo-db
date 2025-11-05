@@ -1,6 +1,7 @@
 #include "lingodb/compiler/Conversion/ArrowToStd/ArrowToStd.h"
 #include "lingodb/compiler/Conversion/UtilToLLVM/Passes.h"
 #include "lingodb/compiler/Dialect/Arrow/IR/ArrowDialect.h"
+#include "lingodb/compiler/Dialect/PyInterp/PyInterpDialect.h"
 #include "lingodb/compiler/Dialect/Arrow/IR/ArrowOps.h"
 #include "lingodb/compiler/Dialect/util/UtilDialect.h"
 #include "lingodb/compiler/Dialect/util/UtilOps.h"
@@ -268,6 +269,7 @@ void ArrowToStdLoweringPass::runOnOperation() {
    target.addLegalDialect<async::AsyncDialect>();
    target.addLegalOp<ModuleOp>();
    target.addLegalOp<UnrealizedConversionCastOp>();
+   target.addLegalDialect<lingodb::compiler::dialect::py_interp::PyInterpDialect>();
 
    target.addLegalDialect<func::FuncDialect>();
    target.addLegalDialect<memref::MemRefDialect>();

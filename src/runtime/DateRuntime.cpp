@@ -80,6 +80,10 @@ int64_t lingodb::runtime::DateRuntime::subtractMonths(int64_t date, int64_t mont
 int64_t lingodb::runtime::DateRuntime::addMonths(int64_t nanos, int64_t months) {
    return DateHelper(nanos).addMonths(months).nanosSinceEpoch();
 }
+int64_t lingodb::runtime::DateRuntime::dateDiffNanoSeconds(int64_t end, int64_t start) {
+   auto diffNanos = end - start;
+   return diffNanos;
+}
 int64_t lingodb::runtime::DateRuntime::dateDiffSecond(int64_t end, int64_t start) {
    auto diffNanos = end - start;
    return diffNanos / (1000000000ll);
@@ -126,39 +130,53 @@ int64_t lingodb::runtime::DateRuntime::dateTrunc(VarLen32 part, int64_t date) {
    int64_t second = 0;
 
    if (StringRuntime::len(part) == 4 && // String length must be checked before comparison
-       StringRuntime::compareEq(part, VarLen32::fromString("year"))) {
+       StringRuntime::compareEq(part, VarLen32::fromString("year", StorageClass::TRANSIENT))) {
       return toEpochNs(year, month, day, hour, minute, second);
    }
 
    month = extractMonth(date);
    if (StringRuntime::len(part) == 5 &&
-       StringRuntime::compareEq(part, VarLen32::fromString("month"))) {
+       StringRuntime::compareEq(part, VarLen32::fromString("month", StorageClass::TRANSIENT))) {
       return toEpochNs(year, month, day, hour, minute, second);
    }
 
    day = extractDay(date);
    if (StringRuntime::len(part) == 3 &&
-       StringRuntime::compareEq(part, VarLen32::fromString("day"))) {
+       StringRuntime::compareEq(part, VarLen32::fromString("day", StorageClass::TRANSIENT))) {
       return toEpochNs(year, month, day, hour, minute, second);
    }
 
    hour = extractHour(date);
    if (StringRuntime::len(part) == 4 &&
-       StringRuntime::compareEq(part, VarLen32::fromString("hour"))) {
+       StringRuntime::compareEq(part, VarLen32::fromString("hour", StorageClass::TRANSIENT))) {
       return toEpochNs(year, month, day, hour, minute, second);
    }
 
    minute = extractMinute(date);
    if (StringRuntime::len(part) == 6 &&
-       StringRuntime::compareEq(part, VarLen32::fromString("minute"))) {
+       StringRuntime::compareEq(part, VarLen32::fromString("minute", StorageClass::TRANSIENT))) {
       return toEpochNs(year, month, day, hour, minute, second);
    }
 
    second = extractSecond(date);
    if (StringRuntime::len(part) == 6 &&
-       StringRuntime::compareEq(part, VarLen32::fromString("second"))) {
+       StringRuntime::compareEq(part, VarLen32::fromString("second", StorageClass::TRANSIENT))) {
       return toEpochNs(year, month, day, hour, minute, second);
    }
 
    throw std::runtime_error("Invalid or unimplemented date part");
+}
+
+int64_t lingodb::runtime::IntervalRuntime::weeks(int64_t interval) {
+   return interval / (1000000000ll) / (60ll * 60ll * 24ll * 7ll);
+}
+int64_t lingodb::runtime::IntervalRuntime::days(int64_t interval) {
+   return interval / (1000000000ll) / (60ll * 60ll * 24ll);
+}
+
+int64_t lingodb::runtime::IntervalRuntime::hours(int64_t interval) {
+   return interval / (1000000000ll) / (60ll * 60ll);
+}
+int64_t lingodb::runtime::IntervalRuntime::minutes(int64_t interval) {
+   return interval / (1000000000ll) / (60ll);
 }

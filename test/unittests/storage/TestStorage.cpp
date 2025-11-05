@@ -177,7 +177,7 @@ TEST_CASE("Storage:RelationHelper") {
       createTableDef.primaryKey = {"col1"};
       lingodb::scheduler::awaitEntryTask(std::make_unique<MockTaskWithContext>(context.get(), [&]() {
          lingodb::runtime::RelationHelper::setPersist(true);
-         lingodb::runtime::RelationHelper::createTable(lingodb::runtime::VarLen32::fromString(serializeToHexString(createTableDef)));
+         lingodb::runtime::RelationHelper::createTable(lingodb::runtime::VarLen32::fromString(serializeToHexString(createTableDef), lingodb::runtime::StorageClass::TRANSIENT));
          lingodb::runtime::RelationHelper::appendToTable(*session, "test_table", createTableDataAsTable());
       }));
    }
@@ -194,7 +194,7 @@ TEST_CASE("Storage:RelationHelper") {
       lingodb::scheduler::awaitEntryTask(std::make_unique<MockTaskWithContext>(context.get(), [&]() {
          lingodb::runtime::RelationHelper::setPersist(true);
          lingodb::runtime::ExternalDatasourceProperty externalDatasourceProperty{.tableName = "test_table", .mapping = {{"x", "col1"}, {"y", "col2"}}, .index = "test_table.pk", .indexType = "hash"};
-         auto* access3 = lingodb::runtime::RelationHelper::accessHashIndex(lingodb::runtime::VarLen32::fromString(lingodb::utility::serializeToHexString(externalDatasourceProperty)));
+         auto* access3 = lingodb::runtime::RelationHelper::accessHashIndex(lingodb::runtime::VarLen32::fromString(lingodb::utility::serializeToHexString(externalDatasourceProperty), lingodb::runtime::StorageClass::TRANSIENT));
          auto* iter3 = access3->lookup(-3797884931935089717);
          REQUIRE(iter3->hasNext());
          lingodb::runtime::BatchView batchView;

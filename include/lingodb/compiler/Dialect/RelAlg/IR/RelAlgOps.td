@@ -484,7 +484,7 @@ def ExistsOp : RelAlg_Op<"exists", [Pure]> {
     let assemblyFormat = [{  $rel attr-dict }];
 }
 
-def MaterializeOp : RelAlg_Op<"materialize", [Pure]> {
+def MaterializeOp : RelAlg_Op<"materialize", [Pure,DeclareOpInterfaceMethods<NullColumnTypeChangeable>]> {
     let arguments = (ins TupleStream:$rel,ArrayAttr:$cols,ArrayAttr:$columns);
     let results = (outs SubOp_ResultTable:$result);
     let assemblyFormat = [{  $rel custom<CustRefArr>($cols) `=` `>` $columns `:` type($result) attr-dict }];
@@ -538,6 +538,13 @@ def QueryReturnOp : RelAlg_Op<"query_return",[Terminator]> {
    let summary = "query return";
    let arguments = (ins Variadic<AnyType>:$inputs);
    let assemblyFormat = [{ ($inputs^ `:` type($inputs))? attr-dict-with-keyword }];
+}
+
+def SQLQueryOp : RelAlg_Op<"sql_query"> {
+    let summary = "SQL query";
+    let arguments = (ins StrAttr:$sql, Variadic<AnyType>:$parameters);
+    let results = (outs AnyType:$result);
+    let assemblyFormat = [{ $sql (`,` $parameters^ `:` type($parameters))? `->` type($result) attr-dict}];
 }
 
 

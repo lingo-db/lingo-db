@@ -25,6 +25,7 @@ add_mlir_dialect_library(MLIRRelAlg
         Transforms/queryopt/DPhyp.cpp
         Transforms/queryopt/GOO.cpp
         Transforms/queryopt/QueryGraph.cpp
+        Transforms/ParseNestedSQL.cpp
         Passes.cpp
         ADDITIONAL_HEADER_DIRS
         ../../../../include/lingodb/compiler/Dialect/RelAlg
@@ -34,6 +35,7 @@ add_mlir_dialect_library(MLIRRelAlg
         MLIRDBOpsIncGen
         MLIRUtilOpsIncGen
         MLIRTupleStreamOpsIncGen
+        build_includes
         LINK_LIBS mlir-support utility PUBLIC
         MLIRIR
         MLIRCompilerHelper

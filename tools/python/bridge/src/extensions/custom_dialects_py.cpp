@@ -353,4 +353,16 @@ NB_MODULE(mlir_lingodb, m) {
             return cls(mlirSubOpEntryListTypeGet(t));
          },
          nb::arg("cls"), nb::arg("t"));
+
+   //----------------------------------------------------------------------------------------------------------------------
+   // PyInterp Dialect
+   //----------------------------------------------------------------------------------------------------------------------
+   auto pyInterpModule = m.def_submodule("py_interp", "extensions required for pyinterp dialect");
+   mlir::python::nanobind_adaptors::mlir_type_subclass(pyInterpModule, "PyObject", mlirTypeIsAPyInterpPyObjectType, mlirPyInterpPyObjectTypeGetTypeID)
+      .def_classmethod(
+         "get",
+         [](nb::object cls, MlirContext context) {
+            return cls(mlirPyInterpPyObjectTypeGet(context));
+         },
+         nb::arg("cls"), nb::arg("context"));
 }

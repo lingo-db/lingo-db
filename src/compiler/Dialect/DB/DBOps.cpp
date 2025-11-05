@@ -217,6 +217,14 @@ OpFoldResult db::ConstantOp::fold(db::ConstantOp::FoldAdaptor adaptor) {
    auto foldFn = fn->foldFn.value();
    return foldFn(getOperandTypes(), adaptor.getOperands(), results);
 }
+void db::RuntimeCall::getEffects(::llvm::SmallVectorImpl<::mlir::SideEffects::EffectInstance<::mlir::MemoryEffects::Effect>>& effects) {
+   auto reg = getContext()->getLoadedDialect<db::DBDialect>()->getRuntimeFunctionRegistry();
+   if (auto* fn = reg->lookup(getFn().str())) {
+      if (fn->sideEffects) {
+         effects.emplace_back(MemoryEffects::Write::get());
+      }
+   }
+}
 namespace {
 LogicalResult inferReturnType(MLIRContext* context, std::optional<Location> location, ValueRange operands, SmallVectorImpl<Type>& inferredReturnTypes) {
    Type baseTypeLeft = getBaseType(operands[0].getType());

@@ -3,15 +3,18 @@
 #include "lingodb/catalog/IndexCatalogEntry.h"
 #include "lingodb/catalog/TableCatalogEntry.h"
 #include "lingodb/compiler/Conversion/ArrowToStd/ArrowToStd.h"
+#include "lingodb/compiler/Conversion/PyInterpLowering/PyInterpLoweringPass.h"
 #include "lingodb/compiler/Conversion/DBToStd/DBToStd.h"
 #include "lingodb/compiler/Conversion/RelAlgToSubOp/RelAlgToSubOpPass.h"
 #include "lingodb/compiler/Conversion/SubOpToControlFlow/SubOpToControlFlowPass.h"
 #include "lingodb/compiler/Dialect/RelAlg/Passes.h"
+#include "lingodb/compiler/Dialect/DB/Passes.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/Passes.h"
 #include "lingodb/compiler/helper.h"
 #include "lingodb/execution/BaselineBackend.h"
 #include "lingodb/execution/CBackend.h"
+#include "lingodb/execution/BackendPasses.h"
 #include "lingodb/execution/LLVMBackends.h"
 #include "lingodb/runtime/ExternalDataSourceProperty.h"
 #include "lingodb/runtime/storage/TableStorage.h"
@@ -47,8 +50,10 @@ class DefaultQueryOptimizer : public QueryOptimizer {
       mlir::PassManager pm(moduleOp.getContext());
       pm.enableVerifier(verify);
       addLingoDBInstrumentation(pm, getSerializationState());
-      //pm.addPass(mlir::createInlinerPass());
-      //pm.addPass(mlir::createSymbolDCEPass());
+      pm.addPass(mlir::createInlinerPass());
+      pm.addPass(mlir::createSymbolDCEPass());
+      pm.addPass(createDecomposeTuplePass());
+      pm.addPass(db::createOptimizeRuntimeFunctionsPass());
       relalg::createQueryOptPipeline(pm, catalog);
       if (mlir::failed(pm.run(moduleOp))) {
          error.emit() << " Query Optimization failed";
@@ -136,6 +141,9 @@ class SubOpLoweringStep : public LoweringStep {
          optSubOpPm.addPass(subop::createSpecializeParallelPass());
       }
       optSubOpPm.addPass(subop::createPrepareLoweringPass());
+#if ENABLE_REFCOUNT == 1
+         optSubOpPm.addPass(subop::createMemoryMgmtPass());
+#endif
       if (mlir::failed(optSubOpPm.run(moduleOp))) {
          error.emit() << "Lowering of Sub-Operators to imperative operations failed";
          return;
@@ -181,6 +189,7 @@ class DefaultImperativeLowering : public LoweringStep {
       lowerArrowPm.enableVerifier(verify);
       addLingoDBInstrumentation(lowerArrowPm, getSerializationState());
       lowerArrowPm.addPass(arrow::createLowerToStdPass());
+      lowerArrowPm.addPass(lingodb::compiler::dialect::py_interp::createLowerToStdPass());
       if (cleanupAfterImperative.getValue()) {
          lowerArrowPm.addPass(lingodb::compiler::createCanonicalizerPass());
          lowerArrowPm.addPass(mlir::createLoopInvariantCodeMotionPass());

@@ -12,6 +12,7 @@ std::unique_ptr<mlir::Pass> createPullGatherUpPass();
 std::unique_ptr<mlir::Pass> createReuseLocalPass();
 //std::unique_ptr<mlir::Pass> createGlobalOptPass();
 std::unique_ptr<mlir::Pass> createParallelizePass();
+std::unique_ptr<mlir::Pass> createMemoryMgmtPass();
 std::unique_ptr<mlir::Pass> createSpecializeParallelPass();
 std::unique_ptr<mlir::Pass> createSplitIntoExecutionStepsPass();
 std::unique_ptr<mlir::Pass> createInlineNestedMapPass();

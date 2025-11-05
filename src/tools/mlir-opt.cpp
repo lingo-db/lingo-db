@@ -5,6 +5,7 @@
 #include "lingodb/compiler/Conversion/SubOpToControlFlow/SubOpToControlFlowPass.h"
 #include "lingodb/compiler/Dialect/Arrow/IR/ArrowDialect.h"
 #include "lingodb/compiler/Dialect/DB/IR/DBDialect.h"
+#include "lingodb/compiler/Dialect/PyInterp/PyInterpDialect.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "lingodb/compiler/Dialect/RelAlg/Passes.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorDialect.h"
@@ -67,6 +68,9 @@ int main(int argc, char** argv) {
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return util::createUtilToLLVMPass();
    });
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+      return lingodb::execution::createDecomposeTuplePass();
+   });
    lingodb::execution::registerBackendPasses();
    mlir::DialectRegistry registry;
    registry.insert<relalg::RelAlgDialect>();
@@ -74,6 +78,7 @@ int main(int argc, char** argv) {
    registry.insert<subop::SubOperatorDialect>();
    registry.insert<db::DBDialect>();
    registry.insert<lingodb::compiler::dialect::arrow::ArrowDialect>();
+   registry.insert<lingodb::compiler::dialect::py_interp::PyInterpDialect>();
    registry.insert<mlir::func::FuncDialect>();
    registry.insert<mlir::arith::ArithDialect>();
    registry.insert<mlir::DLTIDialect>();

@@ -1,4 +1,5 @@
 #include "lingodb/compiler/frontend/sql_analyzer.h"
+#include "lingodb/compiler/Dialect/DB/IR/DBTypes.h"
 
 #include "lingodb/catalog/FunctionCatalogEntry.h"
 #include "lingodb/compiler/frontend/ast/bound/bound_aggregation.h"
@@ -956,7 +957,7 @@ std::shared_ptr<ast::CreateNode> SQLQueryAnalyzer::analyzeFunctionCreate(std::sh
       }
    }
 
-   if (language == "c") {
+   if (language == "c" || language == "hipy" || language == "hipy_fallback" || language == "python") {
       NullableType returnType = SQLTypeUtils::typemodsToCatalogType(createFunctionInfo->returnType.logicalTypeId, createFunctionInfo->returnType.typeModifiers);
 
       auto boundCreateFunctionInfo = std::make_shared<ast::BoundCreateFunctionInfo>(createFunctionInfo->functionName, createFunctionInfo->replace, returnType);
@@ -969,7 +970,7 @@ std::shared_ptr<ast::CreateNode> SQLQueryAnalyzer::analyzeFunctionCreate(std::sh
       createNode->createInfo = boundCreateFunctionInfo;
       return createNode;
    } else {
-      error("Currently only c is allowed", createNode->loc);
+      error("Currently only c and hipy is allowed", createNode->loc);
    }
 }
 
@@ -2771,6 +2772,12 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeFunctionExpressio
       auto stringArg = analyzeExpression(function->arguments[0], context, resolverScope);
       auto fromArg = function->arguments[1] ? analyzeExpression(function->arguments[1], context, resolverScope) : nullptr;
       auto forArg = function->arguments[2] ? analyzeExpression(function->arguments[2], context, resolverScope) : nullptr;
+      if (stringArg->resultType.has_value() && stringArg->resultType->type.getTypeId() == catalog::LogicalTypeId::CHAR) {
+         stringArg->resultType->castType = std::make_shared<NullableType>(catalog::Type::stringType(), stringArg->resultType->isNullable);
+         resultType = NullableType(catalog::Type::stringType(), stringArg->resultType->isNullable);
+      } else {
+         resultType = stringArg->resultType.value();
+      }
 
       if (!stringArg->resultType.has_value() || (stringArg->resultType->type.getTypeId() != catalog::LogicalTypeId::STRING && stringArg->resultType->type.getTypeId() != catalog::LogicalTypeId::CHAR)) {
          error("The first argument of the SUBSTRING function must have a result type of STRING", stringArg->loc);
@@ -2781,8 +2788,6 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeFunctionExpressio
       if (!forArg->resultType.has_value() || forArg->resultType->type.getTypeId() != catalog::LogicalTypeId::INT) {
          error("The second argument of the SUBSTRING function must have a result type of INT", forArg->loc);
       }
-
-      resultType = stringArg->resultType.value();
 
       auto boundArgs = std::vector{stringArg};
       if (fromArg) {
@@ -2875,15 +2880,28 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeFunctionExpressio
       if (function->arguments.size() != 1) {
          error("Function LENGTH needs exactly one argument", function->loc);
       }
-      if (function->arguments[0]->type != ast::ExpressionType::COLUMN_REF) {
-         error("Function LENGTH needs argument of type column", function->loc);
-      }
       auto arg = analyzeExpression(function->arguments[0], context, resolverScope);
-      if (arg->exprClass != ast::ExpressionClass::BOUND_COLUMN_REF) {
-         error("Function grouping needs argument of type column", function->loc);
-      }
       resultType = catalog::Type::int64();
       boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, std::vector{arg});
+   } else if (upperCaseFName == "REPLACE") {
+        if (function->arguments.size() != 3) {
+           error("Function REPLACE needs exactly 3 arguments", function->loc);
+        }
+        auto text = analyzeExpression(function->arguments[0], context, resolverScope);
+        auto search = analyzeExpression(function->arguments[1], context, resolverScope);
+        auto replace = analyzeExpression(function->arguments[2], context, resolverScope);
+        if (text->resultType.value().type.getTypeId() != catalog::LogicalTypeId::STRING) {
+           error("Function REPLACE needs text of type string", text->loc);
+        }
+        if (search->resultType.value().type.getTypeId() != catalog::LogicalTypeId::STRING && search->resultType.value().type.getTypeId() != catalog::LogicalTypeId::CHAR) {
+           error("Function REPLACE needs search of type string or char", text->loc);
+        }
+
+        if (replace->resultType.value().type.getTypeId() != catalog::LogicalTypeId::STRING && replace->resultType.value().type.getTypeId() != catalog::LogicalTypeId::CHAR) {
+           error("Function REPLACE needs replacement of type string or char", text->loc);
+        }
+        resultType = text->resultType.value();
+        boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, std::vector{text, search, replace});
    } else if (upperCaseFName == "REGEXP_REPLACE") {
       if (function->arguments.size() != 3) {
          error("Function REGEXP_REPLACE needs exactly 3 arguments", function->loc);
@@ -2910,7 +2928,52 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeFunctionExpressio
       });
       resultType = catalog::Type::index();
       boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, boundArgs);
-
+   } else if (upperCaseFName == "PARAM") {
+      if (function->arguments.size() != 1) {
+         error("PARAM function needs exactly one argument", function->loc);
+      }
+      auto paramIdxExpr = function->arguments[0];
+      if (paramIdxExpr->type != ast::ExpressionType::VALUE_CONSTANT) {
+         error("PARAM function argument must be a constant", paramIdxExpr->loc);
+      }
+      auto paramIdxValue = std::static_pointer_cast<ast::ConstantExpression>(paramIdxExpr);
+      if (paramIdxValue->value->type != ast::ConstantType::INT) {
+         error("PARAM function argument must be an integer constant", paramIdxExpr->loc);
+      }
+      auto paramIdx = static_cast<size_t>(std::static_pointer_cast<ast::IntValue>(paramIdxValue->value)->iVal);
+      if (paramIdx > context->params.size()  || paramIdx < 1) {
+         error("PARAM function argument index out of bounds", paramIdxExpr->loc);
+      }
+      paramIdx = paramIdx - 1;
+      auto value = context->params[paramIdx];
+      bool nullable = false;
+      mlir::Type baseType = value.getType();
+      using namespace lingodb::compiler::dialect;
+      if (auto nullableType =mlir::dyn_cast_or_null<db::NullableType>(value.getType())) {
+         nullable = true;
+         baseType = nullableType.getType();
+      }
+      catalog::Type rawResType=catalog::Type::int64();
+      if (mlir::isa<db::StringType>(baseType)) {
+         rawResType = catalog::Type::stringType();
+      }else if (mlir::isa<mlir::Float32Type>(baseType)) {
+         rawResType = catalog::Type::f32();
+      } else if (mlir::isa<mlir::Float64Type>(baseType)) {
+         rawResType = catalog::Type::f64();
+      } else if (auto intType = mlir::dyn_cast_or_null<mlir::IntegerType>(baseType)) {
+         switch (intType.getWidth()) {
+            case 1: rawResType = catalog::Type::boolean(); break;
+            case 8: rawResType = catalog::Type::int8(); break;
+            case 16: rawResType = catalog::Type::int16(); break;
+            case 32: rawResType = catalog::Type::int32(); break;
+            case 64: rawResType = catalog::Type::int64(); break;
+            default: error("Unsupported integer width for PARAM function", paramIdxExpr->loc);
+         }
+      } else {
+         error("Unsupported parameter type for PARAM function", paramIdxExpr->loc);
+      }
+      NullableType resType{rawResType, nullable};
+      return drv.nf.node<ast::BoundParameterExpression>(function->loc, resType, paramIdx);
    } else {
       //UDF
       auto entry = catalog->getTypedEntry<lingodb::catalog::FunctionCatalogEntry>(function->functionName);
@@ -2919,6 +2982,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeFunctionExpressio
          if (function->arguments.size() != entry.value()->getArgumentTypes().size()) {
             error("Function " << function->functionName << " needs " << entry.value()->getArgumentTypes().size() << " arguments but got " << function->arguments.size(), function->loc);
          }
+         bool anyNullableArgs = false;
          for (size_t i = 0; i < function->arguments.size(); i++) {
             auto bound = analyzeExpression(function->arguments.at(i), context, resolverScope);
             auto nullableUDFArgumentType = NullableType(entry.value()->getArgumentTypes()[i]);
@@ -2928,9 +2992,11 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeFunctionExpressio
             }
             auto commonTypes = SQLTypeUtils::toCommonTypes(std::vector{nullableUDFArgumentType, bound->resultType.value()});
             bound->resultType = commonTypes[1];
+            anyNullableArgs |= bound->resultType->isNullable;
             boundArgs.emplace_back(bound);
          }
          resultType = entry.value()->getReturnType();
+         resultType.isNullable |= anyNullableArgs;
          boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, boundArgs);
          boundFunctionExpression->udfFunction = entry.value();
       }

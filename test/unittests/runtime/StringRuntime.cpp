@@ -37,13 +37,15 @@ void withContext(const F& f) {
 
 bool comparator(const std::string& input, const std::string& pattern, const std::string& replace, const std::string& expected) {
    // Convert to VarLen
-   const VarLen32 inputVarLen32 = VarLen32::fromString(input);
-   const VarLen32 patternVarLen32 = VarLen32::fromString(pattern);
-   const VarLen32 replaceVarLen32 = VarLen32::fromString(replace);
-   const VarLen32 expectedVarLen32 = VarLen32::fromString(expected);
+   const VarLen32 inputVarLen32 = VarLen32::fromString(input, StorageClass::GLOBAL);
+   const VarLen32 patternVarLen32 = VarLen32::fromString(pattern, StorageClass::GLOBAL);
+   const VarLen32 replaceVarLen32 = VarLen32::fromString(replace, StorageClass::GLOBAL);
+   const VarLen32 expectedVarLen32 = VarLen32::fromString(expected, StorageClass::GLOBAL);
 
    const VarLen32 result = StringRuntime::regexpReplace(inputVarLen32, patternVarLen32, replaceVarLen32);
-   return StringRuntime::compareEq(result, expectedVarLen32);
+   auto res = StringRuntime::compareEq(result, expectedVarLen32);
+   VarLen32::decRefCount(result);
+   return res;
 }
 
 } // namespace

@@ -8,6 +8,11 @@
 #include "ConcurrentMap.h"
 #include "Session.h"
 #include <lingodb/scheduler/Scheduler.h>
+#ifdef USE_CPYTHON_WASM_RUNTIME
+namespace lingodb::wasm {
+struct WASMSession;
+} // namespace lingodb::wasm
+#endif
 namespace lingodb::runtime {
 class Database;
 //some state required for query processing;
@@ -59,6 +64,7 @@ class ExecutionContext {
    std::unordered_map<uint32_t, int64_t> tupleCounts;
    std::vector<std::unordered_map<size_t, State>> allocators;
    std::vector<std::vector<State>> perWorkerStates;
+
    std::vector<Arena> stringArenas;
    Session& session;
 
@@ -67,10 +73,13 @@ class ExecutionContext {
       allocators.resize(lingodb::scheduler::getNumWorkers());
       stringArenas.resize(lingodb::scheduler::getNumWorkers());
       perWorkerStates.resize(lingodb::scheduler::getNumWorkers());
+      resetPythonSessionCache();
    }
    Session& getSession() {
       return session;
    }
+
+   void resetPythonSessionCache();
    template <class T>
    std::optional<T*> getResultOfType(uint32_t id) {
       if (results.contains(id)) {
@@ -103,6 +112,15 @@ class ExecutionContext {
    State& getAllocator(size_t group) {
       return allocators[lingodb::scheduler::currentWorkerId()][group];
    }
+#ifdef USE_CPYTHON_RUNTIME
+   void setupPython();
+   void teardownPython();
+#endif
+#ifdef USE_CPYTHON_WASM_RUNTIME
+   void setupWasm();
+   void teardownWasm();
+   wasm::WASMSession* getWasmSession();
+#endif
    ~ExecutionContext();
 };
 

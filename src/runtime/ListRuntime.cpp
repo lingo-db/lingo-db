@@ -1,10 +1,9 @@
 #include "lingodb/runtime/ListRuntime.h"
+#include <algorithm>
 using namespace lingodb::runtime;
 
 List* List::create(size_t sizeOfType) {
-   auto* list = new List(sizeOfType);
-   getCurrentExecutionContext()->registerState({list, [](void* ptr) { delete reinterpret_cast<List*>(ptr); }});
-   return list;
+   return createRefCounted<List>(sizeOfType);
 }
 uint8_t* List::append() {
    if ((len + 1) * sizeOfType > values.size()) {
@@ -34,4 +33,28 @@ uint8_t* List::at(size_t pos) {
 
 size_t List::size() {
    return len;
+}
+
+void List::cleanupUseCb(List* list, void (*cleanupFn)(List*)) {
+   decRefCount<List>(list, cleanupFn);
+}
+
+void List::cleanupUse(List* list) {
+   decRefCount<List>(list, [](List* l) {});
+}
+void List::addUse(List* list) {
+   incRefCount<List>(list);
+}
+
+void List::sort(bool (*compareFn)(const void*, const void*)) {
+        std::vector<uint8_t*> toSort;
+        for (size_t i = 0; i < len; i++) {
+        toSort.push_back(values.data() + i * sizeOfType);
+        }
+        std::sort(toSort.begin(), toSort.end(), compareFn);
+        std::vector<uint8_t> sorted(values.size());
+        for (size_t i = 0; i < len; i++) {
+        memcpy(sorted.data() + i * sizeOfType, toSort[i], sizeOfType);
+        }
+        values = std::move(sorted);
 }

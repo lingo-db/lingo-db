@@ -265,24 +265,67 @@ mlir::LogicalResult dateSubtractFoldFn(mlir::TypeRange types, ::llvm::ArrayRef<:
    }
    return mlir::failure();
 }
+mlir::Value concatMultipleImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, const mlir::TypeConverter* typeConverter, mlir::Location loc) {
+   size_t numArgs = loweredArguments.size();
+   mlir::Value ref;
+   mlir::Value numVal;
+   auto parentOp = rewriter.getBlock()->getParentOp();
+   mlir::func::FuncOp funcOp;
+   if (auto fOp = mlir::dyn_cast_or_null<mlir::func::FuncOp>(parentOp)) {
+      funcOp = fOp;
+   } else {
+      funcOp = parentOp->getParentOfType<mlir::func::FuncOp>();
+   }
+   {
+      mlir::OpBuilder::InsertionGuard guard(rewriter);
+        rewriter.setInsertionPointToStart(&funcOp.getBody().front());
+        numVal = rewriter.create<mlir::arith::ConstantIndexOp>(loc, numArgs);
+        ref = rewriter.create<util::AllocaOp>(loc, util::RefType::get(typeConverter->convertType(resType)), numVal);
+   }
+
+   for (size_t i = 0; i < numArgs; ++i) {
+      auto idxVal = rewriter.create<mlir::arith::ConstantIndexOp>(loc, i);
+      rewriter.create<util::StoreOp>(loc, loweredArguments[i], ref, idxVal);
+   }
+   return StringRuntime::concatMultiple(rewriter, loc)(mlir::ValueRange{ref, numVal})[0];
+}
+
 } // namespace
 std::shared_ptr<db::RuntimeFunctionRegistry> db::RuntimeFunctionRegistry::getBuiltinRegistry(mlir::MLIRContext* context) {
    auto builtinRegistry = std::make_shared<RuntimeFunctionRegistry>(context);
-   builtinRegistry->add("DumpValue").handlesNulls().matchesTypes({RuntimeFunction::anyType}, RuntimeFunction::noReturnType).implementedAs(dumpValuesImpl);
+   builtinRegistry->add("DumpValue").hasSideEffects(true).handlesNulls().matchesTypes({RuntimeFunction::anyType}, RuntimeFunction::noReturnType).implementedAs(dumpValuesImpl);
    auto resTypeIsI64 = [](mlir::Type t, mlir::TypeRange) { return t.isInteger(64); };
    auto resTypeIsF64 = [](mlir::Type t, mlir::TypeRange) { return t.isF64(); };
    auto resTypeIsBool = [](mlir::Type t, mlir::TypeRange) { return t.isInteger(1); };
    auto resTypeIsIndex = [](mlir::Type t, mlir::TypeRange) { return t.isIndex(); };
+   auto resTypeIsStr = [](mlir::Type t, mlir::TypeRange) { return mlir::isa<db::StringType>(t); };
+   auto resTypeIsInverval = [](mlir::Type t, mlir::TypeRange) {
+      return mlir::isa<db::IntervalType>(t);
+   };
    builtinRegistry->add("Substring").implementedAs(StringRuntime::substr).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::intLike, RuntimeFunction::intLike}, RuntimeFunction::matchesArgument());
+   builtinRegistry->add("StringStrip").implementedAs(StringRuntime::strip).matchesTypes({RuntimeFunction::stringLike}, RuntimeFunction::matchesArgument());
    builtinRegistry->add("StringFind").implementedAs(StringRuntime::findNext).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike, RuntimeFunction::intLike}, resTypeIsI64);
    builtinRegistry->add("StringLength").implementedAs(StringRuntime::len).matchesTypes({RuntimeFunction::stringLike}, resTypeIsI64);
    builtinRegistry->add("StringSplit").implementedAs(StringRuntime::split).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike, RuntimeFunction::intLike}, [](mlir::Type t, mlir::TypeRange) { return mlir::isa<db::ListType>(t) && mlir::isa<db::StringType>(mlir::cast<db::ListType>(t).getElementType()); });
+   builtinRegistry->add("RegexSearch").implementedAs(StringRuntime::regexSearch).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike}, [](mlir::Type t, mlir::TypeRange) { return mlir::isa<db::ListType>(t); });
+   builtinRegistry->add("RaiseRuntimeError").hasSideEffects(true).implementedAs(DumpRuntime::error).matchesTypes({RuntimeFunction::stringLike}, [](mlir::Type t, mlir::TypeRange) { return true; });
    builtinRegistry->add("Ord").implementedAs(StringRuntime::ord).matchesTypes({RuntimeFunction::stringLike}, resTypeIsI64);
 
    builtinRegistry->add("ToUpper").implementedAs(StringRuntime::toUpper).matchesTypes({RuntimeFunction::stringLike}, RuntimeFunction::matchesArgument());
+   builtinRegistry->add("FmtInt").implementedAs(StringRuntime::formatInt).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::intLike}, resTypeIsStr);
+   builtinRegistry->add("FmtDouble").implementedAs(StringRuntime::formatDouble).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::float64}, resTypeIsStr);
    builtinRegistry->add("ToLower").implementedAs(StringRuntime::toLower).matchesTypes({RuntimeFunction::stringLike}, RuntimeFunction::matchesArgument());
    builtinRegistry->add("Contains").implementedAs(StringRuntime::contains).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike}, resTypeIsBool);
    builtinRegistry->add("Concatenate").implementedAs(StringRuntime::concat).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike}, RuntimeFunction::matchesArgument());
+   builtinRegistry->add("ConcatenateMultiple").implementedAs(concatMultipleImpl).needsWrapping().verifyFn = [](mlir::TypeRange types, mlir::Type resType) {
+      for (auto t : types) {
+         if (!mlir::isa<db::StringType>(t)) {
+            return false;
+         }
+      }
+      return mlir::isa<db::StringType>(resType);
+   };
+
    builtinRegistry->add("PyStringFind").implementedAs(StringRuntime::pyFind).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike, RuntimeFunction::intLike, RuntimeFunction::intLike}, resTypeIsI64);
    builtinRegistry->add("PyStringRFind").implementedAs(StringRuntime::pyRFind).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike, RuntimeFunction::intLike, RuntimeFunction::intLike}, resTypeIsI64);
    builtinRegistry->add("Replace").implementedAs(StringRuntime::replace).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike, RuntimeFunction::stringLike}, RuntimeFunction::matchesArgument());
@@ -300,10 +343,11 @@ std::shared_ptr<db::RuntimeFunctionRegistry> db::RuntimeFunctionRegistry::getBui
       return res;
    });
    builtinRegistry->add("RoundInt64").implementedAs(IntegerRuntime::round64).matchesTypes({RuntimeFunction::intLike, RuntimeFunction::intLike}, RuntimeFunction::matchesArgument());
-   builtinRegistry->add("startTiming").implementedAs(Timing::start).matchesTypes({}, resTypeIsI64);
-   builtinRegistry->add("startPerf").implementedAs(Timing::startPerf).matchesTypes({}, RuntimeFunction::noReturnType);
-   builtinRegistry->add("stopPerf").implementedAs(Timing::stopPerf).matchesTypes({}, RuntimeFunction::noReturnType);
-   builtinRegistry->add("stopTiming").implementedAs(Timing::stop).matchesTypes({RuntimeFunction::intLike}, RuntimeFunction::noReturnType);
+   builtinRegistry->add("RoundFloat").implementedAs(FloatRuntime::round).matchesTypes({RuntimeFunction::float64, RuntimeFunction::intLike}, RuntimeFunction::matchesArgument());
+   builtinRegistry->add("startTiming").hasSideEffects(true).implementedAs(Timing::start).matchesTypes({}, resTypeIsI64);
+   builtinRegistry->add("startPerf").hasSideEffects(true).implementedAs(Timing::startPerf).matchesTypes({}, RuntimeFunction::noReturnType);
+   builtinRegistry->add("stopPerf").hasSideEffects(true).implementedAs(Timing::stopPerf).matchesTypes({}, RuntimeFunction::noReturnType);
+   builtinRegistry->add("stopTiming").hasSideEffects(true).implementedAs(Timing::stop).matchesTypes({RuntimeFunction::intLike}, RuntimeFunction::noReturnType);
    builtinRegistry->add("RoundInt32").implementedAs(IntegerRuntime::round32).matchesTypes({RuntimeFunction::intLike, RuntimeFunction::intLike}, RuntimeFunction::matchesArgument());
    builtinRegistry->add("RoundInt16").implementedAs(IntegerRuntime::round16).matchesTypes({RuntimeFunction::intLike, RuntimeFunction::intLike}, RuntimeFunction::matchesArgument());
    builtinRegistry->add("RoundInt8").implementedAs(IntegerRuntime::round8).matchesTypes({RuntimeFunction::intLike, RuntimeFunction::intLike}, RuntimeFunction::matchesArgument());
@@ -319,6 +363,7 @@ std::shared_ptr<db::RuntimeFunctionRegistry> db::RuntimeFunctionRegistry::getBui
    builtinRegistry->add("DateDiffHour").matchesTypes({RuntimeFunction::dateLike, RuntimeFunction::dateLike}, resTypeIsI64).implementedAs(DateRuntime::dateDiffHour);
    builtinRegistry->add("DateDiffMinute").matchesTypes({RuntimeFunction::dateLike, RuntimeFunction::dateLike}, resTypeIsI64).implementedAs(DateRuntime::dateDiffMinute);
    builtinRegistry->add("DateDiffSecond").matchesTypes({RuntimeFunction::dateLike, RuntimeFunction::dateLike}, resTypeIsI64).implementedAs(DateRuntime::dateDiffSecond);
+   builtinRegistry->add("DateDiffInterval").matchesTypes({RuntimeFunction::dateLike, RuntimeFunction::dateLike}, resTypeIsInverval).implementedAs(DateRuntime::dateDiffNanoSeconds);
    builtinRegistry->add("ExtractFromDate").matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::dateLike}, resTypeIsI64).needsWrapping();
    builtinRegistry->add("ExtractYearFromDate").matchesTypes({RuntimeFunction::dateLike}, resTypeIsI64).implementedAs(DateRuntime::extractYear);
    builtinRegistry->add("ExtractMonthFromDate").matchesTypes({RuntimeFunction::dateLike}, resTypeIsI64).implementedAs(DateRuntime::extractMonth);
@@ -328,16 +373,22 @@ std::shared_ptr<db::RuntimeFunctionRegistry> db::RuntimeFunctionRegistry::getBui
    builtinRegistry->add("ExtractSecondFromDate").matchesTypes({RuntimeFunction::dateLike}, resTypeIsI64).implementedAs(DateRuntime::extractSecond);
    builtinRegistry->add("DateAdd").handlesInvalid().matchesTypes({RuntimeFunction::dateLike, RuntimeFunction::dateInterval}, RuntimeFunction::matchesArgument()).implementedAs(dateAddImpl).folds(dateAddFoldFn);
    builtinRegistry->add("DateSubtract").handlesInvalid().matchesTypes({RuntimeFunction::dateLike, RuntimeFunction::dateInterval}, RuntimeFunction::matchesArgument()).implementedAs(dateSubImpl).folds(dateSubtractFoldFn);
+   builtinRegistry->add("IntervalGetDay").matchesTypes({RuntimeFunction::dateInterval}, resTypeIsI64).implementedAs(IntervalRuntime::days);
 
    builtinRegistry->add("AbsInt").handlesInvalid().matchesTypes({RuntimeFunction::intLike}, RuntimeFunction::matchesArgument()).implementedAs(absImpl);
    builtinRegistry->add("AbsDecimal").handlesInvalid().matchesTypes({RuntimeFunction::anyDecimal}, RuntimeFunction::matchesArgument()).implementedAs(absImpl);
    builtinRegistry->add("Sqrt").needsWrapping().matchesTypes({RuntimeFunction::anyNumber}, RuntimeFunction::matchesArgument()).implementedAs(sqrtImpl);
    builtinRegistry->add("Sin").matchesTypes({RuntimeFunction::float64}, resTypeIsF64).implementedAs(FloatRuntime::sin);
    builtinRegistry->add("Log").matchesTypes({RuntimeFunction::float64}, resTypeIsF64).implementedAs(FloatRuntime::log);
+   builtinRegistry->add("Ceil").matchesTypes({RuntimeFunction::float64}, resTypeIsI64).implementedAs(FloatRuntime::ceil);
+
    builtinRegistry->add("Exp").matchesTypes({RuntimeFunction::float64}, resTypeIsF64).implementedAs(FloatRuntime::exp);
+   builtinRegistry->add("Pow").matchesTypes({RuntimeFunction::float64, RuntimeFunction::float64}, resTypeIsF64).implementedAs(FloatRuntime::pow);
    builtinRegistry->add("Erf").matchesTypes({RuntimeFunction::float64}, resTypeIsF64).implementedAs(FloatRuntime::erf);
    builtinRegistry->add("Cos").matchesTypes({RuntimeFunction::float64}, resTypeIsF64).implementedAs(FloatRuntime::cos);
    builtinRegistry->add("ASin").matchesTypes({RuntimeFunction::float64}, resTypeIsF64).implementedAs(FloatRuntime::arcsin);
+   builtinRegistry->add("ACos").matchesTypes({RuntimeFunction::float64}, resTypeIsF64).implementedAs(FloatRuntime::arccos);
+   builtinRegistry->add("ATan2").matchesTypes({RuntimeFunction::float64, RuntimeFunction::float64}, resTypeIsF64).implementedAs(FloatRuntime::arctan2);
    builtinRegistry->add("Hash").matchesTypes({RuntimeFunction::anyType}, resTypeIsIndex).needsWrapping().implementedAs([](mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, const mlir::TypeConverter* typeConverter, mlir::Location loc) -> mlir::Value {
       return rewriter.create<lingodb::compiler::dialect::db::Hash>(loc, loweredArguments[0]);
    });

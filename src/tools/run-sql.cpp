@@ -27,6 +27,7 @@ int main(int argc, char** argv) {
    std::string inputFileName = std::string(argv[1]);
    std::string directory = std::string(argv[2]);
    std::cout << "Loading Database from: " << directory << '\n';
+   auto scheduler = scheduler::startScheduler();
    auto session = runtime::Session::createSession(directory, eagerLoading.getValue());
 
    lingodb::compiler::support::eval::init();
@@ -35,7 +36,6 @@ int main(int argc, char** argv) {
    unsetenv("PERF_BUILDID_DIR");
    queryExecutionConfig->timingProcessor = std::make_unique<execution::TimingPrinter>(inputFileName);
 
-   auto scheduler = scheduler::startScheduler();
    auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), *session);
    executer->fromFile(inputFileName);
    scheduler::awaitEntryTask(std::make_unique<execution::QueryExecutionTask>(std::move(executer)));

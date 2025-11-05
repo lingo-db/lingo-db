@@ -36,7 +36,7 @@ if (APPLE)
 endif()
 
 
-if (NOT CMAKE_BUILD_TYPE STREQUAL "ASAN")
+if (NOT CMAKE_BUILD_TYPE STREQUAL "ASAN" AND NOT ENABLE_PYTHON STREQUAL "CPYTHON")
     add_library(pybridge SHARED bridge.cpp custom_dialects.cpp)
     target_link_libraries(pybridge
             PRIVATE runner runtime mlir-support scheduler ${LIBS} Arrow::arrow_static

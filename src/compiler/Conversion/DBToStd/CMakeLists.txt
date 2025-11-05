@@ -11,6 +11,7 @@ add_mlir_conversion_library(MLIRDBToArrowStd
         date-rt-defs
         decimal-rt-defs
         ht-rt-defs
+        try-except-rt-defs
         LINK_COMPONENTS
         Core
 

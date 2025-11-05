@@ -188,6 +188,14 @@ MLIR_CAPI_EXPORTED bool mlirTypeIsASubOpContinuousEntryRefType(MlirType type);
 MLIR_CAPI_EXPORTED MlirType mlirSubOpEntryListTypeGet(MlirType t);
 MLIR_CAPI_EXPORTED MlirTypeID mlirSubOpEntryListTypeGetTypeID();
 MLIR_CAPI_EXPORTED bool mlirTypeIsASubOpEntryListType(MlirType type);
+
+//----------------------------------------------------------------------------------------------------------------------
+// TupleStream Dialect
+//----------------------------------------------------------------------------------------------------------------------
+
+MLIR_CAPI_EXPORTED MlirType mlirPyInterpPyObjectTypeGet(MlirContext context);
+MLIR_CAPI_EXPORTED MlirTypeID mlirPyInterpPyObjectTypeGetTypeID();
+MLIR_CAPI_EXPORTED bool mlirTypeIsAPyInterpPyObjectType(MlirType type);
 #ifdef __cplusplus
 }
 #endif

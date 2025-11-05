@@ -15,7 +15,7 @@ class FunctionCatalogEntry : public CatalogEntry {
    std::vector<Type> argumentTypes;
 
    public:
-   static constexpr std::array<CatalogEntryType, 1> entryTypes = {CatalogEntryType::C_FUNCTION_ENTRY};
+   static constexpr std::array<CatalogEntryType, 3> entryTypes = {CatalogEntryType::C_FUNCTION_ENTRY, CatalogEntryType::HIPY_FUNCTION_ENTRY, CatalogEntryType::PYTHON_FUNCTION_ENTRY};
    struct UDFHandle {
       void* handle;
       void* addrPtr;
@@ -24,8 +24,8 @@ class FunctionCatalogEntry : public CatalogEntry {
       static std::unordered_map<std::string, UDFHandle> udfFunctions;
       return udfFunctions;
    }
-   FunctionCatalogEntry(std::string name, std::string code, Type returnType, std::vector<Type> argumentTypes)
-      : CatalogEntry(CatalogEntryType::C_FUNCTION_ENTRY), name(std::move(name)), code(std::move(code)), returnType(std::move(returnType)), argumentTypes(std::move(argumentTypes)) {}
+   FunctionCatalogEntry(CatalogEntryType entryType, std::string name, std::string code, Type returnType, std::vector<Type> argumentTypes)
+      : CatalogEntry(entryType), name(std::move(name)), code(std::move(code)), returnType(std::move(returnType)), argumentTypes(std::move(argumentTypes)) {}
    std::string getName() override { return name; }
    [[nodiscard]] std::string getCode() const { return code; }
    [[nodiscard]] Type getReturnType() const { return returnType; }
@@ -38,10 +38,28 @@ class FunctionCatalogEntry : public CatalogEntry {
 class CFunctionCatalogEntry : public FunctionCatalogEntry {
    public:
    CFunctionCatalogEntry(std::string name, std::string code, Type returnType, std::vector<Type> argumentTypes)
-      : FunctionCatalogEntry(name, code, returnType, argumentTypes) {}
+      : FunctionCatalogEntry(CatalogEntry::CatalogEntryType::C_FUNCTION_ENTRY, name, code, returnType, argumentTypes) {}
 
    static std::shared_ptr<FunctionCatalogEntry> deserialize(lingodb::utility::Deserializer& deserializer);
 };
+class HiPyFunctionCatalogEntry : public FunctionCatalogEntry {
+   std::string byteCode;
+
+   public:
+   HiPyFunctionCatalogEntry(std::string name, std::string code, Type returnType, std::vector<Type> argumentTypes, std::string byteCode)
+      : FunctionCatalogEntry(CatalogEntry::CatalogEntryType::HIPY_FUNCTION_ENTRY, name, code, returnType, argumentTypes), byteCode(byteCode) {}
+   std::string getByteCode() { return byteCode; }
+   void serializeEntry(lingodb::utility::Serializer& serializer) const override;
+   static std::shared_ptr<FunctionCatalogEntry> deserialize(lingodb::utility::Deserializer& deserializer);
+};
+class PythonFunctionCatalogEntry : public FunctionCatalogEntry {
+
+   public:
+   PythonFunctionCatalogEntry(std::string name, std::string code, Type returnType, std::vector<Type> argumentTypes)
+      : FunctionCatalogEntry(CatalogEntry::CatalogEntryType::PYTHON_FUNCTION_ENTRY, name, code, returnType, argumentTypes) {}
+   static std::shared_ptr<FunctionCatalogEntry> deserialize(lingodb::utility::Deserializer& deserializer);
+};
+
 
 void visitUDFFunctions(const std::function<void(std::string, void*)>& fn);
 } // namespace lingodb::catalog

@@ -241,11 +241,11 @@ LogicalResult printOperation(CppEmitter& emitter, util::GenericMemrefCastOp op) 
    os << ") " << emitter.getOrCreateName(op.getVal());
    return success();
 }
-LogicalResult printStandardOperation(CppEmitter& emitter, mlir::Operation* op, const std::function<void(raw_ostream&)>& fn) {
+LogicalResult printStandardOperation(CppEmitter& emitter, mlir::Operation* op, const std::function<void(raw_indented_ostream&)>& fn) {
    if (op->getNumResults() != 1) {
       return failure();
    }
-   raw_ostream& os = emitter.ostream();
+   auto& os = emitter.ostream();
    if (failed(emitter.emitAssignPrefix(*op)))
       return failure();
    fn(os);
@@ -381,7 +381,7 @@ LogicalResult printOperation(CppEmitter& emitter, util::DeAllocOp op) {
    return mlir::success();
 }
 LogicalResult printOperation(CppEmitter& emitter, util::CreateConstVarLen op) {
-   return printStandardOperation(emitter, op, [&](auto& os) { os << "runtime::VarLen32{reinterpret_cast<const uint8_t*>(R\"RAW(" << (op.getStr().str()) << ")RAW\"), " << op.getStr().size() << "}"; });
+   return printStandardOperation(emitter, op, [&](auto& os) { os.getOStream() << "runtime::VarLen32{reinterpret_cast<const uint8_t*>(R\"RAW(" << (op.getStr().str()) << ")RAW\"), " << op.getStr().size() << ", runtime::StorageClass::GLOBAL}"; });
 }
 LogicalResult printOperation(CppEmitter& emitter, util::PackOp op) {
    return printStandardOperation(emitter, op, [&](auto& os) {
@@ -410,7 +410,7 @@ LogicalResult printOperation(CppEmitter& emitter, util::GetTupleOp op) {
    return printStandardOperation(emitter, op, [&](auto& os) { os << emitter.getOrCreateName(op.getTuple()) << ".t" << op.getOffset(); });
 }
 LogicalResult printOperation(CppEmitter& emitter, util::CreateVarLen op) {
-   return printStandardOperation(emitter, op, [&](auto& os) { os << "runtime::VarLen32{reinterpret_cast<uint8_t*>(" << emitter.getOrCreateName(op.getRef()) << "), (uint32_t) " << emitter.getOrCreateName(op.getLen()) << "}"; });
+   return printStandardOperation(emitter, op, [&](auto& os) { os << "runtime::VarLen32{reinterpret_cast<uint8_t*>(" << emitter.getOrCreateName(op.getRef()) << "), (uint32_t) " << emitter.getOrCreateName(op.getLen()) << ", runtime::StorageClass::TRANSIENT}"; });
 }
 LogicalResult printOperation(CppEmitter& emitter, util::ToMemrefOp op) {
    return printStandardOperation(emitter, op, [&](auto& os) { os << emitter.getOrCreateName(op.getRef()); });

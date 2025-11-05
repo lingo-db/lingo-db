@@ -370,7 +370,7 @@ class ScanBatchesTask : public lingodb::scheduler::TaskWithImplicitContext {
    std::vector<lingodb::runtime::BatchView> batchInfos;
    std::vector<std::vector<const ArrayView*>> arrayViewPtrs;
    std::atomic<size_t> startIndex{0};
-   size_t splitSize{20000};
+   size_t splitSize{2000};
    std::vector<std::unique_ptr<BatchesWorkerResvState>> workerResvs;
    std::vector<std::pair<uint16_t*, uint16_t*>> selVecs;
 

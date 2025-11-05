@@ -11,6 +11,7 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 #include "llvm/ADT/DenseMap.h"
+#include "lingodb/compiler/Dialect/PyInterp/PyInterpOps.h"
 
 namespace {
 using namespace lingodb::compiler::dialect;
@@ -182,7 +183,34 @@ class RewriteComplexAggrFuncs : public mlir::RewritePattern {
       return mlir::failure();
    }
 };
+class PyInterpConstantPattern : public mlir::RewritePattern {
+   public:
+   PyInterpConstantPattern(mlir::MLIRContext* context)
+      : RewritePattern(py_interp::CastToPyObject::getOperationName(), 1, context) {}
 
+   mlir::LogicalResult matchAndRewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
+      auto castToPyOp = mlir::cast<py_interp::CastToPyObject>(op);
+      if (!mlir::isa<db::StringType>(castToPyOp.getFrom().getType())) return mlir::failure();
+      if (auto constOp = mlir::dyn_cast_or_null<db::ConstantOp>(castToPyOp.getFrom().getDefiningOp())) {
+         rewriter.replaceOpWithNewOp<py_interp::ConstStrPyObject>(op, castToPyOp.getType(), mlir::cast<mlir::StringAttr>(constOp.getValue()));
+         return mlir::success(true);
+      }
+      return mlir::failure();
+   }
+};
+
+class RewriteGetAttrPattern : public mlir::RewritePattern {
+   public:
+   RewriteGetAttrPattern(mlir::MLIRContext* context)
+      : RewritePattern(py_interp::GetAttr::getOperationName(), 1, context) {}
+
+   mlir::LogicalResult matchAndRewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
+      auto getAttrOp = mlir::cast<py_interp::GetAttr>(op);
+      auto attrVal=rewriter.create<py_interp::ConstStrPyObject>(op->getLoc(), getAttrOp.getType(), getAttrOp.getNameAttr());
+      rewriter.replaceOpWithNewOp<py_interp::GetAttr2>(op, getAttrOp.getType(), getAttrOp.getOn(), attrVal);
+      return mlir::success(true);
+   }
+};
 class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-simplify-aggrs"; }
 
@@ -201,6 +229,8 @@ class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir
          patterns.insert<WrapAggrFuncPattern>(&getContext());
          patterns.insert<WrapCountRowsPattern>(&getContext());
          patterns.insert<RewriteComplexAggrFuncs>(&getContext());
+         patterns.insert<PyInterpConstantPattern>(&getContext());
+         //patterns.insert<RewriteGetAttrPattern>(&getContext());
 
          if (lingodb::compiler::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
             assert(false && "should not happen");

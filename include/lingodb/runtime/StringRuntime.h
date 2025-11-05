@@ -40,10 +40,18 @@ struct StringRuntime {
    static int64_t pyRFind(VarLen32 str, VarLen32 needle, int64_t start, int64_t end);
    static VarLen32 replace(VarLen32 str, VarLen32 oldVal, VarLen32 newVal);
    static VarLen32 concat(VarLen32 a, VarLen32 b);
+   static VarLen32 concatMultiple(VarLen32* strings, size_t numStrings);
    static size_t findMatch(VarLen32 str, VarLen32 needle, size_t start, size_t end);
    static size_t findNext(VarLen32 str, VarLen32 needle, size_t start);
    static List* split(VarLen32 str, VarLen32 needle, size_t maxSplits);
    static int64_t ord(VarLen32 str);
+   static void cleanupUse(VarLen32 str);
+   static void addUse(VarLen32 str);
+   static VarLen32 promoteToGlobal(VarLen32 str);
+   static List* regexSearch(VarLen32 pattern, VarLen32 str);
+   static VarLen32 strip(VarLen32 str);
+   static VarLen32 formatInt(VarLen32 format, int64_t value);
+   static VarLen32 formatDouble(VarLen32 format, double value);
 };
 } // namespace lingodb::runtime
 #endif // LINGODB_RUNTIME_STRINGRUNTIME_H

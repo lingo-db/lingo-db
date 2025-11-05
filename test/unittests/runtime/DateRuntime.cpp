@@ -48,7 +48,7 @@ int64_t toDateLike(const int yearIn, const unsigned monthIn = 1, const unsigned 
 
 TEST_CASE("DateTrunc:YearTruncation") {
    withContext([]() {
-      VarLen32 partVarLen = VarLen32::fromString("year");
+      VarLen32 partVarLen = VarLen32::fromString("year", StorageClass::TRANSIENT);
       auto date1 = toDateLike(2025, 5, 17);
       auto date2 = toDateLike(2025);
       REQUIRE(DateRuntime::dateTrunc(partVarLen, date1) == date2);
@@ -61,7 +61,7 @@ TEST_CASE("DateTrunc:YearTruncation") {
 
 TEST_CASE("DateTrunc:MonthTruncation") {
    withContext([]() {
-      VarLen32 partVarLen = VarLen32::fromString("month");
+      VarLen32 partVarLen = VarLen32::fromString("month", StorageClass::TRANSIENT);
       auto date1 = toDateLike(2025, 5, 17);
       auto date2 = toDateLike(2025, 5, 1);
       REQUIRE(DateRuntime::dateTrunc(partVarLen, date1) == date2);
@@ -74,7 +74,7 @@ TEST_CASE("DateTrunc:MonthTruncation") {
 
 TEST_CASE("DateTrunc:DayTruncation") {
    withContext([]() {
-      VarLen32 partVarLen = VarLen32::fromString("day");
+      VarLen32 partVarLen = VarLen32::fromString("day", StorageClass::TRANSIENT);
       auto date = toDateLike(2025, 5, 17);
       REQUIRE(DateRuntime::dateTrunc(partVarLen, date) == date); // identity
    });
@@ -82,7 +82,7 @@ TEST_CASE("DateTrunc:DayTruncation") {
 
 TEST_CASE("DateTrunc:AllMonths") {
    withContext([]() {
-      VarLen32 partVarLen = VarLen32::fromString("month");
+      VarLen32 partVarLen = VarLen32::fromString("month", StorageClass::TRANSIENT);
       for (int month = 1; month <= 12; ++month) {
          auto date = toDateLike(2021, month, 15);
          auto truncated = toDateLike(2021, month, 1);
@@ -93,7 +93,7 @@ TEST_CASE("DateTrunc:AllMonths") {
 
 TEST_CASE("DateTrunc:HourTruncation") {
    withContext([]() {
-      VarLen32 partVarLen = VarLen32::fromString("hour");
+      VarLen32 partVarLen = VarLen32::fromString("hour", StorageClass::TRANSIENT);
 
       auto d1 = toDateLike(2025, 6, 26, 14, 53, 22);
       auto d2 = toDateLike(2025, 6, 26, 14);
@@ -111,7 +111,7 @@ TEST_CASE("DateTrunc:HourTruncation") {
 
 TEST_CASE("DateTrunc:MinuteTruncation") {
    withContext([]() {
-      VarLen32 partVarLen = VarLen32::fromString("minute");
+      VarLen32 partVarLen = VarLen32::fromString("minute", StorageClass::TRANSIENT);
 
       auto d1 = toDateLike(2025, 6, 26, 14, 53, 22);
       auto d2 = toDateLike(2025, 6, 26, 14, 53);
@@ -129,7 +129,7 @@ TEST_CASE("DateTrunc:MinuteTruncation") {
 
 TEST_CASE("DateTrunc:SecondTruncation") {
    withContext([]() {
-      VarLen32 partVarLen = VarLen32::fromString("second");
+      VarLen32 partVarLen = VarLen32::fromString("second", StorageClass::TRANSIENT);
 
       auto d1 = toDateLike(2025, 6, 26, 14, 53, 22);
       REQUIRE(DateRuntime::dateTrunc(partVarLen, d1) == d1); // identity
@@ -140,7 +140,7 @@ TEST_CASE("DateTrunc:SecondTruncation") {
 
 TEST_CASE("DateTrunc:AllHours") {
    withContext([]() {
-      VarLen32 partVarLen = VarLen32::fromString("hour");
+      VarLen32 partVarLen = VarLen32::fromString("hour", StorageClass::TRANSIENT);
 
       for (int hour = 0; hour < 24; ++hour) {
          auto date = toDateLike(2025, 6, 26, hour, 30, 45);
@@ -152,7 +152,7 @@ TEST_CASE("DateTrunc:AllHours") {
 
 TEST_CASE("DateTrunc:AllMinutes") {
    withContext([]() {
-      VarLen32 partVarLen = VarLen32::fromString("minute");
+      VarLen32 partVarLen = VarLen32::fromString("minute", StorageClass::TRANSIENT);
 
       for (int minute = 0; minute < 60; ++minute) {
          auto date = toDateLike(2025, 6, 26, 14, minute, 59);

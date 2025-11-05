@@ -5,6 +5,7 @@
 
 #include "lingodb/catalog/IndexCatalogEntry.h"
 #include "lingodb/catalog/TableCatalogEntry.h"
+#include "lingodb/compiler/frontend/UDFImplementer.h"
 #include "lingodb/runtime/ArrowTable.h"
 #include "lingodb/runtime/ExternalDataSourceProperty.h"
 #include "lingodb/runtime/storage/TableStorage.h"
@@ -35,8 +36,8 @@ void RelationHelper::createFunction(runtime::VarLen32 meta) {
    auto& session = context->getSession();
    auto catalog = session.getCatalog();
    auto def = utility::deserializeFromHexString<lingodb::catalog::CreateFunctionDef>(meta.str());
-   auto func = std::make_shared<lingodb::catalog::CFunctionCatalogEntry>(def.name, def.code, def.returnType, def.argumentTypes);
    if (def.language == "c") {
+      auto func = std::make_shared<lingodb::catalog::CFunctionCatalogEntry>(def.name, def.code, def.returnType, def.argumentTypes);
       //Remove possible so file
       auto find = catalog::FunctionCatalogEntry::getUdfFunctions().find(def.name);
       if (find != catalog::FunctionCatalogEntry::getUdfFunctions().end()) {
@@ -46,8 +47,17 @@ void RelationHelper::createFunction(runtime::VarLen32 meta) {
       if (!catalog->getDbDir().empty() && std::filesystem::exists(catalog->getDbDir() + "/udf/" + def.name + ".so")) {
          std::filesystem::remove(catalog->getDbDir() + "/udf/" + def.name + ".so");
       }
+      catalog->insertEntry(func, true);
+   } else if (def.language == "hipy" || def.language == "hipy_fallback") {
+      std::string byteCode = lingodb::compiler::frontend::compileHiPyUDF(def.name, def.code, def.argumentTypes, def.returnType, def.language=="hipy_fallback");
+      auto func = std::make_shared<lingodb::catalog::HiPyFunctionCatalogEntry>(def.name, def.code, def.returnType, def.argumentTypes, byteCode);
+      catalog->insertEntry(func, true);
+   } else if (def.language == "python"){
+      auto func = std::make_shared<lingodb::catalog::PythonFunctionCatalogEntry>(def.name, def.code, def.returnType, def.argumentTypes);
+      catalog->insertEntry(func, true);
+   } else {
+      throw std::runtime_error("unsupported function language: " + def.language);
    }
-   catalog->insertEntry(func, true);
    catalog->persist();
 }
 void RelationHelper::appendToTable(runtime::Session& session, std::string tableName, std::shared_ptr<arrow::Table> table) {

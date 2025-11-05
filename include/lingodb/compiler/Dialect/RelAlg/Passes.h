@@ -31,6 +31,7 @@ std::unique_ptr<mlir::Pass> createEliminateNullableTypesPass();
 
 std::unique_ptr<mlir::Pass> createSimplifyAggregationsPass();
 std::unique_ptr<mlir::Pass> createAttachMetaDataPass(catalog::Catalog& db);
+std::unique_ptr<mlir::Pass> createParseNestedSQLPass(catalog::Catalog& db);
 std::unique_ptr<mlir::Pass> createDetachMetaDataPass();
 
 std::unique_ptr<mlir::Pass> createTrackTuplesPass();

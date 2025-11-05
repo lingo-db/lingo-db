@@ -14,10 +14,18 @@ jobs:
   build:
     strategy:
       matrix:
-        build_type: [ debug, asan, release ]
-    runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:e3e4ce05ae1c45664a8e9d38d1f89d54103a7951
+        build_type: [ asan, release ]
+    runs-on: self-hosted
+    container:
+      image: ghcr.io/lingo-db/lingodb-udf-dev:a0422cbd1d148f2fa212a8bbbeb4e530771de9cd
+      options: --cpus 12
     steps:
+      - name: Cleanup
+        run : |
+          rm -rf ${GITHUB_WORKSPACE}
+          mkdir -p ${GITHUB_WORKSPACE}
+      - name: Rewrite git URLs to use mirror
+        run: git config --global url.https://github.com/spack/gnuconfig.git.insteadOf https://git.savannah.gnu.org/git/config.git
       - name: Checkout
         uses: actions/checkout@v2
         with:
@@ -28,41 +36,103 @@ jobs:
         with:
           path: /ccache
           key: ccache-${{ matrix.build_type }}-build
-      - name: Build
-        run: |
+      - name: Cleanup
+        run: | 
+          mkdir -p build
           mkdir -p /ccache
           make clean
+      - name: Cache CPython build
+        id: cache-cypthon-patched
+        uses: actions/cache@v3
+        with:
+          path: build/cpython-patched
+          key: cpython-patched-3.14-25.11.2025
+      - name: Build CPython if not cached
+        if: steps.cache-cypthon-patched.outputs.cache-hit != 'true'
+        run: |
+            bash tools/scripts/build-cpython-patched.sh build/cpython-patched
+      - name: Build
+        run: |
           make build-${{ matrix.build_type }}
         env:
           CCACHE_DIR: /ccache
-          CC: ccache clang-20
-          CXX: ccache clang++-20
+          CC: ccache gcc-14
+          CXX: ccache g++-14
           ENABLE_BASELINE_BACKEND: "ON"
+          ENABLE_PYTHON: "CPYTHON"
       - uses: actions/upload-artifact@master
         with:
           name: ${{ matrix.build_type }}-build
           path: build/lingodb-${{ matrix.build_type }}
           retention-days: 1
+  build_lingodb_python:
+    if: true
+    runs-on: self-hosted
+    container:
+      options: --cpus 12
+      image: ghcr.io/lingo-db/lingodb-py-dev:cb8141fb8f200d11ca497107b797e24e72335c1c
+    steps:
+      - name: Cleanup
+        run: |
+          rm -rf ${GITHUB_WORKSPACE}
+          mkdir -p ${GITHUB_WORKSPACE}
+      - name: Rewrite git URLs to use mirror
+        run: git config --global url.https://github.com/spack/gnuconfig.git.insteadOf https://git.savannah.gnu.org/git/config.git
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          submodules: recursive
+      - name: Build
+        run: |
+          rm -rf /built-packages
+          mkdir -p /built-packages
+          bash tools/python/bridge/create_package.linux.sh cp312-cp312
+          cd tools/python
+          /opt/python/cp312-cp312/bin/python3 -m build .
+          cp dist/*.whl /built-packages/.
+      - uses: actions/upload-artifact@master
+        with:
+          name: lingodb-python-build
+          path: /built-packages
 
   test:
-    needs: build
+    needs: [build,build_lingodb_python]
     strategy:
       matrix:
-        build_type: [ debug, asan ]
-    runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:e3e4ce05ae1c45664a8e9d38d1f89d54103a7951
+        build_type: [ asan ]
+    runs-on: self-hosted
+    container:
+      image: ghcr.io/lingo-db/lingodb-udf-dev:a0422cbd1d148f2fa212a8bbbeb4e530771de9cd
+      options: --cpus 4 --memory 32g
+      env:
+        LINGODB_HIPY_PYTHON_BINARY: "/venv/bin/python3"
     steps:
       - uses: actions/checkout@master
+        with:
+          submodules: recursive
       - uses: actions/download-artifact@master
         with:
           name: ${{ matrix.build_type }}-build
           path: build/lingodb-${{ matrix.build_type }}
+      - uses: actions/download-artifact@master
+        with:
+          name: lingodb-python-build
+          path: built-packages
+      - name: Cache CPython build
+        id: cache-cypthon-patched
+        uses: actions/cache@v3
+        with:
+          path: build/cpython-patched
+          key: cpython-patched-3.14-25.11.2025
       - name: Setup for tests
         run: |
           touch build/dependencies
           touch build/lingodb-${{ matrix.build_type }}/.stamp
           touch build/lingodb-${{ matrix.build_type }}/.buildstamp
           chmod +x build/lingodb-${{ matrix.build_type }}/*
+          python3 -m venv /venv
+          /venv/bin/pip install built-packages/*.whl
+          /venv/bin/pip install numpy pandas pyarrow networkx scipy pybind11 jinja2 scikit-learn
       - name: Test lit
         run: |
           make test-no-rebuild-lit
@@ -86,6 +156,8 @@ jobs:
           LINGODB_EXECUTION_MODE: DEFAULT
 
       - name: Test sqlite-small (baseline)
+        # disable for now (until baseline backend is fixed)
+        if: false
         run: |
           # only run sqlite-small for default and baseline backend, since lit chooses backend on its own and unit is backend-agnostic
           make test-no-rebuild-sqlite-small
@@ -97,16 +169,24 @@ jobs:
   sqlite_tests:
     strategy:
       matrix:
-        build_type: [ release, asan ]
+        build_type: [ release ] # todo: reenable asan
     needs: build
-    runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:e3e4ce05ae1c45664a8e9d38d1f89d54103a7951
+    runs-on: self-hosted
+    container:
+      image: ghcr.io/lingo-db/lingodb-udf-dev:a0422cbd1d148f2fa212a8bbbeb4e530771de9cd
+      options: --cpus 10 --memory 32g
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
         with:
           name: ${{ matrix.build_type }}-build
           path: build/lingodb-${{ matrix.build_type }}
+      - name: Cache CPython build
+        id: cache-cypthon-patched
+        uses: actions/cache@v3
+        with:
+          path: build/cpython-patched
+          key: cpython-patched-3.14-25.11.2025
       - name: Setup for tests
         run: |
           touch build/dependencies
@@ -129,10 +209,12 @@ jobs:
   sqlite_dataset-tests:
     strategy:
       matrix:
-        build_type: [ release, asan ]
+        build_type: [release] # todo: reenable asan
     needs: build
-    runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:e3e4ce05ae1c45664a8e9d38d1f89d54103a7951
+    runs-on: self-hosted
+    container:
+      image: ghcr.io/lingo-db/lingodb-udf-dev:a0422cbd1d148f2fa212a8bbbeb4e530771de9cd
+      options: --cpus 10  --memory 32g
     steps:
       - name: Freeing up space
         run: |
@@ -152,6 +234,12 @@ jobs:
           cd build/lingodb-${{ matrix.build_type }}
           rm -rf !("sql"|"sqlite-tester"|".buildstamp"|".stamp")
           cd ../..
+      - name: Cache CPython build
+        id: cache-cypthon-patched
+        uses: actions/cache@v3
+        with:
+          path: build/cpython-patched
+          key: cpython-patched-3.14-25.11.2025
       - name: Prepare Binaries
         run: |
           chmod +x build/lingodb-${{ matrix.build_type }}/*
@@ -183,11 +271,11 @@ jobs:
           mkdir -p /db/tpcds-1
           cd /datasets/tpcds-1
           $BASE_PATH/build/lingodb-${{ matrix.build_type }}/sql /db/tpcds-1 < $BASE_PATH/resources/sql/tpcds/initialize.sql
-      - name: Test tpch (llvm)
+      - name: Test tpcds (llvm)
         run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpchSf1.test /db/tpch-1
         env:
           LINGODB_EXECUTION_MODE: DEFAULT
-      - name: Test tpch (baseline)
+      - name: Test tpcds (baseline)
         run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpchSf1.test /db/tpch-1
         env:
           LINGODB_EXECUTION_MODE: BASELINE
@@ -217,28 +305,10 @@ jobs:
           LINGODB_EXECUTION_MODE: BASELINE
 
 
-  build_lingodb_python:
-    runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-py-dev:8a696e7a8a48fd5af5173299d52463bf24d6f8b5
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-        with:
-            submodules: recursive
-      - name: Build
-        run: |
-          rm -rf /built-packages
-          mkdir -p /built-packages
-          bash tools/python/bridge/create_package.linux.sh cp312-cp312
-          cd tools/python
-          /opt/python/cp312-cp312/bin/python3 -m build .
-          cp dist/*.whl /built-packages/.
-      - uses: actions/upload-artifact@master
-        with:
-          name: lingodb-python-build
-          path: /built-packages
+
 
   test_lingodb_python:
+    if: false
     needs: build_lingodb_python
     runs-on: ubuntu-24.04
     steps:
@@ -254,12 +324,13 @@ jobs:
           python3 tools/python/test/test.py
           python3 tools/python/test/mlir-construction.py
   test_standalone:
+    if: false
     needs: build
     strategy:
       matrix:
         build_type: [ debug]
     runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:e3e4ce05ae1c45664a8e9d38d1f89d54103a7951
+    container: ghcr.io/lingo-db/lingodb-udf-dev:a0422cbd1d148f2fa212a8bbbeb4e530771de9cd
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master

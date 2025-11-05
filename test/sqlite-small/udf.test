@@ -11,6 +11,12 @@ statement ok
 INSERT INTO dups VALUES (1), (1), (2), (2), (3), (3);
 
 statement ok
+CREATE TABLE txt(i varchar not null);
+
+statement ok
+INSERT INTO txt VALUES ('hello'), ('hello'), ('hello'), ('world'), ('world'), ('world');
+
+statement ok
 create or replace function addOne(x int)
 returns int
 language c
@@ -137,3 +143,26 @@ select addDoubles(i,1.577) from ints
 3.577
 4.577
 5.577
+
+
+statement ok
+CREATE FUNCTION addInt(a int, b int)
+RETURNS int
+AS $$
+    return a+b
+$$ LANGUAGE python
+
+statement ok
+CREATE OR REPLACE FUNCTION calculateFac(b float8)
+RETURNS float8
+AS $$
+def calculatefac(b):
+    for i in range(1, int(b)):
+        b = b * i
+    return b
+$$ LANGUAGE python;
+
+query 9
+select calculatefac(10.0::float8);
+----
+3628800
