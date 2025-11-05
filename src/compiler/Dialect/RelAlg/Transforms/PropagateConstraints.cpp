@@ -1,8 +1,9 @@
 #include "lingodb/compiler/Dialect/DB/IR/DBOps.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOps.h"
+#include "lingodb/compiler/Dialect/RelAlg/Passes.h"
+#include "lingodb/compiler/helper.h"
 #include <lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h>
 
-#include "lingodb/compiler/Dialect/RelAlg/Passes.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
@@ -110,7 +111,7 @@ class ReduceAggrKeys : public mlir::PassWrapper<ReduceAggrKeys, mlir::OperationP
          mlir::RewritePatternSet patterns(&getContext());
          patterns.insert<ReduceAggrKeyPattern>(&getContext());
 
-         if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
+         if (lingodb::compiler::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
             assert(false && "should not happen");
          }
       }

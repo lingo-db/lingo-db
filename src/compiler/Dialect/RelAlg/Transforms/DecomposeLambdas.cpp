@@ -3,6 +3,8 @@
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "lingodb/compiler/Dialect/RelAlg/Passes.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
+#include "lingodb/compiler/helper.h"
+
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include <unordered_set>
@@ -223,7 +225,7 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
    void runOnOperation() override {
       mlir::RewritePatternSet patterns(&getContext());
       patterns.insert<DecomposeInnerJoin>(&getContext());
-      if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
+      if (lingodb::compiler::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
          signalPassFailure();
       }
       std::vector<mlir::Operation*> toErase;

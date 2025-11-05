@@ -3,6 +3,7 @@
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/Passes.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
+#include "lingodb/compiler/helper.h"
 
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
@@ -50,7 +51,7 @@ class FoldColumnsPass : public mlir::PassWrapper<FoldColumnsPass, mlir::Operatio
    void runOnOperation() override {
       mlir::RewritePatternSet patterns(&getContext());
       patterns.insert<PushRenamingUp>(&getContext());
-      if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
+      if (lingodb::compiler::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
          signalPassFailure();
       }
    }

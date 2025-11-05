@@ -129,6 +129,7 @@ add_library(runtime_funcs_ptr ${runtime_funcs_ptr_libs})
 add_dependencies(runtime_funcs_ptr build_includes)
 add_subdirectory(src/utility)
 add_subdirectory(src/scheduler)
+add_subdirectory(src/compiler)
 add_subdirectory(src/compiler/mlir-support)
 
 add_subdirectory(src/compiler/Dialect/RelAlg)
@@ -155,6 +156,7 @@ set(LIBS
         ${extension_libs}
         ${conversion_libs}
         ${translation_libs}
+        MLIRCompilerHelper
         MLIROptLib
         MLIRRelAlg
         MLIRTupleStream

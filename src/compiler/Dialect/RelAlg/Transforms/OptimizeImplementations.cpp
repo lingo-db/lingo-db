@@ -819,7 +819,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                auto outerJoin = mlir::cast<relalg::OuterJoinOp>(potentialJoin);
                right = mapColsToNullable(right, builder, op.getLoc(), outerJoin.getMapping());
             }
-            llvm::dbgs() << "introducing groupjoin\n";
+            //            llvm::dbgs() << "introducing groupjoin\n";
             auto groupJoinOp = builder.create<relalg::GroupJoinOp>(op.getLoc(), left, right, isOuterJoin ? relalg::GroupJoinBehavior::outer : relalg::GroupJoinBehavior::inner, leftKeys, rightKeys, mappedCols, op.getComputedCols());
             if (mapOp) {
                mlir::IRMapping mapping;

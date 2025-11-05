@@ -4,7 +4,9 @@
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "lingodb/compiler/Dialect/RelAlg/Passes.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
+#include "lingodb/compiler/helper.h"
 #include "lingodb/utility/Setting.h"
+
 #include "llvm/ADT/TypeSwitch.h"
 
 #include "lingodb/compiler/Dialect/RelAlg/Transforms/ColumnCreatorAnalysis.h"
@@ -619,7 +621,7 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
       mlir::RewritePatternSet patterns(&getContext());
       patterns.insert<OuterJoinToInnerJoin>(&getContext());
       patterns.insert<SingleJoinToInnerJoin>(&getContext());
-      if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
+      if (lingodb::compiler::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
          signalPassFailure();
       }
    }

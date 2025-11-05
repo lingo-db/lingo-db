@@ -1,8 +1,9 @@
-#include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOps.h"
-#include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
-
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgDialect.h"
+#include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "lingodb/compiler/Dialect/RelAlg/Passes.h"
+#include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
+#include "lingodb/compiler/helper.h"
+
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Pass/PassManager.h"
@@ -67,7 +68,7 @@ class TrackTuples : public mlir::PassWrapper<TrackTuples, mlir::OperationPass<ml
    void runOnOperation() override {
       mlir::RewritePatternSet patterns(&getContext());
       patterns.insert<InsertTrackTuplesAfterRelalg>(&getContext());
-      if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
+      if (lingodb::compiler::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
          signalPassFailure();
       }
    }

@@ -3,6 +3,7 @@
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/Passes.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
+#include "lingodb/compiler/helper.h"
 
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
@@ -352,7 +353,7 @@ class ReuseLocalPass : public mlir::PassWrapper<ReuseLocalPass, mlir::OperationP
       patterns.insert<AvoidArrayMaterialization>(&getContext(), columnUsageAnalysis);
       patterns.insert<AvoidDeadMaterialization>(&getContext());
       patterns.insert<ReuseHashtable>(&getContext(), columnUsageAnalysis);
-      if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
+      if (lingodb::compiler::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
          signalPassFailure();
       }
    }
