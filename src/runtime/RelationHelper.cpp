@@ -34,8 +34,8 @@ void RelationHelper::createFunction(runtime::VarLen32 meta) {
    auto& session = context->getSession();
    auto catalog = session.getCatalog();
    auto def = utility::deserializeFromHexString<lingodb::catalog::CreateFunctionDef>(meta.str());
-   auto func = std::make_shared<lingodb::catalog::CFunctionCatalogEntry>(def.name, def.code, def.returnType, def.argumentTypes);
    if (def.language == "c") {
+      auto func = std::make_shared<lingodb::catalog::CFunctionCatalogEntry>(def.name, def.code, def.returnType, def.argumentTypes);
       //Remove possible so file
       auto find = catalog::FunctionCatalogEntry::getUdfFunctions().find(def.name);
       if (find != catalog::FunctionCatalogEntry::getUdfFunctions().end()) {
@@ -45,8 +45,13 @@ void RelationHelper::createFunction(runtime::VarLen32 meta) {
       if (!catalog->getDbDir().empty() && std::filesystem::exists(catalog->getDbDir() + "/udf/" + def.name + ".so")) {
          std::filesystem::remove(catalog->getDbDir() + "/udf/" + def.name + ".so");
       }
+      catalog->insertEntry(func, true);
+   } else if (def.language == "hipy") {
+      auto func = std::make_shared<lingodb::catalog::HiPyFunctionCatalogEntry>(def.name, def.code, def.returnType, def.argumentTypes);
+      catalog->insertEntry(func, true);
+   } else {
+      throw std::runtime_error("unsupported function language: " + def.language);
    }
-   catalog->insertEntry(func, true);
    catalog->persist();
 }
 void RelationHelper::appendToTable(runtime::Session& session, std::string tableName, std::shared_ptr<arrow::Table> table) {

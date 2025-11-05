@@ -2,6 +2,9 @@
 	path = vendored/tpde
 	url = https://github.com/lingo-db/tpde.git
 	branch = master
+[submodule "vendored/hipy"]
+	path = vendored/hipy
+	url = git@github.com:lingo-db/hipy.git
 [submodule "vendored/mimalloc"]
 	path = vendored/mimalloc
 	url = https://github.com/microsoft/mimalloc.git

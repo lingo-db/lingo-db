@@ -1,0 +1,128 @@
+statement ok
+CREATE OR REPLACE FUNCTION extract_type(text_input TEXT)
+RETURNS TEXT
+AS $$
+import hipy
+
+@hipy.compiled_function
+def extract_type(title):
+    t = title.lower()
+    type = 'unknown'
+    if 'condo' in t or 'apartment' in t:
+        type = 'condo'
+    if 'house' in t:
+        type = 'house'
+    return type
+$$ LANGUAGE hipy;
+
+query tsv rowsort 1
+select extract_type('Condo for sale in downtown'::text) as type1
+----
+condo
+
+statement ok
+CREATE OR REPLACE FUNCTION reverse_str(text_input TEXT)
+RETURNS TEXT
+AS $$
+import hipy
+from hipy.lib.urllib.parse import urlparse
+
+@hipy.compiled_function
+def reverse_str(string):
+    res = ""
+    for x in string:
+        res = x + res
+    return res
+$$ LANGUAGE hipy;
+
+query tsv rowsort 2
+select reverse_str('abcdefg'::text) as reversed
+----
+gfedcba
+
+
+statement ok
+CREATE OR REPLACE FUNCTION check_iban (text_input TEXT)
+RETURNS bool
+AS $$
+import hipy
+@hipy.compiled_function
+def check_iban(iban):
+    iban = iban.replace(" ", "").replace("-", "").replace(".", "")
+    iban = iban.upper()
+    iban = iban[4:] + iban[:4]
+    r = 0
+    for c in iban:
+        if c.isdigit():
+            c = int(c)
+            r *= 10
+        else:
+            c = ord(c) - ord("A") + 10
+            r *= 100
+        r += c
+        r %= 97
+    return r % 97 == 1
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION levenshtein_dist(text_input1 TEXT, text_input2 TEXT)
+RETURNS int8
+AS $$
+import hipy
+
+@hipy.compiled_function
+def levenshtein_dist(a, b):
+    """
+    Compute the Levenshtein distance between two given
+    strings (a and b). Taken from m.l. hetland
+    """
+    n, m = len(a), len(b)
+    if n > m:
+        # Make sure n <= m, to use O(min(n,m)) space
+        a,b = b,a
+        n,m = m,n
+    current = list(range(n+1))
+    for i in range(1,m+1):
+        previous, current = current, [i]+[0] * m
+        for j in range(1, n+1):
+            add, delete = previous[j] + 1, current[j-1] + 1
+            change = previous[j-1]
+            if a[j-1] != b[i-1]:
+                change +=1
+            current[j] = min(add, delete, change)
+    return current[n]
+$$ LANGUAGE hipy;
+
+
+statement ok
+CREATE OR REPLACE FUNCTION domain_from_str(text_input TEXT)
+RETURNS TEXT
+AS $$
+import hipy
+from hipy.lib.urllib.parse import urlparse
+
+@hipy.compiled_function
+def domain_from_str(string):
+    return urlparse(string).netloc
+
+$$ LANGUAGE hipy;
+
+query tsv rowsort 3
+SELECT levenshtein_dist('kitten'::text, 'sitting'::text);
+----
+3
+
+query tsv rowsort 4
+select domain_from_str('http://docs.python.org:80/3/library/urllib.parse.html?highlight=params#url-parsing'::text) as type1;
+----
+docs.python.org:80
+
+query tsv rowsort 5
+select check_iban('DE89370400440532013001'::text) as type1;
+----
+f
+
+query tsv rowsort 6
+select check_iban('DE91100000000123456789'::text) as type1;
+----
+t

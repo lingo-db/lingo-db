@@ -956,7 +956,7 @@ std::shared_ptr<ast::CreateNode> SQLQueryAnalyzer::analyzeFunctionCreate(std::sh
       }
    }
 
-   if (language == "c") {
+   if (language == "c" || language == "hipy") {
       NullableType returnType = SQLTypeUtils::typemodsToCatalogType(createFunctionInfo->returnType.logicalTypeId, createFunctionInfo->returnType.typeModifiers);
 
       auto boundCreateFunctionInfo = std::make_shared<ast::BoundCreateFunctionInfo>(createFunctionInfo->functionName, createFunctionInfo->replace, returnType);
@@ -969,7 +969,7 @@ std::shared_ptr<ast::CreateNode> SQLQueryAnalyzer::analyzeFunctionCreate(std::sh
       createNode->createInfo = boundCreateFunctionInfo;
       return createNode;
    } else {
-      error("Currently only c is allowed", createNode->loc);
+      error("Currently only c and hipy is allowed", createNode->loc);
    }
 }
 
