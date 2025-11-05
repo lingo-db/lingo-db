@@ -242,10 +242,14 @@ void runStatement(runtime::Session& session, const std::vector<std::string>& lin
    auto parts = split(lines[line]);
    line++;
    std::string statement;
+   bool dollarQuoted = false;
    while (line < lines.size()) {
-      if (lines[line].empty()) {
+      if (lines[line].empty() && !dollarQuoted) {
          line++;
          break;
+      }
+      if (lines[line].find("$$") != std::string::npos) {
+         dollarQuoted = !dollarQuoted;
       }
       statement += lines[line] + "\n";
       line++;
