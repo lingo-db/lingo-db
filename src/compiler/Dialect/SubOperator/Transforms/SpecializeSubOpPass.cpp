@@ -13,6 +13,8 @@
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
 #include "lingodb/compiler/Dialect/util/UtilDialect.h"
 #include "lingodb/compiler/Dialect/util/UtilOps.h"
+#include "lingodb/compiler/helper.h"
+
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -324,7 +326,7 @@ class SpecializeSubOpPass : public mlir::PassWrapper<SpecializeSubOpPass, mlir::
       patterns.insert<MapAsHashMap>(&getContext(), columnUsageAnalysis);
       patterns.insert<MultiMapAsHashMultiMap>(&getContext(), columnUsageAnalysis);
 
-      if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
+      if (lingodb::compiler::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
          assert(false && "should not happen");
       }
    }

@@ -1,5 +1,6 @@
 #include "lingodb/compiler/Dialect/DB/IR/DBOps.h"
 #include "lingodb/compiler/Dialect/DB/Passes.h"
+#include "lingodb/compiler/helper.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -180,7 +181,7 @@ class PrepareLowering : public mlir::PassWrapper<PrepareLowering, mlir::Operatio
          //patterns.insert<SimplifyNullableCondSkip>(&getContext());
          patterns.insert<WrapWithNullCheck>(&getContext());
          lingodb::compiler::dialect::db::addOptimizeRuntimeFunctionPatterns(patterns);
-         if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
+         if (lingodb::compiler::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
             assert(false && "should not happen");
          }
       }

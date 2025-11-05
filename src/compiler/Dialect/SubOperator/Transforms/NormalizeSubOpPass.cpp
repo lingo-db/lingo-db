@@ -1,17 +1,18 @@
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorDialect.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
-#include "llvm/Support/Debug.h"
-
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/ColumnCreationAnalysis.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/ColumnUsageAnalysis.h"
-
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/Passes.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/SubOpDependencyAnalysis.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamDialect.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
+#include "lingodb/compiler/helper.h"
 
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+
+#include "llvm/Support/Debug.h"
+
 namespace {
 using namespace lingodb::compiler::dialect;
 
@@ -283,7 +284,7 @@ class NormalizeSubOpPass : public mlir::PassWrapper<NormalizeSubOpPass, mlir::Op
       patterns.insert<SplitTableScan>(&getContext());
       patterns.insert<SplitGenericScan>(&getContext());
 
-      if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
+      if (lingodb::compiler::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
          assert(false && "should not happen");
       }
    }
