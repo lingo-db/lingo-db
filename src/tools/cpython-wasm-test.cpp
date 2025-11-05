@@ -76,13 +76,13 @@ std::vector<wasm_val_t> call_py_func(wasm_exec_env_t exec_env,
 
 int main(int argc, char** argv) {
    char error_buf[128] = { 0 };
-   uint32 size, stack_size = 8092, heap_size = 8092;
+   uint32 size, stack_size = 16777216, heap_size = 8092;
 
    /* initialize the wasm runtime by default configurations */
    wasm_runtime_init();
 
    /* read WASM file into a memory buffer */
-   uint8_t * buffer = reinterpret_cast<uint8_t*>(bh_read_file_to_buffer("/home/doellerer/CLionProjects/lingo-db/build/cpython-wasm/Python-3.14.0/cross-build/wasm32-wasip1/python.aot", &size));
+   uint8_t * buffer = reinterpret_cast<uint8_t*>(bh_read_file_to_buffer("/home/bachmaier/projects/lingo-db/build/cpython-wasm/Python-3.14.0/cross-build/wasm32-wasip1/python.aot", &size));
    if (!buffer) {
        std::cerr << "Failed to read WASM file" << std::endl;
        return -1;
@@ -94,6 +94,10 @@ int main(int argc, char** argv) {
        std::cerr << error_buf << std::endl;
        return -1;
    }
+   const char* t = "/::/home/bachmaier/projects/lingo-db/build/cpython-wasm/Python-3.14.0/";
+   const char* t2 = "PYTHONHOME=/home/bachmaier/projects/lingo-db/build/cpython-wasm/Python-3.14.0/cross-build/wasm32-wasip1/test";
+   char* t3 = "/home/bachmaier/projects/lingo-db/build/cpython-wasm/Python-3.14.0/cross-build/wasm32-wasip1/python.wasm";
+   wasm_runtime_set_wasi_args(module, nullptr, 0, &t, 1,  &t2, 1, &t3,1 );
 
    /* create an instance of the WASM module (WASM linear memory is ready) */
    wasm_module_inst_t module_inst = wasm_runtime_instantiate(module, stack_size, heap_size,
@@ -110,34 +114,7 @@ int main(int argc, char** argv) {
       return -1;
    }
 
-   // test if interpreter is initialized
-   auto results = call_py_func<char*>(exec_env, module_inst, "Py_GetVersion");
-   std::string python_version{std::bit_cast<char*>(wasm_runtime_addr_app_to_native(module_inst, results[0].of.i32))};
-   std::cout << std::format("Python version: {}\n", python_version);
-
-   // hello world
-   using PyObjectPtr = uint32_t;
-   void* native_buf_addr = nullptr;
-   uint64_t inst_buf_addr = wasm_runtime_module_malloc(module_inst, 200, &native_buf_addr);
-
-   std::string part1{"Hello "};
-   std::string part2{"World!"};
-
-   char* native_char_buf = std::bit_cast<char*>(native_buf_addr);
-   memcpy(native_char_buf, part1.c_str(), part1.size() + 1);
-   uint32_t wasm_part1_str = static_cast<uint32_t>(inst_buf_addr);
-   memcpy(native_char_buf + part1.size() + 1, part2.c_str(), part2.size() + 1);
-   uint32_t wasm_part2_str = static_cast<uint32_t>(inst_buf_addr + part1.size() + 1);
-
-   PyObjectPtr part1_obj = call_py_func<PyObjectPtr>(exec_env, module_inst, "PyUnicode_FromString", wasm_part1_str)[0].of.i32;
-   PyObjectPtr part2_obj = call_py_func<PyObjectPtr>(exec_env, module_inst, "PyUnicode_FromString", wasm_part2_str)[0].of.i32;
-   PyObjectPtr joined_obj = call_py_func<PyObjectPtr>(exec_env, module_inst, "PyUnicode_Concat", part1_obj, part2_obj)[0].of.i32;
-   call_py_func<void>(exec_env, module_inst, "Py_DecRef", part1_obj);
-   call_py_func<void>(exec_env, module_inst, "Py_DecRef", part2_obj);
-   uint32_t wasm_result_str = call_py_func<char*>(exec_env, module_inst, "PyUnicode_AsUTF8", joined_obj)[0].of.i32;
-   std::string result_str{std::bit_cast<char*>(wasm_runtime_addr_app_to_native(module_inst, wasm_result_str))};
-   std::cout << std::format("Result string: {}\n", result_str);
-   call_py_func<void>(exec_env, module_inst, "Py_DecRef", joined_obj);
+   call_py_func<void>(exec_env, module_inst, "Py_Initialize");
 
    // free all
    wasm_runtime_destroy_exec_env(exec_env);
