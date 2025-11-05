@@ -201,7 +201,7 @@ class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir
          patterns.insert<WrapCountRowsPattern>(&getContext());
          patterns.insert<RewriteComplexAggrFuncs>(&getContext());
 
-         if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
+         if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns), mlir::GreedyRewriteConfig{.enableRegionSimplification = mlir::GreedySimplifyRegionLevel::Disabled, .fold = false, .cseConstants = false}).failed()) {
             assert(false && "should not happen");
          }
       }

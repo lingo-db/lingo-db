@@ -110,7 +110,7 @@ class ReduceAggrKeys : public mlir::PassWrapper<ReduceAggrKeys, mlir::OperationP
          mlir::RewritePatternSet patterns(&getContext());
          patterns.insert<ReduceAggrKeyPattern>(&getContext());
 
-         if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
+         if (mlir::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns), mlir::GreedyRewriteConfig{.enableRegionSimplification = mlir::GreedySimplifyRegionLevel::Disabled, .fold = false, .cseConstants = false}).failed()) {
             assert(false && "should not happen");
          }
       }
