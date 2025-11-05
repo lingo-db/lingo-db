@@ -17,7 +17,7 @@ jobs:
         build_type: [ asan, release ]
     runs-on: self-hosted
     container:
-      image: ghcr.io/lingo-db/lingodb-udf-dev:4037f257d5f1d2ba0cb9854128fafa7df39729ff
+      image: ghcr.io/lingo-db/lingodb-udf-dev:dcf76c836969d7547bd986629aa9c0072e618f2a
       options: --cpus 12
     steps:
       - name: Checkout
@@ -50,7 +50,7 @@ jobs:
     runs-on: self-hosted
     container:
       options: --cpus 12
-      image: ghcr.io/lingo-db/lingodb-py-dev:8d290609bbccabd5c07a7c3c06ca44da8ca45c92
+      image: ghcr.io/lingo-db/lingodb-py-dev:57e90585270a4d9743a43c1cca175d6f6d7dbbab
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -74,7 +74,7 @@ jobs:
         build_type: [ asan ]
     runs-on: self-hosted
     container:
-      image: ghcr.io/lingo-db/lingodb-udf-dev:4037f257d5f1d2ba0cb9854128fafa7df39729ff
+      image: ghcr.io/lingo-db/lingodb-udf-dev:dcf76c836969d7547bd986629aa9c0072e618f2a
       options: --cpus 4 --memory 32g
       env:
         LINGODB_HIPY_PYTHON_BINARY: "/venv/bin/python3"
@@ -137,7 +137,7 @@ jobs:
     needs: build
     runs-on: self-hosted
     container:
-      image: ghcr.io/lingo-db/lingodb-udf-dev:4037f257d5f1d2ba0cb9854128fafa7df39729ff
+      image: ghcr.io/lingo-db/lingodb-udf-dev:dcf76c836969d7547bd986629aa9c0072e618f2a
       options: --cpus 10 --memory 32g
     steps:
       - uses: actions/checkout@master
@@ -171,7 +171,7 @@ jobs:
     needs: build
     runs-on: self-hosted
     container:
-      image: ghcr.io/lingo-db/lingodb-udf-dev:4037f257d5f1d2ba0cb9854128fafa7df39729ff
+      image: ghcr.io/lingo-db/lingodb-udf-dev:dcf76c836969d7547bd986629aa9c0072e618f2a
       options: --cpus 10  --memory 32g
     steps:
       - name: Freeing up space
@@ -282,7 +282,7 @@ jobs:
       matrix:
         build_type: [ debug]
     runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-udf-dev:4037f257d5f1d2ba0cb9854128fafa7df39729ff
+    container: ghcr.io/lingo-db/lingodb-udf-dev:dcf76c836969d7547bd986629aa9c0072e618f2a
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
