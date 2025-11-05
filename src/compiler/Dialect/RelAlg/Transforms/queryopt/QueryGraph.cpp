@@ -202,6 +202,56 @@ std::unique_ptr<lingodb::compiler::support::eval::expr> buildEvalExpr(mlir::Valu
    return support::eval::createInvalid();
 }
 namespace {
+void appendRestrictions(relalg::BaseTableOp baseTableOp, std::vector<std::unique_ptr<lingodb::compiler::support::eval::expr>>& expressions) {
+   std::unordered_map<std::string, mlir::Type> typeMapping;
+   for (auto c : baseTableOp.getColumns()) {
+      typeMapping[c.getName().str()] = mlir::cast<tuples::ColumnDefAttr>(c.getValue()).getColumn().type;
+   }
+   if (baseTableOp->hasAttr("restriction")) {
+      auto restrictionsStr = cast<mlir::StringAttr>(baseTableOp->getAttr("restriction")).getValue();
+      auto restrictions = nlohmann::json::parse(restrictionsStr.str()).get<nlohmann::json::array_t>();
+      for (auto& r : restrictions) {
+         auto cmp = r["cmp"].get<std::string>();
+         auto columnName = r["column"].get<std::string>();
+         auto value = r["value"];
+         if (cmp == "isnotnull") {
+            auto colExpr = support::eval::createAttrRef(columnName);
+            expressions.push_back(support::eval::createNot(support::eval::createIsNull(std::move(colExpr))));
+            continue;
+         }
+         auto type = getBaseType(typeMapping.at(columnName));
+         std::variant<int64_t, double, std::string> parseArg;
+         if (value.is_string()) {
+            parseArg = value.get<std::string>();
+         } else if (value.is_number_integer()) {
+            parseArg = value.get<int64_t>();
+         } else if (value.is_number_float()) {
+            parseArg = value.get<double>();
+         } else {
+            assert(false);
+            continue;
+         }
+         auto colExpr = support::eval::createAttrRef(columnName);
+         auto valueExpr = buildConstant(type, parseArg);
+         if (cmp == "=") {
+            expressions.push_back(support::eval::createEq(std::move(colExpr), std::move(valueExpr)));
+         } else if (cmp == "!=") {
+            expressions.push_back(support::eval::createNot(support::eval::createEq(std::move(colExpr), std::move(valueExpr))));
+         } else if (cmp == "<") {
+            expressions.push_back(support::eval::createLt(std::move(colExpr), std::move(valueExpr)));
+         } else if (cmp == "<=") {
+            expressions.push_back(support::eval::createLte(std::move(colExpr), std::move(valueExpr)));
+         } else if (cmp == ">") {
+            expressions.push_back(support::eval::createGt(std::move(colExpr), std::move(valueExpr)));
+         } else if (cmp == ">=") {
+            expressions.push_back(support::eval::createGte(std::move(colExpr), std::move(valueExpr)));
+         } else {
+            assert(false);
+            continue;
+         }
+      }
+   }
+}
 std::optional<double> estimateUsingSample(QueryGraph::Node& n) {
    if (!n.op) return {};
    if (n.additionalPredicates.empty() && !n.op->hasAttr("restriction")) return {};
@@ -210,57 +260,13 @@ std::optional<double> estimateUsingSample(QueryGraph::Node& n) {
       std::unordered_map<std::string, mlir::Type> typeMapping;
       for (auto c : baseTableOp.getColumns()) {
          mapping[&mlir::cast<tuples::ColumnDefAttr>(c.getValue()).getColumn()] = c.getName().str();
-         typeMapping[c.getName().str()] = mlir::cast<tuples::ColumnDefAttr>(c.getValue()).getColumn().type;
       }
       auto meta = mlir::dyn_cast_or_null<TableMetaDataAttr>(baseTableOp->getAttr("meta"));
       if (!meta) return {};
       auto sample = meta.getMeta()->getSample();
       if (!sample) return {};
       std::vector<std::unique_ptr<lingodb::compiler::support::eval::expr>> expressions;
-      if (baseTableOp->hasAttr("restriction")) {
-         auto restrictionsStr = cast<mlir::StringAttr>(baseTableOp->getAttr("restriction")).getValue();
-         auto restrictions = nlohmann::json::parse(restrictionsStr.str()).get<nlohmann::json::array_t>();
-         for (auto& r : restrictions) {
-            auto cmp = r["cmp"].get<std::string>();
-            auto columnName = r["column"].get<std::string>();
-            auto value = r["value"];
-            if (cmp == "isnotnull") {
-               auto colExpr = support::eval::createAttrRef(columnName);
-               expressions.push_back(support::eval::createNot(support::eval::createIsNull(std::move(colExpr))));
-               continue;
-            }
-            auto type = getBaseType(typeMapping.at(columnName));
-            std::variant<int64_t, double, std::string> parseArg;
-            if (value.is_string()) {
-               parseArg = value.get<std::string>();
-            } else if (value.is_number_integer()) {
-               parseArg = value.get<int64_t>();
-            } else if (value.is_number_float()) {
-               parseArg = value.get<double>();
-            } else {
-               assert(false);
-               continue;
-            }
-            auto colExpr = support::eval::createAttrRef(columnName);
-            auto valueExpr = buildConstant(type, parseArg);
-            if (cmp == "eq") {
-               expressions.push_back(support::eval::createEq(std::move(colExpr), std::move(valueExpr)));
-            } else if (cmp == "neq") {
-               expressions.push_back(support::eval::createNot(support::eval::createEq(std::move(colExpr), std::move(valueExpr))));
-            } else if (cmp == "lt") {
-               expressions.push_back(support::eval::createLt(std::move(colExpr), std::move(valueExpr)));
-            } else if (cmp == "lte") {
-               expressions.push_back(support::eval::createLte(std::move(colExpr), std::move(valueExpr)));
-            } else if (cmp == "gt") {
-               expressions.push_back(support::eval::createGt(std::move(colExpr), std::move(valueExpr)));
-            } else if (cmp == "gte") {
-               expressions.push_back(support::eval::createGte(std::move(colExpr), std::move(valueExpr)));
-            } else {
-               assert(false);
-               continue;
-            }
-         }
-      }
+      appendRestrictions(baseTableOp, expressions);
       for (auto pred : n.additionalPredicates) {
          if (auto selOp = mlir::dyn_cast_or_null<SelectionOp>(pred.getOperation())) {
             auto v = mlir::cast<tuples::ReturnOp>(selOp.getPredicateBlock().getTerminator()).getResults()[0];
@@ -281,7 +287,7 @@ double getRows(QueryGraph::Node& n) {
       auto meta = mlir::dyn_cast_or_null<TableMetaDataAttr>(baseTableOp->getAttr("meta"));
       if (meta) {
          auto numRows = meta.getMeta()->getNumRows();
-         baseTableOp->setAttr("rows", mlir::FloatAttr::get(mlir::Float64Type::get(n.op.getContext()), numRows));
+         //baseTableOp->setAttr("rows", mlir::FloatAttr::get(mlir::Float64Type::get(n.op.getContext()), numRows));
          return numRows == 0 ? 1 : numRows;
       }
    }
@@ -295,6 +301,27 @@ double getRows(QueryGraph::Node& n) {
    return 1;
 }
 } // namespace
+void annotateBaseTable(relalg::BaseTableOp baseTableOp) {
+   auto meta = mlir::dyn_cast_or_null<TableMetaDataAttr>(baseTableOp->getAttr("meta"));
+   if (meta) {
+      auto totalRows = meta.getMeta()->getNumRows();
+      baseTableOp->setAttr("total_rows", mlir::FloatAttr::get(mlir::Float64Type::get(baseTableOp.getContext()), totalRows));
+      auto sample = meta.getMeta()->getSample();
+      std::vector<std::unique_ptr<lingodb::compiler::support::eval::expr>> expressions;
+      appendRestrictions(baseTableOp, expressions);
+      double filteredRows = totalRows;
+      if (sample && !expressions.empty()) {
+         auto optionalCount = lingodb::compiler::support::eval::countResults(sample.getSampleData(), lingodb::compiler::support::eval::createAnd(expressions));
+         if (optionalCount.has_value()) {
+            auto count = optionalCount.value();
+            if (count == 0) count = 1;
+            double selectivity = static_cast<double>(count) / static_cast<double>(sample.getSampleData()->num_rows());
+            filteredRows = static_cast<double>(totalRows) * selectivity;
+         }
+      }
+      baseTableOp->setAttr("rows", mlir::FloatAttr::get(mlir::Float64Type::get(baseTableOp.getContext()), filteredRows));
+   }
+}
 ColumnSet QueryGraph::getPKey(QueryGraph::Node& n) {
    if (!n.op) return {};
    if (auto baseTableOp = mlir::dyn_cast_or_null<BaseTableOp>(n.op.getOperation())) {

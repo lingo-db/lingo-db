@@ -151,13 +151,23 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
       for (auto& u : o->getUses()) uses++; // NOLINT(clang-diagnostic-unused-variable)
       return uses;
    }
+   std::string convertCmpMode(std::string cmpMode) {
+      if (cmpMode == "eq") return "=";
+      if (cmpMode == "neq") return "!=";
+      if (cmpMode == "lt") return "<";
+      if (cmpMode == "gt") return ">";
+      if (cmpMode == "lte") return "<=";
+      if (cmpMode == "gte") return ">=";
+      if (cmpMode == "isa") return "isa";
+      return "";
+   }
    std::string reverseCmpMode(std::string cmpMode) {
-      if (cmpMode == "eq") return "eq";
-      if (cmpMode == "neq") return "neq";
-      if (cmpMode == "lt") return "gt";
-      if (cmpMode == "gt") return "lt";
-      if (cmpMode == "lte") return "gte";
-      if (cmpMode == "gte") return "lte";
+      if (cmpMode == "=") return "=";
+      if (cmpMode == "!=") return "!=";
+      if (cmpMode == "<") return ">";
+      if (cmpMode == ">") return "<";
+      if (cmpMode == "<=") return ">=";
+      if (cmpMode == ">=") return "<=";
       if (cmpMode == "isa") return "isa";
       return "";
    }
@@ -236,7 +246,7 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
          nlohmann::json constValue;
          std::string columnName;
          bool colNullable;
-         std::string cmpMode = stringifyDBCmpPredicate(condOp.getPredicate()).str();
+         std::string cmpMode = convertCmpMode(stringifyDBCmpPredicate(condOp.getPredicate()).str());
          if (getColumnName(condOp.getLeft(), baseTableOp, columnName, colNullable) &&
              getConstant(condOp.getRight(), constValue)) {
             // left is column, right is constant
@@ -282,12 +292,12 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
             }
             appendRestrictions(baseTableOp, nlohmann::json::array_t{{
                                                                        {"column", columnName},
-                                                                       {"cmp", betweenOp.getLowerInclusive() ? "gte" : "gt"},
+                                                                       {"cmp", betweenOp.getLowerInclusive() ? ">=" : ">"},
                                                                        {"value", lowerConst},
                                                                     },
                                                                     {
                                                                        {"column", columnName},
-                                                                       {"cmp", betweenOp.getUpperInclusive() ? "lte" : "lt"},
+                                                                       {"cmp", betweenOp.getUpperInclusive() ? "<=" : "<"},
                                                                        {"value", upperConst},
                                                                     }});
             return true;

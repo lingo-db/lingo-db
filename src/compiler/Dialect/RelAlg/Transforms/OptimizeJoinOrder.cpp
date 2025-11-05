@@ -67,10 +67,7 @@ class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::Oper
             }
          })
          .Case<relalg::BaseTableOp>([&](relalg::BaseTableOp baseTableOp) {
-            auto meta = mlir::dyn_cast_or_null<relalg::TableMetaDataAttr>(baseTableOp->getAttr("meta"));
-            if (!meta) return;
-            auto numRows = meta.getMeta()->getNumRows();
-            baseTableOp->setAttr("rows", mlir::FloatAttr::get(mlir::Float64Type::get(&getContext()), numRows));
+            relalg::annotateBaseTable(baseTableOp);
          })
          .Case<relalg::UnionOp>([&](relalg::UnionOp unionOp) {
             double sum = 0;

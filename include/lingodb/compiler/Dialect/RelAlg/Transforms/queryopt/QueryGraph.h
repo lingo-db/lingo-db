@@ -354,5 +354,6 @@ class QueryGraph {
    void estimate();
    double calculateSelectivity(SelectionEdge& edge, NodeSet left, NodeSet right);
 };
+void annotateBaseTable(relalg::BaseTableOp baseTableOp);
 } // namespace lingodb::compiler::dialect::relalg
 #endif //LINGODB_COMPILER_DIALECT_RELALG_TRANSFORMS_QUERYOPT_QUERYGRAPH_H

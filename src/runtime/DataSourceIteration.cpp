@@ -61,17 +61,17 @@ lingodb::runtime::DataSource* lingodb::runtime::DataSource::get(lingodb::runtime
          FilterDescription filterDesc;
          filterDesc.columnName = r["column"].get<std::string>();
          std::string op = r["cmp"].get<std::string>();
-         if (op == "lt") {
+         if (op == "<") {
             filterDesc.op = FilterOp::LT;
-         } else if (op == "lte") {
+         } else if (op == "<=") {
             filterDesc.op = FilterOp::LTE;
-         } else if (op == "gt") {
+         } else if (op == ">") {
             filterDesc.op = FilterOp::GT;
-         } else if (op == "gte") {
+         } else if (op == ">=") {
             filterDesc.op = FilterOp::GTE;
-         } else if (op == "eq") {
+         } else if (op == "=") {
             filterDesc.op = FilterOp::EQ;
-         } else if (op == "neq") {
+         } else if (op == "!=") {
             filterDesc.op = FilterOp::NEQ;
          } else if (op == "isnotnull") {
             filterDesc.op = FilterOp::NOTNULL;
