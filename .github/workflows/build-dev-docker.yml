@@ -4,7 +4,6 @@ on:
   push:
     paths:
       - tools/docker/Dockerfile
-      - .github/workflows/build-dev-docker.yml
 env:
   REGISTRY: ghcr.io
 
@@ -25,11 +24,6 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Checkout repository
         uses: actions/checkout@v3
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          install: true
-          driver: docker-container
       - name: Build and push Docker image
         id: push
         uses: docker/build-push-action@f2a1d5e99d037542a71f64918e516c093c6f3fc4
@@ -38,13 +32,5 @@ jobs:
           file: tools/docker/Dockerfile
           push: true
           tags: |
-            ghcr.io/lingo-db/lingodb-dev:${{ github.sha }}
-            ${{ github.ref == 'refs/heads/main' && 'ghcr.io/lingo-db/lingodb-dev:latest' || '' }}
-          target: devimg
-          platforms: linux/amd64,linux/arm64
-      - name: Generate artifact attestation
-        uses: actions/attest-build-provenance@v2
-        with:
-          subject-name: ${{ env.REGISTRY }}/lingo-db/lingodb-dev
-          subject-digest: ${{ steps.push.outputs.digest }}
-          push-to-registry: true
+            ghcr.io/lingo-db/lingodb-udf-dev:${{ github.sha }}
+          target: udfdevimg
