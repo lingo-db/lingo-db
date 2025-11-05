@@ -375,6 +375,16 @@ class ToJson {
       }
       return NAN;
    }
+   double getTableSize(mlir::Operation* op) {
+      if (op->hasAttr("total_rows")) {
+         if (auto floatAttr = mlir::dyn_cast_or_null<mlir::FloatAttr>(op->getAttr("total_rows"))) {
+            return floatAttr.getValueAsDouble();
+         } else if (auto intAttr = mlir::dyn_cast_or_null<mlir::IntegerAttr>(op->getAttr("total_rows"))) {
+            return intAttr.getInt();
+         }
+      }
+      return getOutputCardinality(op);
+   }
    nlohmann::json columnToJSON(tuples::ColumnDefAttr columnDefAttr) {
       return nlohmann::json{
          {"datatype", convertDataType(columnDefAttr.getColumn().type)},
@@ -420,12 +430,24 @@ class ToJson {
          .Case<relalg::BaseTableOp>([&](relalg::BaseTableOp baseTable) {
             result["operator"] = "tablescan";
             result["tablename"] = baseTable.getTableIdentifier().str();
-            result["tableSize"] = getOutputCardinality(op);
+            result["tableSize"] = getTableSize(op);
             result["attributes"] = nlohmann::json::array();
             for (auto columnAttr : baseTable.getColumnsAttr()) {
                result["attributes"].push_back(nlohmann::json{
                   {"attribute", columnAttr.getName().str()},
                   {"column", columnToJSON(mlir::cast<tuples::ColumnDefAttr>(columnAttr.getValue()))}});
+            }
+            if (baseTable->hasAttr("restriction")) {
+               auto restrictionStr = mlir::cast<mlir::StringAttr>(baseTable->getAttr("restriction")).str();
+               auto parsedRestrictions = nlohmann::json::parse(restrictionStr);
+               for (auto& r : parsedRestrictions) {
+                  if (r["cmp"] == "isnotnull") {
+                     result["restrictions"].push_back(innerExpression({"", " is not null"}, std::vector<nlohmann::json>{nlohmann::json{{"type", "expression_leaf"}, {"leaf_type", "simple_column"}, {"column", r["column"]}}}));
+
+                  } else {
+                     result["restrictions"].push_back(innerExpression({"", r["cmp"], ""}, std::vector<nlohmann::json>{nlohmann::json{{"type", "expression_leaf"}, {"leaf_type", "simple_column"}, {"column", r["column"]}}, nlohmann::json{{"type", "expression_leaf"}, {"leaf_type", "constant"}, {"value", r["value"]}}}));
+                  }
+               }
             }
             return result;
          })
