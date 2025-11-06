@@ -923,6 +923,12 @@ def CombineTupleOp : SubOperator_Op<"combine_tuple", [Pure,SubOperator]> {
     let results = (outs TupleStream : $res);
     let assemblyFormat = [{  $stream `,` $right attr-dict }];
 }
+def CombineTupleWithValues : SubOperator_Op<"combine_tuple_with_values", [Pure,SubOperator]> {
+
+    let arguments = (ins TupleStream :$stream, Variadic<AnyType> : $values, ArrayAttr : $columns );
+    let results = (outs TupleStream : $res);
+    let assemblyFormat = [{ $stream `,` ($values^ `:` type($values))? `=` `>` custom<CustDefArr>($columns) attr-dict }];
+}
 
 //===----------------------------------------------------------------------===//
 // Control-Flow

@@ -329,13 +329,11 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
                   continue;
                } else {
                   std::vector<mlir::Attribute> createdByMap;
+                  std::vector<mlir::Value> mapOpReturnVals;
+
                   mlir::OpBuilder b(combineOp);
-                  mlir::Block* mapBlock = new mlir::Block;
                   {
-                     mlir::OpBuilder::InsertionGuard guard(b);
-                     b.setInsertionPointToStart(mapBlock);
                      auto& colManager = getContext().getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
-                     std::vector<mlir::Value> mapOpReturnVals;
                      for (auto* r : requiredColumns) { // we need to introduce every required column to the MapOp (MapOp will replace CombineTupleOp)
                         auto colRefAttr = colManager.createRef(r);
                         auto colDefAttr = colManager.createDef(r);
@@ -348,10 +346,9 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
                         createdByMap.push_back(colDefAttr); // every required column is created/returned by the MapOp
                         mapOpReturnVals.push_back(nestedMapOp.getBody()->getArgument(colArgs[r]));
                      }
-                     b.create<tuples::ReturnOp>(b.getUnknownLoc(), mapOpReturnVals);
                   }
-                  auto mapOp = b.create<subop::MapOp>(b.getUnknownLoc(), tuples::TupleStreamType::get(b.getContext()), combineOp.getStream(), b.getArrayAttr(createdByMap), b.getArrayAttr({}));
-                  mapOp.getFn().push_back(mapBlock);
+
+                  auto mapOp = b.create<subop::CombineTupleWithValues>(b.getUnknownLoc(), tuples::TupleStreamType::get(b.getContext()), combineOp.getStream(), mapOpReturnVals, b.getArrayAttr(createdByMap));
                   combineOp->replaceAllUsesWith(mlir::ValueRange{mapOp.getResult()}); // replace combineOp with mapOp
                   opsToErase.push_back(combineOp);
                   createdColumns.update(mapOp);
