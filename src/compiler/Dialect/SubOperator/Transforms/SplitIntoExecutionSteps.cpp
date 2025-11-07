@@ -25,6 +25,9 @@ class SplitIntoExecutionSteps : public mlir::PassWrapper<SplitIntoExecutionSteps
             if (mlir::isa<subop::ExecutionGroupReturnOp>(op)) {
                continue;
             }
+            if (mlir::isa<subop::Macro>(op)){
+               continue;
+            }
             mlir::Operation* beforeInStream = nullptr;
             for (auto operand : op.getOperands()) {
                if (mlir::isa<tuples::TupleStreamType>(operand.getType())) {

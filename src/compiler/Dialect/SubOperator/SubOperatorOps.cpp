@@ -1387,6 +1387,70 @@ void subop::ScanListOp::updateStateType(subop::SubOpStateUsageTransformer& trans
       setElemAttr(transformer.createReplacementColumn(getElemAttr(), newRefType));
    }
 }
+llvm::SmallVector<lingodb::compiler::dialect::subop::Member> subop::MacroCallOp::getReadMembers() {
+   subop::Macro macro;
+   auto executionGroupOp = this->getOperation()->getParentOfType<subop::ExecutionGroupOp>();
+
+   for (auto& operation : executionGroupOp.getSubOps().getOps()) {
+      if (auto potentialMacro = mlir::dyn_cast_or_null<subop::Macro>(operation)) {
+         if (potentialMacro.getSymName() == this->getSymName()) {
+            macro = potentialMacro;
+            break;
+         }
+      }
+   }
+   assert(macro && "macro not found");
+   llvm::SmallVector<subop::Member> res;
+   macro.getSubOps().walk([&](subop::SubOperator subop) {
+      auto read = subop.getReadMembers();
+      res.insert(res.end(), read.begin(), read.end());
+   });
+   return res;
+}
+llvm::SmallVector<lingodb::compiler::dialect::subop::Member> subop::MacroCallOp::getWrittenMembers() {
+   subop::Macro macro;
+   auto executionGroupOp = this->getOperation()->getParentOfType<subop::ExecutionGroupOp>();
+
+   for (auto& operation : executionGroupOp.getSubOps().getOps()) {
+      if (auto potentialMacro = mlir::dyn_cast_or_null<subop::Macro>(operation)) {
+         if (potentialMacro.getSymName() == this->getSymName()) {
+            macro = potentialMacro;
+            break;
+         }
+      }
+   }
+   llvm::SmallVector<subop::Member> res;
+   macro.getSubOps().walk([&](subop::SubOperator subop) {
+      auto read = subop.getWrittenMembers();
+      res.insert(res.end(), read.begin(), read.end());
+   });
+   return res;
+}
+void subop::MacroCallOp::updateStateType(lingodb::compiler::dialect::subop::SubOpStateUsageTransformer& transformer, mlir::Value state, mlir::Type newType) {
+   subop::Macro macro;
+   auto executionGroupOp = this->getOperation()->getParentOfType<subop::ExecutionGroupOp>();
+
+   for (auto& operation : executionGroupOp.getSubOps().getOps()) {
+      if (auto potentialMacro = mlir::dyn_cast_or_null<subop::Macro>(operation)) {
+         if (potentialMacro.getSymName() == this->getSymName()) {
+            macro = potentialMacro;
+            break;
+         }
+      }
+   }
+   for(auto& arg:getOperation()->getOpOperands()){
+        if(state == arg.get() && newType != arg.get().getType()){
+           auto macroArg=macro.getSubOps().getArgument(arg.getOperandNumber());
+           transformer.updateValue(macroArg, newType);
+           macroArg.setType(newType);
+
+        }
+   }
+
+}
+void subop::MacroCallOp::replaceColumns(lingodb::compiler::dialect::subop::SubOpStateUsageTransformer& transformer, lingodb::compiler::dialect::tuples::Column* oldColumn, lingodb::compiler::dialect::tuples::Column* newColumn) {
+   assert(false && "should not happen");
+}
 void subop::ScanListOp::replaceColumns(subop::SubOpStateUsageTransformer& transformer, tuples::Column* oldColumn, tuples::Column* newColumn) {
    assert(false && "should not happen");
 }

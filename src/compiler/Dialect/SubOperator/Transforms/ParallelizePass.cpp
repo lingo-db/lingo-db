@@ -77,11 +77,30 @@ ExecutionStepAnalyzed analyze(subop::ExecutionStepOp executionStepOp, subop::Col
    llvm::DenseMap<subop::Member, std::vector<mlir::Operation*>> writtenMembers;
 
    std::vector<subop::SubOperator> pipelineOps;
-   executionStepOp.getSubOps().walk([&](subop::SubOperator subOp) {
-      if (firstOp != subOp.getOperation() && !mlir::isa<subop::ExecutionStepOp>(subOp.getOperation())) {
-         pipelineOps.push_back(subOp);
-      }
-   });
+   std::function<void(mlir::Region&)> addForRegion = [&](mlir::Region& r) { r.walk([&](subop::SubOperator subOp) {
+                                                                               if (auto macroCallOp = mlir::dyn_cast_or_null<subop::MacroCallOp>(subOp.getOperation())) {
+                                                                                  subop::Macro macro;
+                                                                                  auto executionGroupOp = executionStepOp->getParentOfType<subop::ExecutionGroupOp>();
+                                                                                  for (auto& operation : executionGroupOp.getSubOps().getOps()) {
+                                                                                     if (auto potentialMacro = mlir::dyn_cast_or_null<subop::Macro>(operation)) {
+                                                                                        if (potentialMacro.getSymName() == macroCallOp.getSymName()) {
+                                                                                           macro = potentialMacro;
+                                                                                           break;
+                                                                                        }
+                                                                                     }
+                                                                                  }
+                                                                                  assert(macro);
+                                                                                  for (auto [param, arg] : llvm::zip(macroCallOp.getInputs(), macro.getRegion().getArguments().drop_front())) {
+                                                                                     if (extStates.contains(param)) {
+                                                                                        extStates.insert({arg, extStates[param]});
+                                                                                     }
+                                                                                  }
+                                                                                  addForRegion(macro.getRegion());
+                                                                               } else if (firstOp != subOp.getOperation() && !mlir::isa<subop::ExecutionStepOp>(subOp.getOperation())) {
+                                                                                  pipelineOps.push_back(subOp);
+                                                                               }
+                                                                            }); };
+   addForRegion(executionStepOp.getSubOps());
    for (auto subOp : pipelineOps) {
       auto* pipelineOp = subOp.getOperation();
       auto getCollisions = [&]() {
@@ -216,7 +235,26 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                for (auto [i, a] : llvm::zip(executionStepOp.getInputs(), executionStepOp.getSubOps().getArguments())) {
                   extStates.insert({a, i});
                }
-
+               std::function<void(mlir::Region&)> addForRegion = [&](mlir::Region& r) { r.walk([&](subop::MacroCallOp macroCallOp) {
+                                                                                           subop::Macro macro;
+                                                                                           auto executionGroupOp = executionStepOp->getParentOfType<subop::ExecutionGroupOp>();
+                                                                                           for (auto& operation : executionGroupOp.getSubOps().getOps()) {
+                                                                                              if (auto potentialMacro = mlir::dyn_cast_or_null<subop::Macro>(operation)) {
+                                                                                                 if (potentialMacro.getSymName() == macroCallOp.getSymName()) {
+                                                                                                    macro = potentialMacro;
+                                                                                                    break;
+                                                                                                 }
+                                                                                              }
+                                                                                           }
+                                                                                           assert(macro);
+                                                                                           for (auto [param, arg] : llvm::zip(macroCallOp.getInputs(), macro.getRegion().getArguments().drop_front())) {
+                                                                                              if (extStates.contains(param)) {
+                                                                                                 extStates.insert({arg, extStates[param]});
+                                                                                              }
+                                                                                           }
+                                                                                           addForRegion(macro.getRegion());
+                                                                                        }); };
+               addForRegion(executionStepOp.getSubOps());
                if (auto scanRefsOp = mlir::dyn_cast_or_null<subop::ScanRefsOp>(*executionStepOp.getSubOps().getOps().begin())) {
                   if (!scanRefsOp->hasAttr("sequential")) {
                      ExecutionStepAnalyzed analyzed = analyze(executionStepOp, columnCreationAnalysis);

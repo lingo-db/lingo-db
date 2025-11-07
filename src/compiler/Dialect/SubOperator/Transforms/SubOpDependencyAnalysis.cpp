@@ -74,28 +74,64 @@ subop::SubOpDependencyAnalysis::SubOpDependencyAnalysis(mlir::Operation* op, mli
                }
             }
          }
-         auto opReadMembers = subop.getReadMembers();
-         auto opWrittenMembers = subop.getWrittenMembers();
-         for (auto readMember : opReadMembers) {
-            for (auto* conflict : writtenMembers[readMember]) {
-               addDependency(subopRoot, conflict, roots);
-            }
-         }
-         for (auto writtenMember : opWrittenMembers) {
-            for (auto* conflict : writtenMembers[writtenMember]) {
-               addDependency(subopRoot, conflict, roots);
-            }
-            for (auto* conflict : readMembers[writtenMember]) {
-               addDependency(subopRoot, conflict, roots);
-            }
-         }
-         for (auto readMember : opReadMembers) {
-            readMembers[readMember].insert(subopRoot);
-         }
-         for (auto writtenMember : opWrittenMembers) {
-            writtenMembers[writtenMember].insert(subopRoot);
-         }
+         if (auto macroCallOp = mlir::dyn_cast_or_null<subop::MacroCallOp>(subop.getOperation())) {
+            subop::Macro macro;
+            auto executionGroupOp = macroCallOp->getParentOfType<subop::ExecutionGroupOp>();
 
+            for (auto& operation : executionGroupOp.getSubOps().getOps()) {
+               if (auto potentialMacro = mlir::dyn_cast_or_null<subop::Macro>(operation)) {
+                  if (potentialMacro.getSymName() == macroCallOp.getSymName()) {
+                     macro = potentialMacro;
+                     break;
+                  }
+               }
+            }
+            macro->walk([&](subop::SubOperator macroSubOp) {
+               auto opReadMembers = macroSubOp.getReadMembers();
+               auto opWrittenMembers = macroSubOp.getWrittenMembers();
+               for (auto readMember : opReadMembers) {
+                  for (auto* conflict : writtenMembers[readMember]) {
+                     addDependency(subopRoot, conflict, roots);
+                  }
+               }
+               for (auto writtenMember : opWrittenMembers) {
+                  for (auto* conflict : writtenMembers[writtenMember]) {
+                     addDependency(subopRoot, conflict, roots);
+                  }
+                  for (auto* conflict : readMembers[writtenMember]) {
+                     addDependency(subopRoot, conflict, roots);
+                  }
+               }
+               for (auto readMember : opReadMembers) {
+                  readMembers[readMember].insert(subopRoot);
+               }
+               for (auto writtenMember : opWrittenMembers) {
+                  writtenMembers[writtenMember].insert(subopRoot);
+               }
+            });
+         } else {
+            auto opReadMembers = subop.getReadMembers();
+            auto opWrittenMembers = subop.getWrittenMembers();
+            for (auto readMember : opReadMembers) {
+               for (auto* conflict : writtenMembers[readMember]) {
+                  addDependency(subopRoot, conflict, roots);
+               }
+            }
+            for (auto writtenMember : opWrittenMembers) {
+               for (auto* conflict : writtenMembers[writtenMember]) {
+                  addDependency(subopRoot, conflict, roots);
+               }
+               for (auto* conflict : readMembers[writtenMember]) {
+                  addDependency(subopRoot, conflict, roots);
+               }
+            }
+            for (auto readMember : opReadMembers) {
+               readMembers[readMember].insert(subopRoot);
+            }
+            for (auto writtenMember : opWrittenMembers) {
+               writtenMembers[writtenMember].insert(subopRoot);
+            }
+         }
          pipelines[subopRoot].push_back(subop);
       }
    });

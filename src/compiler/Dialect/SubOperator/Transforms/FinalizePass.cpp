@@ -29,8 +29,126 @@ class FinalizePass : public mlir::PassWrapper<FinalizePass, mlir::OperationPass<
          cloneRec(use.getOwner(), mapping, use.get(), columnMapping);
       }
    }
+   void getRecursivelyUsedColumns(std::unordered_set<tuples::Column*>& usedColumns, subop::ColumnUsageAnalysis& columnUsageAnalysis, mlir::Operation* op) {
+      const auto& currentUsed = columnUsageAnalysis.getUsedColumns(op);
+      usedColumns.insert(currentUsed.begin(), currentUsed.end());
+      for (auto res : op->getResults()) {
+         if (mlir::isa<tuples::TupleStreamType>(res.getType())) {
+            for (auto* user : res.getUsers()) {
+               getRecursivelyUsedColumns(usedColumns, columnUsageAnalysis, user);
+            }
+         }
+      }
+   }
+   void getRequired(std::unordered_set<tuples::Column*>& requiredColumns, const std::unordered_set<tuples::Column*>& usedColumns, subop::ColumnCreationAnalysis& columnCreationAnalysis, mlir::Operation* op) {
+      const auto& createdCols = columnCreationAnalysis.getCreatedColumns(op);
+      for (auto* c : createdCols) {
+         if (usedColumns.contains(c)) {
+            requiredColumns.insert(c);
+         }
+      }
+      for (auto operand : op->getOperands()) {
+         if (mlir::isa<tuples::TupleStreamType>(operand.getType())) {
+            if (auto* defOp = operand.getDefiningOp()) {
+               getRequired(requiredColumns, usedColumns, columnCreationAnalysis, defOp);
+            }
+         }
+      }
+   }
+   void moveRecursivelyIntoMacro(mlir::Operation* op, mlir::Block*& macroBlock, std::vector<mlir::Value>& args, mlir::Value tupleStream) {
+      if (auto subOp = mlir::dyn_cast_or_null<subop::SubOperator>(op)) {
+         subOp->remove();
+         mlir::OpBuilder builder(op->getContext());
+         builder.setInsertionPointToEnd(macroBlock);
+         builder.insert(subOp);
+         for (auto& r : subOp->getRegions()) {
+            r.walk([&](mlir::Operation* op) {
+               for (auto& arg : op->getOpOperands()) {
+                  bool outside = false;
+                  //check if arg is defined outside of r
+                  if (auto* defOp = arg.get().getDefiningOp()) {
+                     if (!subOp->isAncestor(defOp)) {
+                        outside = true;
+                     }
+                  } else if (auto blockArg = mlir::dyn_cast_or_null<mlir::BlockArgument>(arg.get())) {
+                     if (!subOp->isAncestor(blockArg.getOwner()->getParentOp())) {
+                        outside = true;
+                     }
+                  }
+                  if (outside) {
+                     assert(!mlir::isa<tuples::TupleStreamType>(arg.get().getType()) && "tuple-streams should be handled separately");
+                     auto type = arg.get().getType();
+                     args.push_back(arg.get());
+                     arg.set(macroBlock->addArgument(type, subOp->getLoc()));
+                  }
+               }
+            });
+         }
+         for (auto& arg : subOp->getOpOperands()) {
+            auto type = arg.get().getType();
+            if (!mlir::isa<tuples::TupleStreamType>(type)) {
+               args.push_back(arg.get());
+               arg.set(macroBlock->addArgument(type, subOp->getLoc()));
+            } else {
+               arg.set(tupleStream);
+            }
+         }
+         for (auto* user : subOp->getUsers()) {
+            moveRecursivelyIntoMacro(user, macroBlock, args, subOp->getResult(0));
+         }
+      } else {
+         assert(false);
+      }
+   }
    void runOnOperation() override {
+      size_t macroOpId = 0;
       auto module = getOperation();
+      auto columnUsageAnalysis = getAnalysis<subop::ColumnUsageAnalysis>();
+      auto columnCreationAnalysis = getAnalysis<subop::ColumnCreationAnalysis>();
+      auto& colManager = getContext().getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+      std::vector<subop::UnionOp> unionForMacros;
+      module->walk([&](subop::UnionOp unionOp) {
+         if (mlir::isa<subop::ExecutionGroupOp>(unionOp->getParentOp())) {
+            unionForMacros.push_back(unionOp);
+         }
+      });
+      for (size_t i = 0; i < unionForMacros.size(); i++) {
+         auto unionOp = unionForMacros[unionForMacros.size() - 1 - i];
+         std::unordered_set<tuples::Column*> usedColumns;
+         std::unordered_set<tuples::Column*> requiredColumns;
+         getRecursivelyUsedColumns(usedColumns, columnUsageAnalysis, unionOp);
+         getRequired(requiredColumns, usedColumns, columnCreationAnalysis, unionOp);
+         std::vector<mlir::Attribute> requiredColumnRefs;
+         for (auto* c : requiredColumns) {
+            requiredColumnRefs.push_back(colManager.createRef(c));
+         }
+         mlir::ArrayAttr requiredColumnsAttr = mlir::ArrayAttr::get(&getContext(), requiredColumnRefs);
+         mlir::OpBuilder builder(unionOp);
+         std::vector<mlir::Value> args;
+
+         mlir::Block* macroBlock = new mlir::Block;
+         auto tupleStreamArg = macroBlock->addArgument(tuples::TupleStreamType::get(&getContext()), unionOp.getLoc());
+         for (auto* user : unionOp->getUsers()) {
+            moveRecursivelyIntoMacro(user, macroBlock, args, tupleStreamArg);
+         }
+         {
+            mlir::OpBuilder::InsertionGuard guard(builder);
+            builder.setInsertionPointToEnd(macroBlock);
+            builder.create<subop::MacroReturnOp>(unionOp.getLoc());
+         }
+         auto macroName = "macro" + std::to_string(macroOpId++);
+         for (auto stream : unionOp.getStreams()) {
+            mlir::OpBuilder::InsertionGuard guard(builder);
+            builder.setInsertionPointAfter(stream.getDefiningOp());
+            auto newStream = builder.create<subop::MacroCallOp>(unionOp.getLoc(), macroName, stream, args, requiredColumnsAttr);
+         }
+         auto executionGroupOp = unionOp->getParentOfType<subop::ExecutionGroupOp>();
+         builder.setInsertionPointToStart(&executionGroupOp.getSubOps().front());
+         auto macroOp = builder.create<subop::Macro>(unionOp.getLoc(), macroName, requiredColumnsAttr);
+         macroOp.getRegion().getBlocks().clear();
+         macroOp.getRegion().getBlocks().push_back(macroBlock);
+         unionOp->erase();
+      }
       std::vector<subop::UnionOp> unionOps;
       module->walk([&](subop::UnionOp unionOp) {
          unionOps.push_back(unionOp);
@@ -51,6 +169,7 @@ class FinalizePass : public mlir::PassWrapper<FinalizePass, mlir::OperationPass<
          currentUnion->replaceAllUsesWith(mlir::ValueRange{operands[operands.size() - 1]});
          currentUnion->erase();
       }
+
 
       std::vector<subop::GenerateOp> generateOps;
       module->walk([&](subop::GenerateOp generateOp) {

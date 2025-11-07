@@ -966,7 +966,25 @@ def SimpleStateGetScalar : SubOperator_Op<"simple_state_get_scalar",[SubOperator
           llvm::SmallVector<Member> getReadMembers();
       }];
 }
-
+def Macro : SubOperator_Op<"macro",[IsolatedFromAbove]> {
+    let summary = "execution group";
+    let arguments = (ins StrAttr:$sym_name,  ArrayAttr:$columns);
+    let regions = (region SizedRegion<1>:$sub_ops);
+    let assemblyFormat = [{ $sym_name $columns $sub_ops attr-dict-with-keyword }];
+}
+def MacroCallOp : SubOperator_Op<"macro_call",[SubOperator,DeclareOpInterfaceMethods<StateUsingSubOperator>]> {
+    let summary = "macro call";
+    let arguments = (ins StrAttr:$sym_name, TupleStream: $stream, Variadic<AnyType>:$inputs, ArrayAttr:$columns);
+    let assemblyFormat = [{ $sym_name $stream ($inputs^ `:` type($inputs))? custom<CustRefArr>($columns) attr-dict-with-keyword }];
+    let extraClassDeclaration = [{
+      llvm::SmallVector<Member> getWrittenMembers();
+      llvm::SmallVector<Member> getReadMembers();
+    }];
+}
+def MacroReturnOp : SubOperator_Op<"macro_return",[Terminator]> {
+   let summary = "macro return";
+   let assemblyFormat = [{ attr-dict-with-keyword }];
+}
 def ExecutionGroupOp : SubOperator_Op<"execution_group",[IsolatedFromAbove]> {
     let summary = "execution group";
     let arguments = (ins Variadic<AnyType>:$inputs);

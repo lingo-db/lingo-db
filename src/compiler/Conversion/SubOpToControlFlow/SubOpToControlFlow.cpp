@@ -173,6 +173,9 @@ class ColumnMapping {
    void define(tuples::ColumnDefAttr columnDefAttr, mlir::Value v) {
       mapping.insert(std::make_pair(&columnDefAttr.getColumn(), v));
    }
+   void define(const tuples::Column* column, mlir::Value v) {
+      mapping.insert(std::make_pair(column, v));
+   }
    void define(mlir::ArrayAttr columns, mlir::ValueRange values) {
       for (auto i = 0ul; i < columns.size(); i++) {
          define(mlir::cast<tuples::ColumnDefAttr>(columns[i]), values[i]);
@@ -519,6 +522,9 @@ class SubOpRewriter {
    std::stack<ExecutionStepContext> executionStepContexts;
 
    public:
+   SubOpRewriter(mlir::Operation* op) : builder(op), executionStepContexts{} {
+      valueMapping.push_back(mlir::IRMapping());
+   }
    SubOpRewriter(subop::ExecutionStepOp executionStep, mlir::IRMapping& outerMapping) : builder(executionStep), executionStepContexts{} {
       valueMapping.push_back(mlir::IRMapping());
       executionStepContexts.push({executionStep, outerMapping});
@@ -1377,6 +1383,26 @@ class GenerateLowering : public SubOpConversionPattern<subop::GenerateOp> {
       rewriter.eraseOp(generateOp);
 
       return success();
+   }
+};
+
+class MacroCallLowering : public SubOpTupleStreamConsumerConversionPattern<subop::MacroCallOp> {
+   public:
+   using SubOpTupleStreamConsumerConversionPattern<subop::MacroCallOp>::SubOpTupleStreamConsumerConversionPattern;
+
+   LogicalResult match(subop::MacroCallOp macroCallOp) const override {
+      return success();
+   }
+   void rewrite(subop::MacroCallOp macroCallOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+      auto columnArgs = mapping.resolve(macroCallOp, macroCallOp.getColumns());
+      std::vector<Value> inputArgs(macroCallOp.getInputs().begin(), macroCallOp.getInputs().end());
+      for (auto& arg : inputArgs) {
+         arg = rewriter.getMapped(arg);
+      }
+      std::vector<Value> args;
+      args.insert(args.end(), columnArgs.begin(), columnArgs.end());
+      args.insert(args.end(), inputArgs.begin(), inputArgs.end());
+      auto callOp = rewriter.create<func::CallOp>(macroCallOp->getLoc(), macroCallOp.getSymName(), TypeRange{}, args);
    }
 };
 class MapLowering : public SubOpTupleStreamConsumerConversionPattern<subop::MapOp> {
@@ -4298,11 +4324,7 @@ class LockLowering : public SubOpTupleStreamConsumerConversionPattern<subop::Loc
 };
 }; // namespace
 namespace {
-
-void handleExecutionStepCPU(subop::ExecutionStepOp step, subop::ExecutionGroupOp executionGroup, mlir::IRMapping& mapping, mlir::TypeConverter& typeConverter) {
-   // llvm::dbgs() << "[CPU] HANDLING STEP " << step << "\n";
-   auto* ctxt = step->getContext();
-   SubOpRewriter rewriter(step, mapping);
+void addCPUPatterns(SubOpRewriter& rewriter, mlir::MLIRContext* ctxt, mlir::TypeConverter& typeConverter) {
    rewriter.insertPattern<MapLowering>(typeConverter, ctxt);
    rewriter.insertPattern<FilterLowering>(typeConverter, ctxt);
    rewriter.insertPattern<RenameLowering>(typeConverter, ctxt);
@@ -4401,12 +4423,20 @@ void handleExecutionStepCPU(subop::ExecutionStepOp step, subop::ExecutionGroupOp
    rewriter.insertPattern<GetEndLowering>(typeConverter, ctxt);
    rewriter.insertPattern<EntriesBetweenLowering>(typeConverter, ctxt);
    rewriter.insertPattern<InFlightLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<MacroCallLowering>(typeConverter, ctxt);
    rewriter.insertPattern<GenerateLowering>(typeConverter, ctxt);
    rewriter.insertPattern<LoopLowering>(typeConverter, ctxt);
    rewriter.insertPattern<NestedExecutionGroupLowering>(typeConverter, ctxt);
    //rewriter.insertPattern<GetSingleValLowering>(typeConverter, ctxt);
    rewriter.insertPattern<SetTrackedCountLowering>(typeConverter, ctxt);
    //rewriter.insertPattern<SimpleStateGetScalarLowering>(typeConverter, ctxt);
+}
+
+void handleExecutionStepCPU(subop::ExecutionStepOp step, subop::ExecutionGroupOp executionGroup, mlir::IRMapping& mapping, mlir::TypeConverter& typeConverter) {
+   // llvm::dbgs() << "[CPU] HANDLING STEP " << step << "\n";
+   auto* ctxt = step->getContext();
+   SubOpRewriter rewriter(step, mapping);
+   addCPUPatterns(rewriter, ctxt, typeConverter);
 
    for (auto [param, arg, isThreadLocal] : llvm::zip(step.getInputs(), step.getSubOps().front().getArguments(), step.getIsThreadLocal())) {
       mlir::Value input = mapping.lookup(param);
@@ -4556,6 +4586,58 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
       mlir::IRMapping mapping;
       //todo: handle arguments of executionGroup
       for (auto& op : executionGroup.getRegion().front().getOperations()) {
+         if (auto macro = mlir::dyn_cast_or_null<subop::Macro>(&op)) {
+            mlir::OpBuilder builder(&getContext());
+            builder.setInsertionPointToEnd(module.getBody());
+            std::vector<mlir::Type> argTypes;
+            mlir::Block* funcBlock = new mlir::Block;
+            for (auto col : macro.getColumns()) {
+               auto t = mlir::cast<tuples::ColumnRefAttr>(col).getColumn().type;
+               argTypes.push_back(typeConverter.convertType(t));
+               funcBlock->addArgument(typeConverter.convertType(t), macro->getLoc());
+            }
+            for (size_t i = 1; i < macro.getRegion().getNumArguments(); i++) {
+               auto t=typeConverter.convertType(macro.getRegion().getArgumentTypes()[i]);
+               argTypes.push_back(t);
+               funcBlock->addArgument(t, macro->getLoc());
+            }
+            auto funcType = builder.getFunctionType(argTypes, {});
+            auto funcOp = builder.create<mlir::func::FuncOp>(macro.getLoc(), macro.getSymName(), funcType);
+
+            funcOp.getBody().push_back(funcBlock);
+            auto* ctxt = &getContext();
+            SubOpRewriter rewriter(macro.getOperation());
+            addCPUPatterns(rewriter, ctxt, typeConverter);
+            rewriter.operator mlir::OpBuilder&().setInsertionPointToStart(funcBlock);
+            ColumnMapping colMapping;
+            for (auto [c, arg] : llvm::zip(macro.getColumns(), funcOp.getArguments().take_front(macro.getColumns().size()))) {
+               mlir::Value input = arg;
+               auto* col = &mlir::cast<tuples::ColumnRefAttr>(c).getColumn();
+               colMapping.define(col, input);
+            }
+            rewriter.replaceTupleStream(macro.getSubOps().getArgument(0), colMapping);
+            for (auto [old, now] : llvm::zip(macro.getRegion().getArguments().drop_front(), funcOp.getArguments().drop_front(macro.getColumns().size()))) {
+               mlir::Value input = now;
+               rewriter.map(old, input);
+            }
+            std::vector<mlir::Operation*> ops;
+            for (auto& op : macro.getSubOps().front()) {
+               if (&op == macro.getSubOps().front().getTerminator()) {
+                  break;
+               }
+               ops.push_back(&op);
+            }
+            for (auto* op : ops) {
+               // llvm::dbgs() << "====OP: " << *op <<"\n";
+               rewriter.rewrite(op, executionGroup);
+            }
+            rewriter.cleanup();
+            {
+               mlir::OpBuilder builder(ctxt);
+               builder.setInsertionPointToEnd(funcBlock);
+               builder.create<mlir::func::ReturnOp>(macro.getLoc());
+            }
+         }
          if (auto step = mlir::dyn_cast_or_null<subop::ExecutionStepOp>(&op)) {
 #ifdef TRACER
             mlir::Value tracingStep;

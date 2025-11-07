@@ -39,10 +39,10 @@ class IntroducePreAggrHt : public mlir::RewritePattern {
       auto resIdx = threadLocalParent.getRes().getUses().begin()->getOperandNumber();
       auto producedState = threadLocalParent->getParentOfType<subop::ExecutionStepOp>().getResult(resIdx);
 
-      std::vector<subop::LookupOrInsertOp> lookupOrInsertOps;
       subop::MergeOp mergeOp;
       subop::ExecutionStepOp mergeStep;
       std::vector<mlir::Value> localExecutionSteps;
+      std::vector<subop::Macro> macrosToAdapt;
       for (auto& threadLocalUse : producedState.getUses()) {
          if (auto executionStep = mlir::dyn_cast_or_null<subop::ExecutionStepOp>(threadLocalUse.getOwner())) {
             auto val = executionStep.getSubOps().getArgument(threadLocalUse.getOperandNumber());
@@ -82,6 +82,21 @@ class IntroducePreAggrHt : public mlir::RewritePattern {
                         if (mlir::isa<subop::LookupOrInsertOp>(use.getOwner())) {
                         } else if (auto executionStep = mlir::dyn_cast<subop::ExecutionStepOp>(use.getOwner())) {
                            if (!checkUse(executionStep.getSubOps().getArgument(use.getOperandNumber()))) {
+                              return false;
+                           }
+                        } else if (auto macroCallOp = mlir::dyn_cast<subop::MacroCallOp>(use.getOwner())) {
+                           subop::Macro macro;
+                           auto executionGroupOp = macroCallOp->getParentOfType<subop::ExecutionGroupOp>();
+
+                           for (auto& operation : executionGroupOp.getSubOps().getOps()) {
+                              if (auto potentialMacro = mlir::dyn_cast_or_null<subop::Macro>(operation)) {
+                                 if (potentialMacro.getSymName() == macroCallOp.getSymName()) {
+                                    macro = potentialMacro;
+                                    break;
+                                 }
+                              }
+                           }
+                           if (!checkUse(macro.getSubOps().getArgument(use.getOperandNumber()))) {
                               return false;
                            }
                         } else {
