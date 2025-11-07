@@ -827,7 +827,28 @@ LogicalResult printOperation(CppEmitter& emitter,
 
 LogicalResult printOperation(CppEmitter& emitter, ModuleOp moduleOp) {
    CppEmitter::Scope scope(emitter);
-
+   for (Operation& op : moduleOp){
+      //print declarations for implemented functions on top
+        if (auto funcOp = dyn_cast<func::FuncOp>(op)) {
+           if (!funcOp.getFunctionBody().empty()&&funcOp.getName()!="main") {
+              llvm::raw_ostream& os=emitter.ostream();
+              if (failed(emitter.emitTypes(funcOp.getLoc(),
+                                           funcOp.getFunctionType().getResults())))
+                 return failure();
+              os << " " << funcOp.getName() << "(";
+              if (failed(interleaveCommaWithError(
+                     funcOp.getFunctionType().getInputs(), os,
+                     [&](mlir::Type argType) -> LogicalResult {
+                        if (failed(emitter.emitType(funcOp.getLoc(), argType)))
+                           return failure();
+                        return success();
+                     })))
+                 return failure();
+              os <<");";
+              os << "\n";
+           }
+        }
+   }
    for (Operation& op : moduleOp) {
       if (failed(emitter.emitOperation(op, /*trailingSemicolon=*/false)))
          return failure();
