@@ -313,6 +313,38 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
       UnaryOperator topushUnary = mlir::dyn_cast_or_null<UnaryOperator>(topush.getOperation());
       relalg::ColumnSet usedAttributes = topush.getUsedColumns();
       auto res = ::llvm::TypeSwitch<mlir::Operation*, Operator>(curr.getOperation())
+
+                    .Case<relalg::RenamingOp>([&](relalg::RenamingOp renamingOp) {
+                       Operator asOp = mlir::dyn_cast_or_null<Operator>(renamingOp.getOperation());
+                       auto child = mlir::dyn_cast_or_null<Operator>(renamingOp.child());
+                       bool allColumnsAvailable = true;
+
+                       std::unordered_map<const tuples::Column*, const tuples::Column*> colMapping;
+                       for (auto mappingAttr : renamingOp.getColumnsAttr()) {
+                          auto columnDefAttr = mlir::dyn_cast_or_null<tuples::ColumnDefAttr>(mappingAttr);
+                          auto columnRefAttr = mlir::cast<tuples::ColumnRefAttr>(mlir::cast<mlir::ArrayAttr>(columnDefAttr.getFromExisting())[0]);
+                          colMapping[&columnDefAttr.getColumn()] = &columnRefAttr.getColumn();
+                       }
+                       for (const auto* c : usedAttributes) {
+                          c = colMapping.contains(c) ? colMapping[c] : c;
+                          allColumnsAvailable &= columnCreatorAnalysis.getCreator(c).canColumnReach(Operator{}, child, c);
+                       }
+
+                       if (!allColumnsAvailable) {
+                          topush.setChildren({asOp});
+                          return topush;
+                       }
+                       auto& colManager = renamingOp.getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+                       topush->walk([&](tuples::GetColumnOp getColOp) {
+                          auto* col = &getColOp.getAttr().getColumn();
+                          if (colMapping.contains(col)) {
+                             getColOp.setAttrAttr(colManager.createRef(colMapping[col]));
+                          }
+                       });
+                       topush->moveBefore(asOp.getOperation());
+                       asOp.setChildren({pushdown(topush, child, columnCreatorAnalysis)});
+                       return asOp;
+                    })
                     .Case<UnaryOperator>([&](UnaryOperator unaryOperator) {
                        Operator asOp = mlir::dyn_cast_or_null<Operator>(unaryOperator.getOperation());
                        auto child = mlir::dyn_cast_or_null<Operator>(unaryOperator.child());
@@ -327,6 +359,41 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
                        }
                        topush.setChildren({asOp});
                        return topush;
+                    })
+                    .Case<relalg::UnionOp>([&](relalg::UnionOp unionOp) {
+                       Operator asOp = mlir::dyn_cast_or_null<Operator>(unionOp.getOperation());
+                       llvm::SmallVector<Operator, 4> newChildren;
+                       size_t i = 0;
+                       for (auto childVal : unionOp.getOperands()) {
+                          Operator topushnow;
+                          if (i == unionOp->getNumOperands() - 1) {
+                             topushnow = topush;
+                             topushnow->moveBefore(unionOp.getOperation());
+                          } else {
+                             topushnow = topush.clone();
+                             mlir::OpBuilder builder(unionOp.getContext());
+                             builder.setInsertionPoint(unionOp.getOperation());
+                             builder.insert(topushnow.getOperation());
+                          }
+                          auto child = mlir::dyn_cast_or_null<Operator>(childVal.getDefiningOp());
+                          std::unordered_map<const tuples::Column*, const tuples::Column*> colMapping;
+                          for (auto mappingAttr : unionOp.getMapping()) {
+                             auto columnDefAttr = mlir::dyn_cast_or_null<tuples::ColumnDefAttr>(mappingAttr);
+                             auto columnRefAttr = mlir::cast<tuples::ColumnRefAttr>(mlir::cast<mlir::ArrayAttr>(columnDefAttr.getFromExisting())[i]);
+                             colMapping[&columnDefAttr.getColumn()] = &columnRefAttr.getColumn();
+                          }
+                          auto& colManager = unionOp.getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+                          topushnow->walk([&](tuples::GetColumnOp getColOp) {
+                             auto* col = &getColOp.getAttr().getColumn();
+                             if (colMapping.contains(col)) {
+                                getColOp.setAttrAttr(colManager.createRef(colMapping[col]));
+                             }
+                          });
+                          newChildren.push_back(pushdown(topushnow, child, columnCreatorAnalysis));
+                          i++;
+                       }
+                       asOp.setChildren(newChildren);
+                       return asOp;
                     })
                     .Case<BinaryOperator>([&](BinaryOperator binop) {
                        Operator asOp = mlir::dyn_cast_or_null<Operator>(binop.getOperation());
