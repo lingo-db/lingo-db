@@ -278,8 +278,8 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
          nlohmann::json lowerConst;
          nlohmann::json upperConst;
          bool colNullable;
-         if (betweenOp.getVal().getType() != betweenOp.getLower().getType()) return false;
-         if (betweenOp.getVal().getType() != betweenOp.getUpper().getType()) return false;
+         if (getBaseType(betweenOp.getVal().getType()) != betweenOp.getLower().getType()) return false;
+         if (getBaseType(betweenOp.getVal().getType()) != betweenOp.getUpper().getType()) return false;
          if (getColumnName(betweenOp.getVal(), baseTableOp, columnName, colNullable) &&
              getConstant(betweenOp.getLower(), lowerConst) &&
              getConstant(betweenOp.getUpper(), upperConst)) {
