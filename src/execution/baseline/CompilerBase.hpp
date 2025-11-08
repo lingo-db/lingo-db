@@ -1060,6 +1060,12 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
       auto more_cmp_res_vr = this->result_ref(op.getNeedsDetailedEval());
       return derived()->encode_util_varlen_cmp(lhs_vr.part(0), lhs_vr.part(1), rhs_vr.part(0), rhs_vr.part(1), eq_res_vr.part(0), more_cmp_res_vr.part(0));
    }
+   bool compile_util_varlen_cmp_simple_op(dialect::util::VarLenCmpSimple op) {
+      auto lhs_vr = this->val_ref(op.getLeft());
+      auto rhs_vr = this->val_ref(op.getRight());
+      auto eq_res_vr = this->result_ref(op.getEq());
+      return derived()->encode_util_varlen_cmp_simple(lhs_vr.part(0), lhs_vr.part(1), rhs_vr.part(0), rhs_vr.part(1), eq_res_vr.part(0));
+   }
 
    bool compile_arith_cmp_float_op(mlir::arith::CmpFOp op) {
       const mlir::Value lhs = op.getLhs();
@@ -1491,6 +1497,7 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
             return compile_util_get_tuple_op(op);
          })
          .template Case<dialect::util::VarLenCmp>([&](auto op) { return compile_util_varlen_cmp_op(op); })
+         .template Case<dialect::util::VarLenCmpSimple>([&](auto op) { return compile_util_varlen_cmp_simple_op(op); })
          .Default([&](IRInstRef op) {
             error.emit() << "Encountered unimplemented instruction: " << op->getName().getStringRef().str()
                          << "\n";

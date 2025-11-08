@@ -193,6 +193,10 @@ UtilTryCheapHashRes util_varlen_try_cheap_hash(__uint128_t varlen) {
 }
 
 typedef struct UtilVarLenRes { uint64_t totalEqual; uint64_t needsDetailedComp; } UtilVarLenRes;
+bool util_varlen_cmp_simple(__uint128_t lhs, __uint128_t rhs) {
+   return (lhs == rhs);
+}
+
 UtilVarLenRes util_varlen_cmp(__uint128_t lhs, __uint128_t rhs) {
     // cmp lengths + first 4 chars
     uint64_t first64Left = (uint64_t)(lhs);

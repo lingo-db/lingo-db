@@ -314,6 +314,17 @@ class VarLenCmpLowering : public OpConversionPattern<util::VarLenCmp> {
       return success();
    }
 };
+class VarLenCmpSimpleLowering : public OpConversionPattern<util::VarLenCmpSimple> {
+   public:
+   using OpConversionPattern<util::VarLenCmpSimple>::OpConversionPattern;
+   LogicalResult matchAndRewrite(util::VarLenCmpSimple op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op->getLoc();
+
+      Value totalEq = rewriter.create<LLVM::ICmpOp>(loc, LLVM::ICmpPredicate::eq, adaptor.getLeft(), adaptor.getRight());
+      rewriter.replaceOp(op, totalEq);
+      return success();
+   }
+};
 class VarLenTryCheapHashLowering : public OpConversionPattern<util::VarLenTryCheapHash> {
    public:
    using OpConversionPattern<util::VarLenTryCheapHash>::OpConversionPattern;
@@ -596,6 +607,7 @@ void util::populateUtilToLLVMConversionPatterns(LLVMTypeConverter& typeConverter
    patterns.add<CreateConstVarLenLowering>(typeConverter, patterns.getContext());
    patterns.add<VarLenGetLenLowering>(typeConverter, patterns.getContext());
    patterns.add<VarLenCmpLowering>(typeConverter, patterns.getContext());
+   patterns.add<VarLenCmpSimpleLowering>(typeConverter, patterns.getContext());
    patterns.add<VarLenTryCheapHashLowering>(typeConverter, patterns.getContext());
    patterns.add<HashCombineLowering>(typeConverter, patterns.getContext());
    patterns.add<Hash64Lowering>(typeConverter, patterns.getContext());

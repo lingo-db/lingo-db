@@ -326,6 +326,17 @@ class StringCmpOpLowering : public OpConversionPattern<db::CmpOp> {
       }
       return true;
    }
+   bool smallConstString(mlir::Value val) const {
+      if (auto constOp = val.getDefiningOp<db::ConstantOp>()) {
+         if (auto strAttr = mlir::dyn_cast<mlir::StringAttr>(constOp.getValue())) {
+            auto str = strAttr.getValue();
+            if (str.size() <= 12) {
+               return true;
+            }
+         }
+      }
+      return false;
+   }
    LogicalResult matchAndRewrite(db::CmpOp cmpOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       using namespace lingodb::compiler::runtime;
       auto type = cmpOp.getLeft().getType();
@@ -337,13 +348,18 @@ class StringCmpOpLowering : public OpConversionPattern<db::CmpOp> {
       Value right = adaptor.getRight();
       switch (cmpOp.getPredicate()) {
          case db::DBCmpPredicate::eq: {
-            auto varlenCmp = rewriter.create<util::VarLenCmp>(cmpOp->getLoc(), rewriter.getI1Type(), rewriter.getI1Type(), left, right);
-            // TODO: this should be speculated to be **false** to move longer string comparisons out of the hot path
-            res = rewriter.create<mlir::scf::IfOp>(
-                             cmpOp->getLoc(), varlenCmp.getNeedsDetailedEval(), [&](mlir::OpBuilder& builder, mlir::Location loc) {
+            if (smallConstString(cmpOp.getLeft()) || smallConstString(cmpOp.getRight())) {
+               // for small constant strings, we can use direct comparison
+               res = rewriter.create<util::VarLenCmpSimple>(cmpOp->getLoc(), rewriter.getI1Type(), left, right);
+            } else {
+               auto varlenCmp = rewriter.create<util::VarLenCmp>(cmpOp->getLoc(), rewriter.getI1Type(), rewriter.getI1Type(), left, right);
+               // TODO: this should be speculated to be **false** to move longer string comparisons out of the hot path
+               res = rewriter.create<mlir::scf::IfOp>(
+                                cmpOp->getLoc(), varlenCmp.getNeedsDetailedEval(), [&](mlir::OpBuilder& builder, mlir::Location loc) {
                                                          auto rtCmp=StringRuntime::compareEq(rewriter, cmpOp->getLoc())({left, right})[0];
                                                          builder.create<mlir::scf::YieldOp>(loc, rtCmp); }, [&](mlir::OpBuilder& builder, mlir::Location loc) { builder.create<mlir::scf::YieldOp>(loc, varlenCmp.getEq()); })
-                     .getResult(0);
+                        .getResult(0);
+            }
             break;
          }
          case db::DBCmpPredicate::neq:
