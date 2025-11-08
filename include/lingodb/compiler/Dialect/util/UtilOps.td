@@ -52,6 +52,11 @@ def VarLenCmp : Util_Op<"varlen32_cmp"> {
     let results = (outs I1: $eq, I1: $needs_detailed_eval);
     let assemblyFormat = " $left `,` $right attr-dict";
 }
+def VarLenCmpSimple : Util_Op<"varlen32_cmp_simple"> {
+    let arguments = (ins VarLen32Type:$left, VarLen32Type:$right);
+    let results = (outs I1: $eq);
+    let assemblyFormat = " $left `,` $right attr-dict";
+}
 def VarLenTryCheapHash : Util_Op<"varlen32_try_cheap_hash"> {
     let arguments = (ins VarLen32Type:$varlen);
     let results = (outs I1: $complete, Index:$hash);
