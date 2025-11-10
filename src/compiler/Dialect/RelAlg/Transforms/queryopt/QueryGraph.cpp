@@ -213,13 +213,33 @@ void appendRestrictions(relalg::BaseTableOp baseTableOp, std::vector<std::unique
       for (auto& r : restrictions) {
          auto cmp = r["cmp"].get<std::string>();
          auto columnName = r["column"].get<std::string>();
-         auto value = r["value"];
          if (cmp == "isnotnull") {
             auto colExpr = support::eval::createAttrRef(columnName);
             expressions.push_back(support::eval::createNot(support::eval::createIsNull(std::move(colExpr))));
             continue;
          }
          auto type = getBaseType(typeMapping.at(columnName));
+         if (cmp == "in") {
+            std::vector<std::unique_ptr<support::eval::expr>> orExpressions;
+            for (auto value : r["values"]) {
+               std::variant<int64_t, double, std::string> parseArg;
+               if (value.is_string()) {
+                  parseArg = value.get<std::string>();
+               } else if (value.is_number_integer()) {
+                  parseArg = value.get<int64_t>();
+               } else if (value.is_number_float()) {
+                  parseArg = value.get<double>();
+               } else {
+                  assert(false);
+                  continue;
+               }
+               orExpressions.push_back(support::eval::createEq(support::eval::createAttrRef(columnName), buildConstant(type, parseArg)));
+            }
+            expressions.push_back(support::eval::createOr(orExpressions));
+            continue;
+         }
+         auto value = r["value"];
+
          std::variant<int64_t, double, std::string> parseArg;
          if (value.is_string()) {
             parseArg = value.get<std::string>();

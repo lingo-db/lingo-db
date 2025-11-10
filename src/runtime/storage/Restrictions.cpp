@@ -185,6 +185,53 @@ class SimpleTypeFilter : public lingodb::runtime::Filter {
       return writer - nextSelVec;
    }
 };
+template <class T>
+class SimpleTypeInFilter : public lingodb::runtime::Filter {
+   std::vector<T> values;
+
+   public:
+   SimpleTypeInFilter(std::vector<T> values) : values(values) {}
+   size_t filter(size_t len, uint16_t* currSelVec, uint16_t* nextSelVec, const lingodb::runtime::ArrayView* arrayView, size_t offset) override {
+      const T* data = reinterpret_cast<const T*>(arrayView->buffers[1]) + offset + arrayView->offset;
+      auto* writer = nextSelVec;
+      for (size_t i = 0; i < len; i++) {
+         size_t index0 = currSelVec[i];
+         for (auto value : values) {
+            if (value == data[index0]) {
+               *writer = index0;
+               writer++;
+               break;
+            }
+         }
+      }
+      return writer - nextSelVec;
+   }
+};
+class VarLen32FilterIn : public lingodb::runtime::Filter {
+   std::vector<std::string> values;
+
+   public:
+   VarLen32FilterIn(std::vector<std::string> values) : values(values) {}
+   size_t filter(size_t len, uint16_t* currSelVec, uint16_t* nextSelVec, const lingodb::runtime::ArrayView* arrayView, size_t offset) override {
+      const uint8_t* data = reinterpret_cast<const uint8_t*>(arrayView->buffers[2]);
+      const int32_t* offsets = reinterpret_cast<const int32_t*>(arrayView->buffers[1]) + offset + arrayView->offset;
+      auto* writer = nextSelVec;
+      for (size_t i = 0; i < len; i++) {
+         size_t index0 = currSelVec[i];
+         int32_t offset0 = offsets[index0];
+         int32_t nextOffset0 = offsets[index0 + 1];
+         std::string_view strView(reinterpret_cast<const char*>(data + offset0), nextOffset0 - offset0);
+         for (const auto& s : values) {
+            if (strView == s) {
+               *writer = index0;
+               writer++;
+               break;
+            }
+         }
+      }
+      return writer - nextSelVec;
+   }
+};
 template <template <class> class CMP>
 class VarLen32Filter : public lingodb::runtime::Filter {
    std::string value;
@@ -233,7 +280,7 @@ class VarLen32Filter : public lingodb::runtime::Filter {
    }
 };
 template <class T>
-std::unique_ptr<lingodb::runtime::Filter> createSimpleTypeFilter(lingodb::runtime::FilterOp op, T value) {
+std::unique_ptr<lingodb::runtime::Filter> createSimpleTypeSimpleFilters(lingodb::runtime::FilterOp op, T value) {
    switch (op) {
       case lingodb::runtime::FilterOp::LT:
          return std::make_unique<SimpleTypeFilter<T, Lt>>(value);
@@ -247,6 +294,28 @@ std::unique_ptr<lingodb::runtime::Filter> createSimpleTypeFilter(lingodb::runtim
          return std::make_unique<SimpleTypeFilter<T, Eq>>(value);
       case lingodb::runtime::FilterOp::NEQ:
          return std::make_unique<SimpleTypeFilter<T, Neq>>(value);
+      default:
+         throw std::runtime_error("unsupported filter op");
+   }
+}
+template <class T, class PT>
+std::unique_ptr<lingodb::runtime::Filter> createSimpleTypeFilter(lingodb::runtime::FilterOp op, lingodb::runtime::FilterDescription& filterDesc) {
+   switch (op) {
+      case lingodb::runtime::FilterOp::LT:
+      case lingodb::runtime::FilterOp::LTE:
+      case lingodb::runtime::FilterOp::GT:
+      case lingodb::runtime::FilterOp::GTE:
+      case lingodb::runtime::FilterOp::EQ:
+      case lingodb::runtime::FilterOp::NEQ: {
+         auto value = static_cast<T>(std::get<PT>(filterDesc.value));
+         return createSimpleTypeSimpleFilters<T>(op, value);
+      }
+      case lingodb::runtime::FilterOp::IN: {
+         auto valuesPt = (std::get<std::vector<PT>>(filterDesc.values));
+         std::vector<T> values;
+         for (auto v : valuesPt) values.push_back(v);
+         return std::make_unique<SimpleTypeInFilter<T>>(values);
+      }
       default:
          throw std::runtime_error("unsupported filter op");
    }
@@ -295,7 +364,7 @@ std::unique_ptr<lingodb::runtime::Restrictions> lingodb::runtime::Restrictions::
                assert(strVal.size() <= 4);
                int32_t intVal = 0;
                std::memcpy(&intVal, strVal.data(), std::min(sizeof(intVal), strVal.size()));
-               restrictions->filters.push_back({createSimpleTypeFilter<int32_t>(filterDesc.op, intVal), colId});
+               restrictions->filters.push_back({createSimpleTypeSimpleFilters<int32_t>(filterDesc.op, intVal), colId});
                break;
             } else {
                throw std::runtime_error("unsupported fixed size binary width in filter");
@@ -303,30 +372,35 @@ std::unique_ptr<lingodb::runtime::Restrictions> lingodb::runtime::Restrictions::
             break;
          }
          case arrow::Type::INT8: {
-            auto intVal = static_cast<int8_t>(std::get<int64_t>(filterDesc.value));
-            restrictions->filters.push_back({createSimpleTypeFilter<int8_t>(filterDesc.op, intVal), colId});
+            restrictions->filters.push_back({createSimpleTypeFilter<int8_t, int64_t>(filterDesc.op, filterDesc), colId});
             break;
          }
          case arrow::Type::INT16: {
-            auto intVal = static_cast<int16_t>(std::get<int64_t>(filterDesc.value));
-            restrictions->filters.push_back({createSimpleTypeFilter<int16_t>(filterDesc.op, intVal), colId});
+            restrictions->filters.push_back({createSimpleTypeFilter<int16_t, int64_t>(filterDesc.op, filterDesc), colId});
             break;
          }
 
          case arrow::Type::INT32: {
-            auto intVal = static_cast<int32_t>(std::get<int64_t>(filterDesc.value));
-            restrictions->filters.push_back({createSimpleTypeFilter<int32_t>(filterDesc.op, intVal), colId});
+            restrictions->filters.push_back({createSimpleTypeFilter<int32_t, int64_t>(filterDesc.op, filterDesc), colId});
+
             break;
          }
          case arrow::Type::INT64: {
-            auto intVal = static_cast<int64_t>(std::get<int64_t>(filterDesc.value));
-            restrictions->filters.push_back({createSimpleTypeFilter<int64_t>(filterDesc.op, intVal), colId});
+            restrictions->filters.push_back({createSimpleTypeFilter<int64_t, int64_t>(filterDesc.op, filterDesc), colId});
             break;
          }
          case arrow::Type::DATE32: {
-            auto stringVal = std::get<std::string>(filterDesc.value);
-            auto intVal = parseDate32(stringVal);
-            restrictions->filters.push_back({createSimpleTypeFilter<int32_t>(filterDesc.op, intVal), colId});
+            if (filterDesc.op == FilterOp::IN) {
+               std::vector<int32_t> values;
+               for (auto strVal : std::get<std::vector<std::string>>(filterDesc.values)) {
+                  values.push_back(parseDate32(strVal));
+               }
+               restrictions->filters.push_back({std::make_unique<SimpleTypeInFilter<int32_t>>(values), colId});
+            } else {
+               auto stringVal = std::get<std::string>(filterDesc.value);
+               auto intVal = parseDate32(stringVal);
+               restrictions->filters.push_back({createSimpleTypeSimpleFilters<int32_t>(filterDesc.op, intVal), colId});
+            }
             break;
          }
          case arrow::Type::DECIMAL128: {
@@ -352,16 +426,20 @@ std::unique_ptr<lingodb::runtime::Restrictions> lingodb::runtime::Restrictions::
             } else {
                throw std::runtime_error("unsupported decimal constant type");
             }
-            restrictions->filters.push_back({createSimpleTypeFilter<__int128>(filterDesc.op, decimalValue), colId});
+            restrictions->filters.push_back({createSimpleTypeSimpleFilters<__int128>(filterDesc.op, decimalValue), colId});
             break;
          }
          case arrow::Type::STRING: {
-            std::string value = std::get<std::string>(filterDesc.value);
+            std::string value;
+            if (filterDesc.op != FilterOp::IN) {
+               value = std::get<std::string>(filterDesc.value);
+            }
             switch (filterDesc.op) {
                case lingodb::runtime::FilterOp::LT:
                   restrictions->filters.push_back({std::make_unique<VarLen32Filter<Lt>>(value), colId});
                   break;
                case lingodb::runtime::FilterOp::LTE:
+
                   restrictions->filters.push_back({std::make_unique<VarLen32Filter<LtE>>(value), colId});
                   break;
                case lingodb::runtime::FilterOp::GT:
@@ -376,6 +454,11 @@ std::unique_ptr<lingodb::runtime::Restrictions> lingodb::runtime::Restrictions::
                case lingodb::runtime::FilterOp::NEQ:
                   restrictions->filters.push_back({std::make_unique<VarLen32Filter<Neq>>(value), colId});
                   break;
+               case lingodb::runtime::FilterOp::IN: {
+                  auto values = std::get<std::vector<std::string>>(filterDesc.values);
+                  restrictions->filters.push_back({std::make_unique<VarLen32FilterIn>(values), colId});
+                  break;
+               }
                default:
                   throw std::runtime_error("unsupported filter op for string");
             }
