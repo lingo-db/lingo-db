@@ -1933,16 +1933,21 @@ class SumAggrFunc : public DistAggrFunc {
          // state nullable, arg nullable
          mlir::Value isStateNull = builder.create<db::IsNullOp>(loc, builder.getI1Type(), state);
          mlir::Value isArgNull = builder.create<db::IsNullOp>(loc, builder.getI1Type(), args[0]);
-         mlir::Value sum = builder.create<db::AddOp>(loc, state, args[0]);
-         sum = builder.create<mlir::arith::SelectOp>(loc, isArgNull, state, sum);
-         return builder.create<mlir::arith::SelectOp>(loc, isStateNull, args[0], sum);
-      } else if (mlir::isa<db::NullableType>(stateType)) {
-         // state nullable, arg not nullable
-         mlir::Value isStateNull = builder.create<db::IsNullOp>(loc, builder.getI1Type(), state);
+         mlir::Value resultIsNull = builder.create<arith::AndIOp>(loc, isStateNull, isArgNull);
+         mlir::Value stateVal = builder.create<db::NullableGetVal>(loc, state);
+         mlir::Value argVal = builder.create<db::NullableGetVal>(loc, args[0]);
+         mlir::Value zeroArg = builder.create<db::ConstantOp>(loc, getBaseType(args[0].getType()), builder.getI64IntegerAttr(0));
          mlir::Value zero = builder.create<db::ConstantOp>(loc, getBaseType(stateType), builder.getI64IntegerAttr(0));
-         zero = builder.create<db::AsNullableOp>(loc, stateType, zero);
-         state = builder.create<mlir::arith::SelectOp>(loc, isStateNull, zero, state);
-         return builder.create<db::AddOp>(loc, state, args[0]);
+         argVal = builder.create<mlir::arith::SelectOp>(loc, isArgNull, zeroArg, argVal);
+         stateVal = builder.create<mlir::arith::SelectOp>(loc, isStateNull, zero, stateVal);
+         mlir::Value added = builder.create<db::AddOp>(loc, stateVal, argVal);
+         return builder.create<db::AsNullableOp>(loc, state.getType(), added, resultIsNull);
+      } else if (mlir::isa<db::NullableType>(stateType)) {
+         mlir::Value isStateNull = builder.create<db::IsNullOp>(loc, builder.getI1Type(), state);
+         mlir::Value stateVal = builder.create<db::NullableGetVal>(loc, state);
+         mlir::Value added = builder.create<db::AddOp>(loc, stateVal, args[0]);
+         stateVal = builder.create<mlir::arith::SelectOp>(loc, isStateNull, args[0], added);
+         return builder.create<db::AsNullableOp>(loc, stateType, stateVal);
       } else {
          //state non-nullable, arg not nullable
          return builder.create<db::AddOp>(loc, state, args[0]);
@@ -1953,13 +1958,14 @@ class SumAggrFunc : public DistAggrFunc {
          // state nullable, arg not nullable
          mlir::Value isLeftNull = builder.create<db::IsNullOp>(loc, builder.getI1Type(), left);
          mlir::Value isRightNull = builder.create<db::IsNullOp>(loc, builder.getI1Type(), right);
+         mlir::Value resultIsNull = builder.create<arith::AndIOp>(loc, isLeftNull, isRightNull);
+         mlir::Value leftVal = builder.create<db::NullableGetVal>(loc, left);
+         mlir::Value rightVal = builder.create<db::NullableGetVal>(loc, right);
          mlir::Value zero = builder.create<db::ConstantOp>(loc, getBaseType(stateType), builder.getI64IntegerAttr(0));
-         zero = builder.create<db::AsNullableOp>(loc, stateType, zero);
-         mlir::Value newLeft = builder.create<mlir::arith::SelectOp>(loc, isLeftNull, zero, left);
-         mlir::Value newRight = builder.create<mlir::arith::SelectOp>(loc, isRightNull, zero, right);
+         mlir::Value newLeft = builder.create<mlir::arith::SelectOp>(loc, isLeftNull, zero, leftVal);
+         mlir::Value newRight = builder.create<mlir::arith::SelectOp>(loc, isRightNull, zero, rightVal);
          mlir::Value sum = builder.create<db::AddOp>(loc, newLeft, newRight);
-         mlir::Value bothNull = builder.create<mlir::arith::AndIOp>(loc, isLeftNull, isRightNull);
-         return builder.create<mlir::arith::SelectOp>(loc, bothNull, left, sum);
+         return builder.create<db::AsNullableOp>(loc, stateType, sum, resultIsNull);
       } else {
          //state non-nullable, arg not nullable
          return builder.create<db::AddOp>(loc, left, right);
