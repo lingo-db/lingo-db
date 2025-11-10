@@ -75,17 +75,45 @@ lingodb::runtime::DataSource* lingodb::runtime::DataSource::get(lingodb::runtime
             filterDesc.op = FilterOp::NEQ;
          } else if (op == "isnotnull") {
             filterDesc.op = FilterOp::NOTNULL;
+         } else if (op == "in") {
+            filterDesc.op = FilterOp::IN;
          } else {
             throw std::runtime_error("unsupported filter op");
          }
-         if (r["value"].is_string()) {
-            filterDesc.value = r["value"].get<std::string>();
-         } else if (r["value"].is_number_integer()) {
-            filterDesc.value = r["value"].get<int64_t>();
-         } else if (r["value"].is_number_float()) {
-            filterDesc.value = r["value"].get<double>();
+         if (filterDesc.op != FilterOp::IN) {
+            if (r["value"].is_string()) {
+               filterDesc.value = r["value"].get<std::string>();
+            } else if (r["value"].is_number_integer()) {
+               filterDesc.value = r["value"].get<int64_t>();
+            } else if (r["value"].is_number_float()) {
+               filterDesc.value = r["value"].get<double>();
+            } else {
+               throw std::runtime_error("unsupported filter value type");
+            }
          } else {
-            throw std::runtime_error("unsupported filter value type");
+            std::vector<std::string> valuesStr;
+            std::vector<int64_t> valuesInt;
+            std::vector<double> valuesDouble;
+            for (auto v : r["values"]) {
+               if (v.is_string()) {
+                  valuesStr.push_back(v.get<std::string>());
+               } else if (v.is_number_integer()) {
+                  valuesInt.push_back(v.get<int64_t>());
+               } else if (v.is_number_float()) {
+                  valuesDouble.push_back(v.get<double>());
+               } else {
+                  throw std::runtime_error("unsupported filter value type");
+               }
+            }
+            if (!valuesStr.empty()) {
+               assert(valuesInt.empty() && valuesDouble.empty());
+               filterDesc.values = valuesStr;
+            } else if (!valuesInt.empty()) {
+               assert(valuesDouble.empty());
+               filterDesc.values = valuesInt;
+            } else {
+               filterDesc.values = valuesDouble;
+            }
          }
          if (uniqueRestrictions.contains(filterDesc)) {
             continue;

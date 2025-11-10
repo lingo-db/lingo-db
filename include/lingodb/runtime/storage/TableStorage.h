@@ -17,7 +17,8 @@ enum class FilterOp {
    LTE,
    GT,
    GTE,
-   NOTNULL
+   NOTNULL,
+   IN
 
 };
 struct FilterDescription {
@@ -25,11 +26,12 @@ struct FilterDescription {
    size_t columnId;
    FilterOp op;
    std::variant<std::string, int64_t, double> value;
+   std::variant<std::vector<std::string>, std::vector<int64_t>, std::vector<double>> values;
    bool operator==(const FilterDescription& other) const noexcept {
       return columnName == other.columnName &&
          columnId == other.columnId &&
          op == other.op &&
-         value == other.value;
+         value == other.value && values == other.values;
    }
 };
 struct ScanConfig {
@@ -69,7 +71,12 @@ struct hash<lingodb::runtime::FilterDescription> {
          combine(val);
       },
                  f.value);
-
+      std::visit([&](auto const& val) {
+         for (const auto& v : val) {
+            combine(v);
+         }
+      },
+                 f.values);
       return h;
    }
 };

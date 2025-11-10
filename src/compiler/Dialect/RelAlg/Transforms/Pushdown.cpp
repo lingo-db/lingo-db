@@ -174,7 +174,7 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
    bool getColumnName(mlir::Value val, relalg::BaseTableOp baseTableOp, std::string& outColumnName, bool& nullable) {
       auto getColOp = mlir::dyn_cast_or_null<tuples::GetColumnOp>(val.getDefiningOp());
       if (auto castOp = mlir::dyn_cast_or_null<db::CastOp>(val.getDefiningOp())) {
-         if (mlir::isa<db::StringType>(castOp.getType()) && mlir::isa<db::CharType>(castOp.getVal().getType())) {
+         if (mlir::isa<db::StringType>(getBaseType(castOp.getType())) && mlir::isa<db::CharType>(getBaseType(castOp.getVal().getType()))) {
             getColOp = mlir::dyn_cast_or_null<tuples::GetColumnOp>(castOp.getVal().getDefiningOp());
          }
       }
@@ -303,6 +303,31 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
             return true;
          }
       }
+      if (auto inOp = mlir::dyn_cast_or_null<db::OneOfOp>(returnOp.getResults()[0].getDefiningOp())) {
+         std::string columnName;
+         bool colNullable;
+         nlohmann::json::array_t vals;
+         if (!getColumnName(inOp.getVal(), baseTableOp, columnName, colNullable)) return false;
+         for (auto val : inOp.getVals()) {
+            nlohmann::json constVal;
+            if (!getConstant(val, constVal)) return false;
+            vals.push_back(constVal);
+         }
+         if (colNullable) {
+            appendRestrictions(baseTableOp, nlohmann::json::array_t{{
+                                               {"column", columnName},
+                                               {"cmp", "isnotnull"},
+                                               {"value", 0},
+                                            }});
+         }
+         appendRestrictions(baseTableOp, nlohmann::json::array_t{{
+                                            {"column", columnName},
+                                            {"cmp", "in"},
+                                            {"values", vals},
+                                         }});
+         return true;
+      }
+
       return false;
    }
    Operator pushdown(Operator topush, Operator curr, relalg::ColumnCreatorAnalysis& columnCreatorAnalysis, bool ignoreMultUse = false) {
