@@ -1,4 +1,5 @@
 #include "lingodb/compiler/Dialect/DB/IR/DBOps.h"
+#include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "lingodb/compiler/Dialect/RelAlg/Passes.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
@@ -250,6 +251,18 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
          if (op.getComputedCols().size() == 1) {
             // single column map does not need decomposition
             return;
+         }
+         if (auto returnOp = mlir::dyn_cast_or_null<tuples::ReturnOp>(op.getRegion().front().getTerminator())) {
+            bool anyRelalgOp = false;
+            for (auto v : returnOp.getResults()) {
+               if (auto* defOp = v.getDefiningOp()) {
+                  if (defOp->getDialect() == op.getContext()->getLoadedDialect<relalg::RelAlgDialect>()) {
+                     anyRelalgOp = true;
+                     break;
+                  }
+               }
+            }
+            if (!anyRelalgOp) return;
          }
          decomposeMap(op, val);
          op.replaceAllUsesWith(val);
