@@ -312,6 +312,12 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
       }
       UnaryOperator topushUnary = mlir::dyn_cast_or_null<UnaryOperator>(topush.getOperation());
       relalg::ColumnSet usedAttributes = topush.getUsedColumns();
+      if (mlir::isa<relalg::SelectionOp>(topush.getOperation()) && mlir::isa<relalg::SelectionOp>(curr.getOperation())) {
+         if (mlir::OperationEquivalence::isRegionEquivalentTo(&topush->getRegion(0), &curr->getRegion(0), mlir::OperationEquivalence::IgnoreLocations)) {
+            toErase.insert(curr);
+            return pushdown(topush, curr.getChildren()[0], columnCreatorAnalysis);
+         }
+      }
       auto res = ::llvm::TypeSwitch<mlir::Operation*, Operator>(curr.getOperation())
 
                     .Case<relalg::RenamingOp>([&](relalg::RenamingOp renamingOp) {
