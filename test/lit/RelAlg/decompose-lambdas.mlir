@@ -32,36 +32,3 @@ module @querymodule  {
     return
   }
 }
-// -----
-module @querymodule  {
-  func.func @query() {
-    //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel::@attr1({type = i32}),@constrel::@attr2({type = i32})]
-    //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel2::@attr1({type = i32}),@constrel2::@attr2({type = i32})]
-    //CHECK: %{{.*}} = relalg.crossproduct
-  	%0 = relalg.const_relation  columns: [@constrel::@attr1({type = i32}),@constrel::@attr2({type = i32})] values: [[1, 1], [2, 2]]
-  	%1 = relalg.const_relation  columns: [@constrel2::@attr1({type = i32}),@constrel2::@attr2({type = i32})] values: [[1, 1], [2, 2]]
-  	%2 = relalg.crossproduct %0, %1
-    //CHECK: %{{.*}} = relalg.map %{{.*}} computes : [@map::@attr3({type = i32})] (%arg0: !tuples.tuple)
-    //CHECK: %{{.*}} = tuples.getcol %arg0 @constrel::@attr1 : i32
-    //CHECK: %{{.*}} = tuples.getcol %arg0 @constrel2::@attr1 : i32
-    //CHECK: %{{.*}} = db.add %{{.*}} : i32, %{{.*}} : i32
-    //CHECK: tuples.return %{{.*}} : i32
-	//CHECK: %{{.*}} = relalg.map %{{.*}} computes : [@map::@attr4({type = i32})] (%arg0: !tuples.tuple)
-	//CHECK: %{{.*}} = tuples.getcol %arg0 @constrel::@attr2 : i32
-	//CHECK: %{{.*}} = tuples.getcol %arg0 @constrel2::@attr2 : i32
-	//CHECK: %{{.*}} = db.add %{{.*}} : i32, %{{.*}} : i32
-	//CHECK: tuples.return %{{.*}} : i32
-  	%3 = relalg.map %2 computes: [ @map::@attr3({type = i32}), @map::@attr4({type = i32})] (%arg0: !tuples.tuple) {
-		%4 = tuples.getcol %arg0 @constrel::@attr1 : i32
-		%5 = tuples.getcol %arg0 @constrel2::@attr1 : i32
-		%6 = db.add %4 : i32, %5 : i32
-		%7 = tuples.getcol %arg0 @constrel::@attr2 : i32
-		%8 = tuples.getcol %arg0 @constrel2::@attr2 : i32
-		%9 = db.add %7 : i32, %8 : i32
-        tuples.return %6, %9 : i32, i32
-  	}
-  	%res_table = relalg.materialize %3 [@map::@attr3, @map::@attr4] => ["a","b"] : !subop.local_table<[a: i32,b:i32],["a","b"]>
-    subop.set_result 0 %res_table : !subop.local_table<[a: i32,b:i32],["a","b"]>
-    return
-  }
-}
