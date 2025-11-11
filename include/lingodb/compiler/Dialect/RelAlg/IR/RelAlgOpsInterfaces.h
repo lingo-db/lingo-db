@@ -204,6 +204,7 @@ constexpr CompatibilityTable<UnaryOperatorType, UnaryOperatorType> reorderable{
    {UnaryOperatorType::Map, UnaryOperatorType::Projection},
    {UnaryOperatorType::Map, UnaryOperatorType::Selection},
    {UnaryOperatorType::Map, UnaryOperatorType::Map},
+   {UnaryOperatorType::Selection, UnaryOperatorType::Aggregation},
 };
 
 BinaryOperatorType getBinaryOperatorType(mlir::Operation* op);
