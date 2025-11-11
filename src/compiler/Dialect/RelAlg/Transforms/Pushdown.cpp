@@ -345,6 +345,23 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
                        asOp.setChildren({pushdown(topush, child, columnCreatorAnalysis)});
                        return asOp;
                     })
+                    .Case<relalg::WindowOp>([&](relalg::WindowOp windowOp) {
+                       Operator asOp = mlir::dyn_cast_or_null<Operator>(windowOp.getOperation());
+                       auto child = mlir::dyn_cast_or_null<Operator>(windowOp.child());
+                       bool allColumnsAvailable = true;
+                       for (const auto* c : usedAttributes) {
+                          allColumnsAvailable &= columnCreatorAnalysis.getCreator(c).canColumnReach(Operator{}, child, c);
+                       }
+                       auto windowOrderCols = relalg::ColumnSet::fromArrayAttr(windowOp.getOrderBy());
+                       auto computedCols = relalg::ColumnSet::fromArrayAttr(windowOp.getComputedCols());
+                       if (allColumnsAvailable && !windowOrderCols.intersects(usedAttributes) && !computedCols.intersects(usedAttributes)) {
+                          topush->moveBefore(asOp.getOperation());
+                          asOp.setChildren({pushdown(topush, child, columnCreatorAnalysis)});
+                          return asOp;
+                       }
+                       topush.setChildren({asOp});
+                       return topush;
+                    })
                     .Case<UnaryOperator>([&](UnaryOperator unaryOperator) {
                        Operator asOp = mlir::dyn_cast_or_null<Operator>(unaryOperator.getOperation());
                        auto child = mlir::dyn_cast_or_null<Operator>(unaryOperator.child());
