@@ -305,8 +305,8 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
       }
       return false;
    }
-   Operator pushdown(Operator topush, Operator curr, relalg::ColumnCreatorAnalysis& columnCreatorAnalysis) {
-      if (countUses(curr) > 1) {
+   Operator pushdown(Operator topush, Operator curr, relalg::ColumnCreatorAnalysis& columnCreatorAnalysis, bool ignoreMultUse = false) {
+      if (countUses(curr) > 1 && !ignoreMultUse) {
          topush.setChildren({curr});
          return topush;
       }
@@ -526,6 +526,68 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
             });
          }
       });
+      getOperation()->walk([&](relalg::SelectionOp sel) {
+         if (auto op = mlir::cast<Operator>(sel.getRel().getDefiningOp())) {
+            if (countUses(op) > 1) {
+               std::vector<std::vector<relalg::SelectionOp>> collectedSelectionOps;
+               //for each use: count selection chain
+               for (auto* user : op->getUsers()) {
+                  std::vector<relalg::SelectionOp> selectionOps;
+                  while (user) {
+                     if (auto selOp = mlir::dyn_cast<relalg::SelectionOp>(user)) {
+                        selectionOps.push_back(selOp);
+                     } else {
+                        break;
+                     }
+                     if (countUses(mlir::cast<Operator>(user)) != 1) break;
+                     user = *user->getUsers().begin();
+                  }
+                  collectedSelectionOps.push_back(selectionOps);
+               }
+               std::vector<relalg::SelectionOp> sharedSelections;
+               for (auto currSelOp : collectedSelectionOps[0]) {
+                  std::vector<relalg::SelectionOp> sameOps;
+                  bool allMatch = true;
+                  for (size_t i = 1; i < collectedSelectionOps.size(); i++) {
+                     bool anyMatch = false;
+                     for (auto otherSelOp : collectedSelectionOps[i]) {
+                        if (mlir::OperationEquivalence::isRegionEquivalentTo(&currSelOp->getRegion(0), &otherSelOp->getRegion(0), mlir::OperationEquivalence::IgnoreLocations)) {
+                           anyMatch = true;
+                           sameOps.push_back(otherSelOp);
+                           break;
+                        }
+                     }
+                     if (!anyMatch) {
+                        allMatch = false;
+                        break;
+                     }
+                  }
+                  if (allMatch) {
+                     SmallPtrSet<mlir::Operation*, 4> users;
+                     for (auto* u : currSelOp->getUsers()) {
+                        users.insert(u);
+                     }
+                     auto childBefore = currSelOp.getChildren()[0];
+                     auto relBefore = currSelOp.getRel();
+                     Operator pushedDown = pushdown(currSelOp, op, columnCreatorAnalysis, true);
+                     if (currSelOp.getOperation() != pushedDown.getOperation()) {
+                        //"remove currSelOp from previous "chain"
+                        currSelOp.getResult().replaceUsesWithIf(relBefore, [&](mlir::OpOperand& operand) {
+                           return users.contains(operand.getOwner());
+                        });
+                        for (auto o : sameOps) {
+                           o.replaceAllUsesWith(o.getRel());
+                           toErase.insert(o.getOperation());
+                        }
+                     } else {
+                        currSelOp.setChildren({childBefore});
+                     }
+                  }
+               }
+            }
+         }
+      });
+
       for (auto* op : toErase) {
          op->erase();
       }
