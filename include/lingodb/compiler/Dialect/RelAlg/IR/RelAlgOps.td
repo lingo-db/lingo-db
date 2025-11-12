@@ -135,7 +135,7 @@ def BaseTableOp : RelAlg_Op<"basetable",[Pure,Operator]> {
 
 def SelectionOp : RelAlg_Op<"selection",
         [Pure,Operator,PredicateOperator,TupleLamdaOperator,
-         UnaryOperator,DeclareOpInterfaceMethods<ColumnFoldable>]> {
+         UnaryOperator,DeclareOpInterfaceMethods<ColumnFoldable>, DeclareOpInterfaceMethods<NullColumnTypeChangeable>]> {
     let summary = "selection operation";
     let description = [{
         Filter tuple stream, the region returns `1` iff the value should be
@@ -152,7 +152,7 @@ def SelectionOp : RelAlg_Op<"selection",
     }];
 }
 
-def MapOp : RelAlg_Op<"map", [Pure,Operator,TupleLamdaOperator,UnaryOperator,DeclareOpInterfaceMethods<ColumnFoldable>]> {
+def MapOp : RelAlg_Op<"map", [Pure,Operator,TupleLamdaOperator,UnaryOperator,DeclareOpInterfaceMethods<ColumnFoldable>, DeclareOpInterfaceMethods<NullColumnTypeChangeable>]> {
     let summary = "map operation";
 
     let arguments = (ins TupleStream:$rel,ArrayAttr:$computed_cols);
@@ -168,7 +168,7 @@ def MapOp : RelAlg_Op<"map", [Pure,Operator,TupleLamdaOperator,UnaryOperator,Dec
     let hasVerifier=1;
 }
 
-def LimitOp : RelAlg_Op<"limit", [Pure,Operator,UnaryOperator]> {
+def LimitOp : RelAlg_Op<"limit", [Pure,Operator,UnaryOperator,DeclareOpInterfaceMethods<NullColumnTypeChangeable>]> {
     let summary = "limit operation";
 
     let arguments = (ins I32Attr:$max_rows, TupleStream:$rel);
@@ -205,7 +205,7 @@ def CrossProductOp : RelAlg_Op<"crossproduct",
 }
 
 def RenamingOp : RelAlg_Op<"renaming",
-        [Pure,Operator,UnaryOperator]> {
+        [Pure,Operator,UnaryOperator,DeclareOpInterfaceMethods<NullColumnTypeChangeable>]> {
     let summary = "renaming columns in relation";
 
     let arguments = (ins TupleStream:$rel,ArrayAttr:$columns);
@@ -220,7 +220,7 @@ def RenamingOp : RelAlg_Op<"renaming",
     }];
 }
 
-def AggregationOp : RelAlg_Op<"aggregation", [Pure,Operator,UnaryOperator]> {
+def AggregationOp : RelAlg_Op<"aggregation", [Pure,Operator,UnaryOperator,DeclareOpInterfaceMethods<NullColumnTypeChangeable>]> {
     let summary = "aggregation operation";
 
     let arguments = (ins TupleStream:$rel, ArrayAttr:$group_by_cols, ArrayAttr:$computed_cols);
@@ -265,7 +265,7 @@ def WindowOp : RelAlg_Op<"window", [Pure,Operator,UnaryOperator]> {
     }];
 }
 
-def SortOp : RelAlg_Op<"sort", [Pure,Operator,UnaryOperator]> {
+def SortOp : RelAlg_Op<"sort", [Pure,Operator,UnaryOperator,DeclareOpInterfaceMethods<NullColumnTypeChangeable>]> {
     let summary = "sort operation";
 
     let arguments = (ins TupleStream:$rel, ArrayAttr:$sortspecs);
@@ -279,7 +279,7 @@ def SortOp : RelAlg_Op<"sort", [Pure,Operator,UnaryOperator]> {
 // Joins
 class RelAlg_JoinOp<string mnemonic> : RelAlg_Op<mnemonic,
         [Pure,Operator,BinaryOperator,PredicateOperator,
-         TupleLamdaOperator,DeclareOpInterfaceMethods<ColumnFoldable>]> {
+         TupleLamdaOperator,DeclareOpInterfaceMethods<ColumnFoldable>, DeclareOpInterfaceMethods<NullColumnTypeChangeable>]> {
     let arguments = (ins TupleStream:$left,TupleStream:$right);
     let results = (outs TupleStream:$result);
     let regions = (region SizedRegion<1>:$predicate);
@@ -385,7 +385,7 @@ def MarkJoinOp : RelAlg_JoinOp<"markjoin"> {
 }
 
 // Set Operations
-def ProjectionOp : RelAlg_Op<"projection",[Pure,Operator,UnaryOperator]> {
+def ProjectionOp : RelAlg_Op<"projection",[Pure,Operator,UnaryOperator,DeclareOpInterfaceMethods<NullColumnTypeChangeable>]> {
     let summary = "projection operation";
 
     let arguments = (ins RelAlg_SetSemantic:$set_semantic,TupleStream:$rel, ArrayAttr:$cols);
@@ -397,6 +397,7 @@ def ProjectionOp : RelAlg_Op<"projection",[Pure,Operator,UnaryOperator]> {
         ColumnSet getUsedColumns();
         bool canColumnReach(Operator source, Operator target, const lingodb::compiler::dialect::tuples::Column* col);
     }];
+
 }
 
 class RelAlg_BinarySetOp<string mnemonic> : RelAlg_Op<mnemonic,

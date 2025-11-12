@@ -692,6 +692,221 @@ mlir::LogicalResult relalg::SelectionOp::foldColumns(relalg::ColumnFoldInfo& col
    replaceColumnUsesInLamda(getContext(), getPredicate().front(), columnInfo);
    return mlir::success();
 }
+namespace {
+void propagateNonNull(mlir::Value val) {
+   std::vector<mlir::Operation*> users(val.getUsers().begin(), val.getUsers().end());
+   for (auto* user : users) {
+      if (auto canChange = mlir::dyn_cast<lingodb::compiler::dialect::db::SupportsNullabilityChange>(user)) {
+         mlir::Type type = canChange->getResult(0).getType();
+         mlir::Type newType = canChange.getChangedResultType();
+         if (type != newType) {
+            canChange->getResult(0).setType(newType);
+            propagateNonNull(canChange->getResult(0));
+         }
+      } else if (mlir::isa<tuples::ReturnOp>(user)) {
+      } else {
+         mlir::OpBuilder builder(val.getContext());
+         builder.setInsertionPointAfter(val.getDefiningOp());
+         auto asNullableOp = builder.create<db::AsNullableOp>(val.getDefiningOp()->getLoc(), db::NullableType::get(val.getType()), val);
+         val.replaceUsesWithIf(asNullableOp.getRes(), [&](mlir::OpOperand& operand) { return operand.getOwner() == user; });
+      }
+   }
+}
+mlir::LogicalResult handleChangeForPredicate(PredicateOperator op, lingodb::compiler::dialect::relalg::ColumnNullableChangeInfo& columnInfo) {
+   if (op.getPredicateRegion().empty()) return mlir::success();
+   auto predicateArg = op.getPredicateArgument();
+   for (auto* user : predicateArg.getUsers()) {
+      auto getColumnOp = mlir::cast<tuples::GetColumnOp>(user);
+      auto* oldCol = &getColumnOp.getAttr().getColumn();
+      if (columnInfo.directMappings.contains(oldCol)) {
+         auto* newCol = columnInfo.directMappings[oldCol];
+         auto& colManager = op.getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+         getColumnOp.setAttrAttr(colManager.createRef(newCol));
+         getColumnOp.getRes().setType(newCol->type);
+         propagateNonNull(getColumnOp.getRes());
+      }
+   }
+   return mlir::success();
+}
+mlir::ArrayAttr updateOJMapping(mlir::ArrayAttr input, lingodb::compiler::dialect::relalg::ColumnNullableChangeInfo& columnInfo) {
+   auto& colManager = input.getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+   std::vector<mlir::Attribute> newColDefs;
+   for (auto attr : input) {
+      auto colDef = mlir::cast<tuples::ColumnDefAttr>(attr);
+      auto colRef = mlir::cast<tuples::ColumnRefAttr>(mlir::cast<mlir::ArrayAttr>(colDef.getFromExisting())[0]);
+      if (columnInfo.directMappings.contains(&colRef.getColumn())) {
+         mlir::Attribute newColRef = colManager.createRef(columnInfo.directMappings[&colRef.getColumn()]);
+         auto [scope, name] = colManager.getName(&colDef.getColumn());
+         newColDefs.push_back(colManager.createDef(&colDef.getColumn(), mlir::ArrayAttr::get(input.getContext(), {newColRef})));
+      } else {
+         newColDefs.push_back(colDef);
+      }
+   }
+   return mlir::ArrayAttr::get(input.getContext(), newColDefs);
+}
+} // namespace
+mlir::LogicalResult relalg::SelectionOp::changeForColumns(lingodb::compiler::dialect::relalg::ColumnNullableChangeInfo& columnInfo) {
+   return handleChangeForPredicate(*this, columnInfo);
+}
+mlir::LogicalResult relalg::InnerJoinOp::changeForColumns(lingodb::compiler::dialect::relalg::ColumnNullableChangeInfo& columnInfo) {
+   return handleChangeForPredicate(*this, columnInfo);
+}
+mlir::LogicalResult relalg::AntiSemiJoinOp::changeForColumns(lingodb::compiler::dialect::relalg::ColumnNullableChangeInfo& columnInfo) {
+   return handleChangeForPredicate(*this, columnInfo);
+}
+mlir::LogicalResult relalg::CollectionJoinOp::changeForColumns(lingodb::compiler::dialect::relalg::ColumnNullableChangeInfo& columnInfo) {
+   return handleChangeForPredicate(*this, columnInfo);
+}
+mlir::LogicalResult relalg::FullOuterJoinOp::changeForColumns(lingodb::compiler::dialect::relalg::ColumnNullableChangeInfo& columnInfo) {
+   setMappingAttr(updateOJMapping(getMapping(), columnInfo));
+   return handleChangeForPredicate(*this, columnInfo);
+}
+mlir::LogicalResult relalg::MarkJoinOp::changeForColumns(lingodb::compiler::dialect::relalg::ColumnNullableChangeInfo& columnInfo) {
+   return handleChangeForPredicate(*this, columnInfo);
+}
+mlir::LogicalResult relalg::SemiJoinOp::changeForColumns(lingodb::compiler::dialect::relalg::ColumnNullableChangeInfo& columnInfo) {
+   return handleChangeForPredicate(*this, columnInfo);
+}
+mlir::LogicalResult relalg::SingleJoinOp::changeForColumns(lingodb::compiler::dialect::relalg::ColumnNullableChangeInfo& columnInfo) {
+   setMappingAttr(updateOJMapping(getMapping(), columnInfo));
+   return handleChangeForPredicate(*this, columnInfo);
+}
+mlir::LogicalResult relalg::OuterJoinOp::changeForColumns(lingodb::compiler::dialect::relalg::ColumnNullableChangeInfo& columnInfo) {
+   setMappingAttr(updateOJMapping(getMapping(), columnInfo));
+   return handleChangeForPredicate(*this, columnInfo);
+}
+mlir::LogicalResult relalg::MapOp::changeForColumns(lingodb::compiler::dialect::relalg::ColumnNullableChangeInfo& columnInfo) {
+   auto& colManager = getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+   if (getPredicate().empty()) return mlir::success();
+   auto predicateArg = getLambdaArgument();
+   for (auto* user : predicateArg.getUsers()) {
+      auto getColumnOp = mlir::cast<tuples::GetColumnOp>(user);
+      auto* oldCol = &getColumnOp.getAttr().getColumn();
+      if (columnInfo.directMappings.contains(oldCol)) {
+         auto* newCol = columnInfo.directMappings[oldCol];
+         getColumnOp.setAttrAttr(colManager.createRef(newCol));
+         getColumnOp.getRes().setType(newCol->type);
+         propagateNonNull(getColumnOp.getRes());
+      }
+   }
+
+   auto returnOp = mlir::cast<tuples::ReturnOp>(getPredicate().front().getTerminator());
+   std::vector<mlir::Attribute> newAttrs;
+   for (auto [retVal, attr] : llvm::zip(returnOp.getResults(), getComputedCols())) {
+      auto colDef = mlir::cast<tuples::ColumnDefAttr>(attr);
+      if (colDef.getColumn().type != retVal.getType()) {
+         auto [scope, name] = colManager.getName(&colDef.getColumn());
+         auto newColDef = colManager.createDef(scope, name + "__notnull");
+         newColDef.getColumn().type = getBaseType(colDef.getColumn().type);
+         columnInfo.directMappings[&colDef.getColumn()] = &newColDef.getColumn();
+         newAttrs.push_back(newColDef);
+      } else {
+         newAttrs.push_back(colDef);
+      }
+   }
+   setComputedColsAttr(mlir::ArrayAttr::get(getContext(), newAttrs));
+   return mlir::success();
+}
+mlir::LogicalResult relalg::AggregationOp::changeForColumns(lingodb::compiler::dialect::relalg::ColumnNullableChangeInfo& columnInfo) {
+   auto& colManager = getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+   std::vector<mlir::Attribute> newKeyAttrs;
+   tuples::ReturnOp returnOp;
+   for (auto keyAttr : getGroupByCols()) {
+      auto colRef = mlir::cast<tuples::ColumnRefAttr>(keyAttr);
+      if (columnInfo.directMappings.contains(&colRef.getColumn())) {
+         newKeyAttrs.push_back(colManager.createRef(columnInfo.directMappings[&colRef.getColumn()]));
+      } else {
+         newKeyAttrs.push_back(keyAttr);
+      }
+   }
+   getAggrFunc().walk([&](mlir::Operation* op) {
+      if (mlir::isa<relalg::CountRowsOp>(op)) {
+      } else if (auto aggrFunc = mlir::dyn_cast<relalg::AggrFuncOp>(op)) {
+         if (columnInfo.directMappings.contains(&aggrFunc.getAttr().getColumn())) {
+            aggrFunc.setAttrAttr(colManager.createRef(columnInfo.directMappings[&aggrFunc.getAttr().getColumn()]));
+            if (!getGroupByCols().empty()) {
+               aggrFunc.getResult().setType(getBaseType(aggrFunc.getType()));
+               propagateNonNull(aggrFunc.getResult());
+            }
+         }
+      } else if (auto projection = mlir::dyn_cast<relalg::ProjectionOp>(op)) {
+         if (projection.changeForColumns(columnInfo).failed()) {
+            llvm::errs() << "Failed to change ProjectionOp inside AggregationOp\n";
+         }
+      } else if (auto rOp = mlir::dyn_cast<tuples::ReturnOp>(op)) {
+         returnOp = rOp;
+      }
+   });
+   setGroupByColsAttr(mlir::ArrayAttr::get(getContext(), newKeyAttrs));
+   std::vector<mlir::Attribute> newAttrs;
+   for (auto [retVal, attr] : llvm::zip(returnOp.getResults(), getComputedCols())) {
+      auto colDef = mlir::cast<tuples::ColumnDefAttr>(attr);
+      if (colDef.getColumn().type != retVal.getType()) {
+         auto [scope, name] = colManager.getName(&colDef.getColumn());
+         auto newColDef = colManager.createDef(scope, name + "__notnull");
+         newColDef.getColumn().type = getBaseType(colDef.getColumn().type);
+         columnInfo.directMappings[&colDef.getColumn()] = &newColDef.getColumn();
+         newAttrs.push_back(newColDef);
+      } else {
+         newAttrs.push_back(colDef);
+      }
+   }
+   setComputedColsAttr(mlir::ArrayAttr::get(getContext(), newAttrs));
+   return mlir::success();
+}
+mlir::LogicalResult relalg::ProjectionOp::changeForColumns(lingodb::compiler::dialect::relalg::ColumnNullableChangeInfo& columnInfo) {
+   auto& colManager = getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+   std::vector<mlir::Attribute> newKeyAttrs;
+   for (auto keyAttr : getCols()) {
+      auto colRef = mlir::cast<tuples::ColumnRefAttr>(keyAttr);
+      if (columnInfo.directMappings.contains(&colRef.getColumn())) {
+         newKeyAttrs.push_back(colManager.createRef(columnInfo.directMappings[&colRef.getColumn()]));
+      } else {
+         newKeyAttrs.push_back(keyAttr);
+      }
+   }
+   setColsAttr(mlir::ArrayAttr::get(getContext(), newKeyAttrs));
+   return mlir::success();
+}
+mlir::LogicalResult relalg::SortOp::changeForColumns(lingodb::compiler::dialect::relalg::ColumnNullableChangeInfo& columnInfo) {
+   auto& colManager = getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+   std::vector<mlir::Attribute> newSortSpecAttrs;
+   for (auto attr : getSortspecs()) {
+      auto sortSpec = mlir::cast<relalg::SortSpecificationAttr>(attr);
+      auto colRef = sortSpec.getAttr();
+      if (columnInfo.directMappings.contains(&colRef.getColumn())) {
+         auto newRef = colManager.createRef(columnInfo.directMappings[&colRef.getColumn()]);
+         newSortSpecAttrs.push_back(relalg::SortSpecificationAttr::get(getContext(), newRef, sortSpec.getSortSpec()));
+      } else {
+         newSortSpecAttrs.push_back(attr);
+      }
+   }
+   setSortspecsAttr(mlir::ArrayAttr::get(getContext(), newSortSpecAttrs));
+   return mlir::success();
+}
+mlir::LogicalResult relalg::LimitOp::changeForColumns(lingodb::compiler::dialect::relalg::ColumnNullableChangeInfo& columnInfo) {
+   return mlir::success();
+}
+mlir::LogicalResult relalg::RenamingOp::changeForColumns(lingodb::compiler::dialect::relalg::ColumnNullableChangeInfo& columnInfo) {
+   auto& colManager = getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+   std::vector<mlir::Attribute> newColDefs;
+   for (auto attr : getColumns()) {
+      auto colDef = mlir::cast<tuples::ColumnDefAttr>(attr);
+      auto colRef = mlir::cast<tuples::ColumnRefAttr>(mlir::cast<mlir::ArrayAttr>(colDef.getFromExisting())[0]);
+      if (columnInfo.directMappings.contains(&colRef.getColumn())) {
+         mlir::Attribute newColRef = colManager.createRef(columnInfo.directMappings[&colRef.getColumn()]);
+         auto [scope, name] = colManager.getName(&colDef.getColumn());
+         auto newColDef = colManager.createDef(scope, name + "__notnull", mlir::ArrayAttr::get(getContext(), {newColRef}));
+         newColDef.getColumn().type = getBaseType(colDef.getColumn().type);
+         columnInfo.directMappings[&colDef.getColumn()] = &newColDef.getColumn();
+         newColDefs.push_back(newColDef);
+      } else {
+         newColDefs.push_back(colDef);
+      }
+   }
+   setColumnsAttr(mlir::ArrayAttr::get(getContext(), newColDefs));
+   return mlir::success();
+}
 mlir::LogicalResult relalg::CrossProductOp::foldColumns(relalg::ColumnFoldInfo& columnInfo) {
    return mlir::success();
 }

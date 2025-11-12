@@ -404,7 +404,7 @@ def DB_ModOp : DB_BinaryOp<"mod"> {
 
 class DB_LogicalOp<string mnemonic, list<Trait> traits = []> :
         Op<DB_Dialect, mnemonic,
-            !listconcat(traits, [Pure,DeclareOpInterfaceMethods<InferTypeOpInterface>])> {
+            !listconcat(traits, [Pure,DeclareOpInterfaceMethods<InferTypeOpInterface>,DeclareOpInterfaceMethods<DB_SupportsNullabilityChange>])> {
     let results = (outs AnyBool:$res);
     let extraClassDefinition = [{
         LogicalResult $cppClass::inferReturnTypes(MLIRContext* context, std::optional<Location>, ValueRange operands,
@@ -412,6 +412,10 @@ class DB_LogicalOp<string mnemonic, list<Trait> traits = []> :
             mlir::Type i1 = IntegerType::get(context, 1);
             inferredReturnTypes.assign({wrapNullableType(context, i1, operands)});
             return success();
+        }
+        mlir::Type $cppClass::getChangedResultType(){
+            mlir::Type i1 = mlir::IntegerType::get(getContext(), 1);
+            return wrapNullableType(getContext(), i1, getOperands());
         }
     }];
 }
@@ -435,6 +439,7 @@ def DB_CmpOp : DB_LogicalOp<"compare",
 
     let arguments = (ins DB_CmpPredicateAttr:$predicate, NullableDBType:$left, NullableDBType:$right);
     let assemblyFormat = "$predicate $left `:` type($left) `,` $right `:` type($right) attr-dict";
+
         let extraClassDefinition = [{
             LogicalResult $cppClass::inferReturnTypes(MLIRContext* context, std::optional<Location>, ValueRange operands,
                     DictionaryAttr attributes,OpaqueProperties properties, RegionRange regions, SmallVectorImpl<Type>& inferredReturnTypes) {
@@ -447,6 +452,11 @@ def DB_CmpOp : DB_LogicalOp<"compare",
                 }
                 inferredReturnTypes.assign({wrapNullableType(context, i1, operands)});
                 return success();
+            }
+            mlir::Type $cppClass::getChangedResultType(){
+                llvm::SmallVector<mlir::Type> retTypes(1);
+                inferReturnTypes(getContext(), {}, getOperands(),this->getOperation()->getAttrDictionary(), this->getOperation()->getPropertiesStorage(), getOperation()->getRegions(), retTypes);
+                return retTypes[0];
             }
         }];
 }

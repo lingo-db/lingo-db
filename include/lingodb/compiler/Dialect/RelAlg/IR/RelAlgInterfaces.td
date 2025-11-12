@@ -272,5 +272,9 @@ InterfaceMethod<"","mlir::LogicalResult", "foldColumns",(ins "lingodb::compiler:
 InterfaceMethod<"","mlir::LogicalResult", "eliminateDeadColumns",(ins "lingodb::compiler::dialect::relalg::ColumnSet&":$usedColumns,"mlir::Value&":$newStream),"",[{return mlir::failure();}]>
 ];
 }
-
+def NullColumnTypeChangeable : OpInterface<"NullColumnTypeChangeable"> {
+let methods = [
+InterfaceMethod<"","mlir::LogicalResult", "changeForColumns",(ins "lingodb::compiler::dialect::relalg::ColumnNullableChangeInfo&":$columnInfo)>,
+];
+}
 #endif// Interfaces

@@ -41,4 +41,14 @@ def DB_SupportsInvalidValues : OpInterface<"SupportsInvalidValues"> {
 
 def DB_MaySupportInvalidValues : DeclareOpInterfaceMethods<DB_SupportsInvalidValues,["supportsInvalidValues"]> {}
 
+def DB_SupportsNullabilityChange : OpInterface<"SupportsNullabilityChange"> {
+    let cppNamespace = "::lingodb::compiler::dialect::db";
+
+    let methods = [
+        InterfaceMethod<"Returns new result type .",
+            "mlir::Type", "getChangedResultType", (ins)
+        >,
+    ];
+}
+
 #endif// DBInterfaces
