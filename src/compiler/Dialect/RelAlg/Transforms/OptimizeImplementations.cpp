@@ -775,6 +775,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
 
             auto leftChild = joinOperator.getChildren()[0];
             auto rightChild = joinOperator.getChildren()[1];
+            if (leftChild->hasAttrOfType<mlir::FloatAttr>("rows") && leftChild->getAttrOfType<mlir::FloatAttr>("rows").getValueAsDouble() < 100) return;
             //auto leftUsedColumns = usedColumns.intersect(leftChild.getAvailableColumns());
             auto fds = leftChild.getFDs();
             if (!fds.isDuplicateFreeKey(leftKeySet)) return;
