@@ -2857,6 +2857,7 @@ class GroupJoinLowering : public OpConversionPattern<relalg::GroupJoinOp> {
       auto filtered = translateSelection(unwrap, groupJoinOp.getPredicate(), rewriter, loc);
       if (groupJoinOp.getBehavior() == relalg::GroupJoinBehavior::inner) {
          auto [withTrueCol, trueCol] = mapBool(filtered, rewriter, loc, true);
+         filtered = withTrueCol;
          rewriter.create<subop::ScatterOp>(loc, withTrueCol, unwrappedAggrRef, createColumnRefMemberMappingAttr(getContext(), {{markerMember, colManager.createRef(trueCol)}}));
       }
       if (!groupJoinOp.getMappedCols().empty()) {
