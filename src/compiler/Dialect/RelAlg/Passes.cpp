@@ -13,6 +13,7 @@ void relalg::setStaticCatalog(std::shared_ptr<lingodb::catalog::Catalog> catalog
    staticCatalog = catalog;
 }
 void relalg::createQueryOptPipeline(mlir::OpPassManager& pm, lingodb::catalog::Catalog* catalog) {
+   pm.addNestedPass<mlir::func::FuncOp>(relalg::createEliminateUnnecessaryColumnsPass());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createSimplifyAggregationsPass());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createExtractNestedOperatorsPass());
    pm.addPass(mlir::createCSEPass());
@@ -90,6 +91,10 @@ void relalg::registerQueryOptimizationPasses() {
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return relalg::createEliminateNullableTypesPass();
    });
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+      return relalg::createEliminateUnnecessaryColumnsPass();
+   });
+
    mlir::PassPipelineRegistration<mlir::EmptyPipelineOptions>(
       "relalg-query-opt",
       "",

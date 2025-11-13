@@ -353,7 +353,11 @@ ColumnSet QueryGraph::getPKey(QueryGraph::Node& n) {
             mapping[c.getName().str()] = &mlir::cast<tuples::ColumnDefAttr>(c.getValue()).getColumn();
          }
          for (auto c : meta.getMeta()->getPrimaryKey()) {
-            attributes.insert(mapping.at(c));
+            if (mapping.contains(c)) {
+               attributes.insert(mapping.at(c));
+            } else {
+               attributes.insert(nullptr);
+            }
          }
          return attributes;
       }
