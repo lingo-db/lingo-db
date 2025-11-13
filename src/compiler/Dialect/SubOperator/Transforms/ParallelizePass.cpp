@@ -393,7 +393,11 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                op->remove();
                block->push_back(op);
             }
-            toLock.second.front().second->setOperand(0, tupleStream2);
+            for (auto lOp : toLock.second) {
+               if (lOp.second->getOperand(0) == tupleStream) {
+                  lOp.second->setOperand(0, tupleStream2);
+               }
+            }
             auto* lastOp = toLock.second.back().second;
 
             if (lastOp->getNumResults() > 0) {
