@@ -472,8 +472,10 @@ relalg::FunctionalDependencies BaseTableOp::getFDs() {
       }
    }
    right.remove(pk);
-   dependencies.setKey(pk);
-   dependencies.insert(pk, right);
+   if (pk.size() == pks.size()) {
+      dependencies.setKey(pk);
+      dependencies.insert(pk, right);
+   }
    return dependencies;
 }
 relalg::FunctionalDependencies relalg::SelectionOp::getFDs() {

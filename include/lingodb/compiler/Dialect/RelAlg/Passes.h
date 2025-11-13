@@ -27,6 +27,7 @@ std::unique_ptr<mlir::Pass> createIntroduceTmpPass();
 std::unique_ptr<mlir::Pass> createReduceGroupByKeysPass();
 std::unique_ptr<mlir::Pass> createExpandTransitiveEqualities();
 std::unique_ptr<mlir::Pass> createEliminateNullableTypesPass();
+std::unique_ptr<mlir::Pass> createEliminateUnnecessaryColumnsPass();
 
 std::unique_ptr<mlir::Pass> createSimplifyAggregationsPass();
 std::unique_ptr<mlir::Pass> createAttachMetaDataPass(catalog::Catalog& db);
