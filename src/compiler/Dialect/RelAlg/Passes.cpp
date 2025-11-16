@@ -1,4 +1,5 @@
 #include "lingodb/compiler/Dialect/RelAlg/Passes.h"
+#include "lingodb/utility/Setting.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/Passes.h"
@@ -7,6 +8,8 @@
 
 #include <iostream>
 namespace {
+lingodb::utility::GlobalSetting<bool> inferNotNull("system.opt.infer_not_null", true);
+lingodb::utility::GlobalSetting<bool> eliminateNulls("system.opt.eliminate_nullable", true);
 std::shared_ptr<lingodb::catalog::Catalog> staticCatalog = {};
 } // end anonymous namespace
 using namespace lingodb::compiler::dialect;
@@ -19,11 +22,15 @@ void relalg::createQueryOptPipeline(mlir::OpPassManager& pm, lingodb::catalog::C
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createExtractNestedOperatorsPass());
    pm.addPass(mlir::createCSEPass());
    pm.addPass(lingodb::compiler::createCanonicalizerPass());
-   pm.addNestedPass<mlir::func::FuncOp>(relalg::createInferNotNullConditionsPass());
+   if (inferNotNull.getValue()) {
+      pm.addNestedPass<mlir::func::FuncOp>(relalg::createInferNotNullConditionsPass());
+   }
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createDecomposeLambdasPass(true));
    pm.addPass(lingodb::compiler::createCanonicalizerPass());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createImplicitToExplicitJoinsPass());
-   pm.addNestedPass<mlir::func::FuncOp>(relalg::createInferNotNullConditionsPass());
+   if (inferNotNull.getValue()) {
+      pm.addNestedPass<mlir::func::FuncOp>(relalg::createInferNotNullConditionsPass());
+   }
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createDecomposeLambdasPass());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createPushdownPass());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createUnnestingPass());
@@ -38,7 +45,9 @@ void relalg::createQueryOptPipeline(mlir::OpPassManager& pm, lingodb::catalog::C
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createOptimizeJoinOrderPass());
 
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createCombinePredicatesPass());
-   pm.addNestedPass<mlir::func::FuncOp>(relalg::createEliminateNullableTypesPass());
+   if (eliminateNulls.getValue()) {
+      pm.addNestedPass<mlir::func::FuncOp>(relalg::createEliminateNullableTypesPass());
+   }
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createOptimizeImplementationsPass());
    if (catalog) {
       pm.addNestedPass<mlir::func::FuncOp>(relalg::createDetachMetaDataPass());
