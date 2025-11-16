@@ -14,7 +14,6 @@ if (ENABLE_MIMALLOC)
 list(APPEND COMPILE_DEFS " MI_MALLOC_OVERRIDE=1")
 endif ()
 add_executable(sql sql.cpp)
-
 if (ENABLE_MIMALLOC)
     list(APPEND LIBS mimalloc-static)
 endif ()
