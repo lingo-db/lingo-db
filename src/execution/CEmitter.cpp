@@ -431,6 +431,23 @@ LogicalResult printOperation(CppEmitter& emitter, util::VarLenCmp op) {
    os << "= " << left << ".getLen()>12 && " << left << ".getLen()==" << right << ".getLen() &&" << left << ".first4==" << right << ".first4";
    return success();
 }
+LogicalResult printOperation(CppEmitter& emitter, util::VarLenInvalid op) {
+   if (failed(emitter.emitVariableDeclaration(op->getResult(0), false))) {
+      return failure();
+   }
+   raw_ostream& os = emitter.ostream();
+   os << "= runtime::VarLen32();\n";
+   return success();
+}
+LogicalResult printOperation(CppEmitter& emitter, util::VarLenIsInvalid op) {
+   if (failed(emitter.emitVariableDeclaration(op->getResult(0), false))) {
+      return failure();
+   }
+   raw_ostream& os = emitter.ostream();
+   auto input = emitter.getOrCreateName(op.getVarlen());
+   os << "= " << input << ".isInvalid();\n";
+   return success();
+}
 LogicalResult printOperation(CppEmitter& emitter, util::VarLenCmpSimple op) {
    if (failed(emitter.emitVariableDeclaration(op->getResult(0), false))) {
       return failure();
@@ -1341,7 +1358,7 @@ LogicalResult CppEmitter::emitOperation(Operation& op, bool trailingSemicolon) {
             }
          })
          // SCF ops.
-         .Case<util::GenericMemrefCastOp, util::TupleElementPtrOp, util::ArrayElementPtrOp, util::LoadOp, util::StoreOp, util::AllocOp, util::AllocaOp, util::CreateConstVarLen, util::UndefOp, util::BufferCastOp, util::BufferCreateOp, util::DeAllocOp, util::InvalidRefOp, util::IsRefValidOp, util::SizeOfOp, util::PackOp, util::CreateVarLen, util::Hash64, util::HashCombine, util::HashVarLen, util::PtrTagMatches, util::UnTagPtr, util::BufferGetRef, util::BufferGetElementRef, util::BufferGetLen, util::VarLenCmp, util::VarLenCmpSimple, util::VarLenGetLen, util::GetTupleOp, util::VarLenTryCheapHash>(
+         .Case<util::GenericMemrefCastOp, util::TupleElementPtrOp, util::ArrayElementPtrOp, util::LoadOp, util::StoreOp, util::AllocOp, util::AllocaOp, util::CreateConstVarLen, util::UndefOp, util::BufferCastOp, util::BufferCreateOp, util::DeAllocOp, util::InvalidRefOp, util::IsRefValidOp, util::SizeOfOp, util::PackOp, util::CreateVarLen, util::Hash64, util::HashCombine, util::HashVarLen, util::PtrTagMatches, util::UnTagPtr, util::BufferGetRef, util::BufferGetElementRef, util::BufferGetLen, util::VarLenCmp, util::VarLenCmpSimple, util::VarLenGetLen, util::GetTupleOp, util::VarLenTryCheapHash, util::VarLenInvalid, util::VarLenIsInvalid>(
             [&](auto op) { return printOperation(*this, op); })
          .Case<util::ToMemrefOp, memref::AtomicRMWOp>(
             [&](auto op) { return printOperation(*this, op); })

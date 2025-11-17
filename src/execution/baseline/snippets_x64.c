@@ -196,6 +196,10 @@ typedef struct UtilVarLenRes { uint64_t totalEqual; uint64_t needsDetailedComp; 
 bool util_varlen_cmp_simple(__uint128_t lhs, __uint128_t rhs) {
    return (lhs == rhs);
 }
+bool util_varlen_is_invalid(uint64_t varlen) {
+    uint64_t first64 = (uint64_t)(varlen);
+    return (first64 == 0xffffffff00000000);
+}
 
 UtilVarLenRes util_varlen_cmp(__uint128_t lhs, __uint128_t rhs) {
     // cmp lengths + first 4 chars

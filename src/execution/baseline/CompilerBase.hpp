@@ -204,12 +204,17 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
                      return std::nullopt;
                   }
                })
+            .template Case<dialect::util::VarLenInvalid>([&](auto) { return ValRefSpecial{.mode = 4, .value = val}; })
             .Default([&](auto) { return std::nullopt; });
       }
       return std::nullopt;
    }
 
    ValuePart val_part_ref_special(ValRefSpecial& ref, const uint32_t part) noexcept {
+      if (auto invalidVarLen = mlir::dyn_cast_or_null<dialect::util::VarLenInvalid>(ref.value.getDefiningOp())) {
+         assert(part < 2 && "Part index out of range for VarLen32 invalid value");
+         return ValuePartRef(this, part == 0 ? 0xffffffff00000000 : 0, 8, Config::GP_BANK);
+      }
       if (auto constOp = mlir::dyn_cast_or_null<mlir::arith::ConstantOp>(ref.value.getDefiningOp())) {
          if (auto intAttr = mlir::dyn_cast_or_null<mlir::IntegerAttr>(constOp.getValue())) {
             const mlir::APInt containedInt = intAttr.getValue();
@@ -1066,6 +1071,11 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
       auto eq_res_vr = this->result_ref(op.getEq());
       return derived()->encode_util_varlen_cmp_simple(lhs_vr.part(0), lhs_vr.part(1), rhs_vr.part(0), rhs_vr.part(1), eq_res_vr.part(0));
    }
+   bool compile_util_varlen_is_invalid_op(dialect::util::VarLenIsInvalid op) {
+      auto vr = this->val_ref(op.getVarlen());
+      auto res = this->result_ref(op.getIsInvalid());
+      return derived()->encode_util_varlen_is_invalid(vr.part(0), res.part(0));
+   }
 
    bool compile_arith_cmp_float_op(mlir::arith::CmpFOp op) {
       const mlir::Value lhs = op.getLhs();
@@ -1415,7 +1425,7 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
          .template Case<mlir::cf::CondBranchOp>(
             [&](auto op) { return derived()->compile_cf_cond_br_op(op); })
          .template Case<mlir::arith::ConstantOp, dialect::util::SizeOfOp, dialect::util::AllocaOp,
-                        dialect::util::UndefOp>(
+                        dialect::util::UndefOp, dialect::util::VarLenInvalid>(
             [&](auto) {
                // these are all constant operations whose value is handled in val_ref_special / val_part_ref_special
                return true;
@@ -1498,6 +1508,7 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
          })
          .template Case<dialect::util::VarLenCmp>([&](auto op) { return compile_util_varlen_cmp_op(op); })
          .template Case<dialect::util::VarLenCmpSimple>([&](auto op) { return compile_util_varlen_cmp_simple_op(op); })
+         .template Case<dialect::util::VarLenIsInvalid>([&](auto op) { return compile_util_varlen_is_invalid_op(op); })
          .Default([&](IRInstRef op) {
             error.emit() << "Encountered unimplemented instruction: " << op->getName().getStringRef().str()
                          << "\n";

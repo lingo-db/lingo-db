@@ -47,6 +47,17 @@ def VarLenGetLen : Util_Op<"varlen32_getlen"> {
     let results = (outs Index: $len);
     let assemblyFormat = " $varlen attr-dict";
 }
+
+def VarLenIsInvalid : Util_Op<"varlen32_is_invalid"> {
+    let arguments = (ins VarLen32Type:$varlen);
+    let results = (outs I1: $is_invalid);
+    let assemblyFormat = " $varlen attr-dict";
+}
+def VarLenInvalid : Util_Op<"varlen32_invalid"> {
+    let arguments = (ins );
+    let results = (outs VarLen32Type:$varlen);
+    let assemblyFormat = " attr-dict";
+}
 def VarLenCmp : Util_Op<"varlen32_cmp"> {
     let arguments = (ins VarLen32Type:$left, VarLen32Type:$right);
     let results = (outs I1: $eq, I1: $needs_detailed_eval);
