@@ -948,9 +948,7 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
             for (auto arg : function->arguments) {
                values.push_back(translateExpression(builder, arg, context));
             }
-
-            auto packed = builder.create<util::PackOp>(exprLocation, values);
-            return builder.create<db::Hash>(exprLocation, builder.getIndexType(), packed);
+            return builder.create<db::Hash>(exprLocation, builder.getIndexType(), values);
          }
          auto func = function->udfFunction;
          if (func.has_value() && func.value()) {

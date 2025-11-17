@@ -165,10 +165,11 @@ class AppendArrowLowering : public OpConversionPattern<db::AppendArrowOp> {
       auto convertedBaseType = typeConverter->convertType(baseType);
       mlir::Value valid;
       if (nullableType) {
-         auto res = rewriter.create<util::UnPackOp>(loc, adaptor.getValue());
-         value = res.getResult(1);
+         llvm::SmallVector<mlir::Value> unpacked;
+         rewriter.createOrFold<util::UnPackOp>(unpacked, loc,  adaptor.getValue());
+         value = unpacked[1];
          Value falseValue = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
-         valid = rewriter.create<arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::eq, res.getResult(0), falseValue);
+         valid = rewriter.create<arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::eq, unpacked[0], falseValue);
       }
       //todo: also support more base types here
       if (baseType.isIndex()) {
@@ -1055,8 +1056,12 @@ class HashLowering : public ConversionPattern {
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       db::HashAdaptor hashAdaptor(operands);
       auto hashOp = mlir::cast<db::Hash>(op);
-
-      rewriter.replaceOp(op, hashImpl(rewriter, op->getLoc(), hashAdaptor.getVal(), Value(), hashOp.getVal().getType()));
+      mlir::Value totalHash;
+      for (auto [v, t] : llvm::zip(hashAdaptor.getVal(), hashOp.getVal().getTypes())) {
+         totalHash = hashImpl(rewriter, op->getLoc(), v, totalHash, t);
+      }
+      assert(!!totalHash);
+      rewriter.replaceOp(op, totalHash);
       return success();
    }
 };

@@ -310,7 +310,9 @@ class EntryStorageHelper {
          for (auto& [name, value] : values) {
             const MemberInfo& memberInfo = esh.memberInfos.at(name);
             if (memberInfo.isNullable) {
-               const mlir::Value nullBit = rewriter.create<db::IsNullOp>(loc, value);
+               llvm::SmallVector<mlir::Value> isNullVals;
+                  rewriter.createOrFold<db::IsNullOp>(isNullVals,loc, value);
+               const mlir::Value nullBit = isNullVals[0];
                const mlir::Value shiftAmount = rewriter.create<mlir::arith::ConstantIntOp>(loc, memberInfo.nullBitOffset, esh.nullBitsetType);
                if (emptyNullbitset) {
                   // the nullbitset is empty (= 0) => we can just set the bit
@@ -331,7 +333,9 @@ class EntryStorageHelper {
                   nullBitSet = rewriter.create<mlir::arith::AndIOp>(loc, *nullBitSet, invertedShiftedClearBit);
                   nullBitSet = rewriter.create<mlir::arith::OrIOp>(loc, *nullBitSet, shiftedNullBit);
                }
-               value = rewriter.create<db::NullableGetVal>(loc, value);
+               llvm::SmallVector<mlir::Value> rawValues;
+               rewriter.createOrFold<db::NullableGetVal>(rawValues, loc, value);
+               value = rawValues[0];
             }
             // now, actually store the value (not just whether it's null)
             auto memberRef = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(rewriter.getContext(), memberInfo.stored), ref, memberInfo.offset);
@@ -2609,12 +2613,7 @@ class LookupSegmentTreeViewLowering : public SubOpTupleStreamConsumerConversionP
    }
 };
 mlir::Value hashKeys(std::vector<mlir::Value> keys, OpBuilder& rewriter, Location loc) {
-   if (keys.size() == 1) {
-      return rewriter.create<db::Hash>(loc, keys[0]);
-   } else {
-      auto packed = rewriter.create<util::PackOp>(loc, keys);
-      return rewriter.create<db::Hash>(loc, packed);
-   }
+   return rewriter.create<db::Hash>(loc, keys);
 }
 class PureLookupHashMapLowering : public SubOpTupleStreamConsumerConversionPattern<subop::LookupOp> {
    public:
@@ -3340,7 +3339,7 @@ class LookupExternalHashIndexLowering : public SubOpTupleStreamConsumerConversio
       auto loc = lookupOp->getLoc();
 
       // Calculate hash value and perform lookup in external index hashmap
-      auto hashValue = rewriter.create<db::Hash>(loc, rewriter.create<util::PackOp>(loc, mapping.resolve(lookupOp, lookupOp.getKeys())));
+      auto hashValue = rewriter.create<db::Hash>(loc, mapping.resolve(lookupOp, lookupOp.getKeys()));
       mlir::Value list = rt::HashIndexAccess::lookup(rewriter, loc)({adaptor.getState(), hashValue})[0];
 
       mapping.define(lookupOp.getRef(), list);
