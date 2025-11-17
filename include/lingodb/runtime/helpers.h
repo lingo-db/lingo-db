@@ -101,7 +101,7 @@ class VarLen32 {
       memcpy(ptr, str.data(), str.size());
       return VarLen32(ptr, str.size());
    }
-   VarLen32() : VarLen32(nullptr, 0) {}
+   VarLen32() : len(0), first4(0xffffffff), last8(0) {}
    VarLen32(const uint8_t* ptr, uint32_t len) : len(len) {
       if (len > shortLen) {
          this->first4 = unalignedLoad32(ptr);
@@ -116,6 +116,9 @@ class VarLen32 {
          this->first4 = bytes;
          this->last8 = bytes >> 32;
       }
+   }
+   bool isInvalid() {
+      return first4 == 0xffffffff && len == 0;
    }
    uint8_t* getPtr() {
       if (len <= shortLen) {

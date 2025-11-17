@@ -325,6 +325,24 @@ class VarLenCmpSimpleLowering : public OpConversionPattern<util::VarLenCmpSimple
       return success();
    }
 };
+class VarLenInvalidLowering : public OpConversionPattern<util::VarLenInvalid> {
+   public:
+   using OpConversionPattern<util::VarLenInvalid>::OpConversionPattern;
+   LogicalResult matchAndRewrite(util::VarLenInvalid op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      rewriter.replaceOpWithNewOp<mlir::LLVM::ConstantOp>(op, rewriter.getIntegerType(128), rewriter.getIntegerAttr(rewriter.getIntegerType(128), 0xffffffff00000000));
+      return success();
+   }
+};
+class VarLenIsInvalidLowering : public OpConversionPattern<util::VarLenIsInvalid> {
+   public:
+   using OpConversionPattern<util::VarLenIsInvalid>::OpConversionPattern;
+   LogicalResult matchAndRewrite(util::VarLenIsInvalid op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op->getLoc();
+      Value constInvalid = rewriter.create<mlir::LLVM::ConstantOp>(loc, rewriter.getIntegerType(128), rewriter.getIntegerAttr(rewriter.getIntegerType(128), 0xffffffff00000000));
+      rewriter.replaceOpWithNewOp<mlir::LLVM::ICmpOp>(op, LLVM::ICmpPredicate::eq, adaptor.getVarlen(), constInvalid);
+      return success();
+   }
+};
 class VarLenTryCheapHashLowering : public OpConversionPattern<util::VarLenTryCheapHash> {
    public:
    using OpConversionPattern<util::VarLenTryCheapHash>::OpConversionPattern;
@@ -608,6 +626,8 @@ void util::populateUtilToLLVMConversionPatterns(LLVMTypeConverter& typeConverter
    patterns.add<VarLenGetLenLowering>(typeConverter, patterns.getContext());
    patterns.add<VarLenCmpLowering>(typeConverter, patterns.getContext());
    patterns.add<VarLenCmpSimpleLowering>(typeConverter, patterns.getContext());
+   patterns.add<VarLenInvalidLowering>(typeConverter, patterns.getContext());
+   patterns.add<VarLenIsInvalidLowering>(typeConverter, patterns.getContext());
    patterns.add<VarLenTryCheapHashLowering>(typeConverter, patterns.getContext());
    patterns.add<HashCombineLowering>(typeConverter, patterns.getContext());
    patterns.add<Hash64Lowering>(typeConverter, patterns.getContext());

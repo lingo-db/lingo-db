@@ -210,18 +210,24 @@ class EntryStorageHelper {
          type = converted ? converted : type;
          MemberInfo memberInfo;
          if (auto nullableType = mlir::dyn_cast_or_null<db::NullableType>(type)) {
-            // Compression is bounded
-            if (compressionEnabled && nullBitOffset <= 63) {
-               memberInfo.isNullable = true;
-               if (nullBitOffset == 0) {
-                  nullBitSetPos = types.size();
-                  types.push_back(mlir::Type());
-               }
-               memberInfo.nullBitOffset = nullBitOffset++;
-               memberInfo.stored = nullableType.getType();
-            } else {
+            auto charType = mlir::dyn_cast_or_null<db::CharType>(nullableType.getType());
+            if (mlir::isa<db::StringType>(nullableType.getType()) || (charType && charType.getLen() > 1)) {
                memberInfo.isNullable = false;
                memberInfo.stored = type;
+            } else {
+               // Compression is bounded
+               if (compressionEnabled && nullBitOffset <= 63) {
+                  memberInfo.isNullable = true;
+                  if (nullBitOffset == 0) {
+                     nullBitSetPos = types.size();
+                     types.push_back(mlir::Type());
+                  }
+                  memberInfo.nullBitOffset = nullBitOffset++;
+                  memberInfo.stored = nullableType.getType();
+               } else {
+                  memberInfo.isNullable = false;
+                  memberInfo.stored = type;
+               }
             }
          } else {
             memberInfo.isNullable = false;
@@ -311,7 +317,7 @@ class EntryStorageHelper {
             const MemberInfo& memberInfo = esh.memberInfos.at(name);
             if (memberInfo.isNullable) {
                llvm::SmallVector<mlir::Value> isNullVals;
-                  rewriter.createOrFold<db::IsNullOp>(isNullVals,loc, value);
+               rewriter.createOrFold<db::IsNullOp>(isNullVals, loc, value);
                const mlir::Value nullBit = isNullVals[0];
                const mlir::Value shiftAmount = rewriter.create<mlir::arith::ConstantIntOp>(loc, memberInfo.nullBitOffset, esh.nullBitsetType);
                if (emptyNullbitset) {
