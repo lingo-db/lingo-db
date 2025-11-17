@@ -32,12 +32,7 @@ static std::pair<tuples::ColumnDefAttr, tuples::ColumnRefAttr> createColumn(mlir
    return {markAttrDef, columnManager.createRef(&ra)};
 }
 mlir::Value hashKeys(std::vector<mlir::Value> keys, mlir::OpBuilder& rewriter, mlir::Location loc) {
-   if (keys.size() == 1) {
-      return rewriter.create<db::Hash>(loc, keys[0]);
-   } else {
-      auto packed = rewriter.create<util::PackOp>(loc, keys);
-      return rewriter.create<db::Hash>(loc, packed);
-   }
+   return rewriter.create<db::Hash>(loc, keys);
 }
 class MultiMapAsHashIndexedView : public mlir::RewritePattern {
    const subop::ColumnUsageAnalysis& analysis;

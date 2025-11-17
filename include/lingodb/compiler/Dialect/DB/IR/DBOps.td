@@ -337,7 +337,7 @@ def DB_RuntimeCall : DB_Op<"runtime_call", [DB_MayNeedNullWrap,DB_MaySupportInva
 def DB_Hash : DB_Op<"hash", [Pure]> {
     let summary = "Compute hash";
 
-    let arguments = (ins AnyType: $val);
+    let arguments = (ins Variadic<AnyType>: $val);
     let results = (outs  Index : $hash);
     let assemblyFormat = "$val `:` type($val) attr-dict";
 }
