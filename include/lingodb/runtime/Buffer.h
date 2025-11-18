@@ -3,6 +3,7 @@
 #include <stddef.h>
 
 #include "ExecutionContext.h"
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <vector>
@@ -46,7 +47,7 @@ class FlexibleBuffer {
    size_t typeSize;
 
    void nextBuffer() {
-      size_t nextCapacity = currCapacity * 2;
+      size_t nextCapacity = std::ceil(currCapacity * 1.2);
       buffers.push_back(Buffer(0, (uint8_t*) malloc(nextCapacity * typeSize)));
       currCapacity = nextCapacity;
    }
