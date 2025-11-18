@@ -460,5 +460,30 @@ select * from studenten s
 24002	Xenokrates	18
 25403	Jonas	12
 
-statement error No Catalog found
+#Explicitly expecting a error from the parser or analyzer
+statement frontend-error: No Catalog found with name
 select * from student s
+
+statement frontend-error: syntax error, unexpected identifier at .*
+select * frm student s
+
+statement frontend-error: Could not resolve '.*'
+select s.matrn from studenten s
+
+statement frontend-error: Could not resolve '.*'
+select x.matrnr from studenten s
+
+statement frontend-error: Could not resolve '.*'
+select matrn from studenten s
+
+statement frontend-error: Could not resolve '.*'
+select * from studenten s where t.matrnr = 26120;
+
+statement frontend-error: Could not resolve '.*'
+select * from studenten where matrn = 26120;
+
+statement frontend-error: Could not resolve '.*'
+select s.matrnr, count(*) from studenten s group by x.matrnr;
+
+statement frontend-error: Could not resolve '.*'
+select s.matrnr, count(*) from studenten s group by hoeren.matrnr;
