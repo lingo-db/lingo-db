@@ -18,18 +18,35 @@
 namespace {
 lingodb::utility::GlobalSetting<bool> pushdownRestrictions("system.opt.pushdown_restrictions", true);
 using namespace lingodb::compiler::dialect;
-bool isNotNullCheckOnColumn(relalg::ColumnSet relevantColumns, relalg::SelectionOp selectionOp) {
+bool isNotNullCheckOnColumn(relalg::ColumnSet& relevantColumns, mlir::Value v) {
+   if (auto andOp = mlir::dyn_cast_or_null<db::AndOp>(v.getDefiningOp())) {
+      for (auto operand : andOp->getOperands()) {
+         if (isNotNullCheckOnColumn(relevantColumns, operand)) {
+            return true;
+         }
+      }
+   } else if (auto cmpOp = mlir::dyn_cast_or_null<db::CmpOp>(v.getDefiningOp())) {
+      if (cmpOp.getPredicate() != lingodb::compiler::dialect::db::DBCmpPredicate::isa) {
+         if (auto getColLeftOp = mlir::dyn_cast_or_null<tuples::GetColumnOp>(cmpOp.getLeft().getDefiningOp())) {
+            if (relevantColumns.contains(&getColLeftOp.getAttr().getColumn())) {
+               return true;
+            }
+         }
+         if (auto getColRightOp = mlir::dyn_cast_or_null<tuples::GetColumnOp>(cmpOp.getRight().getDefiningOp())) {
+            if (relevantColumns.contains(&getColRightOp.getAttr().getColumn())) {
+               return true;
+            }
+         }
+      }
+   }
+   return false;
+}
+bool isNotNullCheckOnColumn(relalg::ColumnSet& relevantColumns, relalg::SelectionOp selectionOp) {
    if (selectionOp.getPredicate().empty()) return false;
    if (selectionOp.getPredicate().front().empty()) return false;
    if (auto returnOp = mlir::dyn_cast_or_null<tuples::ReturnOp>(selectionOp.getPredicate().front().getTerminator())) {
       if (returnOp.getResults().size() != 1) return false;
-      if (auto notOp = mlir::dyn_cast_or_null<db::NotOp>(returnOp.getResults()[0].getDefiningOp())) {
-         if (auto isNullOp = mlir::dyn_cast_or_null<db::IsNullOp>(notOp.getVal().getDefiningOp())) {
-            if (auto getColOp = mlir::dyn_cast_or_null<tuples::GetColumnOp>(isNullOp.getVal().getDefiningOp())) {
-               return relevantColumns.contains(&getColOp.getAttr().getColumn());
-            }
-         }
-      }
+      return isNotNullCheckOnColumn(relevantColumns, returnOp.getResults()[0]);
    }
    return false;
 }
@@ -40,7 +57,7 @@ class OuterJoinToInnerJoin : public mlir::RewritePattern {
    mlir::LogicalResult match(mlir::Operation* op) const override {
       auto outerJoinOp = mlir::cast<relalg::OuterJoinOp>(op);
       mlir::Value currStream = outerJoinOp.asRelation();
-
+      auto createdCols=outerJoinOp.getCreatedColumns();
       while (currStream) {
          auto users = currStream.getUsers();
          if (users.begin() == users.end()) break;
@@ -48,11 +65,13 @@ class OuterJoinToInnerJoin : public mlir::RewritePattern {
          second++;
          if (second != users.end()) break;
          if (auto selectionOp = mlir::dyn_cast_or_null<relalg::SelectionOp>(*users.begin())) {
-            if (isNotNullCheckOnColumn(outerJoinOp.getCreatedColumns(), selectionOp)) {
+            if (isNotNullCheckOnColumn(createdCols, selectionOp)) {
                return mlir::success();
             }
             currStream = selectionOp.asRelation();
-         } else {
+         } else if (mlir::isa<relalg::CrossProductOp,relalg::MapOp, relalg::InnerJoinOp>(*users.begin())){
+            currStream = (*users.begin())->getResult(0);
+         }else{
             currStream = mlir::Value();
          }
       }
@@ -94,6 +113,7 @@ class SingleJoinToInnerJoin : public mlir::RewritePattern {
    mlir::LogicalResult match(mlir::Operation* op) const override {
       auto outerJoinOp = mlir::cast<relalg::SingleJoinOp>(op);
       mlir::Value currStream = outerJoinOp.asRelation();
+      auto createdCols = outerJoinOp.getCreatedColumns();
 
       while (currStream) {
          auto users = currStream.getUsers();
@@ -102,7 +122,7 @@ class SingleJoinToInnerJoin : public mlir::RewritePattern {
          second++;
          if (second != users.end()) break;
          if (auto selectionOp = mlir::dyn_cast_or_null<relalg::SelectionOp>(*users.begin())) {
-            if (isNotNullCheckOnColumn(outerJoinOp.getCreatedColumns(), selectionOp)) {
+            if (isNotNullCheckOnColumn(createdCols, selectionOp)) {
                return mlir::success();
             }
             currStream = selectionOp.asRelation();
