@@ -3716,5 +3716,6 @@ opt_routine_body:
 void
 lingodb::parser::error (const location_type& l, const std::string& m)
 {
+  drv.scanEnd();
   throw lingodb::SyntaxError(m, l);
 }
