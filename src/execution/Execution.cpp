@@ -48,8 +48,8 @@ class DefaultQueryOptimizer : public QueryOptimizer {
       mlir::PassManager pm(moduleOp.getContext());
       pm.enableVerifier(verify);
       addLingoDBInstrumentation(pm, getSerializationState());
-      //pm.addPass(mlir::createInlinerPass());
-      //pm.addPass(mlir::createSymbolDCEPass());
+      pm.addPass(mlir::createInlinerPass());
+      pm.addPass(mlir::createSymbolDCEPass());
       relalg::createQueryOptPipeline(pm, catalog);
       if (mlir::failed(pm.run(moduleOp))) {
          error.emit() << " Query Optimization failed";
