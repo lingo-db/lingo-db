@@ -51,7 +51,7 @@ TEST_CASE("Length:SingleByte") {
 
          for (std::size_t current = start; current < std::size(characters); current++) {
             testString += characters[current];
-            VarLen32 str = VarLen32::fromString(testString);
+            VarLen32 str = VarLen32::fromString(testString, StorageClass::GLOBAL);
             REQUIRE(StringRuntime::len(str) == (int64_t) (current - start + 1));
          }
       }
@@ -70,53 +70,53 @@ TEST_CASE("Length:MultiByte") {
       VarLen32 str;
 
       // 2 Bytes
-      str = VarLen32::fromString("\u0093\u0722\u0151\u0559\u05F9\u048B\u07ED\u04AC");
+      str = VarLen32::fromString("\u0093\u0722\u0151\u0559\u05F9\u048B\u07ED\u04AC", StorageClass::GLOBAL);
       REQUIRE(StringRuntime::len(str) == 8);
 
-      str = VarLen32::fromString("\u063A\u052C\u01EE\u01CB\u06A3\u03C7\u01B0\u062E\u0481\u01E7\u01A9\u0731\u023E");
+      str = VarLen32::fromString("\u063A\u052C\u01EE\u01CB\u06A3\u03C7\u01B0\u062E\u0481\u01E7\u01A9\u0731\u023E", StorageClass::GLOBAL);
       REQUIRE(StringRuntime::len(str) == 13);
 
-      str = VarLen32::fromString("\u051F\u00F6\u03B8\u015E\u0313\u01A3\u06DE\u044D\u06E4\u0553\u0629\u05AA\u053F\u042C\u0267\u0772\u069E\u00AA\u0458\u032C\u056B");
+      str = VarLen32::fromString("\u051F\u00F6\u03B8\u015E\u0313\u01A3\u06DE\u044D\u06E4\u0553\u0629\u05AA\u053F\u042C\u0267\u0772\u069E\u00AA\u0458\u032C\u056B", StorageClass::GLOBAL);
       REQUIRE(StringRuntime::len(str) == 21);
 
       // 3 Bytes
-      str = VarLen32::fromString("\u1D02\u8B98\uC239\u2ADF\uADEB\u6E12\u2030\u5925\u3717\uD203\u9FBD\u3047\u6119");
+      str = VarLen32::fromString("\u1D02\u8B98\uC239\u2ADF\uADEB\u6E12\u2030\u5925\u3717\uD203\u9FBD\u3047\u6119", StorageClass::GLOBAL);
       REQUIRE(StringRuntime::len(str) == 13);
 
-      str = VarLen32::fromString("\uBFBC\u2F68\u0BA3\u4072\u6692\uAC06\u88D3\u152E\uD375\u5DE3\uB473\uF78E\uF648\u8BD2\u8FAA\u1B91\uAFF4\u4093\u9D41\u7F3F\u8B20\uAC75");
+      str = VarLen32::fromString("\uBFBC\u2F68\u0BA3\u4072\u6692\uAC06\u88D3\u152E\uD375\u5DE3\uB473\uF78E\uF648\u8BD2\u8FAA\u1B91\uAFF4\u4093\u9D41\u7F3F\u8B20\uAC75", StorageClass::GLOBAL);
       REQUIRE(StringRuntime::len(str) == 22);
 
-      str = VarLen32::fromString("\u272A\uA88F\uEF5C\u999D\uA6E0\u71BF\u55BC\uC600\uFE61");
+      str = VarLen32::fromString("\u272A\uA88F\uEF5C\u999D\uA6E0\u71BF\u55BC\uC600\uFE61", StorageClass::GLOBAL);
       REQUIRE(StringRuntime::len(str) == 9);
 
       // 4 Bytes
-      str = VarLen32::fromString("\U0009EF2B\U0008BDFB\U00045E9F\U000680DC\U00034DE0\U000BD75A\U00030A47\U00020378\U0002D572\U0004AFC8\U000106ED\U000492A9\U0010968E\U00032A0F\U000D8399\U000134C3\U000495A0\U0009DBBD\U0001B305\U000DF024");
+      str = VarLen32::fromString("\U0009EF2B\U0008BDFB\U00045E9F\U000680DC\U00034DE0\U000BD75A\U00030A47\U00020378\U0002D572\U0004AFC8\U000106ED\U000492A9\U0010968E\U00032A0F\U000D8399\U000134C3\U000495A0\U0009DBBD\U0001B305\U000DF024", StorageClass::GLOBAL);
       REQUIRE(StringRuntime::len(str) == 20);
 
-      str = VarLen32::fromString("\U0001325A\U000F6B32\U000F7013");
+      str = VarLen32::fromString("\U0001325A\U000F6B32\U000F7013", StorageClass::GLOBAL);
       REQUIRE(StringRuntime::len(str) == 3);
 
-      str = VarLen32::fromString("\U000593FD\U00062603\U000A921E\U0001637A\U0004E61A\U000189D5\U000895C1\U000CC85F\U000A8EBD\U0006E79F\U000332D8\U0002817D\U000B2E3A\U00073307\U0006BC55\U000EBBA9\U00069727\U0004213E\U0008BF9E\U000A6453\U000ACDAB\U0006C051\U0001CC8F\U000980E3\U000EA1EB");
+      str = VarLen32::fromString("\U000593FD\U00062603\U000A921E\U0001637A\U0004E61A\U000189D5\U000895C1\U000CC85F\U000A8EBD\U0006E79F\U000332D8\U0002817D\U000B2E3A\U00073307\U0006BC55\U000EBBA9\U00069727\U0004213E\U0008BF9E\U000A6453\U000ACDAB\U0006C051\U0001CC8F\U000980E3\U000EA1EB", StorageClass::GLOBAL);
       REQUIRE(StringRuntime::len(str) == 25);
 
       // Mixture
 
-      str = VarLen32::fromString("\u16AC\u06C2\U0008BE37\u0237\u0138\u0044\U000C4401\u0024\u0062\u0146\u9DA4\u004C\U00076719\u01F2\u05AE\u0267\u207B\u0077\u0051\U00068704");
+      str = VarLen32::fromString("\u16AC\u06C2\U0008BE37\u0237\u0138\u0044\U000C4401\u0024\u0062\u0146\u9DA4\u004C\U00076719\u01F2\u05AE\u0267\u207B\u0077\u0051\U00068704", StorageClass::GLOBAL);
       REQUIRE(StringRuntime::len(str) == 20);
 
-      str = VarLen32::fromString("\u0027\uC638\U000A87DE\uE8D5\u17AA\uC529\U00032F8E\U0002D7FC\U00036186\u45AA\u0033\u0442\u005E\u0044\uAC34\u0040\U0002A1BE\u6113\uA272\u0169");
+      str = VarLen32::fromString("\u0027\uC638\U000A87DE\uE8D5\u17AA\uC529\U00032F8E\U0002D7FC\U00036186\u45AA\u0033\u0442\u005E\u0044\uAC34\u0040\U0002A1BE\u6113\uA272\u0169", StorageClass::GLOBAL);
       REQUIRE(StringRuntime::len(str) == 20);
 
-      str = VarLen32::fromString("\uF9EE\u05C3\u6120\u0044\u6EFF\u0020\u5929\uA655\u02AA\u1FC7\u0025\u0397\u007E\u1D6C\U000F5E22\u0696\u0068\u063D\u3FF1\U0004E934");
+      str = VarLen32::fromString("\uF9EE\u05C3\u6120\u0044\u6EFF\u0020\u5929\uA655\u02AA\u1FC7\u0025\u0397\u007E\u1D6C\U000F5E22\u0696\u0068\u063D\u3FF1\U0004E934", StorageClass::GLOBAL);
       REQUIRE(StringRuntime::len(str) == 20);
 
-      str = VarLen32::fromString("\u0047\u0052\U000EA560\u003F\u0035\u004B\u01ED\u07E7\u02F2\u032E\uA8AC\uCE1D\u30CE\uABC5\u00F7\u005D\U000C3421\u003F\U0004AB27\u0205");
+      str = VarLen32::fromString("\u0047\u0052\U000EA560\u003F\u0035\u004B\u01ED\u07E7\u02F2\u032E\uA8AC\uCE1D\u30CE\uABC5\u00F7\u005D\U000C3421\u003F\U0004AB27\u0205", StorageClass::GLOBAL);
       REQUIRE(StringRuntime::len(str) == 20);
 
-      str = VarLen32::fromString("\u005F\uF2FE\U0002FBD8\u03B3\u01EF\u0588\u0075\u003A\u0033\u005C\uC45A\u7FA0\u059A\u07CD\u045C\u0648\u0053\uB00C\u017E\U00018707");
+      str = VarLen32::fromString("\u005F\uF2FE\U0002FBD8\u03B3\u01EF\u0588\u0075\u003A\u0033\u005C\uC45A\u7FA0\u059A\u07CD\u045C\u0648\u0053\uB00C\u017E\U00018707", StorageClass::GLOBAL);
       REQUIRE(StringRuntime::len(str) == 20);
 
-      str = VarLen32::fromString("\u04D0\U000FDE46\U000B0A45\u0057\u0727\u022B\uA3BC\u0020\uA871\u003C\u0430\u0031\u038B\U00066A4F\u166B\u0159\u424F\U00039FC9\u0073\u068D");
+      str = VarLen32::fromString("\u04D0\U000FDE46\U000B0A45\u0057\u0727\u022B\uA3BC\u0020\uA871\u003C\u0430\u0031\u038B\U00066A4F\u166B\u0159\u424F\U00039FC9\u0073\u068D", StorageClass::GLOBAL);
       REQUIRE(StringRuntime::len(str) == 20);
    });
 }
@@ -152,7 +152,7 @@ TEST_CASE("Length:EdgePoints") {
       }
 
       for (TestCase testCase : testCases) {
-         VarLen32 str = VarLen32::fromString(testCase.testString);
+         VarLen32 str = VarLen32::fromString(testCase.testString, StorageClass::GLOBAL);
          REQUIRE(StringRuntime::len(str) == testCase.length);
       }
    });
@@ -162,9 +162,10 @@ TEST_CASE("Length:EdgePoints") {
 namespace {
 
 void testSubstrWithCleanup(const VarLen32& testString, const std::string& expected, int64_t from, int64_t len) {
-   VarLen32 exp = VarLen32::fromString(expected);
+   VarLen32 exp = VarLen32::fromString(expected, StorageClass::GLOBAL);
    VarLen32 res = StringRuntime::substr(testString, from, len);
    REQUIRE(StringRuntime::compareEq(res, exp));
+   VarLen32::decRefCount(res);
 }
 
 void testSubstringFromChar(std::string characters[], size_t length) {
@@ -174,27 +175,27 @@ void testSubstringFromChar(std::string characters[], size_t length) {
     * position in the array: starting character;
     * elements in the vector: substrings starting with said character
    */
-   std::vector<std::vector<VarLen32>> subStrings(length);
+   std::vector<std::vector<std::string>> subStrings(length);
 
    for (std::size_t start = 0; start < length; start++) {
       testString += characters[start];
       std::string subString = "";
       for (std::size_t current = start; current < length; current++) {
          subString += characters[current];
-         VarLen32 str = VarLen32::fromString(subString);
-         subStrings[start].push_back(str);
+         subStrings[start].push_back(subString);
       }
    }
 
-   VarLen32 str = VarLen32::fromString(testString);
+   VarLen32 str = VarLen32::fromString(testString, StorageClass::GLOBAL);
 
    for (std::size_t startingCharacter = 0; startingCharacter < length; startingCharacter++) {
       for (std::size_t end = 0; end < subStrings[startingCharacter].size(); end++) {
-         VarLen32& subString = subStrings[startingCharacter][end];
+         VarLen32 subString = VarLen32::fromString(subStrings[startingCharacter][end], StorageClass::GLOBAL);
          VarLen32 res = StringRuntime::substr(str, startingCharacter + 1, end + 1);
          REQUIRE(StringRuntime::compareEq(
             res,
             subString));
+         VarLen32::decRefCount(res);
       }
    }
 }
@@ -249,7 +250,7 @@ TEST_CASE("Substr:MultiByte") {
 
 TEST_CASE("Substr:OutOfBounds") {
    withContext([]() {
-      VarLen32 testString = VarLen32::fromString("The Answer to the Great Question... Of Life, the Universe and Everything... Is... Forty-two");
+      VarLen32 testString = VarLen32::fromString("The Answer to the Great Question... Of Life, the Universe and Everything... Is... Forty-two", StorageClass::GLOBAL);
 
       std::string testCase = "Answer to ";
       testSubstrWithCleanup(testString, testCase, 5, 10);
@@ -290,12 +291,12 @@ TEST_CASE("Substr:OutOfBounds") {
 
 TEST_CASE("Like:Simple") {
    withContext([]() {
-      VarLen32 testLike = VarLen32::fromString("Jos_!");
+      VarLen32 testLike = VarLen32::fromString("Jos_!", StorageClass::GLOBAL);
 
-      VarLen32 testCandidate = VarLen32::fromString("Jose!");
+      VarLen32 testCandidate = VarLen32::fromString("Jose!", StorageClass::GLOBAL);
       REQUIRE(StringRuntime::like(testCandidate, testLike) == true);
 
-      testCandidate = VarLen32::fromString("José!");
+      testCandidate = VarLen32::fromString("José!", StorageClass::GLOBAL);
       REQUIRE(StringRuntime::like(testCandidate, testLike) == true);
    });
 }
@@ -306,90 +307,90 @@ TEST_CASE("Like:Combinations") {
       VarLen32 testCandidate;
 
       // Multi-byte Wildcard
-      testLike = VarLen32::fromString("J_sé!");
+      testLike = VarLen32::fromString("J_sé!", StorageClass::GLOBAL);
 
-      testCandidate = VarLen32::fromString("José!");
+      testCandidate = VarLen32::fromString("José!", StorageClass::GLOBAL);
       REQUIRE(StringRuntime::like(testCandidate, testLike) == true); // 'o' matches '_'
 
-      testCandidate = VarLen32::fromString("Jéssé!");
+      testCandidate = VarLen32::fromString("Jéssé!", StorageClass::GLOBAL);
       REQUIRE(StringRuntime::like(testCandidate, testLike) == false); // two chars after J
 
       // % Matching
-      testLike = VarLen32::fromString("J_sé!");
+      testLike = VarLen32::fromString("J_sé!", StorageClass::GLOBAL);
 
-      testCandidate = VarLen32::fromString("José!");
+      testCandidate = VarLen32::fromString("José!", StorageClass::GLOBAL);
       REQUIRE(StringRuntime::like(testCandidate, testLike) == true); // 'o' matches '_'
 
-      testCandidate = VarLen32::fromString("Jéssé!");
+      testCandidate = VarLen32::fromString("Jéssé!", StorageClass::GLOBAL);
       REQUIRE(StringRuntime::like(testCandidate, testLike) == false); // two chars after J
 
       // Matching across boundaries
 
-      testLike = VarLen32::fromString("J%!");
+      testLike = VarLen32::fromString("J%!", StorageClass::GLOBAL);
 
-      testCandidate = VarLen32::fromString("José!");
+      testCandidate = VarLen32::fromString("José!", StorageClass::GLOBAL);
       REQUIRE(StringRuntime::like(testCandidate, testLike) == true);
 
-      testCandidate = VarLen32::fromString("Jośę!");
+      testCandidate = VarLen32::fromString("Jośę!", StorageClass::GLOBAL);
       REQUIRE(StringRuntime::like(testCandidate, testLike) == true); // two multi-byte chars
 
-      testCandidate = VarLen32::fromString("J!");
+      testCandidate = VarLen32::fromString("J!", StorageClass::GLOBAL);
       REQUIRE(StringRuntime::like(testCandidate, testLike) == true); // zero or more
 
       // Combining Characters
 
-      testLike = VarLen32::fromString("Jo_%!");
+      testLike = VarLen32::fromString("Jo_%!", StorageClass::GLOBAL);
 
-      testCandidate = VarLen32::fromString("Joé!"); // composed form
+      testCandidate = VarLen32::fromString("Joé!", StorageClass::GLOBAL); // composed form
       REQUIRE(StringRuntime::like(testCandidate, testLike) == true);
 
-      testCandidate = VarLen32::fromString("Jo\u0065\u0301!"); // decomposed é (e + ́)
+      testCandidate = VarLen32::fromString("Jo\u0065\u0301!", StorageClass::GLOBAL); // decomposed é (e + ́)
       REQUIRE(StringRuntime::like(testCandidate, testLike) == true); // if normalized
 
-      testCandidate = VarLen32::fromString("Joe!"); // ASCII e
+      testCandidate = VarLen32::fromString("Joe!", StorageClass::GLOBAL); // ASCII e
       REQUIRE(StringRuntime::like(testCandidate, testLike) == true); // match either form
 
       // UTF-8 Boundary with %
 
-      testLike = VarLen32::fromString("%é!");
+      testLike = VarLen32::fromString("%é!", StorageClass::GLOBAL);
 
-      testCandidate = VarLen32::fromString("José!");
+      testCandidate = VarLen32::fromString("José!", StorageClass::GLOBAL);
       REQUIRE(StringRuntime::like(testCandidate, testLike) == true);
 
-      testCandidate = VarLen32::fromString("Jøse!");
+      testCandidate = VarLen32::fromString("Jøse!", StorageClass::GLOBAL);
       REQUIRE(StringRuntime::like(testCandidate, testLike) == false);
 
       // Multiple _
 
-      testLike = VarLen32::fromString("____!");
+      testLike = VarLen32::fromString("____!", StorageClass::GLOBAL);
 
-      testCandidate = VarLen32::fromString("José!");
+      testCandidate = VarLen32::fromString("José!", StorageClass::GLOBAL);
       REQUIRE(StringRuntime::like(testCandidate, testLike) == true); // 4 codepoints
 
-      testCandidate = VarLen32::fromString("Jose!");
+      testCandidate = VarLen32::fromString("Jose!", StorageClass::GLOBAL);
       REQUIRE(StringRuntime::like(testCandidate, testLike) == true); // ASCII only
 
-      testCandidate = VarLen32::fromString("Jósé!");
+      testCandidate = VarLen32::fromString("Jósé!", StorageClass::GLOBAL);
       REQUIRE(StringRuntime::like(testCandidate, testLike) == true); // 5 codepoints
 
       // Start and End Anchors
 
-      testLike = VarLen32::fromString("%é");
+      testLike = VarLen32::fromString("%é", StorageClass::GLOBAL);
 
-      testCandidate = VarLen32::fromString("Café");
+      testCandidate = VarLen32::fromString("Café", StorageClass::GLOBAL);
       REQUIRE(StringRuntime::like(testCandidate, testLike) == true);
 
-      testCandidate = VarLen32::fromString("Cafe");
+      testCandidate = VarLen32::fromString("Cafe", StorageClass::GLOBAL);
       REQUIRE(StringRuntime::like(testCandidate, testLike) == false);
 
       // Non-Match Edge Cases
 
-      testLike = VarLen32::fromString("Jo%!");
+      testLike = VarLen32::fromString("Jo%!", StorageClass::GLOBAL);
 
-      testCandidate = VarLen32::fromString("Jóse"); // no '!'
+      testCandidate = VarLen32::fromString("Jóse", StorageClass::GLOBAL); // no '!'
       REQUIRE(StringRuntime::like(testCandidate, testLike) == false);
 
-      testCandidate = VarLen32::fromString("Jośé!!");
+      testCandidate = VarLen32::fromString("Jośé!!", StorageClass::GLOBAL);
       REQUIRE(StringRuntime::like(testCandidate, testLike) == true);
    });
 }

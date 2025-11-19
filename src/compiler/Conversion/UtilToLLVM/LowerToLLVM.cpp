@@ -383,6 +383,9 @@ class CreateConstVarLenLowering : public OpConversionPattern<util::CreateConstVa
             memcpy(&last8, op.getStr().data() + 4, std::min(8ul, len - 4));
          }
          p2 = rewriter.create<mlir::LLVM::ConstantOp>(op->getLoc(), i128Ty, rewriter.getIntegerAttr(i128Ty, last8));
+         auto const64 = rewriter.create<mlir::LLVM::ConstantOp>(op->getLoc(), i128Ty, rewriter.getIntegerAttr(i128Ty, 64));
+         auto shlp2 = rewriter.create<mlir::LLVM::ShlOp>(op->getLoc(), p2, const64);
+         rewriter.replaceOpWithNewOp<mlir::LLVM::OrOp>(op, p1, shlp2);
       } else {
          static size_t globalStrConstId = 0;
          mlir::LLVM::GlobalOp globalOp;
@@ -395,10 +398,10 @@ class CreateConstVarLenLowering : public OpConversionPattern<util::CreateConstVa
          }
          auto ptr = rewriter.create<mlir::LLVM::AddressOfOp>(op->getLoc(), globalOp);
          p2 = rewriter.create<mlir::LLVM::PtrToIntOp>(op->getLoc(), i128Ty, ptr);
+         auto const66 = rewriter.create<mlir::LLVM::ConstantOp>(op->getLoc(), i128Ty, rewriter.getIntegerAttr(i128Ty, 66)); //shift by 64 + 2 for storage class
+         auto shlp2 = rewriter.create<mlir::LLVM::ShlOp>(op->getLoc(), p2, const66);
+         rewriter.replaceOpWithNewOp<mlir::LLVM::OrOp>(op, p1, shlp2);
       }
-      auto const64 = rewriter.create<mlir::LLVM::ConstantOp>(op->getLoc(), i128Ty, rewriter.getIntegerAttr(i128Ty, 64));
-      auto shlp2 = rewriter.create<mlir::LLVM::ShlOp>(op->getLoc(), p2, const64);
-      rewriter.replaceOpWithNewOp<mlir::LLVM::OrOp>(op, p1, shlp2);
       return success();
    }
 };

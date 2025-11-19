@@ -2,6 +2,7 @@
 #define LINGODB_RUNTIME_HELPERS_H
 #include "ExecutionContext.h"
 
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
@@ -67,6 +68,12 @@ static uint64_t read8PadZero(const uint8_t* p, uint32_t len) {
    return unalignedLoad64(p + len - 8) >> (64 - len * 8);
 #endif
 }
+enum class StorageClass : uint8_t {
+   GLOBAL = 0, // valid over the entire query runtime (e.g., constants, registered values
+   TRANSIENT = 1, // externally managed, but only valid during the current "morsel"
+   REFCOUNTED = 2, // reference counted memory, freed when no references remain
+   RESERVED = 3, // reserved for future use
+};
 
 class VarLen32 {
    private:
@@ -87,25 +94,63 @@ class VarLen32 {
    };
 
    private:
-   void storePtr(const uint8_t* ptr) {
-      const uint8_t** ptrloc = reinterpret_cast<const uint8_t**>((&bytes[4]));
-      *ptrloc = ptr;
+   void storePtr(const uint8_t* ptr, StorageClass storageClass) {
+      uintptr_t* ptrloc = reinterpret_cast<uintptr_t*>((&bytes[4]));
+      uintptr_t ptrVal = reinterpret_cast<uintptr_t>(ptr);
+      ptrVal <<= 2; // make space for storage class
+      ptrVal |= static_cast<uint8_t>(storageClass);
+      *ptrloc = ptrVal;
    }
 
    public:
-   static VarLen32 fromString(std::string str) {
+   static VarLen32 fromString(std::string str, StorageClass storageClass) {
       if (str.size() <= shortLen) {
-         return VarLen32(reinterpret_cast<const uint8_t*>(str.data()), str.size());
+         return VarLen32(reinterpret_cast<const uint8_t*>(str.data()), str.size(), storageClass);
       }
-      auto* ptr = getCurrentExecutionContext()->allocString(str.size());
-      memcpy(ptr, str.data(), str.size());
-      return VarLen32(ptr, str.size());
+      if (storageClass == StorageClass::GLOBAL) {
+         auto* ptr = getCurrentExecutionContext()->allocString(str.size());
+         memcpy(ptr, str.data(), str.size());
+         return VarLen32(ptr, str.size(), storageClass);
+      } else if (storageClass == StorageClass::TRANSIENT) {
+         return VarLen32(reinterpret_cast<const uint8_t*>(str.data()), str.size(), storageClass);
+      } else if (storageClass == StorageClass::REFCOUNTED) {
+         uint8_t* allocated = static_cast<uint8_t*>(malloc(str.size() + 4));
+         reinterpret_cast<uint32_t*>(allocated)[0] = 1; //set refcount to 1
+         memcpy(allocated + 4, str.data(), str.size());
+         return VarLen32(allocated + 4, str.size(), storageClass);
+      } else {
+         assert(false);
+         return VarLen32();
+      }
+   }
+   static uint8_t* allocateForStorageClass(size_t size, StorageClass storageClass) {
+      if (storageClass == StorageClass::GLOBAL) {
+         return getCurrentExecutionContext()->allocString(size);
+      } else if (storageClass == StorageClass::TRANSIENT) {
+         return nullptr;
+      } else if (storageClass == StorageClass::REFCOUNTED) {
+         uint8_t* allocated = static_cast<uint8_t*>(malloc(size + 4));
+         reinterpret_cast<uint32_t*>(allocated)[0] = 1; //set refcount to 1
+         return allocated + 4;
+      }
+      assert(false);
+      return nullptr;
+   }
+   static void decRefCount(runtime::VarLen32 varLen32) {
+      if (varLen32.getLen() <= shortLen) return;
+      if (varLen32.getStorageClass() != StorageClass::REFCOUNTED) return;
+      uint8_t* ptr = varLen32.getPtr();
+      std::atomic<uint32_t>* refCountPtr = reinterpret_cast<std::atomic<uint32_t>*>(ptr) - 1;
+      uint32_t oldRefCount = refCountPtr->fetch_sub(1);
+      if (oldRefCount == 1) {
+         free(refCountPtr);
+      }
    }
    VarLen32() : len(0), first4(0xffffffff), last8(0) {}
-   VarLen32(const uint8_t* ptr, uint32_t len) : len(len) {
+   VarLen32(const uint8_t* ptr, uint32_t len, StorageClass storageClass) : len(len) {
       if (len > shortLen) {
          this->first4 = unalignedLoad32(ptr);
-         storePtr(ptr);
+         storePtr(ptr, storageClass);
       } else if (len > 8) {
          this->first4 = unalignedLoad32(ptr);
          this->last8 = unalignedLoad64(ptr + len - 8);
@@ -124,8 +169,11 @@ class VarLen32 {
       if (len <= shortLen) {
          return bytes;
       } else {
-         return reinterpret_cast<uint8_t*>(*(uintptr_t*) (&bytes[4]));
+         return reinterpret_cast<uint8_t*>((*(uintptr_t*) (&bytes[4])) >> 2);
       }
+   }
+   StorageClass getStorageClass() {
+      return static_cast<StorageClass>(last8 & 0x3);
    }
    char* data() {
       return (char*) getPtr();
