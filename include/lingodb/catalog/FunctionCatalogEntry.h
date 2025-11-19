@@ -43,10 +43,13 @@ class CFunctionCatalogEntry : public FunctionCatalogEntry {
    static std::shared_ptr<FunctionCatalogEntry> deserialize(lingodb::utility::Deserializer& deserializer);
 };
 class HiPyFunctionCatalogEntry : public FunctionCatalogEntry {
-   public:
-   HiPyFunctionCatalogEntry(std::string name, std::string code, Type returnType, std::vector<Type> argumentTypes)
-      : FunctionCatalogEntry(CatalogEntry::CatalogEntryType::HIPY_FUNCTION_ENTRY, name, code, returnType, argumentTypes) {}
+   std::string byteCode;
 
+   public:
+   HiPyFunctionCatalogEntry(std::string name, std::string code, Type returnType, std::vector<Type> argumentTypes, std::string byteCode)
+      : FunctionCatalogEntry(CatalogEntry::CatalogEntryType::HIPY_FUNCTION_ENTRY, name, code, returnType, argumentTypes), byteCode(byteCode) {}
+   std::string getByteCode() { return byteCode; }
+   void serializeEntry(lingodb::utility::Serializer& serializer) const override;
    static std::shared_ptr<FunctionCatalogEntry> deserialize(lingodb::utility::Deserializer& deserializer);
 };
 

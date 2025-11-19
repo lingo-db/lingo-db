@@ -5,6 +5,7 @@
 
 #include "lingodb/catalog/IndexCatalogEntry.h"
 #include "lingodb/catalog/TableCatalogEntry.h"
+#include "lingodb/compiler/frontend/UDFImplementer.h"
 #include "lingodb/runtime/ArrowTable.h"
 #include "lingodb/runtime/storage/TableStorage.h"
 #include "lingodb/utility/Serialization.h"
@@ -47,7 +48,8 @@ void RelationHelper::createFunction(runtime::VarLen32 meta) {
       }
       catalog->insertEntry(func, true);
    } else if (def.language == "hipy") {
-      auto func = std::make_shared<lingodb::catalog::HiPyFunctionCatalogEntry>(def.name, def.code, def.returnType, def.argumentTypes);
+      std::string byteCode = lingodb::compiler::frontend::compileHiPyUDF(def.name, def.code, def.argumentTypes, def.returnType);
+      auto func = std::make_shared<lingodb::catalog::HiPyFunctionCatalogEntry>(def.name, def.code, def.returnType, def.argumentTypes, byteCode);
       catalog->insertEntry(func, true);
    } else {
       throw std::runtime_error("unsupported function language: " + def.language);
