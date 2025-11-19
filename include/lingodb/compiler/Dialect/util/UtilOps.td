@@ -205,7 +205,7 @@ def PackOp : Util_Op<"pack",[Pure]> {
 let summary = "string constant";
 let arguments = (ins Variadic<AnyType>:$vals);
 let results =(outs TupleOf<[AnyType]>:$tuple);
-let assemblyFormat = "$vals `:` type($vals) attr-dict `->` type($tuple) ";
+let assemblyFormat = "($vals^ `:` type($vals))? attr-dict `->` type($tuple) ";
     let hasVerifier=1;
 let builders = [
         OpBuilder<(ins "mlir::ValueRange":$vals), [{
