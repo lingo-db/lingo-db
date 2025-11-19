@@ -44,7 +44,9 @@ class LoggingTimingPrinter : public execution::TimingProcessor {
 
    void addTiming(const std::unordered_map<std::string, double>& timing) override {
       for (auto [name, t] : timing) {
-         if (name == "executionTime") {
+         if (name == "frontend") {
+            timings["frontend"] += t;
+         } else if (name == "executionTime") {
             timings["execution"] += t;
          } else if (name == "QOpt") {
             timings["qopt"] += t;

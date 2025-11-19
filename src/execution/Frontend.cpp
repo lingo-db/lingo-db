@@ -106,6 +106,7 @@ class SQLFrontend : public lingodb::execution::Frontend {
    mlir::OwningOpRef<mlir::ModuleOp> module;
    bool isFile = false;
    void load(std::string fileOrDirect) {
+      auto start = std::chrono::high_resolution_clock::now();
       lingodb::execution::initializeContext(context);
       Driver drv;
       try {
@@ -146,6 +147,8 @@ class SQLFrontend : public lingodb::execution::Frontend {
       } catch (lingodb::FrontendError& e) {
          error.emit() << e.what();
       }
+      auto end = std::chrono::high_resolution_clock::now();
+      timing["frontend"] = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000.0;
    }
 
    void loadFromString(std::string sql) override {
