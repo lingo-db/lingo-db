@@ -18,16 +18,16 @@ void relalg::createQueryOptPipeline(mlir::OpPassManager& pm, lingodb::catalog::C
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createExtractNestedOperatorsPass());
    pm.addPass(mlir::createCSEPass());
    pm.addPass(mlir::createCanonicalizerPass());
-   pm.addNestedPass<mlir::func::FuncOp>(relalg::createInferNotNullConditionsPass());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createDecomposeLambdasPass(true));
    pm.addPass(mlir::createCanonicalizerPass());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createImplicitToExplicitJoinsPass());
-   pm.addNestedPass<mlir::func::FuncOp>(relalg::createInferNotNullConditionsPass());
+   //pm.addNestedPass<mlir::func::FuncOp>(relalg::createInferNotNullConditionsPass());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createDecomposeLambdasPass());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createPushdownPass());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createUnnestingPass());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createColumnFoldingPass());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createDecomposeLambdasPass());
+   pm.addNestedPass<mlir::func::FuncOp>(relalg::createInferNotNullConditionsPass());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createPushdownPass());
    if (catalog) {
       pm.addNestedPass<mlir::func::FuncOp>(relalg::createAttachMetaDataPass(*catalog));
