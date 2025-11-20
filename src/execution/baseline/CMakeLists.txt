@@ -30,14 +30,24 @@ find_program(CLANG_EXECUTABLE NAMES clang-20 clang-19)
 if (NOT CLANG_EXECUTABLE)
     message(FATAL_ERROR "Neither clang-20 nor clang-19 was found in PATH.")
 endif ()
+# x64
 add_custom_command(
         OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/snippets_x64.bc
         COMMAND ${CLANG_EXECUTABLE} -c -emit-llvm -ffreestanding -fcf-protection=none -O3 -fomit-frame-pointer -fno-math-errno --target=x86_64-linux -march=opteron -o ${CMAKE_CURRENT_BINARY_DIR}/snippets_x64.bc ${CMAKE_CURRENT_SOURCE_DIR}/snippets_x64.c
         DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/snippets_x64.c
         DEPENDS_EXPLICIT_ONLY
-        COMMENT "Generating LLVM bitcode from snippets.c"
+        COMMENT "Generating x64 LLVM bitcode from snippets.c"
+)
+# arm-apple
+add_custom_command(
+        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/snippets_arm-apple.bc
+        COMMAND ${CLANG_EXECUTABLE} -c -emit-llvm -ffreestanding -fcf-protection=none -O3 -fomit-frame-pointer -fno-math-errno --target=aarch64 -march=armv8.5-a -o ${CMAKE_CURRENT_BINARY_DIR}/snippets_arm-apple.bc ${CMAKE_CURRENT_SOURCE_DIR}/snippets_arm-apple.c
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/snippets_arm-apple.c
+        DEPENDS_EXPLICIT_ONLY
+        COMMENT "Generating arm-apple LLVM bitcode from snippets.c"
 )
 # Step 2: Use tpde to generate C++ header file from LLVM bitcode
+# x64
 add_custom_command(
         OUTPUT ${SNIPPED_INCLUDE_DIR}/snippet_encoders_x64.hpp
         COMMAND $<TARGET_FILE:tpde::tpde_encodegen> -o ${SNIPPED_INCLUDE_DIR}/snippet_encoders_x64.hpp ${CMAKE_CURRENT_BINARY_DIR}/snippets_x64.bc
@@ -46,8 +56,18 @@ add_custom_command(
         DEPENDS_EXPLICIT_ONLY
         COMMENT "Generating ${SNIPPED_INCLUDE_DIR}/snippet_encoders_x64.hpp from ${CMAKE_CURRENT_BINARY_DIR}/snippets_x64.bc"
 )
+# arm-apple
+add_custom_command(
+        OUTPUT ${SNIPPED_INCLUDE_DIR}/snippet_encoders_arm-apple.hpp
+        COMMAND $<TARGET_FILE:tpde::tpde_encodegen> -o ${SNIPPED_INCLUDE_DIR}/snippet_encoders_arm-apple.hpp ${CMAKE_CURRENT_BINARY_DIR}/snippets_arm-apple.bc
+        DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/snippets_arm-apple.bc
+        DEPENDS tpde::tpde_encodegen
+        DEPENDS_EXPLICIT_ONLY
+        COMMENT "Generating ${SNIPPED_INCLUDE_DIR}/snippet_encoders_arm-apple.hpp from ${CMAKE_CURRENT_BINARY_DIR}/snippets_arm-apple.bc"
+)
 add_custom_target(snippet_encoders ALL
         DEPENDS ${SNIPPED_INCLUDE_DIR}/snippet_encoders_x64.hpp
+        DEPENDS ${SNIPPED_INCLUDE_DIR}/snippet_encoders_arm-apple.hpp
 )
 # have snippet encoders built with the runner target which includes the baseline execution backend
 add_dependencies(runner snippet_encoders)
