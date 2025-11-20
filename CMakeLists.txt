@@ -71,7 +71,7 @@ include_directories(${PROJECT_SOURCE_DIR}/include)
 include_directories(${PROJECT_SOURCE_DIR}/vendored)
 
 add_subdirectory(${PROJECT_SOURCE_DIR}/vendored/linenoise-ng/ EXCLUDE_FROM_ALL)
-
+add_subdirectory(${PROJECT_SOURCE_DIR}/vendored/cpython-wasm ${CMAKE_CURRENT_BINARY_DIR}/cpython-wasm)
 
 include_directories(${PROJECT_BINARY_DIR}/include)
 link_directories(${LLVM_BUILD_LIBRARY_DIR})
