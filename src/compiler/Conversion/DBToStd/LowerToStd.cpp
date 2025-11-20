@@ -1332,6 +1332,50 @@ class DictIterGetValueLowering : public OpConversionPattern<db::DictIterGetValue
       return success();
    }
 };
+class MemoryCleanupUseLowering : public OpConversionPattern<db::MemoryCleanupUse> {
+   public:
+   using OpConversionPattern<db::MemoryCleanupUse>::OpConversionPattern;
+   LogicalResult matchAndRewrite(db::MemoryCleanupUse cleanupUse, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = cleanupUse.getLoc();
+      auto t = cleanupUse.getValue().getType();
+      if (mlir::isa<db::StringType>(t)) {
+         rt::StringRuntime::cleanupUse(rewriter, loc)({adaptor.getValue()});
+         rewriter.eraseOp(cleanupUse);
+         return success();
+      }
+      if (mlir::isa<db::ListType>(t)) {
+         if (cleanupUse.getCleanupFn().has_value()) {
+            auto constFunc = rewriter.create<func::ConstantOp>(loc, rewriter.getFunctionType({typeConverter->convertType(t)}, {}), cleanupUse.getCleanupFn().value().getRootReference());
+            rt::List::cleanupUseCb(rewriter, loc)({adaptor.getValue(), constFunc.getResult()});
+         } else {
+            rt::List::cleanupUse(rewriter, loc)({adaptor.getValue()});
+         }
+         rewriter.eraseOp(cleanupUse);
+         return success();
+      }
+      return failure();
+   }
+};
+
+class MemoryAddUseLowering : public OpConversionPattern<db::MemoryAddUse> {
+   public:
+   using OpConversionPattern<db::MemoryAddUse>::OpConversionPattern;
+   LogicalResult matchAndRewrite(db::MemoryAddUse addUse, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = addUse.getLoc();
+      auto t = addUse.getValue().getType();
+      if (mlir::isa<db::StringType>(t)) {
+         rt::StringRuntime::addUse(rewriter, loc)({adaptor.getValue()});
+         rewriter.eraseOp(addUse);
+         return success();
+      }
+      if (mlir::isa<db::ListType>(t)) {
+         rt::List::addUse(rewriter, loc)({adaptor.getValue()});
+         rewriter.eraseOp(addUse);
+         return success();
+      }
+      return failure();
+   }
+};
 } // end anonymous namespace
 void DBToStdLoweringPass::runOnOperation() {
    auto module = getOperation();
@@ -1500,6 +1544,8 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<DictIterNextLowering>(typeConverter, ctxt);
    patterns.insert<DictIterGetKeyLowering>(typeConverter, ctxt);
    patterns.insert<DictIterGetValueLowering>(typeConverter, ctxt);
+   patterns.insert<MemoryCleanupUseLowering>(typeConverter, ctxt);
+   patterns.insert<MemoryAddUseLowering>(typeConverter, ctxt);
 
    if (failed(applyFullConversion(module, target, std::move(patterns))))
       signalPassFailure();

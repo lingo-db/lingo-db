@@ -28,6 +28,7 @@ module {
         db.list_set %list: !db.list<i32> [%c1i] = %c42 : i32
         %elem2_updated = db.list_get %list: !db.list<i32> [%c1i]  : i32
         db.runtime_call "DumpValue" (%elem2_updated) : (i32) -> ()
+        db.memory.cleanup_use %list : !db.list<i32>
 
 
         return

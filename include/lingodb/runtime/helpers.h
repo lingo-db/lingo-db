@@ -2,11 +2,14 @@
 #define LINGODB_RUNTIME_HELPERS_H
 #include "ExecutionContext.h"
 
+#include <atomic>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
+#include <new>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <string.h> // for memcpy
@@ -103,25 +106,28 @@ class VarLen32 {
    }
 
    public:
-   static VarLen32 fromString(std::string str, StorageClass storageClass) {
-      if (str.size() <= shortLen) {
-         return VarLen32(reinterpret_cast<const uint8_t*>(str.data()), str.size(), storageClass);
+   static VarLen32 fromDataAndLen(const char* data, size_t len, StorageClass storageClass) {
+      if (len <= shortLen) {
+         return VarLen32(reinterpret_cast<const uint8_t*>(data), len, storageClass);
       }
       if (storageClass == StorageClass::GLOBAL) {
-         auto* ptr = getCurrentExecutionContext()->allocString(str.size());
-         memcpy(ptr, str.data(), str.size());
-         return VarLen32(ptr, str.size(), storageClass);
+         auto* ptr = getCurrentExecutionContext()->allocString(len);
+         memcpy(ptr, data, len);
+         return VarLen32(ptr, len, storageClass);
       } else if (storageClass == StorageClass::TRANSIENT) {
-         return VarLen32(reinterpret_cast<const uint8_t*>(str.data()), str.size(), storageClass);
+         return VarLen32(reinterpret_cast<const uint8_t*>(data), len, storageClass);
       } else if (storageClass == StorageClass::REFCOUNTED) {
-         uint8_t* allocated = static_cast<uint8_t*>(malloc(str.size() + 4));
+         uint8_t* allocated = static_cast<uint8_t*>(malloc(len + 4));
          reinterpret_cast<uint32_t*>(allocated)[0] = 1; //set refcount to 1
-         memcpy(allocated + 4, str.data(), str.size());
-         return VarLen32(allocated + 4, str.size(), storageClass);
+         memcpy(allocated + 4, data, len);
+         return VarLen32(allocated + 4, len, storageClass);
       } else {
          assert(false);
          return VarLen32();
       }
+   }
+   static VarLen32 fromString(std::string str, StorageClass storageClass) {
+      return fromDataAndLen(str.data(), str.size(), storageClass);
    }
    static uint8_t* allocateForStorageClass(size_t size, StorageClass storageClass) {
       if (storageClass == StorageClass::GLOBAL) {
@@ -145,6 +151,13 @@ class VarLen32 {
       if (oldRefCount == 1) {
          free(refCountPtr);
       }
+   }
+   static void incRefCount(runtime::VarLen32 varLen32) {
+      if (varLen32.getLen() <= shortLen) return;
+      if (varLen32.getStorageClass() != StorageClass::REFCOUNTED) return;
+      uint8_t* ptr = varLen32.getPtr();
+      std::atomic<uint32_t>* refCountPtr = reinterpret_cast<std::atomic<uint32_t>*>(ptr) - 1;
+      refCountPtr->fetch_add(1);
    }
    VarLen32() : len(0), first4(0xffffffff), last8(0) {}
    VarLen32(const uint8_t* ptr, uint32_t len, StorageClass storageClass) : len(len) {
@@ -192,6 +205,16 @@ class VarLen32 {
    operator std::string() { return std::string((char*) getPtr(), getLen()); }
    std::string str() { return std::string((char*) getPtr(), getLen()); }
 };
+
+template <typename T, typename... Args>
+T* createRefCounted(Args&&... args) {
+   uint8_t* allocated = static_cast<uint8_t*>(malloc(sizeof(T) + 4));
+   // initialize refcount to 1
+   reinterpret_cast<uint32_t*>(allocated)[0] = 1;
+   void* objPtr = allocated + 4;
+   T* obj = new (objPtr) T(std::forward<Args>(args)...);
+   return obj;
+}
 
 template <class T>
 struct LegacyFixedSizedBuffer {
@@ -263,5 +286,29 @@ template <typename T>
 T* untag(T* ptr) {
    return reinterpret_cast<T*>(reinterpret_cast<uintptr_t>(ptr) >> 16);
 }
+
+// New generic refcount helpers (declaration)
+// Manage a 4-byte uint32_t refcount stored immediately before the object pointer.
+// If the refcount value is UINT32_MAX (0xffffffff) do nothing (global ownership).
+template <typename T>
+inline void incRefCount(T* obj) {
+   if (!obj) return;
+   // Refcount is stored as a 32-bit value immediately before the object pointer.
+   auto* refPtr = reinterpret_cast<std::atomic<uint32_t>*>(reinterpret_cast<uint8_t*>(obj) - 4);
+   refPtr->fetch_add(1);
+}
+
+template <typename T>
+inline void decRefCount(T* obj, void (*cleanupFn)(T*)) {
+   if (!obj) return;
+   auto* refPtr = reinterpret_cast<std::atomic<uint32_t>*>(reinterpret_cast<uint8_t*>(obj) - 4);
+   uint32_t old = refPtr->fetch_sub(1);
+   if (old == 1) {
+      cleanupFn(obj);
+      obj->~T();
+      free(reinterpret_cast<void*>(refPtr));
+   }
+}
+
 } // end namespace lingodb::runtime
 #endif // LINGODB_RUNTIME_HELPERS_H

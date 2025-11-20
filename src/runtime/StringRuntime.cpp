@@ -196,7 +196,7 @@ __int128 lingodb::runtime::StringRuntime::toDecimal(lingodb::runtime::VarLen32 s
       size_t len = 0;                                                                                                                                \
       arrow::Status status = formatter(value, [&](std::string_view v) {                                                                              \
          len = v.length();                                                                                                                           \
-         data = getCurrentExecutionContext()->allocString(len);                                                                                      \
+         data = VarLen32::allocateForStorageClass(len, StorageClass::REFCOUNTED);                                                                    \
          memcpy(data, v.data(), len);                                                                                                                \
          return arrow::Status::OK();                                                                                                                 \
       });                                                                                                                                            \
@@ -392,7 +392,7 @@ lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::toUpper(lingodb::run
       ::toUpper(str.data(), str.getLen());
       return str;
    } else {
-      char* copied = reinterpret_cast<char*>(getCurrentExecutionContext()->allocString(str.getLen()));
+      char* copied = reinterpret_cast<char*>(VarLen32::allocateForStorageClass(str.getLen(), StorageClass::REFCOUNTED));
 
       memcpy(copied, str.data(), str.getLen());
       ::toUpper(copied, str.getLen());
@@ -404,7 +404,7 @@ lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::toLower(lingodb::run
       ::toLower(str.data(), str.getLen());
       return str;
    } else {
-      char* copied = reinterpret_cast<char*>(getCurrentExecutionContext()->allocString(str.getLen()));
+      char* copied = reinterpret_cast<char*>(VarLen32::allocateForStorageClass(str.getLen(), StorageClass::REFCOUNTED));
       memcpy(copied, str.data(), str.getLen());
       ::toLower(copied, str.getLen());
       return lingodb::runtime::VarLen32((uint8_t*) copied, str.getLen(), StorageClass::REFCOUNTED);
@@ -491,7 +491,8 @@ lingodb::runtime::List* lingodb::runtime::StringRuntime::split(VarLen32 str, Var
          end = str.getLen();
       }
       auto* val = list->append();
-      new (val) lingodb::runtime::VarLen32(reinterpret_cast<const uint8_t*>(str.data() + start), end - start, StorageClass::REFCOUNTED);
+      auto varlen = VarLen32::fromDataAndLen(str.data() + start, end - start, StorageClass::REFCOUNTED);
+      *reinterpret_cast<VarLen32*>(val) = varlen;
       start = end + needle.getLen();
       splits++;
    }
@@ -517,4 +518,12 @@ int64_t lingodb::runtime::StringRuntime::ord(VarLen32 str) {
          (static_cast<int32_t>(str.data()[2]) & 0x3F) << 6 | (static_cast<int32_t>(str.data()[3]) & 0x3F);
    }
    throw std::runtime_error("Cannot get ord of string with length " + std::to_string(str.getLen()));
+}
+
+void lingodb::runtime::StringRuntime::cleanupUse(VarLen32 str) {
+   lingodb::runtime::VarLen32::decRefCount(str);
+}
+
+void lingodb::runtime::StringRuntime::addUse(VarLen32 str) {
+   lingodb::runtime::VarLen32::incRefCount(str);
 }
