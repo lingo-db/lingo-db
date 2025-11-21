@@ -2,3 +2,7 @@
 	path = vendored/tpde
 	url = https://github.com/lingo-db/tpde.git
 	branch = master
+
+[submodule "vendored/wasm-micro-runtime"]
+	path = vendored/wasm-micro-runtime
+	url = git@github.com:bytecodealliance/wasm-micro-runtime.git
