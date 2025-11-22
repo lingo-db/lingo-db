@@ -170,7 +170,16 @@ bool lingodb::runtime::StringRuntime::startsWith(lingodb::runtime::VarLen32 str1
       return val;                                                                                                                                 \
    }
 
-CAST_NUMERIC_FROM_STRING(int64_t, arrow::Int64Type, Int)
+//CAST_NUMERIC_FROM_STRING(int64_t, arrow::Int64Type, Int)
+int64_t lingodb::runtime::StringRuntime::toInt(lingodb::runtime::VarLen32 str) {
+   std::string::size_type sz = 0;
+   auto res = std::stoll(str.str(), &sz);
+   if (sz != str.getLen()) {
+      throw std::runtime_error("string also contained non-numeric characters");
+   }
+   return res;
+}
+
 CAST_NUMERIC_FROM_STRING(float, arrow::FloatType, Float32)
 CAST_NUMERIC_FROM_STRING(double, arrow::DoubleType, Float64)
 //end taken from gandiva
