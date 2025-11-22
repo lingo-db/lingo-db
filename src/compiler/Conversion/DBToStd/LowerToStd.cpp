@@ -13,6 +13,7 @@
 #include "lingodb/compiler/runtime/Hashtable.h"
 #include "lingodb/compiler/runtime/ListRuntime.h"
 #include "lingodb/compiler/runtime/StringRuntime.h"
+#include "lingodb/compiler/runtime/TryExcept.h"
 
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -91,12 +92,14 @@ class SimpleTypeConversionPattern : public ConversionPattern {
    LogicalResult
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
+      op->dump();
       llvm::SmallVector<mlir::Type> convertedTypes;
       if (typeConverter->convertTypes(op->getResultTypes(), convertedTypes).failed()) {
          return failure();
       }
       auto newOp = rewriter.create<Op>(op->getLoc(), convertedTypes, ValueRange(operands), op->getAttrs());
       rewriter.replaceOp(op, newOp->getResults());
+      newOp->dump();
       return success();
    }
 };
@@ -1376,6 +1379,132 @@ class MemoryAddUseLowering : public OpConversionPattern<db::MemoryAddUse> {
       return failure();
    }
 };
+class TryExceptLowering : public OpConversionPattern<db::TryExcept> {
+   public:
+   using OpConversionPattern<db::TryExcept>::OpConversionPattern;
+   LogicalResult matchAndRewrite(db::TryExcept tryExcept, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = tryExcept.getLoc();
+      func::FuncOp tryFunc;
+      func::FuncOp exceptFunc;
+      if (auto constOp = mlir::dyn_cast_or_null<func::ConstantOp>(tryExcept.getTryFn().getDefiningOp())) {
+         tryFunc = mlir::cast<func::FuncOp>(tryExcept->getParentOfType<ModuleOp>().lookupSymbol(constOp.getValue()));
+      }
+      if (auto constOp = mlir::dyn_cast_or_null<func::ConstantOp>(tryExcept.getExceptFn().getDefiningOp())) {
+         exceptFunc = mlir::cast<func::FuncOp>(tryExcept->getParentOfType<ModuleOp>().lookupSymbol(constOp.getValue()));
+      }
+      if (!tryFunc || !exceptFunc) {
+         return failure();
+      }
+      // step 1: allocate stack memory for the arguments (if present) and the result
+      mlir::Value tryArgAlloca;
+      mlir::Value exceptArgAlloca;
+      mlir::Value resultAlloca;
+      {
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(&tryExcept->getParentOfType<func::FuncOp>().getBody().front());
+         if (tryExcept.getTryArg()) {
+            auto tryArgType = typeConverter->convertType(tryExcept.getTryArg().getType());
+            tryArgAlloca = rewriter.create<util::AllocaOp>(loc, util::RefType::get(rewriter.getContext(), tryArgType), mlir::Value());
+            // cast to ref<i8> for uniformity
+            tryArgAlloca = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(rewriter.getContext(), rewriter.getI8Type()), tryArgAlloca);
+         } else {
+            tryArgAlloca = rewriter.create<util::UndefOp>(loc, util::RefType::get(rewriter.getContext(), rewriter.getI8Type()));
+         }
+         if (tryExcept.getExceptArg()) {
+            auto exceptArgType = typeConverter->convertType(tryExcept.getExceptArg().getType());
+            exceptArgAlloca = rewriter.create<util::AllocaOp>(loc, util::RefType::get(rewriter.getContext(), exceptArgType), mlir::Value());
+            // cast to ref<i8> for uniformity
+            exceptArgAlloca = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(rewriter.getContext(), rewriter.getI8Type()), exceptArgAlloca);
+         } else {
+            exceptArgAlloca = rewriter.create<util::UndefOp>(loc, util::RefType::get(rewriter.getContext(), rewriter.getI8Type()));
+         }
+         auto resultType = typeConverter->convertType(tryExcept.getType());
+         resultAlloca = rewriter.create<util::AllocaOp>(loc, util::RefType::get(rewriter.getContext(), resultType), mlir::Value());
+         // cast to ref<i8> for uniformity
+         resultAlloca = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(rewriter.getContext(), rewriter.getI8Type()), resultAlloca);
+      }
+      // step 2: create a new function "try_wrapped_ctr" that takes a pointer to the try argument and a pointer to the result, and calls the try function
+      func::FuncOp tryWrappedFn;
+      {
+         static int cntr = 0;
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(tryExcept->getParentOfType<ModuleOp>().getBody());
+         auto fnType = FunctionType::get(rewriter.getContext(), {util::RefType::get(rewriter.getContext(), rewriter.getI8Type()), util::RefType::get(rewriter.getContext(), rewriter.getI8Type())}, {});
+         tryWrappedFn = rewriter.create<func::FuncOp>(loc, "try_wrapped_fn_" + std::to_string(cntr++), fnType);
+         rewriter.setInsertionPointToStart(tryWrappedFn.addEntryBlock());
+         mlir::Value tryArgPtr = tryWrappedFn.getArgument(0);
+         mlir::Value resultPtr = tryWrappedFn.getArgument(1);
+         // load try argument if present
+         mlir::Value tryArg;
+         if (tryExcept.getTryArg()) {
+            auto tryArgType = typeConverter->convertType(tryExcept.getTryArg().getType());
+            auto castedPtr = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(rewriter.getContext(), tryArgType), tryArgPtr);
+            tryArg = rewriter.create<util::LoadOp>(loc, castedPtr).getVal();
+         }
+         // call try function
+         mlir::SmallVector<mlir::Value> tryFnArgs;
+         if (tryExcept.getTryArg()) {
+            tryFnArgs.push_back(tryArg);
+         }
+         auto tryFnCall = rewriter.create<func::CallOp>(loc, tryFunc, tryFnArgs);
+         // store result
+         auto castedResultPtr = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(rewriter.getContext(), typeConverter->convertType(tryExcept.getType())), resultPtr);
+         rewriter.create<util::StoreOp>(loc, tryFnCall.getResult(0), castedResultPtr, mlir::Value());
+         rewriter.create<func::ReturnOp>(loc);
+      }
+      mlir::Value tryFnPtr = rewriter.create<func::ConstantOp>(loc, tryWrappedFn.getFunctionType(), tryWrappedFn.getSymName());
+      // step 3: create a new function "except_wrapped_fn" that takes a pointer to the except argument, and calls the except function
+      func::FuncOp exceptWrappedFn;
+      {
+         static int cntr = 0;
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(tryExcept->getParentOfType<ModuleOp>().getBody());
+         auto fnType = FunctionType::get(rewriter.getContext(), {util::RefType::get(rewriter.getContext(), rewriter.getI8Type()), util::RefType::get(rewriter.getContext(), rewriter.getI8Type())}, {});
+         exceptWrappedFn = rewriter.create<func::FuncOp>(loc, "except_wrapped_fn_" + std::to_string(cntr++), fnType);
+         rewriter.setInsertionPointToStart(exceptWrappedFn.addEntryBlock());
+         mlir::Value exceptArgPtr = exceptWrappedFn.getArgument(0);
+         mlir::Value resultPtr = exceptWrappedFn.getArgument(1);
+         // load except argument if present
+         mlir::Value exceptArg;
+         if (tryExcept.getExceptArg()) {
+            auto exceptArgType = typeConverter->convertType(tryExcept.getExceptArg().getType());
+            auto castedPtr = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(rewriter.getContext(), exceptArgType), exceptArgPtr);
+            exceptArg = rewriter.create<util::LoadOp>(loc, castedPtr).getVal();
+         }
+         // call except function
+         mlir::SmallVector<mlir::Value> exceptFnArgs;
+         if (tryExcept.getExceptArg()) {
+            exceptFnArgs.push_back(exceptArg);
+         }
+         auto exceptFnCall = rewriter.create<func::CallOp>(loc, exceptFunc, exceptFnArgs);
+         // store result
+         auto castedResultPtr = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(rewriter.getContext(), typeConverter->convertType(tryExcept.getType())), resultPtr);
+         rewriter.create<util::StoreOp>(loc, exceptFnCall.getResult(0), castedResultPtr, mlir::Value());
+         rewriter.create<func::ReturnOp>(loc);
+      }
+      mlir::Value exceptFnPtr = rewriter.create<func::ConstantOp>(loc, exceptWrappedFn.getFunctionType(), exceptWrappedFn.getSymName());
+      // step 4: store arguments into allocas
+      if (tryExcept.getTryArg()) {
+         auto castedTryArgAlloca = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(rewriter.getContext(), typeConverter->convertType(tryExcept.getTryArg().getType())), tryArgAlloca);
+         rewriter.create<util::StoreOp>(loc, adaptor.getTryArg(), castedTryArgAlloca, mlir::Value());
+      }
+      if (tryExcept.getExceptArg()) {
+         auto castedExceptArgAlloca = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(rewriter.getContext(), typeConverter->convertType(tryExcept.getExceptArg().getType())), exceptArgAlloca);
+         rewriter.create<util::StoreOp>(loc, adaptor.getExceptArg(), castedExceptArgAlloca, mlir::Value());
+      }
+      // step 5: create try-except runtime call
+      rt::TryExcept::run(rewriter, loc)({tryFnPtr,
+                                         exceptFnPtr,
+                                         tryArgAlloca,
+                                         exceptArgAlloca,
+                                         resultAlloca});
+      // step 6: load result
+      auto castedResultAlloca = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(rewriter.getContext(), typeConverter->convertType(tryExcept.getType())), resultAlloca);
+      auto resultLoad = rewriter.create<util::LoadOp>(loc, castedResultAlloca);
+      rewriter.replaceOp(tryExcept, resultLoad.getVal());
+      return success();
+   }
+};
 } // end anonymous namespace
 void DBToStdLoweringPass::runOnOperation() {
    auto module = getOperation();
@@ -1441,6 +1570,17 @@ void DBToStdLoweringPass::runOnOperation() {
          payloadType = IntegerType::get(ctxt, 1);
       }
       return (Type) TupleType::get(ctxt, {IntegerType::get(ctxt, 1), payloadType});
+   });
+   typeConverter.addConversion([&](FunctionType funcType) {
+      llvm::SmallVector<Type> convertedInputs;
+      for (auto inputType : funcType.getInputs()) {
+         convertedInputs.push_back(typeConverter.convertType(inputType));
+      }
+      llvm::SmallVector<Type> convertedResults;
+      for (auto resultType : funcType.getResults()) {
+         convertedResults.push_back(typeConverter.convertType(resultType));
+      }
+      return FunctionType::get(ctxt, convertedInputs, convertedResults);
    });
    auto opIsWithoutDBTypes = [&](Operation* op) { return !hasDBType(typeConverter, op->getOperandTypes()) && !hasDBType(typeConverter, op->getResultTypes()); };
    target.addDynamicallyLegalDialect<scf::SCFDialect>(opIsWithoutDBTypes);
@@ -1546,6 +1686,7 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<DictIterGetValueLowering>(typeConverter, ctxt);
    patterns.insert<MemoryCleanupUseLowering>(typeConverter, ctxt);
    patterns.insert<MemoryAddUseLowering>(typeConverter, ctxt);
+   patterns.insert<TryExceptLowering>(typeConverter, ctxt);
 
    if (failed(applyFullConversion(module, target, std::move(patterns))))
       signalPassFailure();
