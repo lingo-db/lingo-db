@@ -95,7 +95,11 @@ class WrapWithNullCheck : public mlir::RewritePattern {
                }else{
                   b.create<mlir::scf::YieldOp>(loc);
                } });
-         rewriter.replaceOpWithNewOp<db::AsNullableOp>(op, op->getResultTypes()[0], ifOp.getResults()[0], isAnyNull);
+         if (op->getNumResults() == 1) {
+            rewriter.replaceOpWithNewOp<db::AsNullableOp>(op, op->getResultTypes()[0], ifOp.getResults()[0], isAnyNull);
+         } else {
+            rewriter.eraseOp(op);
+         }
       }
    }
 };
