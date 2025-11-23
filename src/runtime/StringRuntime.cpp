@@ -534,3 +534,6 @@ void lingodb::runtime::StringRuntime::cleanupUse(VarLen32 str) {
 void lingodb::runtime::StringRuntime::addUse(VarLen32 str) {
    lingodb::runtime::VarLen32::incRefCount(str);
 }
+lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::promoteToGlobal(lingodb::runtime::VarLen32 str) {
+   return lingodb::runtime::VarLen32::promoteToGlobal(str);
+}

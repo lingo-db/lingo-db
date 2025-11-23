@@ -142,6 +142,21 @@ class VarLen32 {
       assert(false);
       return nullptr;
    }
+   static runtime::VarLen32 promoteToGlobal(runtime::VarLen32 varLen32) {
+      if (varLen32.getLen() <= shortLen) return varLen32;
+      if (varLen32.getStorageClass() == StorageClass::GLOBAL) return varLen32;
+      if (varLen32.getStorageClass() == StorageClass::TRANSIENT) {
+         //todo: materialize to global (if needed)
+         return varLen32;
+         //uint8_t* newPtr = getCurrentExecutionContext()->allocString(varLen32.getLen());
+         //memcpy(newPtr, varLen32.getPtr(), varLen32.getLen());
+         //varLen32.storePtr(newPtr, StorageClass::GLOBAL);
+      } else if (varLen32.getStorageClass() == StorageClass::REFCOUNTED) {
+         VarLen32 newVarLen32(varLen32.getPtr(), varLen32.getLen(), StorageClass::GLOBAL);
+         getCurrentExecutionContext()->registerState({varLen32.getPtr() - 4, [](void* ptr) { free(ptr); }});
+         return newVarLen32;
+      }
+   }
    static void decRefCount(runtime::VarLen32 varLen32) {
       if (varLen32.getLen() <= shortLen) return;
       if (varLen32.getStorageClass() != StorageClass::REFCOUNTED) return;

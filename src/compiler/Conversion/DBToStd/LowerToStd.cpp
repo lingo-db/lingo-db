@@ -1377,6 +1377,19 @@ class MemoryAddUseLowering : public OpConversionPattern<db::MemoryAddUse> {
       return failure();
    }
 };
+class MemoryPromoteToGlobalLowering : public OpConversionPattern<db::MemoryPromoteToGlobal> {
+   public:
+   using OpConversionPattern<db::MemoryPromoteToGlobal>::OpConversionPattern;
+   LogicalResult matchAndRewrite(db::MemoryPromoteToGlobal promoteOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = promoteOp.getLoc();
+      auto t = promoteOp.getValue().getType();
+      if (mlir::isa<db::StringType>(t)) {
+         rewriter.replaceOp(promoteOp,rt::StringRuntime::promoteToGlobal(rewriter, loc)({adaptor.getValue()})[0]);
+         return success();
+      }
+      return failure();
+   }
+};
 class TryExceptLowering : public OpConversionPattern<db::TryExcept> {
    public:
    using OpConversionPattern<db::TryExcept>::OpConversionPattern;
@@ -1685,6 +1698,7 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<MemoryCleanupUseLowering>(typeConverter, ctxt);
    patterns.insert<MemoryAddUseLowering>(typeConverter, ctxt);
    patterns.insert<TryExceptLowering>(typeConverter, ctxt);
+   patterns.insert<MemoryPromoteToGlobalLowering>(typeConverter, ctxt);
 
    if (failed(applyFullConversion(module, target, std::move(patterns))))
       signalPassFailure();

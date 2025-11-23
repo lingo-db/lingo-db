@@ -211,10 +211,20 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
             for (auto value : valuesToManage) {
                cleanupUse(block->getTerminator(), value);
             }
-            for (auto value : returnedValues) {
-               if (typeNeedsManagement(value.getType())) {
-                  mlir::OpBuilder builder(block, block->getTerminator()->getIterator());
-                  builder.create<db::MemoryAddUse>(block->getTerminator()->getLoc(), value);
+            if (block == &mapOp.getFn().front()) {
+               for (auto& operand : terminator->getOpOperands()) {
+                  if (typeNeedsManagement(operand.get().getType())) {
+                     mlir::OpBuilder builder(block->getTerminator());
+                     mlir::Value newVal = builder.create<db::MemoryPromoteToGlobal>(block->getTerminator()->getLoc(), operand.get().getType(),operand.get());
+                     operand.set(newVal);
+                  }
+               }
+            } else {
+               for (auto value : returnedValues) {
+                  if (typeNeedsManagement(value.getType())) {
+                     mlir::OpBuilder builder(block, block->getTerminator()->getIterator());
+                     addUse(value, block->getTerminator());
+                  }
                }
             }
          });
