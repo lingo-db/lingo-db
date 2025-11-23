@@ -625,6 +625,10 @@ copy_opt_item:
     {
         $$ = std::pair<std::string, std::string>("FORMAT", "csv");
     }
+    | HEADER_P
+    {
+        $$ = std::pair<std::string, std::string>("HEADER", "true");
+    }
     | ESCAPE STRING_VALUE
     {
         std::string str = $STRING_VALUE;
