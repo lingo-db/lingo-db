@@ -201,15 +201,13 @@ __int128 lingodb::runtime::StringRuntime::toDecimal(lingodb::runtime::VarLen32 s
 #define CAST_NUMERIC_TO_STRING(IN_TYPE, ARROW_TYPE, TYPE_NAME)                                                                                       \
    lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::from##TYPE_NAME(IN_TYPE value) { /* NOLINT (clang-diagnostic-return-type-c-linkage)*/ \
       arrow::internal::StringFormatter<ARROW_TYPE> formatter;                                                                                        \
-      uint8_t* data = nullptr;                                                                                                                       \
-      size_t len = 0;                                                                                                                                \
+      VarLen32 res;                                                                                                                                  \
+                                                                                                                                                     \
       arrow::Status status = formatter(value, [&](std::string_view v) {                                                                              \
-         len = v.length();                                                                                                                           \
-         data = VarLen32::allocateForStorageClass(len, StorageClass::REFCOUNTED);                                                                    \
-         memcpy(data, v.data(), len);                                                                                                                \
+         res = VarLen32::fromString(v, StorageClass::REFCOUNTED);                                                                                    \
          return arrow::Status::OK();                                                                                                                 \
       });                                                                                                                                            \
-      return lingodb::runtime::VarLen32(data, len, StorageClass::REFCOUNTED);                                                                        \
+      return res;                                                                                                                                    \
    }
 
 CAST_NUMERIC_TO_STRING(int64_t, arrow::Int64Type, Int)
