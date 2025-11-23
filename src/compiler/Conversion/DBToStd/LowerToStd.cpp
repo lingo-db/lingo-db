@@ -92,14 +92,12 @@ class SimpleTypeConversionPattern : public ConversionPattern {
    LogicalResult
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
-      op->dump();
       llvm::SmallVector<mlir::Type> convertedTypes;
       if (typeConverter->convertTypes(op->getResultTypes(), convertedTypes).failed()) {
          return failure();
       }
       auto newOp = rewriter.create<Op>(op->getLoc(), convertedTypes, ValueRange(operands), op->getAttrs());
       rewriter.replaceOp(op, newOp->getResults());
-      newOp->dump();
       return success();
    }
 };
