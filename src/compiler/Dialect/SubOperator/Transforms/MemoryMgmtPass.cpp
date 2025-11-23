@@ -188,6 +188,11 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
                            elseBuilder.create<mlir::scf::YieldOp>(selectOp->getLoc(), selectOp.getFalseValue());
                         }
                         selectOp.replaceAllUsesWith(ifOp.getResult(0));
+                        //also replace in returnedValues
+                        if (returnedValues.contains(selectOp.getResult())) {
+                           returnedValues.erase(selectOp.getResult());
+                           returnedValues.insert(ifOp.getResult(0));
+                        }
                         selectOp.erase();
                         op = ifOp; // continue processing the IfOp
                      }
