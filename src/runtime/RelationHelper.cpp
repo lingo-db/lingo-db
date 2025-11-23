@@ -82,7 +82,7 @@ void RelationHelper::appendTableFromResult(lingodb::runtime::VarLen32 tableName,
       appendToTable(session, tableName.str(), resultTable.value()->get());
    }
 }
-void RelationHelper::copyFromIntoTable(lingodb::runtime::VarLen32 tableName, lingodb::runtime::VarLen32 fileName, lingodb::runtime::VarLen32 delimiter, lingodb::runtime::VarLen32 escape) {
+void RelationHelper::copyFromIntoTable(lingodb::runtime::VarLen32 tableName, lingodb::runtime::VarLen32 fileName, lingodb::runtime::VarLen32 delimiter, lingodb::runtime::VarLen32 escape, bool header) {
    auto* context = getCurrentExecutionContext();
    auto& session = context->getSession();
    auto catalog = session.getCatalog();
@@ -92,6 +92,9 @@ void RelationHelper::copyFromIntoTable(lingodb::runtime::VarLen32 tableName, lin
       std::shared_ptr<arrow::io::InputStream> input = inputFile;
 
       auto readOptions = arrow::csv::ReadOptions::Defaults();
+      if (header) {
+         readOptions.skip_rows = 1;
+      }
       auto parseOptions = arrow::csv::ParseOptions::Defaults();
       parseOptions.delimiter = delimiter.str().front();
       if (size_t escapeStringLen = escape.getLen(); escapeStringLen > 0) {

@@ -386,6 +386,7 @@ void SQLMlirTranslator::translateCopyNode(mlir::OpBuilder& builder, std::shared_
    std::string tableName = copyStmt->copyInfo->table;
    std::string delimiter = ",";
    std::string escape = "";
+   bool header = false;
    for (auto [optionName, optionValue] : copyStmt->copyInfo->options) {
       if (optionName == "DELIMITER") {
          delimiter = optionValue;
@@ -398,6 +399,8 @@ void SQLMlirTranslator::translateCopyNode(mlir::OpBuilder& builder, std::shared_
          }
 
       } else if (optionName == "NULL") {
+      } else if (optionName =="HEADER"){
+         header = optionValue == "true";
       } else {
          translatorError(optionName << "option not implemented", copyStmt->loc);
       }
@@ -406,7 +409,8 @@ void SQLMlirTranslator::translateCopyNode(mlir::OpBuilder& builder, std::shared_
    auto fileNameValue = createStringValue(builder, fileName);
    auto delimiterValue = createStringValue(builder, delimiter);
    auto escapeValue = createStringValue(builder, escape);
-   compiler::runtime::RelationHelper::copyFromIntoTable(builder, builder.getUnknownLoc())(mlir::ValueRange{tableNameValue, fileNameValue, delimiterValue, escapeValue});
+   auto headerValue = builder.create<mlir::arith::ConstantIntOp>(builder.getUnknownLoc(), header ? 1 : 0, 1);
+   compiler::runtime::RelationHelper::copyFromIntoTable(builder, builder.getUnknownLoc())(mlir::ValueRange{tableNameValue, fileNameValue, delimiterValue, escapeValue, headerValue});
 }
 
 catalog::CreateTableDef SQLMlirTranslator::translateTableElements(mlir::OpBuilder& builder, std::vector<std::shared_ptr<ast::TableElement>> tableElements, std::shared_ptr<analyzer::SQLContext> context) {

@@ -13,7 +13,7 @@ class RelationHelper {
    static void createTable(runtime::VarLen32 meta);
    static void createFunction(runtime::VarLen32 meta);
    static void appendTableFromResult(runtime::VarLen32 tableName, size_t resultId);
-   static void copyFromIntoTable(runtime::VarLen32 tableName, runtime::VarLen32 fileName, runtime::VarLen32 delimiter, runtime::VarLen32 escape);
+   static void copyFromIntoTable(runtime::VarLen32 tableName, runtime::VarLen32 fileName, runtime::VarLen32 delimiter, runtime::VarLen32 escape, bool header);
    static void setPersist(bool value);
    static HashIndexAccess* accessHashIndex(runtime::VarLen32 description);
 };
