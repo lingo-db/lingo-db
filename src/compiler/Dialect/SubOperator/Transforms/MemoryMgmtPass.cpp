@@ -23,6 +23,9 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(MemoryMgmtPass)
    virtual llvm::StringRef getArgument() const override { return "subop-memory-mgmt"; }
    bool typeNeedsManagement(mlir::Type t) {
+      if (auto nullableType = mlir::dyn_cast<db::NullableType>(t)) {
+         t = nullableType.getType();
+      }
       if (mlir::isa<db::StringType, db::ListType>(t)) {
          return true;
       }

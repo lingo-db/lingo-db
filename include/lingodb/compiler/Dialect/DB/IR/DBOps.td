@@ -526,17 +526,17 @@ def AppendArrowOp : DB_Op<"arrow.append"> {
     let arguments = (ins Arrow_ArrayBuilder:$builder, NullableDBType:$value); //todo: add valid flag, or is nullable type enough?
     let assemblyFormat = "$builder `,` $value `->` type($value) attr-dict";
 }
-def MemoryCleanupUse : DB_Op<"memory.cleanup_use"> {
+def MemoryCleanupUse : DB_Op<"memory.cleanup_use",[DB_NeedsNullWrap]> {
     let summary = "cleanup use (e.g., decrease ref count, if 0 delete) ";
     let arguments = (ins AnyType:$value, OptionalAttr<SymbolRefAttr>:$cleanupFn);
     let assemblyFormat = "$value `:` type($value) ($cleanupFn^)? attr-dict";
 }
-def MemoryAddUse : DB_Op<"memory.add_use"> {
+def MemoryAddUse : DB_Op<"memory.add_use",[DB_NeedsNullWrap]> {
     let summary = "add use (e.g., increase ref count) ";
     let arguments = (ins AnyType:$value);
     let assemblyFormat = "$value `:` type($value) attr-dict";
 }
-def MemoryPromoteToGlobal : DB_Op<"memory.promote_to_global"> {
+def MemoryPromoteToGlobal : DB_Op<"memory.promote_to_global",[DB_NeedsNullWrap]> {
     let summary = "promote value to global memory (i.e., mark as global, register memory in runtime) ";
     let arguments = (ins AnyType:$value);
     let results = (outs AnyType:$res);
