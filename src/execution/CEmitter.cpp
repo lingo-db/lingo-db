@@ -1315,6 +1315,7 @@ LogicalResult CppEmitter::emitOperation(Operation& op, bool trailingSemicolon) {
             ArithmeticPrinter(SelectOp, TERNARY_OP)
             ArithmeticPrinter(RemFOp, FMOD)
             ArithmeticPrinter(RemUIOp, MODULO_U)
+            ArithmeticPrinter(RemSIOp, MODULO)
             ArithmeticPrinter(ShLIOp, SHIFT_LEFT)
             ArithmeticPrinter(ShRSIOp, SHIFT_RIGHT)
             ArithmeticPrinter(ShRUIOp, SHIFT_RIGHT_U)
