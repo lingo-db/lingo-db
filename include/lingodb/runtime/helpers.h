@@ -126,7 +126,7 @@ class VarLen32 {
          return VarLen32();
       }
    }
-   static VarLen32 fromString(std::string str, StorageClass storageClass) {
+   static VarLen32 fromString(std::string_view str, StorageClass storageClass) {
       return fromDataAndLen(str.data(), str.size(), storageClass);
    }
    static uint8_t* allocateForStorageClass(size_t size, StorageClass storageClass) {
