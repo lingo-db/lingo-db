@@ -2771,6 +2771,12 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeFunctionExpressio
       auto stringArg = analyzeExpression(function->arguments[0], context, resolverScope);
       auto fromArg = function->arguments[1] ? analyzeExpression(function->arguments[1], context, resolverScope) : nullptr;
       auto forArg = function->arguments[2] ? analyzeExpression(function->arguments[2], context, resolverScope) : nullptr;
+      if (stringArg->resultType.has_value() && stringArg->resultType->type.getTypeId() == catalog::LogicalTypeId::CHAR) {
+         stringArg->resultType->castType = std::make_shared<NullableType>(catalog::Type::stringType(), stringArg->resultType->isNullable);
+         resultType = NullableType(catalog::Type::stringType(), stringArg->resultType->isNullable);
+      }else{
+         resultType = stringArg->resultType.value();
+      }
 
       if (!stringArg->resultType.has_value() || (stringArg->resultType->type.getTypeId() != catalog::LogicalTypeId::STRING && stringArg->resultType->type.getTypeId() != catalog::LogicalTypeId::CHAR)) {
          error("The first argument of the SUBSTRING function must have a result type of STRING", stringArg->loc);
@@ -2781,8 +2787,6 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeFunctionExpressio
       if (!forArg->resultType.has_value() || forArg->resultType->type.getTypeId() != catalog::LogicalTypeId::INT) {
          error("The second argument of the SUBSTRING function must have a result type of INT", forArg->loc);
       }
-
-      resultType = stringArg->resultType.value();
 
       auto boundArgs = std::vector{stringArg};
       if (fromArg) {

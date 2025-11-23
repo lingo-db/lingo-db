@@ -922,7 +922,7 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
             return builder.create<db::RuntimeCall>(exprLocation, wrapNullableType(mlirContext, builder.getI64Type(), {part, arg2}), "ExtractFromDate", mlir::ValueRange({part, arg2})).getRes();
          }
          if (upperCaseFName == "SUBSTRING" || upperCaseFName == "SUBSTR") {
-            auto str = translateExpression(builder, function->arguments[0], context);
+            auto str = function->arguments[0]->resultType->castValue(builder, translateExpression(builder, function->arguments[0], context));
             auto from = function->arguments[1] ? translateExpression(builder, function->arguments[1], context) : nullptr;
             auto to = function->arguments[2] ? translateExpression(builder, function->arguments[2], context) : nullptr;
             return builder.create<db::RuntimeCall>(exprLocation, str.getType(), "Substring", mlir::ValueRange({str, from, to})).getRes();
