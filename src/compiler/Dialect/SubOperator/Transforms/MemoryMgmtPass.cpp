@@ -120,15 +120,9 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
          builder.create<db::MemoryCleanupUse>(insertBeforeOp->getLoc(), val, mlir::SymbolRefAttr());
       }
    }
-   void runOnOperation() override {
-      // Walk the module and process every subop::MapOp.
-      // Currently we iterate the MapOp's regions and blocks so we can
-      // inspect and later transform per-block nested code (placeholder).
-      auto module = getOperation();
-      module.walk([&](subop::MapOp mapOp) {
-         // Iterate all regions and blocks inside the MapOp.
-         mapOp->walk([&](mlir::Block* block) {
-            llvm::DenseSet<mlir::Value> returnedValues;
+
+   void handleBlock(mlir::Block* block, mlir::Block* mapBlock) {
+       llvm::DenseSet<mlir::Value> returnedValues;
             auto terminator = block->getTerminator();
             for (auto retVal : terminator->getOperands()) {
                returnedValues.insert(retVal);
@@ -166,6 +160,14 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
                   })
                   .Case<db::ListSetOp>([&](db::ListSetOp setOp) {
                      addUse(setOp.getElement(), op);
+                  })
+                  .Case<db::TryExcept>([&](db::TryExcept tryOp) {
+                     if (tryOp.getTryArg()) {
+                        addUse(tryOp.getTryArg(), op);
+                     }
+                      if (tryOp.getExceptArg()) {
+                         addUse(tryOp.getExceptArg(), op);
+                      }
                   })
                   .Case<util::PackOp>([&](util::PackOp packOp) {
                      for (auto value : packOp.getVals()) {
@@ -219,7 +221,7 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
             for (auto value : valuesToManage) {
                cleanupUse(block->getTerminator(), value);
             }
-            if (block == &mapOp.getFn().front()) {
+            if (block == mapBlock) {
                for (auto& operand : terminator->getOpOperands()) {
                   if (typeNeedsManagement(operand.get().getType())) {
                      mlir::OpBuilder builder(block->getTerminator());
@@ -235,6 +237,27 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
                   }
                }
             }
+   }
+   void runOnOperation() override {
+      // Walk the module and process every subop::MapOp.
+      // Currently we iterate the MapOp's regions and blocks so we can
+      // inspect and later transform per-block nested code (placeholder).
+      auto module = getOperation();
+      module.walk([&](subop::MapOp mapOp) {
+         // Iterate all regions and blocks inside the MapOp.
+         mapOp->walk([&](mlir::Block* block) {
+           handleBlock(block, &mapOp.getFn().front());
+         });
+      });
+      module.walk([&](mlir::func::FuncOp funcOp) {
+         if (funcOp.isDeclaration()) {
+            return;
+         }
+         if (funcOp.getName()=="main") {
+            return;
+         }
+         funcOp->walk([&](mlir::Block* block) {
+            handleBlock(block, nullptr);
          });
       });
    }

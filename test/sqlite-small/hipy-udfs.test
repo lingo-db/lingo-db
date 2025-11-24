@@ -126,3 +126,34 @@ query tsv rowsort 6
 select check_iban('DE91100000000123456789'::text) as type1;
 ----
 t
+
+statement ok
+CREATE OR REPLACE FUNCTION extractba(val TEXT)
+RETURNS INT8
+AS $$
+import hipy
+import hipy.lib.math
+import math
+@hipy.compiled_function
+def extractba(val):
+      try:
+        max_idx = val.find(' ba')
+        if max_idx < 0:
+            max_idx = len(val)
+        s = val[:max_idx]
+        split_idx = s.rfind(',')
+        if split_idx < 0:
+            split_idx = 0
+        else:
+            split_idx += 2
+        r = s[split_idx:]
+        ba = math.ceil(2.0 * float(r)) / 2.0
+        return int(ba)
+      except:
+        return -1
+$$ LANGUAGE hipy;
+
+query tsv rowsort 7
+select extractba('1234567.891011 ba but there are more baths somehwere else');
+----
+1234568
