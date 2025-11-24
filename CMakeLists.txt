@@ -78,7 +78,9 @@ include_directories(${PROJECT_SOURCE_DIR}/vendored)
 
 add_subdirectory(${PROJECT_SOURCE_DIR}/vendored/linenoise-ng/ EXCLUDE_FROM_ALL)
 
-
+set(PY_HOME ${CMAKE_SOURCE_DIR}/build/cpython-patched)
+message ("Using Python home: ${PY_HOME}")
+include_directories(${PY_HOME}/include/python3.14)
 include_directories(${PROJECT_BINARY_DIR}/include)
 link_directories(${LLVM_BUILD_LIBRARY_DIR})
 add_definitions(${LLVM_DEFINITIONS})
@@ -95,9 +97,8 @@ elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
 else ()
     message(FATAL_ERROR "Unsupported architecture: ${CMAKE_SYSTEM_PROCESSOR}")
 endif ()
-set(PY_INCLUDE_DIR
-        "/home/michael/Downloads/Python-3.14.0b3/installed/include/python3.14t"
-        CACHE PATH "Location of the Python include directory" FORCE)
+
+
 add_custom_target(build_includes)
 add_custom_target(build_dialect_includes)
 add_dependencies(build_includes build_dialect_includes)

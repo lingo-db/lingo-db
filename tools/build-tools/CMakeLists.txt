@@ -16,8 +16,7 @@ target_link_libraries(runtime-header-tool
 set(CLANG_TOOL_FLAGS "-xc++" "--std=c++20" "-v" "-v" "-v")
 set(CLANG_TOOL_FLAGS "${CLANG_TOOL_FLAGS}" "-I${CMAKE_SOURCE_DIR}/include")
 set(CLANG_TOOL_FLAGS "${CLANG_TOOL_FLAGS}" "-I${ARROW_INCLUDE_DIR}")
-message(STATUS "Using PYTHON_INCLUDE_DIR: ${PY_INCLUDE_DIR}")
-set(CLANG_TOOL_FLAGS "${CLANG_TOOL_FLAGS}" "-I" "${PY_INCLUDE_DIR}")
+set(CLANG_TOOL_FLAGS "${CLANG_TOOL_FLAGS}" "-I" "${PY_HOME}/include/python3.14")
 
 # Get Clang resource directory
 # Check if the compiler is ccache

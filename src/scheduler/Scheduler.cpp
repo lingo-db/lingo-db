@@ -332,6 +332,7 @@ class Scheduler {
             workerThread.join();
          }
       }
+      Py_FinalizeEx();
    }
 
    bool isShutdown() {

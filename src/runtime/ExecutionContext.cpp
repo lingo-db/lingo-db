@@ -30,6 +30,13 @@ lingodb::runtime::ExecutionContext::~ExecutionContext() {
    }
    allocators.clear();
    perWorkerStates.clear();
+
+   for (auto state : pythonThreadStates) {
+      if (state != nullptr) {
+         PyThreadState_Swap((PyThreadState*)state);
+         Py_EndInterpreter(PyThreadState_Get());
+      }
+   }
 }
 
 uint8_t* lingodb::runtime::ExecutionContext::allocStateRaw(size_t size) {
@@ -56,6 +63,7 @@ void lingodb::runtime::ExecutionContext::setupPython() {
    auto workerId = scheduler::currentWorkerId();
    if (pythonThreadStates[workerId] == nullptr) {
       PyGILState_STATE gs = PyGILState_Ensure();
+      auto mainState= PyThreadState_Get();
       PyThreadState *tstate = nullptr;
       PyInterpreterConfig config = {
          .use_main_obmalloc = 0,
@@ -69,6 +77,9 @@ void lingodb::runtime::ExecutionContext::setupPython() {
       if (PyStatus_Exception(status)) {
          Py_ExitStatusException(status);
       }
+      auto x = PyThreadState_Swap(mainState);
+      PyGILState_Release(gs);
+      PyThreadState_Swap(x);
    } else {
       PyThreadState_Swap((PyThreadState*)pythonThreadStates[workerId]);
    }
