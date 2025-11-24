@@ -26,3 +26,6 @@ double lingodb::runtime::FloatRuntime::erf(double x) {
 double lingodb::runtime::FloatRuntime::pow(double x, double y) {
    return ::pow(x, y);
 }
+int64_t lingodb::runtime::FloatRuntime::ceil(double x) {
+   return ::ceil(x);
+}

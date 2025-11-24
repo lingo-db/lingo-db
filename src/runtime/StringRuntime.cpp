@@ -537,3 +537,35 @@ void lingodb::runtime::StringRuntime::addUse(VarLen32 str) {
 lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::promoteToGlobal(lingodb::runtime::VarLen32 str) {
    return lingodb::runtime::VarLen32::promoteToGlobal(str);
 }
+lingodb::runtime::List* lingodb::runtime::StringRuntime::regexSearch(lingodb::runtime::VarLen32 pattern, lingodb::runtime::VarLen32 str) {
+   struct Range {
+      int64_t start;
+      int64_t end;
+   };
+   try {
+      auto* list = lingodb::runtime::List::create(sizeof(Range));
+      std::regex reg(pattern.str());
+      std::smatch match;
+      auto strVal=str.str();
+      if (std::regex_search(strVal, match, reg)) {
+         int64_t start = match.position(0);
+         int64_t end = start + match.length(0);
+         *reinterpret_cast<Range*>(list->append())={start, end};
+         for (size_t i = 1; i < match.size(); ++i) {
+            // If group didn't participate, position() returns string::npos
+            auto pos = match.position(i);
+            if (pos == std::string::npos) {
+               //groups.emplace_back(std::string::npos, std::string::npos);
+            } else {
+               *reinterpret_cast<Range*>(list->append())={pos, pos + match.length(i)};
+            }
+         }
+         return list;
+      } else {
+         return list;
+      }
+   } catch (const std::regex_error&) {
+      throw std::runtime_error("unsupported regex pattern");
+   }
+   return nullptr;
+}

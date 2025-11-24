@@ -108,3 +108,8 @@ void lingodb::runtime::DumpRuntime::dumpChar(bool null, uint64_t val, size_t byt
       std::cout << "(\"" << std::string(chars, bytes) << "\")" << std::endl;
    }
 }
+
+bool lingodb::runtime::DumpRuntime::error(lingodb::runtime::VarLen32 message) {
+   throw std::runtime_error(message.str());
+   return false;
+}

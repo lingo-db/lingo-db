@@ -277,6 +277,8 @@ std::shared_ptr<db::RuntimeFunctionRegistry> db::RuntimeFunctionRegistry::getBui
    builtinRegistry->add("StringFind").implementedAs(StringRuntime::findNext).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike, RuntimeFunction::intLike}, resTypeIsI64);
    builtinRegistry->add("StringLength").implementedAs(StringRuntime::len).matchesTypes({RuntimeFunction::stringLike}, resTypeIsI64);
    builtinRegistry->add("StringSplit").implementedAs(StringRuntime::split).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike, RuntimeFunction::intLike}, [](mlir::Type t, mlir::TypeRange) { return mlir::isa<db::ListType>(t) && mlir::isa<db::StringType>(mlir::cast<db::ListType>(t).getElementType()); });
+   builtinRegistry->add("RegexSearch").implementedAs(StringRuntime::regexSearch).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike}, [](mlir::Type t, mlir::TypeRange) { return mlir::isa<db::ListType>(t); });
+   builtinRegistry->add("RaiseRuntimeError").implementedAs(DumpRuntime::error).matchesTypes({RuntimeFunction::stringLike}, [](mlir::Type t, mlir::TypeRange) {return true;});
    builtinRegistry->add("Ord").implementedAs(StringRuntime::ord).matchesTypes({RuntimeFunction::stringLike}, resTypeIsI64);
 
    builtinRegistry->add("ToUpper").implementedAs(StringRuntime::toUpper).matchesTypes({RuntimeFunction::stringLike}, RuntimeFunction::matchesArgument());
@@ -334,6 +336,8 @@ std::shared_ptr<db::RuntimeFunctionRegistry> db::RuntimeFunctionRegistry::getBui
    builtinRegistry->add("Sqrt").needsWrapping().matchesTypes({RuntimeFunction::anyNumber}, RuntimeFunction::matchesArgument()).implementedAs(sqrtImpl);
    builtinRegistry->add("Sin").matchesTypes({RuntimeFunction::float64}, resTypeIsF64).implementedAs(FloatRuntime::sin);
    builtinRegistry->add("Log").matchesTypes({RuntimeFunction::float64}, resTypeIsF64).implementedAs(FloatRuntime::log);
+   builtinRegistry->add("Ceil").matchesTypes({RuntimeFunction::float64}, resTypeIsI64).implementedAs(FloatRuntime::ceil);
+
    builtinRegistry->add("Exp").matchesTypes({RuntimeFunction::float64}, resTypeIsF64).implementedAs(FloatRuntime::exp);
    builtinRegistry->add("Erf").matchesTypes({RuntimeFunction::float64}, resTypeIsF64).implementedAs(FloatRuntime::erf);
    builtinRegistry->add("Cos").matchesTypes({RuntimeFunction::float64}, resTypeIsF64).implementedAs(FloatRuntime::cos);
