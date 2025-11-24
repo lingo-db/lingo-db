@@ -2774,7 +2774,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeFunctionExpressio
       if (stringArg->resultType.has_value() && stringArg->resultType->type.getTypeId() == catalog::LogicalTypeId::CHAR) {
          stringArg->resultType->castType = std::make_shared<NullableType>(catalog::Type::stringType(), stringArg->resultType->isNullable);
          resultType = NullableType(catalog::Type::stringType(), stringArg->resultType->isNullable);
-      }else{
+      } else {
          resultType = stringArg->resultType.value();
       }
 
@@ -2923,6 +2923,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeFunctionExpressio
          if (function->arguments.size() != entry.value()->getArgumentTypes().size()) {
             error("Function " << function->functionName << " needs " << entry.value()->getArgumentTypes().size() << " arguments but got " << function->arguments.size(), function->loc);
          }
+         bool anyNullableArgs = false;
          for (size_t i = 0; i < function->arguments.size(); i++) {
             auto bound = analyzeExpression(function->arguments.at(i), context, resolverScope);
             auto nullableUDFArgumentType = NullableType(entry.value()->getArgumentTypes()[i]);
@@ -2932,9 +2933,11 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeFunctionExpressio
             }
             auto commonTypes = SQLTypeUtils::toCommonTypes(std::vector{nullableUDFArgumentType, bound->resultType.value()});
             bound->resultType = commonTypes[1];
+            anyNullableArgs |= bound->resultType->isNullable;
             boundArgs.emplace_back(bound);
          }
          resultType = entry.value()->getReturnType();
+         resultType.isNullable |= anyNullableArgs;
          boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, boundArgs);
          boundFunctionExpression->udfFunction = entry.value();
       }
