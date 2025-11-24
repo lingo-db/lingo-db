@@ -182,7 +182,7 @@ class HiPyFunctionImplementer : public lingodb::catalog::MLIRUDFImplementor {
             for (auto v : values) {
                notNullValues.push_back(mlir::isa<db::NullableType>(v.getType()) ? builder.create<db::NullableGetVal>(loc, mlir::cast<db::NullableType>(v.getType()).getType(), v) : v);
             }
-            auto func = mlir::cast<mlir::func::FuncOp>(moduleOp.lookupSymbol(functionName));
+            auto func = mlir::cast<mlir::func::FuncOp>(moduleOp.lookupSymbol(functionName+"_"+functionName));
             auto res = builder.create<mlir::func::CallOp>(loc, func, notNullValues).getResult(0);
             mlir::Value resNullable = builder.create<db::AsNullableOp>(loc, db::NullableType::get(res.getType()), res);
 
@@ -204,7 +204,7 @@ class HiPyFunctionImplementer : public lingodb::catalog::MLIRUDFImplementor {
          ifOp.getElseRegion().push_back(elseBlock);
          return ifOp.getResult(0);
       }
-      auto func = mlir::cast<mlir::func::FuncOp>(moduleOp.lookupSymbol(functionName));
+      auto func = mlir::cast<mlir::func::FuncOp>(moduleOp.lookupSymbol(functionName+"_"+functionName));
 
       return builder.create<mlir::func::CallOp>(loc, func, values).getResult(0);
    }
@@ -268,7 +268,7 @@ std::string compileHiPyUDF(std::string functionName, std::string code, std::vect
 
       // Step 2: Invoke the external script
       std::ostringstream command;
-      command << pythonBinary.getValue() << " vendored/hipy/compile.py " << tempFilePath << " " << functionName << " '" << jsonArgsStr << "' " << outputFilePath << " 2>&1";
+      command << pythonBinary.getValue() << " vendored/hipy/compile.py " << tempFilePath << " " << functionName << " '" << jsonArgsStr << "' "<< functionName <<" "<< outputFilePath << " 2>&1";
       std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(command.str().c_str(), "r"), pclose);
       if (!pipe) {
          throw std::runtime_error("Failed to execute compile.py script.");
