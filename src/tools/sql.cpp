@@ -145,9 +145,14 @@ int main(int argc, char** argv) {
       // Trim trailing whitespace
       std::string trimmed = line;
       trimmed.erase(trimmed.find_last_not_of(" \t\r\n") + 1);
-      count += std::ranges::count(trimmed.begin(), trimmed.end(), '$');
+      // count how often $$ appears in the line
+      size_t pos = 0;
+      while ((pos = trimmed.find("$$", pos)) != std::string::npos) {
+         count++;
+         pos += 2;
+      }
 
-      if (!trimmed.empty() && trimmed.back() == ';' && count % 4 == 0) {
+      if (!trimmed.empty() && trimmed.back() == ';' && count % 2 == 0) {
          // Done reading the full statement
          linenoiseHistoryAdd(query.str().c_str()); // optional: add to history
 
