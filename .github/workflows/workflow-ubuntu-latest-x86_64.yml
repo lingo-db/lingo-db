@@ -30,8 +30,11 @@ jobs:
         with:
           path: /ccache
           key: ccache-${{ matrix.build_type }}-build
-      - name: Create Build dir
-        run: mkdir -p build
+      - name: Cleanup
+        run: | 
+          mkdir -p build
+          mkdir -p /ccache
+          make clean
       - name: Cache CPython build
         id: cache-cypthon-patched
         uses: actions/cache@v3
@@ -44,8 +47,6 @@ jobs:
             bash tools/scripts/build-cpython-patched.sh build/cpython-patched
       - name: Build
         run: |
-          mkdir -p /ccache
-          make clean
           make build-${{ matrix.build_type }}
         env:
           CCACHE_DIR: /ccache
