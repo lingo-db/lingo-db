@@ -60,6 +60,7 @@ class ExecutionContext {
    std::vector<std::unordered_map<size_t, State>> allocators;
 #ifdef USE_CPYTHON_RUNTIME
    std::vector<void*> pythonThreadStates;
+   std::mutex pythonSetupMutex;
 #endif
    std::vector<std::vector<State>> perWorkerStates;
    std::vector<Arena> stringArenas;
