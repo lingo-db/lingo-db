@@ -122,24 +122,30 @@ class SQLFrontend : public lingodb::execution::Frontend {
             auto sqlContext = std::make_shared<lingodb::analyzer::SQLContext>();
             sqlContext->catalog = catalog;
             lingodb::analyzer::SQLQueryAnalyzer analyzer{catalog};
-            drv.result[0] = analyzer.canonicalizeAndAnalyze(drv.result[0], sqlContext);
-
             mlir::OpBuilder builder(&context);
-
             mlir::ModuleOp moduleOp = builder.create<mlir::ModuleOp>(builder.getUnknownLoc());
-            lingodb::translator::SQLMlirTranslator translator{moduleOp, catalog};
-            builder.setInsertionPointToStart(moduleOp.getBody());
             auto* queryBlock = new mlir::Block;
-            std::vector<mlir::Type> returnTypes;
-            {
+            if (drv.result[0]) {
+               drv.result[0] = analyzer.canonicalizeAndAnalyze(drv.result[0], sqlContext);
+
+
+               lingodb::translator::SQLMlirTranslator translator{moduleOp, catalog};
+               std::vector<mlir::Type> returnTypes;
+               {
+                  mlir::OpBuilder::InsertionGuard guard(builder);
+                  builder.setInsertionPointToStart(queryBlock);
+                  auto val = translator.translateStart(builder, drv.result[0], sqlContext);
+                  if (val.has_value()) {
+                     builder.create<lingodb::compiler::dialect::subop::SetResultOp>(builder.getUnknownLoc(), 0, val.value());
+                  }
+                  builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc());
+               }
+            }else {
                mlir::OpBuilder::InsertionGuard guard(builder);
                builder.setInsertionPointToStart(queryBlock);
-               auto val = translator.translateStart(builder, drv.result[0], sqlContext);
-               if (val.has_value()) {
-                  builder.create<lingodb::compiler::dialect::subop::SetResultOp>(builder.getUnknownLoc(), 0, val.value());
-               }
                builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc());
             }
+            builder.setInsertionPointToStart(moduleOp.getBody());
             mlir::func::FuncOp funcOp = builder.create<mlir::func::FuncOp>(builder.getUnknownLoc(), "main", builder.getFunctionType({}, {}));
             funcOp.getBody().push_back(queryBlock);
             module = moduleOp;
