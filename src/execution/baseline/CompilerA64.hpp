@@ -14,7 +14,7 @@ namespace lingodb::execution::baseline {
 // aarch64 target specific compiler
 struct IRCompilerA64
    : tpde::a64::CompilerA64<IRAdaptor, IRCompilerA64, IRCompilerBase, CompilerConfig>,
-     tpde_encodegen::EncodeCompilerA64<IRAdaptor, IRCompilerA64, IRCompilerBase, CompilerConfig> {
+     tpde_encodegen::EncodeCompiler<IRAdaptor, IRCompilerA64, IRCompilerBase, CompilerConfig> {
    using Base = tpde::a64::CompilerA64<IRAdaptor, IRCompilerA64, IRCompilerBase, CompilerConfig>;
    using ScratchReg = typename Base::ScratchReg;
    using ValuePartRef = typename Base::ValuePartRef;
@@ -33,6 +33,16 @@ struct IRCompilerA64
    explicit IRCompilerA64(std::unique_ptr<IRAdaptor>&& adaptor)
       : Base{adaptor.get()},
         adaptor(std::move(adaptor)) { static_assert(tpde::Compiler<IRCompilerA64, tpde::a64::PlatformConfig>); }
+
+   void load_address_of_global(const SymRef global_sym, const AsmReg dst) {
+      // emit lea with relocation
+      reloc_text(
+          global_sym, R_AARCH64_ADR_PREL_PG_HI21, this->text_writer.offset());
+      ASMNC(ADRP, dst, 0, 0);
+      reloc_text(
+          global_sym, R_AARCH64_ADD_ABS_LO12_NC, this->text_writer.offset());
+      ASMNC(ADDxi, dst, dst, 0);
+   }
 
    void create_helper_call(std::span<IRValueRef> args, ValueRef* result, SymRef sym) noexcept {
       tpde::util::SmallVector<CallArg, 8> arg_vec{};
@@ -53,7 +63,7 @@ struct IRCompilerA64
          assert(0 && "Unsupported type for comparison operation");
          return false;
       }
-      Jump jump;
+      Jump::Kind jump;
 
       bool is_signed = false;
       switch (op.getPredicate()) {
@@ -131,7 +141,7 @@ struct IRCompilerA64
 
          if (lhs_pr.is_const() && !rhs_pr.is_const()) {
             std::swap(lhs_pr, rhs_pr);
-            jump = swap_jump(jump);
+            jump = swap_jump(jump).kind;
          }
 
          if (int_width != 32 && int_width != 64) {
@@ -189,7 +199,7 @@ struct IRCompilerA64
          // br follows cmp immediately -> only materialize flags into register if cmp has multiple users
          if (!op->hasOneUse()) {
             (void) result_ref(op.getResult());
-            generate_raw_set(jump, result_ref(op.getResult()).part(0).alloc_reg(), /*zext=*/false);
+            generate_raw_set(jump, result_ref(op.getResult()).part(0).alloc_reg());
          }
          auto* true_block = br.getTrueDest();
          auto* false_block = br.getFalseDest();
@@ -202,7 +212,7 @@ struct IRCompilerA64
          if (auto zext_op = mlir::dyn_cast_or_null<mlir::arith::ExtUIOp>(next); zext_op && zext_op.getResult().getType().getIntOrFloatBitWidth() < 64) {
             // chain: cmp -> zext => immediately generate the zext set into target register
             auto [_, res_ref] = result_ref_single(zext_op.getResult());
-            generate_raw_set(jump, res_ref.alloc_reg(), /*zext=*/true);
+            generate_raw_set(jump, res_ref.alloc_reg());
             this->adaptor->inst_set_fused(zext_op, true);
             return true;
          }
@@ -229,21 +239,55 @@ struct IRCompilerA64
       const auto cond_reg = cond_ref.load_to_reg();
       ASM(TSTwi, cond_reg, 1);
 
-      return generate_conditional_branch(Jump::jne, true_block, false_block);
+      return generate_conditional_branch(Jump::Jne, true_block, false_block);
+   }
+
+   bool generate_conditional_branch(const Jump jmp, const IRBlockRef true_block, const IRBlockRef false_block) noexcept {
+      auto* const next_block = this->analyzer.block_ref(this->next_block());
+
+      const auto true_needs_split = this->branch_needs_split(true_block);
+      const auto false_needs_split = this->branch_needs_split(false_block);
+
+      const auto spilled = this->spill_before_branch();
+      this->begin_branch_region();
+
+      if (next_block == true_block || (next_block != false_block && true_needs_split)) {
+         generate_branch_to_block(invert_jump(jmp), false_block, false_needs_split, false);
+         generate_branch_to_block(Jump::jmp, true_block, false, true);
+      } else if (next_block == false_block) {
+         generate_branch_to_block(jmp, true_block, true_needs_split, false);
+         generate_branch_to_block(Jump::jmp, false_block, false, true);
+      } else {
+         assert(!true_needs_split);
+         this->generate_branch_to_block(jmp, true_block, false, false);
+         this->generate_branch_to_block(Jump::jmp, false_block, false, true);
+      }
+      this->end_branch_region();
+      this->release_spilled_regs(spilled);
+      return true;
+   }
+
+   void load_address_of_got_sym(const SymRef sym, const AsmReg dst) noexcept {
+      assert(sym.valid());
+      // mov the ptr from the GOT
+      reloc_text(
+          sym, R_AARCH64_ADR_GOT_PAGE, this->text_writer.offset());
+      ASMNC(ADRP, dst, 0, 0);
+      reloc_text(
+          sym, R_AARCH64_LD64_GOT_LO12_NC, this->text_writer.offset());
+      ASMNC(LDRxu, dst, dst, 0);
    }
    CallBuilder create_call_builder() {
       cc_assigners = tpde::a64::CCAssignerAAPCS();
       return CallBuilder{*this, std::get<tpde::a64::CCAssignerAAPCS>(cc_assigners)};
    }
 
-   void load_address_of_got_sym(const SymRef sym, const AsmReg dst) noexcept {
-      assert(sym.valid());
-      ASM(ADRP, dst, /*imm placeholder*/ 0);
-      reloc_text(sym, R_AARCH64_ADR_GOT_PAGE, text_writer.offset() - 4, 0);
-
-      ASM(LDR, dst, dst, /*imm placeholder*/ 0);
-      reloc_text(sym, R_AARCH64_LD64_GOT_LO12_NC, text_writer.offset() - 4, 0);
+   void reset() noexcept {
+      Base::reset();
+      EncodeCompiler::reset();
    }
+
+   Error& getError() { return Base::getError(); }
 };
 
 
