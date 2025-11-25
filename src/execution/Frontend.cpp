@@ -123,9 +123,10 @@ class SQLFrontend : public lingodb::execution::Frontend {
             auto sqlContext = std::make_shared<lingodb::analyzer::SQLContext>();
             sqlContext->catalog = catalog;
             lingodb::analyzer::SQLQueryAnalyzer analyzer{catalog};
-            drv.result[0] = analyzer.canonicalizeAndAnalyze(drv.result[0], sqlContext);
-
             mlir::OpBuilder builder(context);
+            if (drv.result[0]) {
+               drv.result[0] = analyzer.canonicalizeAndAnalyze(drv.result[0], sqlContext);
+            }
 
             mlir::ModuleOp moduleOp = builder.create<mlir::ModuleOp>(builder.getUnknownLoc());
             lingodb::translator::SQLMlirTranslator translator{moduleOp, catalog};
@@ -135,9 +136,11 @@ class SQLFrontend : public lingodb::execution::Frontend {
             {
                mlir::OpBuilder::InsertionGuard guard(builder);
                builder.setInsertionPointToStart(queryBlock);
-               auto val = translator.translateStart(builder, drv.result[0], sqlContext);
-               if (val.has_value()) {
-                  builder.create<lingodb::compiler::dialect::subop::SetResultOp>(builder.getUnknownLoc(), 0, val.value());
+               if (drv.result[0]) {
+                  auto val = translator.translateStart(builder, drv.result[0], sqlContext);
+                  if (val.has_value()) {
+                     builder.create<lingodb::compiler::dialect::subop::SetResultOp>(builder.getUnknownLoc(), 0, val.value());
+                  }
                }
                builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc());
             }
