@@ -1,5 +1,7 @@
 #include "lingodb/runtime/ExecutionContext.h"
+#ifdef USE_CPYTHON_RUNTIME
 #include "Python.h"
+#endif
 #include <cassert>
 
 void lingodb::runtime::ExecutionContext::setResult(uint32_t id, uint8_t* ptr) {
