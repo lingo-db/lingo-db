@@ -10,6 +10,7 @@
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamDialect.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
+#include "lingodb/compiler/Dialect/PyInterp/PyInterpOps.h"
 #include "lingodb/compiler/Dialect/util/UtilOps.h"
 
 //----------------------------------------------------------------------------------------------------------------------
@@ -453,4 +454,13 @@ MlirTypeID mlirSubOpEntryListTypeGetTypeID() {
 }
 bool mlirTypeIsASubOpEntryListType(MlirType type) {
    return llvm::isa<subop::ListType>(unwrap(type));
+}
+MlirType mlirPyInterpPyObjectTypeGet(MlirContext context){
+   return wrap(py_interp::PyObjectType::get(unwrap(context)));
+}
+MlirTypeID mlirPyInterpPyObjectTypeGetTypeID(){
+   return wrap(py_interp::PyObjectType::getTypeID());
+}
+bool mlirTypeIsAPyInterpPyObjectType(MlirType type) {
+   return llvm::isa<py_interp::PyObjectType>(unwrap(type));
 }
