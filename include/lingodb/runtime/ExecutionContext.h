@@ -58,7 +58,9 @@ class ExecutionContext {
    std::unordered_map<uint32_t, uint8_t*> results;
    std::unordered_map<uint32_t, int64_t> tupleCounts;
    std::vector<std::unordered_map<size_t, State>> allocators;
+#ifdef USE_CPYTHON_RUNTIME
    std::vector<void*> pythonThreadStates;
+#endif
    std::vector<std::vector<State>> perWorkerStates;
    std::vector<Arena> stringArenas;
    Session& session;
@@ -67,7 +69,9 @@ class ExecutionContext {
    ExecutionContext(Session& session) : session(session) {
       allocators.resize(lingodb::scheduler::getNumWorkers());
       stringArenas.resize(lingodb::scheduler::getNumWorkers());
+#ifdef USE_CPYTHON_RUNTIME
       pythonThreadStates.resize(lingodb::scheduler::getNumWorkers(), nullptr);
+#endif
       perWorkerStates.resize(lingodb::scheduler::getNumWorkers());
    }
    Session& getSession() {
@@ -105,8 +109,10 @@ class ExecutionContext {
    State& getAllocator(size_t group) {
       return allocators[lingodb::scheduler::currentWorkerId()][group];
    }
+#ifdef USE_CPYTHON_RUNTIME
    void setupPython();
    void teardownPython();
+#endif
 
    ~ExecutionContext();
 };

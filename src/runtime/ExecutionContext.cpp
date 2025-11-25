@@ -30,13 +30,14 @@ lingodb::runtime::ExecutionContext::~ExecutionContext() {
    }
    allocators.clear();
    perWorkerStates.clear();
-
+#ifdef USE_CPYTHON_RUNTIME
    for (auto state : pythonThreadStates) {
       if (state != nullptr) {
          PyThreadState_Swap((PyThreadState*)state);
          Py_EndInterpreter(PyThreadState_Get());
       }
    }
+#endif
 }
 
 uint8_t* lingodb::runtime::ExecutionContext::allocStateRaw(size_t size) {
@@ -58,7 +59,7 @@ lingodb::runtime::ExecutionContext* lingodb::runtime::getCurrentExecutionContext
    assert(currentExecutionContext);
    return currentExecutionContext;
 }
-
+#ifdef USE_CPYTHON_RUNTIME
 void lingodb::runtime::ExecutionContext::setupPython() {
    auto workerId = scheduler::currentWorkerId();
    if (pythonThreadStates[workerId] == nullptr) {
@@ -89,3 +90,4 @@ void lingodb::runtime::ExecutionContext::teardownPython() {
    auto state = PyThreadState_Swap(nullptr);
    pythonThreadStates[workerId] = state;
 }
+#endif

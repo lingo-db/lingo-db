@@ -34,12 +34,14 @@ jobs:
         run: |
           mkdir -p /ccache
           make clean
+          bash tools/scripts/build-cpython-patched.sh
           make build-${{ matrix.build_type }}
         env:
           CCACHE_DIR: /ccache
           CC: ccache gcc-14
           CXX: ccache g++-14
           ENABLE_BASELINE_BACKEND: "ON"
+          ENABLE_PYTHON: "CPYTHON"
       - uses: actions/upload-artifact@master
         with:
           name: ${{ matrix.build_type }}-build

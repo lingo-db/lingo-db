@@ -78,8 +78,25 @@ include_directories(${PROJECT_SOURCE_DIR}/vendored)
 
 add_subdirectory(${PROJECT_SOURCE_DIR}/vendored/linenoise-ng/ EXCLUDE_FROM_ALL)
 
-set(PY_HOME ${CMAKE_SOURCE_DIR}/build/cpython-patched)
-message ("Using Python home: ${PY_HOME}")
+# Add ENABLE_PYTHON option: OFF, WASM, CPYTHON
+if(NOT DEFINED ENABLE_PYTHON)
+    set(ENABLE_PYTHON "OFF" CACHE STRING "Enable Python support: OFF, WASM, CPYTHON")
+else()
+    set(ENABLE_PYTHON "${ENABLE_PYTHON}" CACHE STRING "Enable Python support: OFF, WASM, CPYTHON" FORCE)
+endif()
+set_property(CACHE ENABLE_PYTHON PROPERTY STRINGS "OFF;WASM;CPYTHON")
+message(STATUS "ENABLE_PYTHON=${ENABLE_PYTHON}")
+
+# If CPYTHON selected, try to find Python development libraries and expose a compile definition
+if(ENABLE_PYTHON STREQUAL "CPYTHON")
+    message(STATUS "Configuring embedded CPython support")
+    set(PY_HOME ${CMAKE_SOURCE_DIR}/build/cpython-patched)
+    message ("Using Python home: ${PY_HOME}")
+    add_compile_definitions(USE_CPYTHON_RUNTIME=1)
+else()
+    message(STATUS "CPython runtime not enabled (ENABLE_PYTHON=${ENABLE_PYTHON})")
+endif()
+
 include_directories(${PY_HOME}/include/python3.14)
 include_directories(${PROJECT_BINARY_DIR}/include)
 link_directories(${LLVM_BUILD_LIBRARY_DIR})
@@ -204,3 +221,5 @@ add_subdirectory(tools)
 if (ENABLE_TESTS)
     add_subdirectory(test)
 endif ()
+
+

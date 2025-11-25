@@ -1,7 +1,16 @@
 #ifndef LINGODB_RUNTIME_PYTHON_H
 #define LINGODB_RUNTIME_PYTHON_H
+
+#ifdef USE_CPYTHON_RUNTIME
 #include "Python.h"
+#else
+// If CPython support is not enabled, forward-declare PyObject so headers compile.
+struct _object;
+typedef _object PyObject;
+#endif
+
 #include "helpers.h"
+#include <cstdint>
 
 namespace lingodb::runtime {
 class PythonRuntime {

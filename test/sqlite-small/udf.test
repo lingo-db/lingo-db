@@ -137,3 +137,18 @@ select addDoubles(i,1.577) from ints
 3.577
 4.577
 5.577
+
+statement ok
+CREATE OR REPLACE FUNCTION calculateFac(b float8)
+RETURNS float8
+AS $$
+def calculatefac(b):
+    for i in range(1, int(b)):
+        b = b * i
+    return b
+$$ LANGUAGE python;
+
+query 9
+select calculatefac(10.0::float8);
+----
+3628800

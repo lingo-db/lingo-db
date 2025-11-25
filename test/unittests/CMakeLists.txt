@@ -16,6 +16,10 @@ add_executable(tester
 )
 target_link_libraries(tester PRIVATE Catch2::Catch2WithMain ${LIBS} utility catalog MLIRSQLFrontend runtime runner)
 set_target_properties(tester PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
-
+if(ENABLE_PYTHON STREQUAL "CPYTHON")
+    target_link_libraries(tester PRIVATE python3.14)
+    target_link_directories(tester PRIVATE ${PY_HOME}/lib)
+    target_compile_definitions(tester PRIVATE USE_CPYTHON_RUNTIME=1)
+endif()
 enable_testing()
 add_test(NAME UnitTests COMMAND tester)

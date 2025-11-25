@@ -1,8 +1,10 @@
 #include "lingodb/runtime/PythonRuntime.h"
 
 #include <iostream>
+#include <stdexcept>
+namespace lingodb::runtime{
+#ifdef USE_CPYTHON_RUNTIME
 
-namespace lingodb::runtime {
 PyObject* PythonRuntime::import(runtime::VarLen32 val) {
    auto valStr = val.str();
    return PyImport_ImportModule(valStr.c_str());
@@ -162,5 +164,41 @@ void PythonRuntime::incref(PyObject* obj){
    Py_INCREF(obj);
 }
 
+
+#else // USE_CPYTHON_RUNTIME
+
+PyObject* PythonRuntime::createModule(runtime::VarLen32 /*modname*/, runtime::VarLen32 /*source*/) {
+    throw std::runtime_error("CPython runtime is not enabled");
+}
+PyObject* PythonRuntime::getAttr(PyObject* /*obj*/, runtime::VarLen32 /*attr*/) {
+    throw std::runtime_error("CPython runtime is not enabled");
+}
+void PythonRuntime::setAttr(PyObject* /*obj*/, runtime::VarLen32 /*attr*/, PyObject* /*value*/) {
+    throw std::runtime_error("CPython runtime is not enabled");
+}
+PyObject* PythonRuntime::call0(PyObject* /*callable*/) { throw std::runtime_error("CPython runtime is not enabled"); }
+PyObject* PythonRuntime::call1(PyObject* /*callable*/, PyObject* /*arg1*/) { throw std::runtime_error("CPython runtime is not enabled"); }
+PyObject* PythonRuntime::call2(PyObject* /*callable*/, PyObject* /*arg1*/, PyObject* /*arg2*/) { throw std::runtime_error("CPython runtime is not enabled"); }
+PyObject* PythonRuntime::call3(PyObject* /*callable*/, PyObject* /*arg1*/, PyObject* /*arg2*/, PyObject* /*arg3*/) { throw std::runtime_error("CPython runtime is not enabled"); }
+PyObject* PythonRuntime::call4(PyObject* /*callable*/, PyObject* /*arg1*/, PyObject* /*arg2*/, PyObject* /*arg3*/, PyObject* /*arg4*/) { throw std::runtime_error("CPython runtime is not enabled"); }
+PyObject* PythonRuntime::call5(PyObject* /*callable*/, PyObject* /*arg1*/, PyObject* /*arg2*/, PyObject* /*arg3*/, PyObject* /*arg4*/, PyObject* /*arg5*/) { throw std::runtime_error("CPython runtime is not enabled"); }
+PyObject* PythonRuntime::call6(PyObject* /*callable*/, PyObject* /*arg1*/, PyObject* /*arg2*/, PyObject* /*arg3*/, PyObject* /*arg4*/, PyObject* /*arg5*/, PyObject* /*arg6*/) { throw std::runtime_error("CPython runtime is not enabled"); }
+PyObject* PythonRuntime::call7(PyObject* /*callable*/, PyObject* /*arg1*/, PyObject* /*arg2*/, PyObject* /*arg3*/, PyObject* /*arg4*/, PyObject* /*arg5*/, PyObject* /*arg6*/, PyObject* /*arg7*/) { throw std::runtime_error("CPython runtime is not enabled"); }
+PyObject* PythonRuntime::call8(PyObject* /*callable*/, PyObject* /*arg1*/, PyObject* /*arg2*/, PyObject* /*arg3*/, PyObject* /*arg4*/, PyObject* /*arg5*/, PyObject* /*arg6*/, PyObject* /*arg7*/, PyObject* /*arg8*/) { throw std::runtime_error("CPython runtime is not enabled"); }
+PyObject* PythonRuntime::call9(PyObject* /*callable*/, PyObject* /*arg1*/, PyObject* /*arg2*/, PyObject* /*arg3*/, PyObject* /*arg4*/, PyObject* /*arg5*/, PyObject* /*arg6*/, PyObject* /*arg7*/, PyObject* /*arg8*/, PyObject* /*arg9*/) { throw std::runtime_error("CPython runtime is not enabled"); }
+PyObject* PythonRuntime::call10(PyObject* /*callable*/, PyObject* /*arg1*/, PyObject* /*arg2*/, PyObject* /*arg3*/, PyObject* /*arg4*/, PyObject* /*arg5*/, PyObject* /*arg6*/, PyObject* /*arg7*/, PyObject* /*arg8*/, PyObject* /*arg9*/, PyObject* /*arg10*/) { throw std::runtime_error("CPython runtime is not enabled"); }
+int64_t PythonRuntime::toInt64(PyObject* /*obj*/) { throw std::runtime_error("CPython runtime is not enabled"); }
+PyObject* PythonRuntime::fromInt64(int64_t /*value*/) { throw std::runtime_error("CPython runtime is not enabled"); }
+bool PythonRuntime::toBool(PyObject* /*obj*/) { throw std::runtime_error("CPython runtime is not enabled"); }
+PyObject* PythonRuntime::fromBool(bool /*value*/) { throw std::runtime_error("CPython runtime is not enabled"); }
+runtime::VarLen32 PythonRuntime::toVarLen32(PyObject* /*obj*/) { throw std::runtime_error("CPython runtime is not enabled"); }
+PyObject* PythonRuntime::fromVarLen32(runtime::VarLen32 /*value*/) { throw std::runtime_error("CPython runtime is not enabled"); }
+double PythonRuntime::toDouble(PyObject* /*obj*/) { throw std::runtime_error("CPython runtime is not enabled"); }
+PyObject* PythonRuntime::fromDouble(double /*value*/) { throw std::runtime_error("CPython runtime is not enabled");}
+void PythonRuntime::decref(PyObject* /*obj*/) { throw std::runtime_error("CPython runtime is not enabled"); }
+void PythonRuntime::incref(PyObject* /*obj*/) { throw std::runtime_error("CPython runtime is not enabled"); }
+PyObject* PythonRuntime::import(runtime::VarLen32 /*val*/) { throw std::runtime_error("CPython runtime is not enabled"); }
+
+#endif // USE_CPYTHON_RUNTIME
 
 }

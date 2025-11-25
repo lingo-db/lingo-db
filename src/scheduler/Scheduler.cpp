@@ -7,7 +7,10 @@
 #include <iostream>
 #include <memory>
 #include <thread>
+
+#ifdef USE_CPYTHON_RUNTIME
 #include <Python.h>
+#endif
 
 
 #include "lingodb/scheduler/Scheduler.h"
@@ -332,7 +335,9 @@ class Scheduler {
             workerThread.join();
          }
       }
+#ifdef USE_CPYTHON_RUNTIME
       Py_FinalizeEx();
+#endif
    }
 
    bool isShutdown() {
@@ -758,8 +763,10 @@ std::unique_ptr<SchedulerHandle> startScheduler(size_t numWorkers) {
             }
          }
       }
+#ifdef USE_CPYTHON_RUNTIME
       Py_Initialize();
       auto _save = PyEval_SaveThread();
+#endif
       scheduler = new Scheduler(numWorkers);
       scheduler->start();
    }
