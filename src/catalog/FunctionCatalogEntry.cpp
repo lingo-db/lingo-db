@@ -42,6 +42,14 @@ std::shared_ptr<FunctionCatalogEntry> HiPyFunctionCatalogEntry::deserialize(ling
    auto byteCode = deserializer.readProperty<std::string>(6);
    return std::make_shared<HiPyFunctionCatalogEntry>(name, code, returnType, argumentTypes, byteCode);
 }
+std::shared_ptr<FunctionCatalogEntry> PythonFunctionCatalogEntry::deserialize(lingodb::utility::Deserializer& deserializer){
+   auto name = deserializer.readProperty<std::string>(2);
+   auto code = deserializer.readProperty<std::string>(3);
+   auto returnType = deserializer.readProperty<Type>(4);
+   auto argumentTypes = deserializer.readProperty<std::vector<Type>>(5);
+   return std::make_shared<CFunctionCatalogEntry>(name, code, returnType, argumentTypes);
+}
+
 
 void HiPyFunctionCatalogEntry::serializeEntry(lingodb::utility::Serializer& serializer) const {
    serializer.writeProperty(1, entryType);

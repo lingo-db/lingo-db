@@ -4,6 +4,7 @@ target_link_libraries(mlirTypes
         ${conversion_libs}
         ${translation_libs}
 )
+add_dependencies(mlirTypes py-rt-defs)
 
 add_library(catalog Catalog.cpp Types.cpp Defs.cpp TableCatalogEntry.cpp IndexCatalogEntry.cpp MetaData.cpp Column.cpp FunctionCatalogEntry.cpp)
 target_link_libraries(catalog PUBLIC mlirTypes)

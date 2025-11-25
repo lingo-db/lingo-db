@@ -51,6 +51,9 @@ void RelationHelper::createFunction(runtime::VarLen32 meta) {
       std::string byteCode = lingodb::compiler::frontend::compileHiPyUDF(def.name, def.code, def.argumentTypes, def.returnType);
       auto func = std::make_shared<lingodb::catalog::HiPyFunctionCatalogEntry>(def.name, def.code, def.returnType, def.argumentTypes, byteCode);
       catalog->insertEntry(func, true);
+   } else if (def.language == "python"){
+      auto func = std::make_shared<lingodb::catalog::PythonFunctionCatalogEntry>(def.name, def.code, def.returnType, def.argumentTypes);
+      catalog->insertEntry(func, true);
    } else {
       throw std::runtime_error("unsupported function language: " + def.language);
    }

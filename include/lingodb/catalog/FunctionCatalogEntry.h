@@ -15,7 +15,7 @@ class FunctionCatalogEntry : public CatalogEntry {
    std::vector<Type> argumentTypes;
 
    public:
-   static constexpr std::array<CatalogEntryType, 2> entryTypes = {CatalogEntryType::C_FUNCTION_ENTRY, CatalogEntryType::HIPY_FUNCTION_ENTRY};
+   static constexpr std::array<CatalogEntryType, 3> entryTypes = {CatalogEntryType::C_FUNCTION_ENTRY, CatalogEntryType::HIPY_FUNCTION_ENTRY, CatalogEntryType::PYTHON_FUNCTION_ENTRY};
    struct UDFHandle {
       void* handle;
       void* addrPtr;
@@ -52,6 +52,14 @@ class HiPyFunctionCatalogEntry : public FunctionCatalogEntry {
    void serializeEntry(lingodb::utility::Serializer& serializer) const override;
    static std::shared_ptr<FunctionCatalogEntry> deserialize(lingodb::utility::Deserializer& deserializer);
 };
+class PythonFunctionCatalogEntry : public FunctionCatalogEntry {
+
+   public:
+   PythonFunctionCatalogEntry(std::string name, std::string code, Type returnType, std::vector<Type> argumentTypes)
+      : FunctionCatalogEntry(CatalogEntry::CatalogEntryType::PYTHON_FUNCTION_ENTRY, name, code, returnType, argumentTypes) {}
+   static std::shared_ptr<FunctionCatalogEntry> deserialize(lingodb::utility::Deserializer& deserializer);
+};
+
 
 void visitUDFFunctions(const std::function<void(std::string, void*)>& fn);
 } // namespace lingodb::catalog

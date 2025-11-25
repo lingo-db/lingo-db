@@ -258,7 +258,7 @@ void SQLMlirTranslator::translateCreateFunction(mlir::OpBuilder& builder, std::s
       auto descriptionValue = createStringValue(builder, utility::serializeToHexString(createFunctionDef));
       compiler::runtime::RelationHelper::createFunction(builder, builder.getUnknownLoc())(mlir::ValueRange({descriptionValue}));
 
-   } else if (language == "hipy") {
+   } else if (language == "hipy" || language =="python") {
       std::vector<catalog::Type> standaloneArgumentTypes;
       standaloneArgumentTypes.reserve(boundCreateFunctionInfo->argumentTypes.size());
       for (size_t i = 0; i < boundCreateFunctionInfo->argumentTypes.size(); i++) {

@@ -4,9 +4,11 @@
 #include "lingodb/catalog/MLIRTypes.h"
 #include "lingodb/catalog/TableCatalogEntry.h"
 #include "lingodb/compiler/Dialect/DB/IR/DBOps.h"
+#include "lingodb/compiler/Dialect/util/UtilOps.h"
 #include "lingodb/execution/Execution.h"
 #include "lingodb/utility/Serialization.h"
 #include "lingodb/utility/Setting.h"
+#include "lingodb/compiler/runtime/PythonRuntime.h"
 
 #include <lingodb/execution/Backend.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
@@ -21,13 +23,44 @@
 #include <dlfcn.h>
 
 #include "json.h"
+#include "pytypedefs.h"
 
+#include <lingodb/compiler/Dialect/util/UtilOps.h.inc>
+#include <lingodb/compiler/Dialect/util/UtilOps.h.inc>
 #include <mlir/Bytecode/BytecodeReader.h>
 #include <mlir/Bytecode/BytecodeWriter.h>
 namespace {
 lingodb::utility::GlobalSetting<std::string> pythonBinary("system.hipy.python_binary", ".venv/bin/python3");
 lingodb::utility::GlobalSetting<std::string> cUDFCompilerDriver("system.compilation.c_udf_compiler_driver", "cc");
 
+
+class PythonUDFImplementer : public lingodb::catalog::MLIRUDFImplementor {
+   std::string functionName;
+   std::string code;
+   std::vector<lingodb::catalog::Type> argumentTypes;
+   lingodb::catalog::Type returnType;
+
+   public:
+   PythonUDFImplementer(std::string functionName, std::string code, std::vector<lingodb::catalog::Type> argumentTypes, lingodb::catalog::Type returnType) : functionName(std::move(functionName)), code(std::move(code)), argumentTypes(std::move(argumentTypes)), returnType(std::move(returnType)) {}
+
+   mlir::Value callFunction(mlir::ModuleOp& moduleOp, mlir::OpBuilder& builder, mlir::Location loc, mlir::ValueRange args, lingodb::catalog::Catalog* catalog) override {
+      using namespace lingodb::compiler::dialect;
+      namespace rt = lingodb::compiler::runtime;
+      mlir::Value moduleNameVal = builder.create<util::CreateConstVarLen>(loc, util::VarLen32Type::get(builder.getContext()),builder.getStringAttr("udf_"+functionName));
+      mlir::Value codeVal = builder.create<util::CreateConstVarLen>(loc, util::VarLen32Type::get(builder.getContext()),builder.getStringAttr(code));
+      mlir::Value moduleVal = rt::PythonRuntime::createModule(builder, loc)({moduleNameVal, codeVal})[0];
+      mlir::Value functionVal =  rt::PythonRuntime::getAttr(builder, loc)({moduleVal, builder.create<util::CreateConstVarLen>(loc, util::VarLen32Type::get(builder.getContext()), builder.getStringAttr(functionName))})[0];
+      mlir::Value pythonArg = rt::PythonRuntime::fromDouble(builder, loc)({args[0]})[0];
+      mlir::Value res = rt::PythonRuntime::call1(builder, loc)({functionVal, pythonArg})[0];
+      mlir::Value nativeRes = rt::PythonRuntime::toDouble(builder, loc)({res})[0];
+      rt::PythonRuntime::decref(builder, loc)({moduleVal});
+      rt::PythonRuntime::decref(builder, loc)({functionVal});
+      rt::PythonRuntime::decref(builder, loc)({res});
+      rt::PythonRuntime::decref(builder, loc)({pythonArg});
+
+      return nativeRes;
+   }
+};
 class CUDFImplementer : public lingodb::catalog::MLIRUDFImplementor {
    std::string functionName;
    std::string code;
@@ -317,6 +350,10 @@ std::shared_ptr<catalog::MLIRUDFImplementor> getUDFImplementer(std::shared_ptr<c
       }
       case catalog::CatalogEntry::CatalogEntryType::HIPY_FUNCTION_ENTRY: {
          return std::make_shared<HiPyFunctionImplementer>(entry->getName(), std::dynamic_pointer_cast<catalog::HiPyFunctionCatalogEntry>(entry)->getByteCode(), entry->getArgumentTypes(), entry->getReturnType());
+      }
+      case catalog::CatalogEntry::CatalogEntryType::PYTHON_FUNCTION_ENTRY: {
+         return std::make_shared<PythonUDFImplementer>(entry->getName(), entry->getCode(), entry->getArgumentTypes(), entry->getReturnType());
+
       }
       default: throw std::runtime_error("getUDFImplementer: unknown catalog entry type");
    }
