@@ -70,7 +70,7 @@ uint8_t util_load_i8(uint8_t* ptr) { return *ptr; }
 uint16_t util_load_i16(uint16_t* ptr) { return *ptr; }
 uint32_t util_load_i32(uint32_t* ptr) { return *ptr; }
 uint64_t util_load_i64(uint64_t* ptr) { return *ptr; }
-__uint128_t load_i128(__uint128_t  * ptr) { return *ptr; }
+__uint128_t load_i128(__uint128_t* ptr) { return *ptr; }
 
 float util_load_f32(float* ptr) { return *ptr; }
 double util_load_f64(double* ptr) { return *ptr; }
@@ -95,14 +95,14 @@ float arith_select_f32(uint8_t cond, float val1, float val2) { return ((cond & 1
 double arith_select_f64(uint8_t cond, double val1, double val2) { return ((cond & 1) ? val1 : val2); }
 __uint128_t arith_select_i128(uint8_t cond, __uint128_t val1, __uint128_t val2) { return ((cond & 1) ? val1 : val2); }
 
-__int128_t  arith_sext_i8_i128(int8_t in) { return (__int128_t  )in; }
-__uint128_t arith_zext_i8_i128(uint8_t in) { return (__uint128_t  )in; }
-__int128_t arith_sext_i16_i128(int16_t in) { return (__int128_t  )in; }
-__uint128_t arith_zext_i16_i128(uint16_t in) { return (__uint128_t  )in; }
-__int128_t arith_sext_i32_i128(int32_t in) { return (__int128_t  )in; }
-__uint128_t arith_zext_i32_i128(uint32_t in) { return (__uint128_t  )in; }
-__int128_t arith_sext_i64_i128(int64_t in) { return (__int128_t  )in; }
-__uint128_t arith_zext_i64_i128(uint64_t in) { return (__uint128_t  )in; }
+__int128_t arith_sext_i8_i128(int8_t in) { return (__int128_t)in; }
+__uint128_t arith_zext_i8_i128(uint8_t in) { return (__uint128_t)in; }
+__int128_t arith_sext_i16_i128(int16_t in) { return (__int128_t)in; }
+__uint128_t arith_zext_i16_i128(uint16_t in) { return (__uint128_t)in; }
+__int128_t arith_sext_i32_i128(int32_t in) { return (__int128_t)in; }
+__uint128_t arith_zext_i32_i128(uint32_t in) { return (__uint128_t)in; }
+__int128_t arith_sext_i64_i128(int64_t in) { return (__int128_t)in; }
+__uint128_t arith_zext_i64_i128(uint64_t in) { return (__uint128_t)in; }
 
 float arith_sitofp_i64_f32(int64_t in) { return (float)in; }
 double arith_sitofp_i64_f64(int64_t in) { return (double)in; }
@@ -144,6 +144,13 @@ FOPS(double, f64)
 // special operations
 // --------------------------
 
+uint64_t util_hash_64(uint64_t val) {
+    uint64_t p1 = 11400714819323198549ull;
+    uint64_t m1 = p1 * val;
+    uint64_t reversed = __builtin_bswap64(m1);
+    return m1 ^ reversed;
+}
+
 bool util_ptr_tag_matches(void* ref, uint64_t hash, void* bloomMaskPtr) {
     uint64_t shiftAmount = 53;
     uint64_t slot = hash >> shiftAmount;
@@ -165,18 +172,14 @@ void* util_untag_ptr(void* ref) {
 bool util_is_ref_valid(void* ref) {
     return ref != NULL;
 }
-uint64_t util_hash_64(uint64_t val) {
-    uint64_t p1 = 11400714819323198549ull;
-    uint64_t m1 = p1 * val;
-    uint64_t reversed = __builtin_bswap64(m1);
-    return m1 ^ reversed;
-}
+
 uint64_t util_hash_combine(uint64_t h1, uint64_t h2) {
     uint64_t reversed = __builtin_bswap64(h1);
     return h2 ^ reversed;
 }
+
 typedef struct UtilTryCheapHashRes { bool lenLt13; uint64_t hash; } UtilTryCheapHashRes;
-UtilTryCheapHashRes util_varlen_try_cheap_hash(__uint128_t  varlen) {
+UtilTryCheapHashRes util_varlen_try_cheap_hash(__uint128_t varlen) {
     uint64_t first64 = (uint64_t)(varlen);
     uint64_t last64 = (uint64_t)(varlen >> 64);
 
@@ -190,7 +193,7 @@ UtilTryCheapHashRes util_varlen_try_cheap_hash(__uint128_t  varlen) {
 }
 
 typedef struct UtilVarLenRes { uint64_t totalEqual; uint64_t needsDetailedComp; } UtilVarLenRes;
-bool util_varlen_cmp_simple(__uint128_t  lhs, __uint128_t  rhs) {
+bool util_varlen_cmp_simple(__uint128_t lhs, __uint128_t rhs) {
    return (lhs == rhs);
 }
 bool util_varlen_is_invalid(uint64_t varlen) {
@@ -198,7 +201,7 @@ bool util_varlen_is_invalid(uint64_t varlen) {
     return (first64 == 0xffffffff00000000);
 }
 
-UtilVarLenRes util_varlen_cmp(__uint128_t  lhs, __uint128_t  rhs) {
+UtilVarLenRes util_varlen_cmp(__uint128_t lhs, __uint128_t rhs) {
     // cmp lengths + first 4 chars
     uint64_t first64Left = (uint64_t)(lhs);
     uint64_t first64Right = (uint64_t)(rhs);
