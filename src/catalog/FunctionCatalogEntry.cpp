@@ -22,6 +22,8 @@ std::shared_ptr<FunctionCatalogEntry> FunctionCatalogEntry::deserialize(lingodb:
          return CFunctionCatalogEntry::deserialize(deserializer);
       case CatalogEntryType::HIPY_FUNCTION_ENTRY:
          return HiPyFunctionCatalogEntry::deserialize(deserializer);
+      case CatalogEntryType::PYTHON_FUNCTION_ENTRY:
+         return PythonFunctionCatalogEntry::deserialize(deserializer);
       default:
          throw std::runtime_error("Should not happen");
    }

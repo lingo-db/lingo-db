@@ -304,8 +304,18 @@ void PyInterpLoweringPass::runOnOperation() {
    });
 
    typeConverter.addConversion([&](py_interp::PyObjectType) {
-      //todo: childArrayType
       return util::RefType::get(ctxt, mlir::IntegerType::get(ctxt, 8));
+   });
+   typeConverter.addConversion([&](FunctionType funcType) {
+      llvm::SmallVector<Type> convertedInputs;
+      for (auto inputType : funcType.getInputs()) {
+         convertedInputs.push_back(typeConverter.convertType(inputType));
+      }
+      llvm::SmallVector<Type> convertedResults;
+      for (auto resultType : funcType.getResults()) {
+         convertedResults.push_back(typeConverter.convertType(resultType));
+      }
+      return FunctionType::get(ctxt, convertedInputs, convertedResults);
    });
    RewritePatternSet patterns(&getContext());
 
