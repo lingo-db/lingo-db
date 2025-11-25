@@ -37,7 +37,7 @@ ${MLIR_BIN_DIR}/mlir-tblgen -gen-python-op-bindings -bind-dialect=relalg -I ${ML
 ${MLIR_BIN_DIR}/mlir-tblgen -gen-python-enum-bindings -bind-dialect=relalg -I ${MLIR_INCLUDE_DIR} -I  ${BASE_PATH}/include/ -I  ${BASE_PATH}/include/lingodb/compiler/Dialect/RelAlg/IR dialects/RelAlgOps.td > src/lingodbbridge/mlir/dialects/_relalg_enum_gen.py
 ${MLIR_BIN_DIR}/mlir-tblgen -gen-python-op-bindings -bind-dialect=subop -I ${MLIR_INCLUDE_DIR} -I  ${BASE_PATH}/include/  -I  ${BASE_PATH}/include/lingodb/compiler/Dialect/SubOperator dialects/SubOperatorOps.td > src/lingodbbridge/mlir/dialects/_subop_ops_gen.py
 ${MLIR_BIN_DIR}/mlir-tblgen -gen-python-enum-bindings -bind-dialect=subop -I ${MLIR_INCLUDE_DIR} -I  ${BASE_PATH}/include/ -I  ${BASE_PATH}/include/lingodb/compiler/Dialect/SubOperator dialects/SubOperatorOps.td > src/lingodbbridge/mlir/dialects/_subop_enum_gen.py
-${MLIR_BIN_DIR}/mlir-tblgen -gen-python-op-bindings -bind-dialect=py_interp -I ${MLIR_INCLUDE_DIR} -I  ${BASE_PATH}/include/ dialects/PyInterp.td > src/lingodbbridge/mlir/dialects/_pyinterp_ops_gen.py
+${MLIR_BIN_DIR}/mlir-tblgen -gen-python-op-bindings -bind-dialect=py_interp -I ${MLIR_INCLUDE_DIR} -I  ${BASE_PATH}/include/ dialects/PyInterp.td > src/lingodbbridge/mlir/dialects/_py_interp_ops_gen.py
 
 cp -r /llvm-src/mlir/lib/Bindings/Python src/extensions/mlir_vendored
 mkdir -p src/lingodbbridge/libs
