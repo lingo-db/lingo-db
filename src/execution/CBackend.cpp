@@ -118,8 +118,8 @@ class DefaultCBackend : public lingodb::execution::ExecutionBackend {
       auto mainFunc = reinterpret_cast<lingodb::execution::mainFnType>(dlsym(handle, "mainFunc"));
       dlsymError = dlerror();
       if (dlsymError) {
-         dlclose(handle);
          error.emit() << "Could not load symbol for main function: " << std::string(dlsymError);
+         dlclose(handle);
          return;
       }
       mainFunc();
