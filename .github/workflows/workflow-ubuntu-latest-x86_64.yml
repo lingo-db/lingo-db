@@ -30,11 +30,22 @@ jobs:
         with:
           path: /ccache
           key: ccache-${{ matrix.build_type }}-build
+      - name: Create Build dir
+        run: mkdir -p build
+      - name: Cache CPython build
+        id: cache-cypthon-patched
+        uses: actions/cache@v3
+        with:
+          path: build/cpython-patched
+          key: cpython-patched-3.14-25.11.2025
+      - name: Build CPython if not cached
+        if: steps.cache-cypthon-patched.outputs.cache-hit != 'true'
+        run: |
+            bash tools/scripts/build-cpython-patched.sh build/cpython-patched
       - name: Build
         run: |
           mkdir -p /ccache
           make clean
-          bash tools/scripts/build-cpython-patched.sh
           make build-${{ matrix.build_type }}
         env:
           CCACHE_DIR: /ccache
@@ -92,6 +103,12 @@ jobs:
         with:
           name: lingodb-python-build
           path: built-packages
+      - name: Cache CPython build
+        id: cache-cypthon-patched
+        uses: actions/cache@v3
+        with:
+          path: build/cpython-patched
+          key: cpython-patched-3.14-25.11.2025
       - name: Setup for tests
         run: |
           touch build/dependencies
@@ -149,6 +166,12 @@ jobs:
         with:
           name: ${{ matrix.build_type }}-build
           path: build/lingodb-${{ matrix.build_type }}
+      - name: Cache CPython build
+        id: cache-cypthon-patched
+        uses: actions/cache@v3
+        with:
+          path: build/cpython-patched
+          key: cpython-patched-3.14-25.11.2025
       - name: Setup for tests
         run: |
           touch build/dependencies
@@ -196,6 +219,12 @@ jobs:
           cd build/lingodb-${{ matrix.build_type }}
           rm -rf !("sql"|"sqlite-tester"|".buildstamp"|".stamp")
           cd ../..
+      - name: Cache CPython build
+        id: cache-cypthon-patched
+        uses: actions/cache@v3
+        with:
+          path: build/cpython-patched
+          key: cpython-patched-3.14-25.11.2025
       - name: Prepare Binaries
         run: |
           chmod +x build/lingodb-${{ matrix.build_type }}/*
