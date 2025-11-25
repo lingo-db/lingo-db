@@ -24,7 +24,6 @@
 #include <dlfcn.h>
 
 #include "json.h"
-#include "pytypedefs.h"
 
 #include <lingodb/compiler/Dialect/util/UtilOps.h.inc>
 #include <lingodb/compiler/Dialect/util/UtilOps.h.inc>
