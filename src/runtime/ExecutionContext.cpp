@@ -65,8 +65,8 @@ lingodb::runtime::ExecutionContext* lingodb::runtime::getCurrentExecutionContext
 void lingodb::runtime::ExecutionContext::setupPython() {
    auto workerId = scheduler::currentWorkerId();
    if (pythonThreadStates[workerId] == nullptr) {
-      PyGILState_STATE gs = PyGILState_Ensure();
-      auto mainState= PyThreadState_Get();
+      //PyGILState_STATE gs = PyGILState_Ensure();
+      //auto mainState= PyThreadState_Get();
       PyThreadState *tstate = nullptr;
       PyInterpreterConfig config = {
          .use_main_obmalloc = 0,
@@ -80,16 +80,17 @@ void lingodb::runtime::ExecutionContext::setupPython() {
       if (PyStatus_Exception(status)) {
          Py_ExitStatusException(status);
       }
-      auto x = PyThreadState_Swap(mainState);
-      PyGILState_Release(gs);
-      PyThreadState_Swap(x);
+      //auto x = PyThreadState_Swap(mainState);
+      //PyGILState_Release(gs);
+      //PyThreadState_Swap(x);
    } else {
       PyThreadState_Swap((PyThreadState*)pythonThreadStates[workerId]);
    }
 }
 void lingodb::runtime::ExecutionContext::teardownPython() {
+   //auto mainState= PyThreadState_Get();
    auto workerId = scheduler::currentWorkerId();
-   auto state = PyThreadState_Swap(nullptr);
+   auto state = PyThreadState_Swap(nullptr);//(mainState);
    pythonThreadStates[workerId] = state;
 }
 #endif
