@@ -47,8 +47,8 @@ void RelationHelper::createFunction(runtime::VarLen32 meta) {
          std::filesystem::remove(catalog->getDbDir() + "/udf/" + def.name + ".so");
       }
       catalog->insertEntry(func, true);
-   } else if (def.language == "hipy") {
-      std::string byteCode = lingodb::compiler::frontend::compileHiPyUDF(def.name, def.code, def.argumentTypes, def.returnType);
+   } else if (def.language == "hipy" || def.language == "hipy_fallback") {
+      std::string byteCode = lingodb::compiler::frontend::compileHiPyUDF(def.name, def.code, def.argumentTypes, def.returnType, def.language=="hipy_fallback");
       auto func = std::make_shared<lingodb::catalog::HiPyFunctionCatalogEntry>(def.name, def.code, def.returnType, def.argumentTypes, byteCode);
       catalog->insertEntry(func, true);
    } else if (def.language == "python"){

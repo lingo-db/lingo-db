@@ -161,6 +161,13 @@ class HiPyFunctionImplementer : public lingodb::catalog::MLIRUDFImplementor {
    std::vector<lingodb::catalog::Type> argumentTypes;
    lingodb::catalog::Type returnType;
 
+   mlir::Value handlePython(mlir::Value val, lingodb::catalog::Type type, mlir::OpBuilder& builder, mlir::Location loc) {
+      using namespace lingodb::compiler::dialect;
+      if (mlir::isa<py_interp::PyObjectType>(val.getType())) {
+         val = builder.create<py_interp::CastFromPyObject>(loc, type.getMLIRTypeCreator()->createType(builder.getContext()), val);
+      }
+      return val;
+   }
    public:
    HiPyFunctionImplementer(std::string functionName, std::string byteCode, std::vector<lingodb::catalog::Type> argumentTypes, lingodb::catalog::Type returnType) : functionName(std::move(functionName)), byteCode(std::move(byteCode)), argumentTypes(std::move(argumentTypes)), returnType(std::move(returnType)) {}
    mlir::Value callFunction(mlir::ModuleOp& moduleOp, mlir::OpBuilder& builder, mlir::Location loc, mlir::ValueRange args, lingodb::catalog::Catalog* catalog) override {
@@ -212,7 +219,7 @@ class HiPyFunctionImplementer : public lingodb::catalog::MLIRUDFImplementor {
                notNullValues.push_back(mlir::isa<db::NullableType>(v.getType()) ? builder.create<db::NullableGetVal>(loc, mlir::cast<db::NullableType>(v.getType()).getType(), v) : v);
             }
             auto func = mlir::cast<mlir::func::FuncOp>(moduleOp.lookupSymbol(functionName+"_"+functionName));
-            auto res = builder.create<mlir::func::CallOp>(loc, func, notNullValues).getResult(0);
+            auto res = handlePython(builder.create<mlir::func::CallOp>(loc, func, notNullValues).getResult(0), returnType, builder, loc);
             mlir::Value resNullable = builder.create<db::AsNullableOp>(loc, db::NullableType::get(res.getType()), res);
 
             resType = resNullable.getType();
@@ -235,14 +242,14 @@ class HiPyFunctionImplementer : public lingodb::catalog::MLIRUDFImplementor {
       }
       auto func = mlir::cast<mlir::func::FuncOp>(moduleOp.lookupSymbol(functionName+"_"+functionName));
 
-      return builder.create<mlir::func::CallOp>(loc, func, values).getResult(0);
+      return handlePython(builder.create<mlir::func::CallOp>(loc, func, values).getResult(0), returnType, builder, loc);
    }
 };
 } //namespace
 
 namespace lingodb::compiler::frontend {
 
-std::string compileHiPyUDF(std::string functionName, std::string code, std::vector<lingodb::catalog::Type> argumentTypes, lingodb::catalog::Type returnType) {
+std::string compileHiPyUDF(std::string functionName, std::string code, std::vector<lingodb::catalog::Type> argumentTypes, lingodb::catalog::Type returnType, bool fallback) {
    mlir::MLIRContext context;
    lingodb::execution::initializeContext(context);
    mlir::OwningOpRef<mlir::ModuleOp> module;
@@ -297,7 +304,7 @@ std::string compileHiPyUDF(std::string functionName, std::string code, std::vect
 
       // Step 2: Invoke the external script
       std::ostringstream command;
-      command << pythonBinary.getValue() << " vendored/hipy/compile.py " << tempFilePath << " " << functionName << " '" << jsonArgsStr << "' "<< functionName <<" "<< outputFilePath << " 2>&1";
+      command << pythonBinary.getValue() << " vendored/hipy/compile.py " << tempFilePath << " " << functionName << " '" << jsonArgsStr << "' "<< functionName <<" " << (fallback ? "fallback" : "nofallback") <<" "<< outputFilePath << " 2>&1";
       std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(command.str().c_str(), "r"), pclose);
       if (!pipe) {
          throw std::runtime_error("Failed to execute compile.py script.");

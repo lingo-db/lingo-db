@@ -15,7 +15,7 @@ class MLIRUDFImplementor {
 } // namespace lingodb::catalog
 
 namespace lingodb::compiler::frontend {
-std::string compileHiPyUDF(std::string functionName, std::string code, std::vector<lingodb::catalog::Type> argumentTypes, lingodb::catalog::Type returnType);
+std::string compileHiPyUDF(std::string functionName, std::string code, std::vector<lingodb::catalog::Type> argumentTypes, lingodb::catalog::Type returnType, bool fallback);
 std::shared_ptr<catalog::MLIRUDFImplementor> getUDFImplementer(std::shared_ptr<catalog::FunctionCatalogEntry> entry);
 std::shared_ptr<catalog::MLIRUDFImplementor> createCUDFImplementer(
    std::string funcName, std::string cCode, std::vector<lingodb::catalog::Type> argumentTypes, lingodb::catalog::Type returnType);

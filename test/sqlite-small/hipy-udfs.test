@@ -157,3 +157,21 @@ query tsv rowsort 7
 select extractba('1234567.891011 ba but there are more baths somehwere else');
 ----
 1234568
+
+statement ok
+CREATE OR REPLACE FUNCTION extractpcode(text_input TEXT)
+RETURNS TEXT
+AS $$
+import hipy
+@hipy.compiled_function
+def extractpcode(val):
+      try:
+        return '%05d' % int(val)
+      except:
+        return ''
+$$ LANGUAGE hipy_fallback;
+
+query tsv rowsort 8
+select extractpcode('123');
+----
+00123
