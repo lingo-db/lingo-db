@@ -31,3 +31,48 @@ def ImportOp : PyInterp_Op<"import"> {
 	let results = (outs PyObjectType:$result);
 	let assemblyFormat = "$name attr-dict";
 }
+
+def CreateModule : PyInterp_Op<"create_module"> {
+    let arguments = (ins StrAttr:$name, StrAttr:$code);
+    let results = (outs PyObjectType:$module);
+    let assemblyFormat = "$name `,` $code attr-dict";
+}
+
+def CastToPyObject : PyInterp_Op<"cast_to_pyobject"> {
+    let arguments = (ins AnyType:$from);
+    let results = (outs PyObjectType:$to);
+    let assemblyFormat = "$from `:` type($from) attr-dict";
+}
+def CastFromPyObject : PyInterp_Op<"cast_from_pyobject"> {
+    let arguments = (ins PyObjectType:$from);
+    let results = (outs AnyType:$to);
+    let assemblyFormat = "$from `->` type($to) attr-dict";
+}
+
+
+def Call : PyInterp_Op<"py_call"> {
+    let description = [{
+        TODO: currently we do a hacky thing: args and kwargs are mixed...
+    }];
+	let arguments = (ins PyObjectType:$on, Variadic<PyObjectType>:$args, ArrayAttr:$kwnames);
+	let results = (outs PyObjectType:$result);
+	let assemblyFormat = "$on `(` $args `)` $kwnames attr-dict";
+}
+def GetAttr : PyInterp_Op<"get_attr"> {
+	let arguments = (ins PyObjectType:$on, StrAttr:$name);
+	let results = (outs PyObjectType:$result);
+	let assemblyFormat = "$on `->` $name attr-dict";
+}
+
+def SetAttr : PyInterp_Op<"set_attr"> {
+	let arguments = (ins StrAttr:$name, PyObjectType:$on, PyObjectType:$value);
+	let assemblyFormat = "$on `->` $name `=` $value attr-dict";
+}
+def DecRef : PyInterp_Op<"dec_ref"> {
+    let arguments = (ins PyObjectType:$obj);
+    let assemblyFormat = "$obj attr-dict";
+}
+def IncRef : PyInterp_Op<"inc_ref"> {
+    let arguments = (ins PyObjectType:$obj);
+    let assemblyFormat = "$obj attr-dict";
+}

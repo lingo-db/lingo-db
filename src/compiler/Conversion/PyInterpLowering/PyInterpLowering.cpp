@@ -58,13 +58,182 @@ class ImportLowering : public OpConversionPattern<py_interp::ImportOp> {
    public:
    using OpConversionPattern<py_interp::ImportOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(py_interp::ImportOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto val = rt::PythonRuntime::test(rewriter, op.getLoc())({})[0];
+      auto nameVal = rewriter.create<util::CreateConstVarLen>(op.getLoc(), util::VarLen32Type::get(rewriter.getContext()),op.getName());
+      auto val = rt::PythonRuntime::import(rewriter, op.getLoc())({})[0];
       rewriter.replaceOp(op, val);
 
       return success();
    }
 };
+class CreateModuleLowering : public OpConversionPattern<py_interp::CreateModule> {
+   public:
+   using OpConversionPattern<py_interp::CreateModule>::OpConversionPattern;
+   LogicalResult matchAndRewrite(py_interp::CreateModule op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op.getLoc();
+      mlir::Value moduleNameVal = rewriter.create<util::CreateConstVarLen>(loc, util::VarLen32Type::get(rewriter.getContext()),op.getName());
+      mlir::Value codeVal = rewriter.create<util::CreateConstVarLen>(loc, util::VarLen32Type::get(rewriter.getContext()),op.getCode());
+      auto val = rt::PythonRuntime::createModule(rewriter, op.getLoc())({moduleNameVal, codeVal})[0];
+      rewriter.replaceOp(op, val);
+      return success();
+   }
+};
+class GetAttrLowering : public OpConversionPattern<py_interp::GetAttr> {
+   public:
+   using OpConversionPattern<py_interp::GetAttr>::OpConversionPattern;
+   LogicalResult matchAndRewrite(py_interp::GetAttr op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op.getLoc();
+      mlir::Value attrNameVal = rewriter.create<util::CreateConstVarLen>(loc, util::VarLen32Type::get(rewriter.getContext()),op.getName());
+      auto val = rt::PythonRuntime::getAttr(rewriter, op.getLoc())({adaptor.getOn(), attrNameVal})[0];
+      rewriter.replaceOp(op, val);
+      return success();
+   }
+};
+class SetAttrLowering : public OpConversionPattern<py_interp::SetAttr> {
+   public:
+   using OpConversionPattern<py_interp::SetAttr>::OpConversionPattern;
+   LogicalResult matchAndRewrite(py_interp::SetAttr op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op.getLoc();
+      mlir::Value attrNameVal = rewriter.create<util::CreateConstVarLen>(loc, util::VarLen32Type::get(rewriter.getContext()),op.getName());
+      rt::PythonRuntime::setAttr(rewriter, op.getLoc())({adaptor.getOn(), attrNameVal, adaptor.getValue()});
+      rewriter.eraseOp(op);
+      return success();
+   }
+};
 
+class CallLowering : public OpConversionPattern<py_interp::Call> {
+   public:
+        using OpConversionPattern<py_interp::Call>::OpConversionPattern;
+   LogicalResult matchAndRewrite(py_interp::Call op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      if (op.getKwnames().empty()) {
+         std::optional<util::FunctionSpec> fn;
+         switch (adaptor.getArgs().size()) {
+            case 0:
+               fn = rt::PythonRuntime::call0;
+               break;
+            case 1:
+               fn =rt::PythonRuntime::call1;
+               break;
+            case 2:
+               fn =rt::PythonRuntime::call2;
+               break;
+            case 3:
+               fn =rt::PythonRuntime::call3;
+               break;
+            case 4:
+               fn =rt::PythonRuntime::call4;
+               break;
+            case 5:
+               fn =rt::PythonRuntime::call5;
+               break;
+            case 6:
+               fn =rt::PythonRuntime::call6;
+               break;
+            case 7:
+               fn =rt::PythonRuntime::call7;
+               break;
+            case 8:
+               fn =rt::PythonRuntime::call8;
+               break;
+            case 9:
+               fn =rt::PythonRuntime::call9;
+               break;
+            case 10:
+               fn =rt::PythonRuntime::call10;
+               break;
+         }
+         if (!fn) return failure();
+         std::vector<mlir::Value> args;
+         args.push_back(adaptor.getOn());
+         args.insert(args.end(), adaptor.getArgs().begin(), adaptor.getArgs().end());
+         auto res = fn.value()(rewriter, op->getLoc())(args)[0];
+         rewriter.replaceOp(op, res);
+         return success();
+      }
+      return failure();
+
+
+   }
+};
+class DecRefLowering : public OpConversionPattern<py_interp::DecRef> {
+   public:
+   using OpConversionPattern<py_interp::DecRef>::OpConversionPattern;
+   LogicalResult matchAndRewrite(py_interp::DecRef op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      rt::PythonRuntime::decref(rewriter, op.getLoc())({adaptor.getObj()});
+      rewriter.eraseOp(op);
+      return success();
+   }
+};
+class IncRefLowering : public OpConversionPattern<py_interp::IncRef> {
+   public:
+   using OpConversionPattern<py_interp::IncRef>::OpConversionPattern;
+   LogicalResult matchAndRewrite(py_interp::IncRef op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      rt::PythonRuntime::incref(rewriter, op.getLoc())({adaptor.getObj()});
+      rewriter.eraseOp(op);
+      return success();
+   }
+};
+class CastToPyObjectLowering : public OpConversionPattern<py_interp::CastToPyObject> {
+   public:
+   using OpConversionPattern<py_interp::CastToPyObject>::OpConversionPattern;
+   LogicalResult matchAndRewrite(py_interp::CastToPyObject op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto t = op.getFrom().getType();
+      if (auto floatType = mlir::dyn_cast<mlir::FloatType>(t)) {
+         mlir::Value val = adaptor.getFrom();
+         if (floatType.isF32()) {
+            val = rewriter.create<arith::ExtFOp>(op.getLoc(), rewriter.getF64Type(), val);
+         }
+         rewriter.replaceOp(op,  rt::PythonRuntime::fromDouble(rewriter, op.getLoc())({val})[0]);
+      }else if (auto intType = mlir::dyn_cast<mlir::IntegerType>(t)) {
+         if (intType.getWidth()==1) {
+            rewriter.replaceOp(op, rt::PythonRuntime::fromBool(rewriter, op.getLoc())({adaptor.getFrom()})[0]);
+         }else {
+            mlir::Value val = adaptor.getFrom();
+            if (intType.getWidth() < 64) {
+               val = rewriter.create<arith::ExtSIOp>(op.getLoc(), rewriter.getI64Type(), val);
+            } else if (intType.getWidth() > 64) {
+               return failure();
+            }
+            rewriter.replaceOp(op, rt::PythonRuntime::fromInt64(rewriter, op.getLoc())({val})[0]);
+         }
+      } else if (mlir::isa<util::VarLen32Type>(t)) {
+         rewriter.replaceOp(op, rt::PythonRuntime::fromVarLen32(rewriter, op.getLoc())({adaptor.getFrom()})[0]);
+      } else {
+         return failure();
+      }
+      return success();
+   }
+};
+class CastFromPyObjectLowering : public OpConversionPattern<py_interp::CastFromPyObject> {
+   public:
+   using OpConversionPattern<py_interp::CastFromPyObject>::OpConversionPattern;
+   LogicalResult matchAndRewrite(py_interp::CastFromPyObject op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto t = op.getTo().getType();
+      if (auto floatType = mlir::dyn_cast<mlir::FloatType>(t)) {
+         mlir::Value val = rt::PythonRuntime::toDouble(rewriter, op.getLoc())({adaptor.getFrom()})[0];
+         if (floatType.isF32()) {
+            val = rewriter.create<arith::TruncFOp>(op.getLoc(), rewriter.getF32Type(), val);
+         }
+         rewriter.replaceOp(op, val);
+      }else if (auto intType = mlir::dyn_cast<mlir::IntegerType>(t)) {
+         if (intType.getWidth()==1) {
+            rewriter.replaceOp(op, rt::PythonRuntime::toBool(rewriter, op.getLoc())({adaptor.getFrom()})[0]);
+         }else {
+            mlir::Value val = rt::PythonRuntime::toInt64(rewriter, op.getLoc())({adaptor.getFrom()})[0];
+            if (intType.getWidth() < 64) {
+               val = rewriter.create<arith::TruncIOp>(op.getLoc(), intType, val);
+            } else if (intType.getWidth() > 64) {
+               return failure();
+            }
+            rewriter.replaceOp(op, val);
+         }
+      } else if (mlir::isa<util::VarLen32Type>(t)) {
+         rewriter.replaceOp(op, rt::PythonRuntime::toVarLen32(rewriter, op.getLoc())({adaptor.getFrom()})[0]);
+      } else {
+         return failure();
+      }
+      return success();
+   }
+};
 } // end anonymous namespace
 template <class Op>
 class SimpleTypeConversionPattern : public ConversionPattern {
@@ -148,6 +317,14 @@ void PyInterpLoweringPass::runOnOperation() {
    patterns.insert<SimpleTypeConversionPattern<mlir::func::ConstantOp>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::arith::SelectOp>>(typeConverter, &getContext());
    patterns.insert<ImportLowering>(typeConverter, &getContext());
+   patterns.insert<CreateModuleLowering>(typeConverter, &getContext());
+   patterns.insert<GetAttrLowering>(typeConverter, &getContext());
+   patterns.insert<SetAttrLowering>(typeConverter, &getContext());
+   patterns.insert<CallLowering>(typeConverter, &getContext());
+   patterns.insert<CastToPyObjectLowering>(typeConverter, &getContext());
+   patterns.insert<CastFromPyObjectLowering>(typeConverter, &getContext());
+   patterns.insert<DecRefLowering>(typeConverter, &getContext());
+   patterns.insert<IncRefLowering>(typeConverter, &getContext());
    if (failed(applyFullConversion(module, target, std::move(patterns))))
       signalPassFailure();
 }

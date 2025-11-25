@@ -3,15 +3,11 @@
 #include <iostream>
 
 namespace lingodb::runtime {
-PyObject* PythonRuntime::test() {
-   PyObject *globals = PyDict_New();
-   PyObject* dict2 = PyDict_New();
-   auto res = PyRun_String("print(1)", Py_single_input, globals, dict2);
-   Py_DECREF(res);
-   Py_DECREF(globals);
-   Py_DECREF(dict2);
-   return res;
+PyObject* PythonRuntime::import(runtime::VarLen32 val) {
+   auto valStr = val.str();
+   return PyImport_ImportModule(valStr.c_str());
 }
+
 inline void throw_python_error() {
    PyObject *ptype, *pvalue, *ptraceback;
    PyErr_Fetch(&ptype, &pvalue, &ptraceback);
@@ -100,8 +96,58 @@ PyObject* PythonRuntime::call2(PyObject* callable, PyObject* arg1, PyObject* arg
 PyObject* PythonRuntime::call3(PyObject* callable, PyObject* arg1, PyObject* arg2, PyObject* arg3) {
    return PyObject_CallFunctionObjArgs(callable, arg1, arg2, arg3, NULL);
 }
+PyObject* PythonRuntime::call4(PyObject* callable, PyObject* arg1, PyObject* arg2, PyObject* arg3, PyObject* arg4){
+   return PyObject_CallFunctionObjArgs(callable, arg1, arg2, arg3, arg4, NULL);
+}
+PyObject* PythonRuntime::call5(PyObject* callable, PyObject* arg1, PyObject* arg2, PyObject* arg3, PyObject* arg4, PyObject* arg5){
+   return PyObject_CallFunctionObjArgs(callable, arg1, arg2, arg3, arg4, arg5, NULL);
+}
+PyObject* PythonRuntime::call6(PyObject* callable, PyObject* arg1, PyObject* arg2, PyObject* arg3, PyObject* arg4, PyObject* arg5, PyObject* arg6){
+   return PyObject_CallFunctionObjArgs(callable, arg1, arg2, arg3, arg4, arg5, arg6, NULL);
+}
+PyObject* PythonRuntime::call7(PyObject* callable, PyObject* arg1, PyObject* arg2, PyObject* arg3, PyObject* arg4, PyObject* arg5, PyObject* arg6, PyObject* arg7){
+   return PyObject_CallFunctionObjArgs(callable, arg1, arg2, arg3, arg4, arg5, arg6, arg7, NULL);
+}
+PyObject* PythonRuntime::call8(PyObject* callable, PyObject* arg1, PyObject* arg2, PyObject* arg3, PyObject* arg4, PyObject* arg5, PyObject* arg6, PyObject* arg7, PyObject* arg8){
+   return PyObject_CallFunctionObjArgs(callable, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, NULL);
+}
+PyObject* PythonRuntime::call9(PyObject* callable, PyObject* arg1, PyObject* arg2, PyObject* arg3, PyObject* arg4, PyObject* arg5, PyObject* arg6, PyObject* arg7, PyObject* arg8, PyObject* arg9){
+   return PyObject_CallFunctionObjArgs(callable, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, NULL);
+}
+PyObject* PythonRuntime::call10(PyObject* callable, PyObject* arg1, PyObject* arg2, PyObject* arg3, PyObject* arg4, PyObject* arg5, PyObject* arg6, PyObject* arg7, PyObject* arg8, PyObject* arg9, PyObject* arg10){
+   return PyObject_CallFunctionObjArgs(callable, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, NULL);
+}
+void PythonRuntime::setAttr(PyObject* obj, runtime::VarLen32 attr, PyObject* value) {
+   auto attrStr = attr.str();
+   PyObject_SetAttrString(obj, attrStr.c_str(), value);
+}
+
+
 int64_t PythonRuntime::toInt64(PyObject* obj) {
    return PyLong_AsLongLong(obj);
+}
+PyObject* PythonRuntime::fromInt64(int64_t value){
+   return PyLong_FromLongLong(value);
+}
+bool PythonRuntime::toBool(PyObject* obj) {
+   return PyObject_IsTrue(obj); //todo
+}
+PyObject* PythonRuntime::fromBool(bool value){
+   return PyBool_FromLong(value ? 1 : 0);
+}
+runtime::VarLen32 PythonRuntime::toVarLen32(PyObject* obj){
+   if (PyUnicode_Check(obj)) {
+      Py_ssize_t size;
+      const char* data = PyUnicode_AsUTF8AndSize(obj, &size);
+      if (data) {
+         return runtime::VarLen32::fromString(std::string_view(data, size), StorageClass::REFCOUNTED);
+      }
+   }
+   throw std::runtime_error("Object is not a string");
+}
+PyObject* PythonRuntime::fromVarLen32(runtime::VarLen32 value){
+   auto str = value.str();
+   return PyUnicode_FromStringAndSize(str.data(), str.size());
 }
 double PythonRuntime::toDouble(PyObject* obj){
    return PyFloat_AsDouble(obj);
@@ -111,6 +157,9 @@ PyObject* PythonRuntime::fromDouble(double value){
 }
 void PythonRuntime::decref(PyObject* obj){
    Py_DECREF(obj);
+}
+void PythonRuntime::incref(PyObject* obj){
+   Py_INCREF(obj);
 }
 
 

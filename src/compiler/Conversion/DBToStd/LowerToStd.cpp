@@ -3,6 +3,7 @@
 #include "lingodb/compiler/Dialect/PyInterp/PyInterpDialect.h"
 #include "lingodb/compiler/Dialect/Arrow/IR/ArrowDialect.h"
 #include "lingodb/compiler/Dialect/Arrow/IR/ArrowOps.h"
+#include "lingodb/compiler/Dialect/PyInterp/PyInterpOps.h"
 #include "lingodb/compiler/Dialect/DB/IR/DBDialect.h"
 #include "lingodb/compiler/Dialect/DB/IR/DBOps.h"
 #include "lingodb/compiler/Dialect/DB/IR/RuntimeFunctions.h"
@@ -1355,6 +1356,10 @@ class MemoryCleanupUseLowering : public OpConversionPattern<db::MemoryCleanupUse
          rewriter.eraseOp(cleanupUse);
          return success();
       }
+      if (mlir::isa<py_interp::PyObjectType>(t)) {
+         rewriter.replaceOpWithNewOp<py_interp::DecRef>(cleanupUse, adaptor.getValue());
+         return success();
+      }
       return failure();
    }
 };
@@ -1373,6 +1378,10 @@ class MemoryAddUseLowering : public OpConversionPattern<db::MemoryAddUse> {
       if (mlir::isa<db::ListType>(t)) {
          rt::List::addUse(rewriter, loc)({adaptor.getValue()});
          rewriter.eraseOp(addUse);
+         return success();
+      }
+      if (mlir::isa<py_interp::PyObjectType>(t)) {
+         rewriter.replaceOpWithNewOp<py_interp::IncRef>(addUse, adaptor.getValue());
          return success();
       }
       return failure();

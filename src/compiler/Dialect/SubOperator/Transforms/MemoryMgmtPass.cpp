@@ -1,9 +1,11 @@
 #include "lingodb/compiler/Dialect/DB/IR/DBOps.h"
+#include "lingodb/compiler/Dialect/PyInterp/PyInterpOps.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorInterfaces.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/Passes.h"
 #include "lingodb/compiler/Dialect/util/UtilOps.h"
 #include "lingodb/compiler/helper.h"
+#include "lingodb/compiler/Conversion/PyInterpLowering/PyInterpLoweringPass.h"
 
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
@@ -26,7 +28,7 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
       if (auto nullableType = mlir::dyn_cast<db::NullableType>(t)) {
          t = nullableType.getType();
       }
-      if (mlir::isa<db::StringType, db::ListType>(t)) {
+      if (mlir::isa<db::StringType, db::ListType, py_interp::PyObjectType>(t)) {
          return true;
       }
       if (mlir::isa<mlir::TupleType>(t)) {

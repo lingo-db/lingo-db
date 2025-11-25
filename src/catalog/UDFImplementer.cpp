@@ -5,6 +5,7 @@
 #include "lingodb/catalog/TableCatalogEntry.h"
 #include "lingodb/compiler/Dialect/DB/IR/DBOps.h"
 #include "lingodb/compiler/Dialect/util/UtilOps.h"
+#include "lingodb/compiler/Dialect/PyInterp/PyInterpOps.h"
 #include "lingodb/execution/Execution.h"
 #include "lingodb/utility/Serialization.h"
 #include "lingodb/utility/Setting.h"
@@ -46,18 +47,14 @@ class PythonUDFImplementer : public lingodb::catalog::MLIRUDFImplementor {
    mlir::Value callFunction(mlir::ModuleOp& moduleOp, mlir::OpBuilder& builder, mlir::Location loc, mlir::ValueRange args, lingodb::catalog::Catalog* catalog) override {
       using namespace lingodb::compiler::dialect;
       namespace rt = lingodb::compiler::runtime;
-      mlir::Value moduleNameVal = builder.create<util::CreateConstVarLen>(loc, util::VarLen32Type::get(builder.getContext()),builder.getStringAttr("udf_"+functionName));
-      mlir::Value codeVal = builder.create<util::CreateConstVarLen>(loc, util::VarLen32Type::get(builder.getContext()),builder.getStringAttr(code));
-      mlir::Value moduleVal = rt::PythonRuntime::createModule(builder, loc)({moduleNameVal, codeVal})[0];
-      mlir::Value functionVal =  rt::PythonRuntime::getAttr(builder, loc)({moduleVal, builder.create<util::CreateConstVarLen>(loc, util::VarLen32Type::get(builder.getContext()), builder.getStringAttr(functionName))})[0];
-      mlir::Value pythonArg = rt::PythonRuntime::fromDouble(builder, loc)({args[0]})[0];
-      mlir::Value res = rt::PythonRuntime::call1(builder, loc)({functionVal, pythonArg})[0];
-      mlir::Value nativeRes = rt::PythonRuntime::toDouble(builder, loc)({res})[0];
-      rt::PythonRuntime::decref(builder, loc)({moduleVal});
-      rt::PythonRuntime::decref(builder, loc)({functionVal});
-      rt::PythonRuntime::decref(builder, loc)({res});
-      rt::PythonRuntime::decref(builder, loc)({pythonArg});
-
+      mlir::Value moduleVal = builder.create<py_interp::CreateModule>(loc,py_interp::PyObjectType::get(builder.getContext()),builder.getStringAttr("udf_"+functionName), builder.getStringAttr(code));
+      mlir::Value functionVal = builder.create<py_interp::GetAttr>(loc, py_interp::PyObjectType::get(builder.getContext()), moduleVal, builder.getStringAttr(functionName));
+      std::vector<mlir::Value> castedArgs;
+      for (auto arg : args) {
+         castedArgs.push_back(builder.create<py_interp::CastToPyObject>(loc, py_interp::PyObjectType::get(builder.getContext()), arg));
+      }
+      mlir::Value res = builder.create<py_interp::Call>(loc, py_interp::PyObjectType::get(builder.getContext()), functionVal, mlir::ValueRange(castedArgs),builder.getArrayAttr({}));
+      mlir::Value nativeRes = builder.create<py_interp::CastFromPyObject>(loc, returnType.getMLIRTypeCreator()->createType(builder.getContext()), res);
       return nativeRes;
    }
 };
