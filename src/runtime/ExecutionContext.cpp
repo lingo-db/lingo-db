@@ -67,7 +67,6 @@ void lingodb::runtime::ExecutionContext::setupPython() {
    if (pythonThreadStates[workerId] == nullptr) {
       //PyGILState_STATE gs = PyGILState_Ensure();
       //auto mainState= PyThreadState_Get();
-      std::unique_lock<std::mutex> lock(pythonSetupMutex);
       PyThreadState *tstate = nullptr;
       PyInterpreterConfig config = {
          .use_main_obmalloc = 0,
@@ -92,6 +91,8 @@ void lingodb::runtime::ExecutionContext::teardownPython() {
    //auto mainState= PyThreadState_Get();
    auto workerId = scheduler::currentWorkerId();
    auto state = PyThreadState_Swap(nullptr);//(mainState);
-   pythonThreadStates[workerId] = state;
+   if (state) {
+      pythonThreadStates[workerId] = state;
+   }
 }
 #endif
