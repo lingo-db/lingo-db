@@ -64,10 +64,48 @@ struct ColumnRefEq {
 };
 
 struct TargetInfo {
-   std::vector<std::shared_ptr<ColumnReference>> targetColumns;
    void add(std::shared_ptr<ColumnReference> entry) {
       targetColumns.push_back(std::move(entry));
    }
+
+   std::shared_ptr<ColumnReference> getTargetColumn(size_t i) {
+      return targetColumns[i];
+   }
+   std::shared_ptr<ColumnReference>& operator[](size_t i) {
+      assert(targetColumns.size() > i);
+      return targetColumns[i];
+   }
+   const std::vector<std::shared_ptr<ColumnReference>> getTargetColumns() const {
+      std::vector<std::shared_ptr<ColumnReference>> result;
+      for (auto w : targetColumns) {
+         result.push_back(w);
+      }
+
+      return result;
+   }
+
+   void setTargetColumns(std::vector<std::shared_ptr<ColumnReference>> colums) {
+      targetColumns = std::vector<std::shared_ptr<ColumnReference>>(colums.begin(), colums.end());
+   }
+
+   void clear() {
+      targetColumns.clear();
+   }
+   size_t size() {
+      return targetColumns.size();
+   }
+   void resize(size_t size) {
+      targetColumns.resize(size);
+   }
+
+   void eraseif(std::function<bool(const std::shared_ptr<ColumnReference>& entry)> fn) {
+      std::erase_if(targetColumns, [&](const std::weak_ptr<ColumnReference>& entry) {
+         return fn(entry.lock());
+      });
+   }
+
+   private:
+   std::vector<std::shared_ptr<ColumnReference>> targetColumns;
 };
 } // namespace lingodb::ast
 #endif

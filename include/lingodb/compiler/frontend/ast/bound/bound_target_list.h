@@ -9,9 +9,12 @@
 namespace lingodb::ast {
 class BoundTargetList : public AstNode {
    public:
-   BoundTargetList(bool distinct, std::vector<std::shared_ptr<ColumnReference>> targets) : AstNode(NodeType::TARGET_LIST), distinct(distinct), targets(std::move(targets)) {}
+   BoundTargetList(bool distinct, std::vector<std::weak_ptr<ColumnReference>> targets) : AstNode(NodeType::TARGET_LIST), distinct(distinct), targets(std::move(targets)) {}
    bool distinct = false;
-   std::vector<std::shared_ptr<ColumnReference>> targets;
+   /**
+    * Hold only weak_ptr.
+    */
+   std::vector<std::weak_ptr<ColumnReference>> targets;
 };
 } // namespace lingodb::ast
 

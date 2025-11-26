@@ -40,6 +40,7 @@ class EliminateUnnecessaryColumns : public mlir::PassWrapper<EliminateUnnecessar
                mapping.push_back(x);
             } else {
                //colDef.dump();
+
             }
          }
          baseTableOp.setColumnsAttr(builder.getDictionaryAttr(mapping));
