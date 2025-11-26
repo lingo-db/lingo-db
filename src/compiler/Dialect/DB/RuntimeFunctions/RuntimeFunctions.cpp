@@ -274,6 +274,7 @@ std::shared_ptr<db::RuntimeFunctionRegistry> db::RuntimeFunctionRegistry::getBui
    auto resTypeIsBool = [](mlir::Type t, mlir::TypeRange) { return t.isInteger(1); };
    auto resTypeIsIndex = [](mlir::Type t, mlir::TypeRange) { return t.isIndex(); };
    builtinRegistry->add("Substring").implementedAs(StringRuntime::substr).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::intLike, RuntimeFunction::intLike}, RuntimeFunction::matchesArgument());
+   builtinRegistry->add("StringStrip").implementedAs(StringRuntime::strip).matchesTypes({RuntimeFunction::stringLike}, RuntimeFunction::matchesArgument());
    builtinRegistry->add("StringFind").implementedAs(StringRuntime::findNext).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike, RuntimeFunction::intLike}, resTypeIsI64);
    builtinRegistry->add("StringLength").implementedAs(StringRuntime::len).matchesTypes({RuntimeFunction::stringLike}, resTypeIsI64);
    builtinRegistry->add("StringSplit").implementedAs(StringRuntime::split).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike, RuntimeFunction::intLike}, [](mlir::Type t, mlir::TypeRange) { return mlir::isa<db::ListType>(t) && mlir::isa<db::StringType>(mlir::cast<db::ListType>(t).getElementType()); });

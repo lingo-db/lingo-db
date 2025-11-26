@@ -569,3 +569,28 @@ lingodb::runtime::List* lingodb::runtime::StringRuntime::regexSearch(lingodb::ru
    }
    return nullptr;
 }
+
+namespace{
+inline std::string_view ltrim(std::string_view str) {
+   const auto pos(str.find_first_not_of(" \t\n\r\f\v"));
+   str.remove_prefix(std::min(pos, str.length()));
+   return str;
+}
+
+inline std::string_view rtrim(std::string_view str) {
+   const auto pos(str.find_last_not_of(" \t\n\r\f\v"));
+   str.remove_suffix(std::min(str.length() - pos - 1, str.length()));
+   return str;
+}
+
+inline std::string_view trim(std::string_view str) {
+   str = ltrim(str);
+   str = rtrim(str);
+   return str;
+}
+} // namespace
+
+lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::strip(lingodb::runtime::VarLen32 str) {
+        auto trimmed = trim(str.str());
+        return VarLen32::fromString(trimmed, StorageClass::REFCOUNTED);
+}

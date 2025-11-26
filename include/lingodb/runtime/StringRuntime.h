@@ -48,6 +48,7 @@ struct StringRuntime {
    static void addUse(VarLen32 str);
    static VarLen32 promoteToGlobal(VarLen32 str);
    static List* regexSearch(VarLen32 pattern, VarLen32 str);
+   static VarLen32 strip(VarLen32 str);
 };
 } // namespace lingodb::runtime
 #endif // LINGODB_RUNTIME_STRINGRUNTIME_H
