@@ -377,3 +377,27 @@ from (values (1,1), (2,2), (3,3)) t(x,y)
 from test
 |> LIMIT 1
 |> union all (select * from test);
+--//CHECK:  %{{.*}} = relalg.basetable  {table_identifier = "test"} columns: {}
+select 1 from test;
+--//CHECK:  %{{.*}} = relalg.basetable  {table_identifier = "test"} columns: {bool => @test::@bool({type = !db.nullable<i1>})}
+select bool from test;
+--//CHECK:  %{{.*}} = relalg.basetable  {table_identifier = "test"} columns: {int32 => @test::@int32({type = !db.nullable<i32>}), int64 => @test::@int64({type = !db.nullable<i64>})}
+select int32 from test where int64 > 100;
+--//CHECK-DAG:  %{{.*}} = relalg.basetable  {table_identifier = "test"} columns: {int32 => @test::@int32({type = !db.nullable<i32>})}
+--//CHECK-DAG:  %{{.*}} = relalg.basetable  {table_identifier = "test"} columns: {}
+select int32 from test union select 1 from test;
+--//CHECK-DAG:  %{{.*}} = relalg.basetable  {table_identifier = "test"} columns: {int64 => @t2::@int64({type = !db.nullable<i64>}), str => @t2::@str({type = !db.nullable<!db.string>})}
+--//CHECK-DAG:  %{{.*}} = relalg.basetable  {table_identifier = "test"} columns: {decimal => @t1::@decimal({type = !db.nullable<!db.decimal<5, 2>>}), int32 => @t1::@int32({type = !db.nullable<i32>}), int64 => @t1::@int64({type = !db.nullable<i64>})}
+select t1.int32, t2.str from test t1 join test t2 on t1.int64 = t2.int64 where t1.decimal > 1.0;
+--//CHECK-DAG:  %{{.*}} = relalg.basetable  {table_identifier = "test"} columns: {int32 => @{{.*}}::@int32({type = !db.nullable<i32>}), int64 => @{{.*}}::@int64({type = !db.nullable<i64>})}
+--//CHECK-DAG:  %{{.*}} = relalg.basetable  {table_identifier = "test"} columns: {decimal => @{{.*}}::@decimal({type = !db.nullable<!db.decimal<5, 2>>}), int64 => @{{.*}}::@int64({type = !db.nullable<i64>})}
+select int32 from test where int32 IN (select int64 from test t where t.decimal=42) and int64 > 10;
+--//CHECK:      %{{.*}} = relalg.basetable  {table_identifier = "test"} columns: {bool => @{{.*}}::@bool({type = !db.nullable<i1>})}
+--//CHECK:      %{{.*}} = relalg.basetable  {table_identifier = "test"} columns: {}
+select t1.bool from test t1 where not exists( select * from test t2);
+--//CHECK:      %{{.*}} = relalg.basetable  {table_identifier = "test"} columns: {bool => @{{.*}}::@bool({type = !db.nullable<i1>})}
+--//CHECK:      %{{.*}} = relalg.basetable  {table_identifier = "test"} columns: {}
+select t1.bool from test t1 where not exists( select t2.bool from test t2);
+--//CHECK:      %{{.*}} = relalg.basetable  {table_identifier = "test"} columns: {bool => @{{.*}}::@bool({type = !db.nullable<i1>}), int32 => @{{.*}}::@int32({type = !db.nullable<i32>})}
+--//CHECK:      %{{.*}} = relalg.basetable  {table_identifier = "test"} columns: {int32 => @{{.*}}::@int32({type = !db.nullable<i32>})}
+select t1.bool from test t1 where not exists( select t2.bool from test t2 where t2.int32=t1.int32);

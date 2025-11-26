@@ -691,7 +691,7 @@ std::shared_ptr<ast::AstNode> SQLQueryAnalyzer::canonicalizeAndAnalyze(std::shar
       context->pushNewScope();
       auto scope = context->createResolverScope();
       transformed = analyzeTableProducer(transformed, context, scope);
-      for (auto target : context->currentScope->targetInfo.targetColumns) {
+      for (auto target : context->currentScope->targetInfo.getTargetColumns()) {
          if (!target->isSelectable) {
             error("Column " + target->displayName + " is not available after aggregation", transformed->loc);
          }
@@ -742,7 +742,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableProducer(std::
                      boundCteNode->subQueryScope = *subQueryScope;
                      std::vector<std::pair<std::shared_ptr<ast::ColumnReference>, std::shared_ptr<ast::ColumnReference>>> renamedColumnReferences;
                      size_t i = 0;
-                     for (auto targetColumns : targetInfo.targetColumns) {
+                     for (auto targetColumns : targetInfo.getTargetColumns()) {
                         auto from = targetColumns;
                         auto to = std::make_shared<ast::ColumnReference>(context->getUniqueScope(cteNode->alias), from->resultType, from->name);
                         to->displayName = from->displayName;
@@ -787,15 +787,15 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableProducer(std::
                   rightScope = context->currentScope;
                   context->popCurrentScope();
                }
-               if (leftScope->targetInfo.targetColumns.size() != rightScope->targetInfo.targetColumns.size()) {
+               if (leftScope->targetInfo.getTargetColumns().size() != rightScope->targetInfo.getTargetColumns().size()) {
                   error("Left and right side must have the same number of columns", rootNode->loc);
                }
 
                auto newScopeName = context->getUniqueScope("setop");
                std::vector<std::shared_ptr<ast::ColumnReference>> newTargetInfos;
-               for (size_t i = 0; i < leftScope->targetInfo.targetColumns.size(); i++) {
-                  auto leftColumn = leftScope->targetInfo.targetColumns[i];
-                  auto rightColumn = rightScope->targetInfo.targetColumns[i];
+               for (size_t i = 0; i < leftScope->targetInfo.getTargetColumns().size(); i++) {
+                  auto leftColumn = leftScope->targetInfo.getTargetColumn(i);
+                  auto rightColumn = rightScope->targetInfo.getTargetColumn(i);
                   auto commonTypes = SQLTypeUtils::toCommonTypes(std::vector{leftColumn->resultType, rightColumn->resultType});
                   leftColumn->resultType = commonTypes[0];
                   rightColumn->resultType = commonTypes[1];
@@ -807,8 +807,9 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableProducer(std::
                }
 
                context->mapAttribute(resolverScope, setOperationNode->alias.empty() ? context->getUniqueScope("setOp") : setOperationNode->alias, newTargetInfos);
-               context->currentScope->targetInfo.targetColumns = newTargetInfos;
+               context->currentScope->targetInfo.setTargetColumns(newTargetInfos);
                auto boundSetOperationNode = drv.nf.node<ast::BoundSetOperationNode>(setOperationNode->loc, setOperationNode->alias, setOperationNode->setType, setOperationNode->setOpAll, boundLeft, boundRight, leftScope, rightScope);
+
                return boundSetOperationNode;
             }
             case ast::QueryNodeType::VALUES: {
@@ -978,7 +979,7 @@ std::shared_ptr<ast::BoundInsertNode> SQLQueryAnalyzer::analyzeInsertNode(std::s
    if (!std::static_pointer_cast<ast::BoundValuesQueryNode>(boundTableProducer)->modifiers.empty()) {
       error("Modifiers for insert node not yet supported", boundTableProducer->loc);
    }
-   for (auto c : context->currentScope->targetInfo.targetColumns) {
+   for (auto c : context->currentScope->targetInfo.getTargetColumns()) {
       if (c->resultType.type.getTypeId() == catalog::LogicalTypeId::CHAR) {
          auto charInfo = c->resultType.type.getInfo<catalog::CharTypeInfo>();
          if (charInfo->getLength() > 8) {
@@ -1027,8 +1028,8 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
       case ast::PipeOperatorType::SELECT: {
          assert(pipeOperator->node->nodeType == ast::NodeType::TARGET_LIST);
          auto targetSelection = std::static_pointer_cast<ast::TargetList>(pipeOperator->node);
-         std::vector<std::shared_ptr<ast::ColumnReference>> targetColumns{};
-         context->currentScope->targetInfo.targetColumns.clear();
+         std::vector<std::weak_ptr<ast::ColumnReference>> targetColumns{};
+         context->currentScope->targetInfo.clear();
 
          for (auto& target : targetSelection->targets) {
             auto parsedExpression = analyzeExpression(target, context, resolverScope);
@@ -1048,13 +1049,13 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                case ast::ExpressionClass::BOUND_STAR: {
                   auto star = std::static_pointer_cast<ast::BoundStarExpression>(parsedExpression);
                   targetColumns.resize(star->columnReferences.size());
-                  context->currentScope->targetInfo.targetColumns.resize(star->columnReferences.size());
+                  context->currentScope->targetInfo.resize(star->columnReferences.size());
                   std::vector<catalog::Catalog> catalogs;
                   std::string scope;
                   std::vector<catalog::Column> columns;
                   for (auto& [columnReference, index] : star->columnReferences) {
                      targetColumns[index] = columnReference;
-                     context->currentScope->targetInfo.targetColumns[index] = columnReference;
+                     context->currentScope->targetInfo[(index)] = columnReference;
                   }
 
                   break;
@@ -1081,7 +1082,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
          std::vector<std::shared_ptr<ast::BoundExpression>> evalBeforeAggr;
 
          //Clear targetinfo (see PIPE SQL Syntax)
-         context->currentScope->targetInfo.targetColumns.clear();
+         context->currentScope->targetInfo.clear();
 
          std::vector<std::shared_ptr<ast::BoundFunctionExpression>> boundAggregationExpressions{};
          /**
@@ -1384,7 +1385,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
             }
             auto boundExpression = analyzeExpression(target, context, resolverScope);
             assert(boundExpression->columnReference.has_value());
-            std::erase_if(context->currentScope->targetInfo.targetColumns, [&](const std::shared_ptr<ast::ColumnReference>& other) {
+            context->currentScope->targetInfo.eraseif([&](const std::shared_ptr<ast::ColumnReference>& other) {
                return *other == *boundExpression->columnReference.value();
             });
          }
@@ -1466,7 +1467,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableRef(std::share
             context->popCurrentScope();
          }
          size_t i = 0;
-         for (auto target : targetInfo.targetColumns) {
+         for (auto target : targetInfo.getTargetColumns()) {
             assert(!subquery->alias.empty());
             if (subquery->columnNames.size() > i) {
                target->displayName = subquery->columnNames[i];
@@ -1785,10 +1786,10 @@ std::shared_ptr<ast::BoundResultModifier> SQLQueryAnalyzer::analyzeResultModifie
                      }
                      assert(boundConstant->value);
                      auto constantValue = std::static_pointer_cast<ast::IntValue>(boundConstant->value);
-                     if (context->currentScope->targetInfo.targetColumns.size() < static_cast<size_t>(constantValue->iVal) || constantValue->iVal <= 0) {
+                     if (context->currentScope->targetInfo.size() < static_cast<size_t>(constantValue->iVal) || constantValue->iVal <= 0) {
                         error("Invalid order by element", boundConstant->loc);
                      }
-                     columnReference = context->currentScope->targetInfo.targetColumns.at(constantValue->iVal - 1);
+                     columnReference = context->currentScope->targetInfo.getTargetColumn(constantValue->iVal - 1);
                      break;
                   }
                   default: error("Order by element not implemented", orderByElement->expression->loc);
@@ -2053,11 +2054,11 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
             subqueryTargetInfo = context->currentScope->targetInfo;
             context->popCurrentScope();
          }
-         if (subqueryTargetInfo.targetColumns.size() != 1 && subqueryExpr->subQueryType != ast::SubqueryType::EXISTS && subqueryExpr->subQueryType != ast::SubqueryType::NOT_EXISTS) {
+         if (subqueryTargetInfo.size() != 1 && subqueryExpr->subQueryType != ast::SubqueryType::EXISTS && subqueryExpr->subQueryType != ast::SubqueryType::NOT_EXISTS) {
             error("subquery expressions must produce a single value", subqueryExpr->loc);
          }
 
-         auto columnReference = subqueryTargetInfo.targetColumns[0];
+         auto columnReference = subqueryTargetInfo.getTargetColumn(0);
          auto x = std::make_shared<ast::ColumnReference>(columnReference->scope, columnReference->resultType, columnReference->name);
          auto resultType = columnReference->resultType;
          resultType.isNullable = true;
@@ -2071,6 +2072,10 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
 
          auto boundSubqueryExpression = drv.nf.node<ast::BoundSubqueryExpression>(subqueryExpr->loc, subqueryExpr->subQueryType, resultType, subqueryExpr->alias, columnReference, subqueryScope, boundSubquery, boundToTestExpr);
          boundSubqueryExpression->columnReference = x;
+         if (subqueryExpr->subQueryType == ast::SubqueryType::EXISTS || subqueryExpr->subQueryType == ast::SubqueryType::NOT_EXISTS) {
+            boundSubqueryExpression->columnReferenceForSubquery = nullptr;
+            subqueryScope->targetInfo.clear();
+         }
          boundSubqueryExpression->comparisonType = subqueryExpr->comparisonType;
          return boundSubqueryExpression;
       }
