@@ -49,7 +49,7 @@ std::shared_ptr<FunctionCatalogEntry> PythonFunctionCatalogEntry::deserialize(li
    auto code = deserializer.readProperty<std::string>(3);
    auto returnType = deserializer.readProperty<Type>(4);
    auto argumentTypes = deserializer.readProperty<std::vector<Type>>(5);
-   return std::make_shared<CFunctionCatalogEntry>(name, code, returnType, argumentTypes);
+   return std::make_shared<PythonFunctionCatalogEntry>(name, code, returnType, argumentTypes);
 }
 
 
