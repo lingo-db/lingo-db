@@ -539,6 +539,7 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
    }
 
    void runOnOperation() override {
+      toErase.clear();
       relalg::ColumnCreatorAnalysis columnCreatorAnalysis(getOperation());
       using namespace mlir;
       getOperation()->walk([&](relalg::SelectionOp sel) {
@@ -604,6 +605,7 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
                         });
                         for (auto o : sameOps) {
                            o.replaceAllUsesWith(o.getRel());
+                           o->remove();
                            toErase.insert(o.getOperation());
                         }
                      } else {
