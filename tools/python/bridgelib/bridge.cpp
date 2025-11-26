@@ -37,7 +37,7 @@ class Connection {
    public:
    Connection(std::shared_ptr<runtime::Session> session) : session(session) {
       lingodb::compiler::support::eval::init();
-      scheduler = lingodb::scheduler::startScheduler();
+      scheduler = lingodb::scheduler::startScheduler(); //todo: fix session must be created after scheduler
    }
    runtime::Session& getSession() {
       return *session;

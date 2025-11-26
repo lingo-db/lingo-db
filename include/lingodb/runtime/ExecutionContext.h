@@ -67,6 +67,7 @@ class ExecutionContext {
    std::vector<void*> pythonThreadStates;
 #endif
    std::vector<std::vector<State>> perWorkerStates;
+
    std::vector<Arena> stringArenas;
    Session& session;
 #ifdef USE_CPYTHON_WASM_RUNTIME
@@ -76,11 +77,8 @@ class ExecutionContext {
    ExecutionContext(Session& session) : session(session) {
       allocators.resize(lingodb::scheduler::getNumWorkers());
       stringArenas.resize(lingodb::scheduler::getNumWorkers());
-#ifdef USE_CPYTHON_RUNTIME
-      pythonThreadStates.resize(lingodb::scheduler::getNumWorkers(), nullptr);
-#endif
-#ifdef USE_CPYTHON_WASM_RUNTIME
 
+#ifdef USE_CPYTHON_WASM_RUNTIME
       wasmEnvironments.resize(lingodb::scheduler::getNumWorkers(), {nullptr, nullptr});
 #endif
       perWorkerStates.resize(lingodb::scheduler::getNumWorkers());

@@ -36,14 +36,6 @@ lingodb::runtime::ExecutionContext::~ExecutionContext() {
    }
    allocators.clear();
    perWorkerStates.clear();
-#ifdef USE_CPYTHON_RUNTIME
-   for (auto state : pythonThreadStates) {
-      if (state != nullptr) {
-         PyThreadState_Swap((PyThreadState*)state);
-         Py_EndInterpreter(PyThreadState_Get());
-      }
-   }
-#endif
 }
 
 uint8_t* lingodb::runtime::ExecutionContext::allocStateRaw(size_t size) {
@@ -57,7 +49,7 @@ uint8_t* lingodb::runtime::ExecutionContext::allocStateRaw(size_t size) {
 
 void lingodb::runtime::ExecutionContext::setupWasm() {
    auto workerId = scheduler::currentWorkerId();
-   auto& env = wasmEnvironments[workerId];
+   auto& env = session.wasmEnvironments[workerId];
    if (env.first == nullptr) {
       wasm::WASMSession session = wasm::WASM::initializeWASM();
       env.first = session.execEnv;
@@ -70,7 +62,7 @@ void lingodb::runtime::ExecutionContext::teardownWasm() {
 }
 lingodb::wasm::WASMSession lingodb::runtime::ExecutionContext::getWasmSession() {
    auto workerId = scheduler::currentWorkerId();
-   auto& env = wasmEnvironments[workerId];
+   auto& env = session.wasmEnvironments[workerId];
    assert(env.first && env.second);
    return wasm::WASMSession(static_cast<wasm_exec_env_t>(env.first), static_cast<wasm_module_inst_t>(env.second));
 }
@@ -90,7 +82,7 @@ lingodb::runtime::ExecutionContext* lingodb::runtime::getCurrentExecutionContext
 #ifdef USE_CPYTHON_RUNTIME
 void lingodb::runtime::ExecutionContext::setupPython() {
    auto workerId = scheduler::currentWorkerId();
-   if (pythonThreadStates[workerId] == nullptr) {
+   if (session.pythonThreadStates[workerId] == nullptr) {
       //PyGILState_STATE gs = PyGILState_Ensure();
       //auto mainState= PyThreadState_Get();
       PyThreadState *tstate = nullptr;
@@ -110,7 +102,7 @@ void lingodb::runtime::ExecutionContext::setupPython() {
       //PyGILState_Release(gs);
       //PyThreadState_Swap(x);
    } else {
-      PyThreadState_Swap((PyThreadState*)pythonThreadStates[workerId]);
+      PyThreadState_Swap((PyThreadState*)session.pythonThreadStates[workerId]);
    }
 }
 void lingodb::runtime::ExecutionContext::teardownPython() {
@@ -118,7 +110,7 @@ void lingodb::runtime::ExecutionContext::teardownPython() {
    auto workerId = scheduler::currentWorkerId();
    auto state = PyThreadState_Swap(nullptr);//(mainState);
    if (state) {
-      pythonThreadStates[workerId] = state;
+      session.pythonThreadStates[workerId] = state;
    }
 }
 #endif

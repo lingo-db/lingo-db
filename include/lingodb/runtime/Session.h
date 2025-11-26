@@ -1,20 +1,42 @@
 #ifndef LINGODB_RUNTIME_SESSION_H
 #define LINGODB_RUNTIME_SESSION_H
 #include "lingodb/catalog/Catalog.h"
+#include "lingodb/scheduler/Scheduler.h"
 
+#include<vector>
 #include <memory>
+#ifdef USE_CPYTHON_WASM_RUNTIME
+namespace lingodb::wasm {
+struct WASMSession;
+} // namespace lingodb::wasm
+#endif
 
 namespace lingodb::runtime {
 class ExecutionContext;
 class Session {
    std::shared_ptr<catalog::Catalog> catalog;
-
    public:
-   Session(std::shared_ptr<catalog::Catalog> catalog) : catalog(catalog) {}
+#ifdef USE_CPYTHON_RUNTIME
+   std::vector<void*> pythonThreadStates;
+#endif
+#ifdef USE_CPYTHON_WASM_RUNTIME
+   std::vector<std::pair<void*, void*>> wasmEnvironments;
+#endif
+   public:
+   Session(std::shared_ptr<catalog::Catalog> catalog) : catalog(catalog) {
+#ifdef USE_CPYTHON_RUNTIME
+      pythonThreadStates.resize(lingodb::scheduler::getNumWorkers(), nullptr);
+#endif
+#ifdef USE_CPYTHON_WASM_RUNTIME
+
+      wasmEnvironments.resize(lingodb::scheduler::getNumWorkers(), {nullptr, nullptr});
+#endif
+   }
    static std::shared_ptr<Session> createSession();
    static std::shared_ptr<Session> createSession(std::string dbDir, bool eagerLoading = true);
    std::shared_ptr<catalog::Catalog> getCatalog();
    std::unique_ptr<ExecutionContext> createExecutionContext();
+   ~Session();
 };
 } //end namespace lingodb::runtime
 #endif //LINGODB_RUNTIME_SESSION_H

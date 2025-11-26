@@ -706,13 +706,13 @@ class TupleCountResultProcessor : public lingodb::execution::ResultProcessor {
    }
 };
 void execute(std::string inputFileName, std::string databasePath, std::unordered_map<uint32_t, int64_t>& tupleCounts) {
+   auto scheduler = lingodb::scheduler::startScheduler();
    auto session = lingodb::runtime::Session::createSession(databasePath, false);
    lingodb::compiler::support::eval::init();
    auto queryExecutionConfig = lingodb::execution::createQueryExecutionConfig(lingodb::execution::ExecutionMode::CHEAP, false);
    queryExecutionConfig->timingProcessor = {};
    queryExecutionConfig->queryOptimizer = {};
    queryExecutionConfig->resultProcessor = std::make_unique<TupleCountResultProcessor>(tupleCounts);
-   auto scheduler = lingodb::scheduler::startScheduler();
    auto executer = lingodb::execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), *session);
    executer->fromFile(inputFileName);
    lingodb::scheduler::awaitEntryTask(std::make_unique<lingodb::execution::QueryExecutionTask>(std::move(executer)));
