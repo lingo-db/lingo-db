@@ -5,6 +5,3 @@ include_directories(${Boost_INCLUDE_DIRS})
 
 add_library(scheduler Scheduler.cpp)
 target_link_libraries(scheduler Boost::context)
-if(ENABLE_PYTHON STREQUAL "CPYTHON")
-    target_link_libraries(scheduler cpython-wasm)
-endif ()

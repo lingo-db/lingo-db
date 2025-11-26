@@ -200,7 +200,7 @@ PyObjectPtr PythonRuntime::createModule(runtime::VarLen32 modname, runtime::VarL
    // 1) Check if module already exists
    PyObjectPtr mod = wasmSession.callPyFunc<PyObjectPtr>("PyDict_GetItemString", sys_modules, modWasmStr).at(0).of.i32;
    if (mod) {
-      wasmSession.callPyFunc<PyObjectPtr>("Py_INCREF", mod); // convert borrowed → owned
+      wasmSession.callPyFunc<void>("Py_IncRef", mod); // convert borrowed → owned
       return mod;
    }
    // 2) Create new module

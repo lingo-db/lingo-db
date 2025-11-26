@@ -85,6 +85,8 @@ if(ENABLE_PYTHON STREQUAL "CPYTHON")
     target_compile_definitions(run-sql PRIVATE USE_CPYTHON_RUNTIME=1)
 endif()
 
+if(ENABLE_PYTHON STREQUAL "WASM")
 # cpython-wasm-test
 add_executable(cpython-wasm-test cpython-wasm-test.cpp ${UNCOMMON_SHARED_SOURCE})
 target_link_libraries(cpython-wasm-test PUBLIC cpython-wasm)
+endif()

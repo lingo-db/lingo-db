@@ -31,6 +31,7 @@
 #include <mlir/Bytecode/BytecodeWriter.h>
 namespace {
 lingodb::utility::GlobalSetting<std::string> pythonBinary("system.hipy.python_binary", ".venv/bin/python3");
+lingodb::utility::GlobalSetting<std::string> hipyDir("system.hipy.hipy_dir", "vendored/hipy");
 lingodb::utility::GlobalSetting<std::string> cUDFCompilerDriver("system.compilation.c_udf_compiler_driver", "cc");
 
 
@@ -45,15 +46,62 @@ class PythonUDFImplementer : public lingodb::catalog::MLIRUDFImplementor {
 
    mlir::Value callFunction(mlir::ModuleOp& moduleOp, mlir::OpBuilder& builder, mlir::Location loc, mlir::ValueRange args, lingodb::catalog::Catalog* catalog) override {
       using namespace lingodb::compiler::dialect;
-      namespace rt = lingodb::compiler::runtime;
       mlir::Value moduleVal = builder.create<py_interp::CreateModule>(loc,py_interp::PyObjectType::get(builder.getContext()),builder.getStringAttr("udf_"+functionName), builder.getStringAttr(code));
       mlir::Value functionVal = builder.create<py_interp::GetAttr>(loc, py_interp::PyObjectType::get(builder.getContext()), moduleVal, builder.getStringAttr(functionName));
+
+      std::vector<mlir::Value> values;
+      std::vector<mlir::Value> isNull;
+      for (auto arg : args) {
+         values.push_back(arg);
+         if (mlir::isa<db::NullableType>(arg.getType())) {
+            isNull.push_back(builder.create<db::IsNullOp>(loc, arg));
+         }
+      }
+      if (isNull.size() > 0) {
+         auto allNotNull = builder.create<db::OrOp>(loc, isNull);
+         auto* elseBlock = new mlir::Block;
+         mlir::Type resType;
+         {
+            mlir::OpBuilder::InsertionGuard guard(builder);
+            builder.setInsertionPointToStart(elseBlock);
+            std::vector<mlir::Value> notNullValues;
+            for (auto v : values) {
+               notNullValues.push_back(mlir::isa<db::NullableType>(v.getType()) ? builder.create<db::NullableGetVal>(loc, mlir::cast<db::NullableType>(v.getType()).getType(), v) : v);
+            }
+            std::vector<mlir::Value> castedArgs;
+            for (auto arg : notNullValues) {
+               castedArgs.push_back(builder.create<py_interp::CastToPyObject>(loc, py_interp::PyObjectType::get(builder.getContext()), arg));
+            }
+            mlir::Value res = builder.create<py_interp::Call>(loc, py_interp::PyObjectType::get(builder.getContext()), functionVal, mlir::ValueRange(castedArgs),builder.getArrayAttr({}));
+            mlir::Value nativeRes = builder.create<py_interp::CastFromPyObject>(loc, returnType.getMLIRTypeCreator()->createType(builder.getContext()), res);
+
+            mlir::Value resNullable = builder.create<db::AsNullableOp>(loc, db::NullableType::get(nativeRes.getType()), nativeRes);
+            resType = resNullable.getType();
+            builder.create<mlir::scf::YieldOp>(loc, resNullable);
+         }
+         auto* thenBlock = new mlir::Block;
+
+         {
+            mlir::OpBuilder::InsertionGuard guard(builder);
+            builder.setInsertionPointToStart(thenBlock);
+            mlir::Value res = builder.create<db::NullOp>(loc, resType);
+            builder.create<mlir::scf::YieldOp>(loc, res);
+         }
+         auto ifOp = builder.create<mlir::scf::IfOp>(loc, mlir::TypeRange{resType}, allNotNull, false);
+         ifOp.getThenRegion().getBlocks().clear();
+         ifOp.getThenRegion().push_back(thenBlock);
+         ifOp.getElseRegion().getBlocks().clear();
+         ifOp.getElseRegion().push_back(elseBlock);
+         return ifOp.getResult(0);
+      }
+
       std::vector<mlir::Value> castedArgs;
       for (auto arg : args) {
          castedArgs.push_back(builder.create<py_interp::CastToPyObject>(loc, py_interp::PyObjectType::get(builder.getContext()), arg));
       }
       mlir::Value res = builder.create<py_interp::Call>(loc, py_interp::PyObjectType::get(builder.getContext()), functionVal, mlir::ValueRange(castedArgs),builder.getArrayAttr({}));
       mlir::Value nativeRes = builder.create<py_interp::CastFromPyObject>(loc, returnType.getMLIRTypeCreator()->createType(builder.getContext()), res);
+
       return nativeRes;
    }
 };
@@ -304,7 +352,7 @@ std::string compileHiPyUDF(std::string functionName, std::string code, std::vect
 
       // Step 2: Invoke the external script
       std::ostringstream command;
-      command << pythonBinary.getValue() << " vendored/hipy/compile.py " << tempFilePath << " " << functionName << " '" << jsonArgsStr << "' "<< functionName <<" " << (fallback ? "fallback" : "nofallback") <<" "<< outputFilePath << " 2>&1";
+      command << pythonBinary.getValue() << " "<<hipyDir.getValue()<<"/compile.py " << tempFilePath << " " << functionName << " '" << jsonArgsStr << "' "<< functionName <<" " << (fallback ? "fallback" : "nofallback") <<" "<< outputFilePath << " 2>&1";
       std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(command.str().c_str(), "r"), pclose);
       if (!pipe) {
          throw std::runtime_error("Failed to execute compile.py script.");
