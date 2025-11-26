@@ -25,6 +25,9 @@ void awaitChildTask(std::unique_ptr<Task> task);
 size_t getNumWorkers();
 //returns the id of the current worker thread
 size_t currentWorkerId();
+#if !ASAN_ACTIVE
+uint8_t* getStackBoundary();
+#endif
 
 } // namespace lingodb::scheduler
 

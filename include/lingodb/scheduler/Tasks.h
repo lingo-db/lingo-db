@@ -13,11 +13,18 @@ class TaskWithContext : public Task {
 #ifdef USE_CPYTHON_RUNTIME
       context->setupPython();
 #endif
+#ifdef USE_CPYTHON_WASM_RUNTIME
+      context->setupWasm();
+#endif
    }
    void teardown() override {
       runtime::setCurrentExecutionContext(nullptr);
 #ifdef USE_CPYTHON_RUNTIME
       context->teardownPython();
+#endif
+#ifdef USE_CPYTHON_WASM_RUNTIME
+      context->teardownWasm();
+
 #endif
    }
 };
@@ -31,11 +38,17 @@ class TaskWithImplicitContext : public Task {
 #ifdef USE_CPYTHON_RUNTIME
       context->setupPython();
 #endif
+#ifdef USE_CPYTHON_WASM_RUNTIME
+      context->setupWasm();
+#endif
    }
    void teardown() override {
       runtime::setCurrentExecutionContext(nullptr);
 #ifdef USE_CPYTHON_RUNTIME
       context->teardownPython();
+#endif
+#ifdef USE_CPYTHON_WASM_RUNTIME
+      context->teardownWasm();
 #endif
    }
 };

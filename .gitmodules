@@ -8,3 +8,7 @@
 [submodule "vendored/mimalloc"]
 	path = vendored/mimalloc
 	url = https://github.com/microsoft/mimalloc.git
+
+[submodule "vendored/cpython-wasm"]
+	path = vendored/cpython-wasm
+	url = git@github.com:lingo-db/cpython-wasm.git

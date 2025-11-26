@@ -17,6 +17,9 @@ set(CLANG_TOOL_FLAGS "-xc++" "--std=c++20" "-v" "-v" "-v")
 set(CLANG_TOOL_FLAGS "${CLANG_TOOL_FLAGS}" "-I${CMAKE_SOURCE_DIR}/include")
 set(CLANG_TOOL_FLAGS "${CLANG_TOOL_FLAGS}" "-I${ARROW_INCLUDE_DIR}")
 set(CLANG_TOOL_FLAGS "${CLANG_TOOL_FLAGS}" "-I" "${PY_HOME}/include/python3.14")
+if (ENABLE_PYTHON STREQUAL "WASM")
+    set(CLANG_TOOL_FLAGS "${CLANG_TOOL_FLAGS}" "-DUSE_CPYTHON_WASM_RUNTIME=1")
+endif()
 
 # Get Clang resource directory
 # Check if the compiler is ccache

@@ -161,18 +161,22 @@ class Fiber {
 };
 
 #else
+thread_local uint8_t* stackBoundary = 0;
 class Fiber {
    static constexpr size_t stackSize = 1 << 20;
 
    struct LocalAllocator {
       Fiber* fiber = nullptr;
-
+      void* sp = nullptr;
+      size_t size = 0;
       boost::context::stack_context allocate() {
          assert(!fiber->stackAllocated);
          boost::context::stack_context sctx;
          sctx.size = stackSize;
          sctx.sp = fiber->stackSpace + stackSize;
          fiber->stackAllocated = true;
+         sp = sctx.sp;
+         size = sctx.size;
          return sctx;
       }
 
@@ -192,6 +196,7 @@ class Fiber {
    boost::context::fiber sink;
    Worker* worker = nullptr;
    std::shared_ptr<TaskWrapper> task = nullptr;
+   LocalAllocator allocator;
 
    public:
    void setup();
@@ -202,8 +207,10 @@ class Fiber {
       this->task = taskWrapper;
       done = false;
       isRunning = true;
-      fiber = boost::context::fiber{std::allocator_arg, LocalAllocator{this}, [&](boost::context::fiber&& boostSink) {
+      allocator = LocalAllocator{this};
+      fiber = boost::context::fiber{std::allocator_arg, allocator, [&](boost::context::fiber&& boostSink) {
                                        sink = std::move(boostSink);
+                                       stackBoundary = static_cast<uint8_t*>(allocator.sp) - allocator.size;
                                        setup();
                                        f();
                                        teardown();
@@ -227,7 +234,10 @@ class Fiber {
       assert(!isRunning);
       assert(!done);
       isRunning = true;
+      stackBoundary = static_cast<uint8_t*>(allocator.sp) - allocator.size;
+      ;
       setup();
+
       fiber = std::move(fiber).resume();
       teardown();
       return done;
@@ -786,6 +796,16 @@ size_t currentWorkerId() {
    }
    assert(false);
    return std::numeric_limits<size_t>::max();
+}
+#if !ASAN_ACTIVE
+uint8_t* getStackBoundary() {
+   return stackBoundary;
+}
+#endif
+
+Worker* getCurrentWorker() {
+   assert(currentWorker);
+   return currentWorker;
 }
 } // namespace lingodb::scheduler
 

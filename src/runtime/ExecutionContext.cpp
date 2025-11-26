@@ -2,6 +2,10 @@
 #ifdef USE_CPYTHON_RUNTIME
 #include "Python.h"
 #endif
+#ifdef USE_CPYTHON_WASM_RUNTIME
+#include "lingodb/runtime/WASM.h"
+#include "wasm_export.h"
+#endif
 #include <cassert>
 
 void lingodb::runtime::ExecutionContext::setResult(uint32_t id, uint8_t* ptr) {
@@ -49,6 +53,28 @@ uint8_t* lingodb::runtime::ExecutionContext::allocStateRaw(size_t size) {
    context->registerState({ptr, [](void* p) { free(p); }});
    return ptr;
 }
+#ifdef USE_CPYTHON_WASM_RUNTIME
+
+void lingodb::runtime::ExecutionContext::setupWasm() {
+   auto workerId = scheduler::currentWorkerId();
+   auto& env = wasmEnvironments[workerId];
+   if (env.first == nullptr) {
+      wasm::WASMSession session = wasm::WASM::initializeWASM();
+      env.first = session.execEnv;
+      env.second = session.moduleInst;
+   } else {
+   }
+}
+void lingodb::runtime::ExecutionContext::teardownWasm() {
+   //TODO teardown
+}
+lingodb::wasm::WASMSession lingodb::runtime::ExecutionContext::getWasmSession() {
+   auto workerId = scheduler::currentWorkerId();
+   auto& env = wasmEnvironments[workerId];
+   assert(env.first && env.second);
+   return wasm::WASMSession(static_cast<wasm_exec_env_t>(env.first), static_cast<wasm_module_inst_t>(env.second));
+}
+#endif
 
 namespace {
 thread_local lingodb::runtime::ExecutionContext* currentExecutionContext = nullptr;

@@ -304,7 +304,11 @@ void PyInterpLoweringPass::runOnOperation() {
    });
 
    typeConverter.addConversion([&](py_interp::PyObjectType) {
+#ifdef USE_CPYTHON_WASM_RUNTIME
+      return mlir::IntegerType::get(ctxt, 32);
+#else
       return util::RefType::get(ctxt, mlir::IntegerType::get(ctxt, 8));
+#endif
    });
    typeConverter.addConversion([&](FunctionType funcType) {
       llvm::SmallVector<Type> convertedInputs;

@@ -8,6 +8,11 @@
 #include "ConcurrentMap.h"
 #include "Session.h"
 #include <lingodb/scheduler/Scheduler.h>
+#ifdef USE_CPYTHON_WASM_RUNTIME
+namespace lingodb::wasm {
+struct WASMSession;
+} // namespace lingodb::wasm
+#endif
 namespace lingodb::runtime {
 class Database;
 //some state required for query processing;
@@ -64,13 +69,19 @@ class ExecutionContext {
    std::vector<std::vector<State>> perWorkerStates;
    std::vector<Arena> stringArenas;
    Session& session;
-
+#ifdef USE_CPYTHON_WASM_RUNTIME
+   std::vector<std::pair<void*, void*>> wasmEnvironments;
+#endif
    public:
    ExecutionContext(Session& session) : session(session) {
       allocators.resize(lingodb::scheduler::getNumWorkers());
       stringArenas.resize(lingodb::scheduler::getNumWorkers());
 #ifdef USE_CPYTHON_RUNTIME
       pythonThreadStates.resize(lingodb::scheduler::getNumWorkers(), nullptr);
+#endif
+#ifdef USE_CPYTHON_WASM_RUNTIME
+
+      wasmEnvironments.resize(lingodb::scheduler::getNumWorkers(), {nullptr, nullptr});
 #endif
       perWorkerStates.resize(lingodb::scheduler::getNumWorkers());
    }
@@ -113,7 +124,11 @@ class ExecutionContext {
    void setupPython();
    void teardownPython();
 #endif
-
+#ifdef USE_CPYTHON_WASM_RUNTIME
+   void setupWasm();
+   void teardownWasm();
+   wasm::WASMSession getWasmSession();
+#endif
    ~ExecutionContext();
 };
 
