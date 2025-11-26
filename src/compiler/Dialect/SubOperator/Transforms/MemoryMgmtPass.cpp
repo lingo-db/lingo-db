@@ -64,8 +64,9 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
             builder.setInsertionPointAfter(insertAfterOp);
             llvm::SmallVector<mlir::Value> unpacked;
             builder.createOrFold<util::UnPackOp>(unpacked, insertAfterOp->getLoc(), val);
+            auto insertionPoint=&*builder.getInsertionPoint();
             for (auto element : unpacked) {
-               addUseAfter(element, insertAfterOp);
+               addUseAfter(element, insertionPoint);
             }
 
          } else {
@@ -170,6 +171,9 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
                       if (tryOp.getExceptArg()) {
                          addUse(tryOp.getExceptArg(), op);
                       }
+                  })
+                  .Case<db::AsNullableOp>([&](db::AsNullableOp asNullableOp) {
+                     addUse(asNullableOp.getVal(), op);
                   })
                   .Case<util::PackOp>([&](util::PackOp packOp) {
                      for (auto value : packOp.getVals()) {
