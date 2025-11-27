@@ -39,7 +39,7 @@ find_package(ArrowCompute 21 REQUIRED)
 option(ENABLE_GPU_BACKEND "enable GPU backend" OFF)
 option(ENABLE_BASELINE_BACKEND "enable tpde baseline backend" OFF)
 option(ENABLE_TESTS "enable tests" ON)
-
+  add_subdirectory(vendored/mimalloc EXCLUDE_FROM_ALL)
 
 find_package(Clang 20.1 REQUIRED)
 find_package(LLVM 20.1 REQUIRED)

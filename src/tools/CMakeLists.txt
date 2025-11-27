@@ -11,8 +11,9 @@ else ()
     list(APPEND COMPILE_DEFS " GPU_ENABLED=0")
 endif (ENABLE_GPU_BACKEND)
 
+list(APPEND COMPILE_DEFS " MI_MALLOC_OVERRIDE=1")
 add_executable(sql sql.cpp)
-target_link_libraries(sql runner utility runtime mlir-support scheduler linenoise-ng)
+target_link_libraries(sql runner utility runtime mlir-support scheduler linenoise-ng mimalloc-static)
 set_target_properties(sql PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 target_compile_definitions(sql PRIVATE ${COMPILE_DEFS})
 
