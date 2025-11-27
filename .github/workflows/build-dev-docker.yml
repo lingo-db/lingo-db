@@ -35,6 +35,7 @@ jobs:
             ghcr.io/lingo-db/lingodb-dev:${{ github.sha }}
             ${{ github.ref == 'refs/heads/main' && 'ghcr.io/lingo-db/lingodb-dev:latest' || '' }}
           target: devimg
+          platforms: linux/amd64,linux/arm64
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@v2
         with:
