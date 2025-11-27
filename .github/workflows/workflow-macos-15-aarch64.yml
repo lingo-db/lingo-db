@@ -19,6 +19,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: CCache
         id: ccache
@@ -49,6 +51,7 @@ jobs:
           CC: "ccache /opt/homebrew/opt/llvm@20/bin/clang"
           CCACHE_DIR: "~/.ccache"
           CMAKE_PREFIX_PATH: "/opt/homebrew/"
+          ENABLE_MIMALLOC: "OFF"
         run: |
           mkdir -p ~/.ccache
           make clean
