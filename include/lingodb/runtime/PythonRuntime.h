@@ -24,6 +24,7 @@ class PythonRuntime {
    public:
    static PyObjectPtr createModule(runtime::VarLen32 modname, runtime::VarLen32 source);
    static PyObjectPtr getAttr(PyObjectPtr obj, runtime::VarLen32 attr);
+   static PyObjectPtr getAttr2(PyObjectPtr obj, PyObjectPtr attr);
    static void setAttr(PyObjectPtr obj, runtime::VarLen32 attr, PyObjectPtr value);
    static PyObjectPtr call0(PyObjectPtr callable);
    static PyObjectPtr call1(PyObjectPtr callable, PyObjectPtr arg1);

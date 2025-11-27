@@ -4,6 +4,8 @@
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/Bytecode/BytecodeOpInterface.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
+
 
 #include "lingodb/compiler/Dialect/PyInterp/PyInterpTypes.h"
 

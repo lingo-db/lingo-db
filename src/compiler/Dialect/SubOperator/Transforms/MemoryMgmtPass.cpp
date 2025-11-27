@@ -262,7 +262,7 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
       module.walk([&](subop::MapOp mapOp) {
          llvm::DenseSet<mlir::Value> notCounted;
          mapOp.getFn().walk([&](mlir::Operation* op){
-            if(mlir::isa<db::ConstantOp>(op)){
+            if(mlir::isa<db::ConstantOp, py_interp::ConstStrPyObject>(op)){
                notCounted.insert(op->getResult(0));
             }
          });
@@ -280,7 +280,7 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
             return;
          }
          funcOp.getBody().walk([&](mlir::Operation* op){
-            if(mlir::isa<db::ConstantOp>(op)){
+            if(mlir::isa<db::ConstantOp, py_interp::ConstStrPyObject>(op)){
                notCounted.insert(op->getResult(0));
             }
          });

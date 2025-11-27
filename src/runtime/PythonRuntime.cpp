@@ -90,6 +90,9 @@ PyObject* PythonRuntime::getAttr(PyObject* obj, runtime::VarLen32 attr){
    auto attrStr = attr.str();
    return PyObject_GetAttrString(obj, attrStr.c_str());
 }
+PyObject* PythonRuntime::getAttr2(PyObject* obj, PyObject* attr){
+   return PyObject_GetAttr(obj, attr);
+}
 PyObject* PythonRuntime::call0(PyObject* callable){
    return PyObject_CallFunctionObjArgs(callable, NULL);
 }
@@ -152,8 +155,7 @@ runtime::VarLen32 PythonRuntime::toVarLen32(PyObject* obj){
    throw std::runtime_error("Object is not a string");
 }
 PyObject* PythonRuntime::fromVarLen32(runtime::VarLen32 value){
-   auto str = value.str();
-   return PyUnicode_FromStringAndSize(str.data(), str.size());
+   return PyUnicode_FromStringAndSize(value.data(), value.getLen());
 }
 double PythonRuntime::toDouble(PyObject* obj){
    return PyFloat_AsDouble(obj);

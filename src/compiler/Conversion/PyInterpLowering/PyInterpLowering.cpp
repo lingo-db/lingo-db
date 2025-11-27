@@ -88,6 +88,16 @@ class GetAttrLowering : public OpConversionPattern<py_interp::GetAttr> {
       return success();
    }
 };
+class GetAttr2Lowering : public OpConversionPattern<py_interp::GetAttr2> {
+   public:
+   using OpConversionPattern<py_interp::GetAttr2>::OpConversionPattern;
+   LogicalResult matchAndRewrite(py_interp::GetAttr2 op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op.getLoc();
+      auto val = rt::PythonRuntime::getAttr2(rewriter, op.getLoc())({adaptor.getOn(), adaptor.getName()})[0];
+      rewriter.replaceOp(op, val);
+      return success();
+   }
+};
 class SetAttrLowering : public OpConversionPattern<py_interp::SetAttr> {
    public:
    using OpConversionPattern<py_interp::SetAttr>::OpConversionPattern;
@@ -169,6 +179,15 @@ class IncRefLowering : public OpConversionPattern<py_interp::IncRef> {
    LogicalResult matchAndRewrite(py_interp::IncRef op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       rt::PythonRuntime::incref(rewriter, op.getLoc())({adaptor.getObj()});
       rewriter.eraseOp(op);
+      return success();
+   }
+};
+class ConstStrLowering : public OpConversionPattern<py_interp::ConstStrPyObject> {
+   public:
+   using OpConversionPattern<py_interp::ConstStrPyObject>::OpConversionPattern;
+   LogicalResult matchAndRewrite(py_interp::ConstStrPyObject op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto strConst = rewriter.create<util::CreateConstVarLen>(op.getLoc(), util::VarLen32Type::get(rewriter.getContext()),mlir::cast<mlir::StringAttr>(op.getValue()));
+      rewriter.replaceOp(op, rt::PythonRuntime::fromVarLen32(rewriter, op.getLoc())({strConst})[0]);
       return success();
    }
 };
@@ -333,12 +352,14 @@ void PyInterpLoweringPass::runOnOperation() {
    patterns.insert<ImportLowering>(typeConverter, &getContext());
    patterns.insert<CreateModuleLowering>(typeConverter, &getContext());
    patterns.insert<GetAttrLowering>(typeConverter, &getContext());
+   patterns.insert<GetAttr2Lowering>(typeConverter, &getContext());
    patterns.insert<SetAttrLowering>(typeConverter, &getContext());
    patterns.insert<CallLowering>(typeConverter, &getContext());
    patterns.insert<CastToPyObjectLowering>(typeConverter, &getContext());
    patterns.insert<CastFromPyObjectLowering>(typeConverter, &getContext());
    patterns.insert<DecRefLowering>(typeConverter, &getContext());
    patterns.insert<IncRefLowering>(typeConverter, &getContext());
+   patterns.insert<ConstStrLowering>(typeConverter, &getContext());
    if (failed(applyFullConversion(module, target, std::move(patterns))))
       signalPassFailure();
 }

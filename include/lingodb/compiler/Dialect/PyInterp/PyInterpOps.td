@@ -1,6 +1,7 @@
 include "mlir/IR/OpBase.td"
 include "mlir/IR/EnumAttr.td"
 include "mlir/IR/AttrTypeBase.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
 
 def PyInterp_Dialect : Dialect {
     let summary = "Dialect for interacting with an embedded Python interpreter";
@@ -14,6 +15,7 @@ def PyInterp_Dialect : Dialect {
         public:
     }];
     let useDefaultTypePrinterParser=1;
+    let hasConstantMaterializer = 1;
 }
 
 class PyInterp_Op<string mnemonic, list<Trait> traits = []> : Op<PyInterp_Dialect, mnemonic, traits>{
@@ -37,7 +39,13 @@ def CreateModule : PyInterp_Op<"create_module"> {
     let results = (outs PyObjectType:$module);
     let assemblyFormat = "$name `,` $code attr-dict";
 }
+def ConstStrPyObject : PyInterp_Op<"const_str_pyobject", [ConstantLike,Pure]> {
+    let arguments = (ins AnyAttr:$value);
+    let results = (outs PyObjectType:$obj);
+    let assemblyFormat = "$value attr-dict";
+     let hasFolder = 1;
 
+}
 def CastToPyObject : PyInterp_Op<"cast_to_pyobject"> {
     let arguments = (ins AnyType:$from);
     let results = (outs PyObjectType:$to);
@@ -60,6 +68,11 @@ def Call : PyInterp_Op<"py_call"> {
 }
 def GetAttr : PyInterp_Op<"get_attr"> {
 	let arguments = (ins PyObjectType:$on, StrAttr:$name);
+	let results = (outs PyObjectType:$result);
+	let assemblyFormat = "$on `->` $name attr-dict";
+}
+def GetAttr2 : PyInterp_Op<"get_attr2"> {
+	let arguments = (ins PyObjectType:$on, PyObjectType:$name);
 	let results = (outs PyObjectType:$result);
 	let assemblyFormat = "$on `->` $name attr-dict";
 }
