@@ -38,7 +38,6 @@ inline void throw_python_error() {
 
 PyObject* PythonRuntime::createModule(runtime::VarLen32 modname, runtime::VarLen32 source){
    auto modStr=modname.str();
-   auto sourceStr = source.str();
 
    PyObject *sys_modules = PyImport_GetModuleDict();  // borrowed
 
@@ -48,6 +47,8 @@ PyObject* PythonRuntime::createModule(runtime::VarLen32 modname, runtime::VarLen
       Py_INCREF(mod);      // convert borrowed → owned
       return mod;          // caller owns reference
    }
+   auto sourceStr = source.str();
+
 
    // 2) Create new module
    mod = PyModule_New(modname.data());
@@ -191,18 +192,20 @@ PyObjectPtr PythonRuntime::createModule(runtime::VarLen32 modname, runtime::VarL
    }
 #endif
    auto modStr = modname.str();
-   auto sourceStr = source.str();
    wasm::WASMSession wasmSession = getCurrentExecutionContext()->getWasmSession();
    auto modWasmStr = wasmSession.createWasmStringBuffer(modStr);
-   auto sourceWasmStr = wasmSession.createWasmStringBuffer(sourceStr);
    PyObjectPtr sys_modules = wasmSession.callPyFunc<PyObjectPtr>("PyImport_GetModuleDict").at(0).of.i32;
    assert(sys_modules);
    // 1) Check if module already exists
    PyObjectPtr mod = wasmSession.callPyFunc<PyObjectPtr>("PyDict_GetItemString", sys_modules, modWasmStr).at(0).of.i32;
    if (mod) {
       wasmSession.callPyFunc<void>("Py_IncRef", mod); // convert borrowed → owned
+      wasmSession.freeWasmBuffer(modWasmStr);
       return mod;
    }
+   auto sourceStr = source.str();
+   auto sourceWasmStr = wasmSession.createWasmStringBuffer(sourceStr);
+
    // 2) Create new module
    mod = wasmSession.callPyFunc<PyObjectPtr>("PyModule_New", modWasmStr).at(0).of.i32;
    if (!mod) {
