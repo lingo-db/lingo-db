@@ -447,7 +447,7 @@ class EntryStorageHelper {
       }
       return result;
    }
-   LazyValueMap getValueMap(mlir::Value ref, mlir::OpBuilder& rewriter, mlir::Location loc, ArrayAttr relevantMembers = {}) {
+   /*LazyValueMap getValueMap(mlir::Value ref, mlir::OpBuilder& rewriter, mlir::Location loc, ArrayAttr relevantMembers = {}) {
       llvm::SmallVector<Member> relevantMembersVec;
       if (relevantMembers) {
          for (auto mAttr : relevantMembers) {
@@ -455,6 +455,10 @@ class EntryStorageHelper {
          }
       }
       return LazyValueMap(ref, rewriter, loc, *this, relevantMembers ? relevantMembersVec : std::optional<llvm::SmallVector<Member>>());
+   }*/
+   LazyValueMap getValueMap(mlir::Value ref, mlir::OpBuilder& rewriter, mlir::Location loc, std::optional<llvm::SmallVector<subop::Member>> relevantMembers = {}) {
+
+      return LazyValueMap(ref, rewriter, loc, *this, relevantMembers);
    }
    template <class L>
    void storeOrderedValues(mlir::Value ref, L list, mlir::OpBuilder& rewriter, mlir::Location loc) {
@@ -1616,7 +1620,7 @@ class CreateSegmentTreeViewLowering : public SubOpConversionPattern<subop::Creat
             auto sourceValues = sourceStorageHelper.getValueMap(src, rewriter, loc);
             std::vector<mlir::Value> args;
             for (auto relevantMember : createOp.getRelevantMembers()) {
-               args.push_back(sourceValues.get(mlir::cast<subop::MemberAttr>(relevantMember).getMember()));
+               args.push_back(sourceValues.get(relevantMember));
             }
             Block* sortLambda = &createOp.getInitialFn().front();
             rewriter.inlineBlock<tuples::ReturnOpAdaptor>(sortLambda, args, [&](tuples::ReturnOpAdaptor adaptor) {
@@ -3620,7 +3624,7 @@ class ReduceContinuousRefLowering : public SubOpTupleStreamConsumerConversionPat
          arguments.push_back(arg);
       }
       for (auto member : reduceOp.getMembers()) {
-         mlir::Value arg = values.get(mlir::cast<subop::MemberAttr>(member).getMember());
+         mlir::Value arg = values.get(member);
          if (arg.getType() != reduceOp.getRegion().getArgument(arguments.size()).getType()) {
             arg = rewriter.create<mlir::UnrealizedConversionCastOp>(reduceOp->getLoc(), reduceOp.getRegion().getArgument(arguments.size()).getType(), arg).getResult(0);
          }
@@ -3629,7 +3633,7 @@ class ReduceContinuousRefLowering : public SubOpTupleStreamConsumerConversionPat
 
       rewriter.inlineBlock<tuples::ReturnOpAdaptor>(&reduceOp.getRegion().front(), arguments, [&](tuples::ReturnOpAdaptor adaptor) {
          for (size_t i = 0; i < reduceOp.getMembers().size(); i++) {
-            auto member = mlir::cast<subop::MemberAttr>(reduceOp.getMembers()[i]).getMember();
+            auto member = reduceOp.getMembers()[i];
             auto& memberVal = values.get(member);
             auto updatedVal = adaptor.getResults()[i];
             if (updatedVal.getType() != memberVal.getType()) {
@@ -3764,7 +3768,7 @@ class ReduceContinuousRefAtomicLowering : public SubOpTupleStreamConsumerConvers
       auto ptrType = storageHelper.getRefType();
       auto baseRef = rewriter.create<util::BufferGetRef>(reduceOp->getLoc(), ptrType, unpackedReference[1]);
       auto elementRef = rewriter.create<util::ArrayElementPtrOp>(reduceOp->getLoc(), ptrType, baseRef, unpackedReference[0]);
-      auto valueRef = storageHelper.getPointer(elementRef, mlir::cast<subop::MemberAttr>(reduceOp.getMembers()[0]).getMember(), rewriter, loc);
+      auto valueRef = storageHelper.getPointer(elementRef, reduceOp.getMembers()[0], rewriter, loc);
       implementAtomicReduce(reduceOp, rewriter, valueRef, mapping);
    }
 };
@@ -3782,7 +3786,7 @@ class ReduceOpLowering : public SubOpTupleStreamConsumerConversionPattern<subop:
       auto ref = mapping.resolve(reduceOp, reduceOp.getRef());
       EntryStorageHelper storageHelper(reduceOp, members, referenceType.hasLock(), typeConverter);
       if (reduceOp->hasAttr("atomic")) {
-         auto valueRef = storageHelper.getPointer(ref, mlir::cast<subop::MemberAttr>(reduceOp.getMembers()[0]).getMember(), rewriter, reduceOp->getLoc());
+         auto valueRef = storageHelper.getPointer(ref,reduceOp.getMembers()[0], rewriter, reduceOp->getLoc());
          implementAtomicReduce(reduceOp, rewriter, valueRef, mapping);
       } else {
          auto values = storageHelper.getValueMap(ref, rewriter, reduceOp->getLoc());
@@ -3795,7 +3799,7 @@ class ReduceOpLowering : public SubOpTupleStreamConsumerConversionPattern<subop:
             arguments.push_back(arg);
          }
          for (auto member : reduceOp.getMembers()) {
-            mlir::Value arg = values.get(mlir::cast<subop::MemberAttr>(member).getMember());
+            mlir::Value arg = values.get(member);
             if (arg.getType() != reduceOp.getRegion().getArgument(arguments.size()).getType()) {
                arg = rewriter.create<mlir::UnrealizedConversionCastOp>(reduceOp->getLoc(), reduceOp.getRegion().getArgument(arguments.size()).getType(), arg).getResult(0);
             }
@@ -3804,8 +3808,7 @@ class ReduceOpLowering : public SubOpTupleStreamConsumerConversionPattern<subop:
 
          rewriter.inlineBlock<tuples::ReturnOpAdaptor>(&reduceOp.getRegion().front(), arguments, [&](tuples::ReturnOpAdaptor adaptor) {
             for (size_t i = 0; i < reduceOp.getMembers().size(); i++) {
-               auto member = mlir::cast<subop::MemberAttr>(reduceOp.getMembers()[i]).getMember();
-               auto& memberVal = values.get(member);
+               auto& memberVal = values.get(reduceOp.getMembers()[i]);
                auto updatedVal = adaptor.getResults()[i];
                if (updatedVal.getType() != memberVal.getType()) {
                   updatedVal = rewriter.create<mlir::UnrealizedConversionCastOp>(reduceOp->getLoc(), memberVal.getType(), updatedVal).getResult(0);
@@ -4188,7 +4191,7 @@ class LoopLowering : public SubOpConversionPattern<subop::LoopOp> {
          std::vector<mlir::Value> res;
          auto simpleStateType = mlir::cast<subop::SimpleStateType>(continueOp.getOperandTypes()[0]);
          EntryStorageHelper storageHelper(loopOp, simpleStateType.getMembers(), simpleStateType.hasLock(), typeConverter);
-         auto shouldContinueBool = storageHelper.getValueMap(nestedGroupResultMapping.lookup(continueOp.getOperand(0)), rewriter, loc).get(continueOp.getCondMember().getMember());
+         auto shouldContinueBool = storageHelper.getValueMap(nestedGroupResultMapping.lookup(continueOp.getOperand(0)), rewriter, loc).get(continueOp.getCondMember());
          res.push_back(shouldContinueBool);
          for (auto operand : continueOp->getOperands().drop_front()) {
             res.push_back(nestedGroupResultMapping.lookup(operand));

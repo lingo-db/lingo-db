@@ -43,6 +43,21 @@ tuples::ColumnDefAttr SubOpStateUsageTransformer::createReplacementColumn(tuples
    replaceColumn(&oldColumn.getColumn(), &newColumnDef.getColumn());
    return newColumnDef;
 }
+llvm::SmallVector<subop::Member> SubOpStateUsageTransformer::updateMembers(const llvm::SmallVector<subop::Member>& currentMembers){
+   bool anyNeedsReplacement = llvm::any_of(currentMembers, [&](auto m){return memberMapping.contains(m);});
+   if (anyNeedsReplacement){
+      llvm::SmallVector<subop::Member> newMembers;
+      for (auto m: currentMembers){
+         if (memberMapping.contains(m)) {
+            newMembers.push_back(memberMapping.at(m));
+         } else {
+            newMembers.push_back(m);
+         }
+      }
+      return newMembers;
+   }
+   return currentMembers;
+}
 mlir::ArrayAttr SubOpStateUsageTransformer::updateMembers(mlir::ArrayAttr currentMembers) {
    bool anyNeedsReplacement = false;
    for (auto m : currentMembers) {

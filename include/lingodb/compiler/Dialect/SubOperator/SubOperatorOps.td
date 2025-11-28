@@ -685,7 +685,7 @@ def CreateSimpleStateOp : SubOperator_Op<"create_simple_state", [Pure]> {
 
 def CreateHeapOp : SubOperator_Op<"create_heap", [Pure]> {
     let summary = "create new heap";
-    let arguments = (ins ArrayAttr: $sortBy);
+    let arguments = (ins Property<"llvm::SmallVector<subop::Member>">: $sortBy);
     let results = (outs Heap : $res);
     let regions = (region AnyRegion:$initFn);
     let regions = (region SizedRegion<1>:$region);
@@ -718,7 +718,7 @@ def CreateSortedViewOp : SubOperator_Op<"create_sorted_view", [IsolatedFromAbove
         Sort a records in a vector. The region yields the order of two arguments as in C++ `std::sort`.
     }];
 
-    let arguments = (ins Buffer:$toSort,ArrayAttr: $sortBy);
+    let arguments = (ins Buffer:$toSort,Property<"llvm::SmallVector<subop::Member>">: $sortBy);
     let results = (outs SortedView:$result);
     let regions = (region SizedRegion<1>:$region);
   let hasCustomAssemblyFormat = 1;
@@ -748,7 +748,7 @@ def CreateContinuousView : SubOperator_Op<"create_continuous_view", [SubOperator
 
 def CreateSegmentTreeView : SubOperator_Op<"create_segment_tree_view",[SubOperator]> {
   let regions = (region SizedRegion<1>:$initial_fn,SizedRegion<1>:$combine_fn);
-  let arguments = (ins ContinuousView:$source,ArrayAttr: $relevant_members);
+  let arguments = (ins ContinuousView:$source,Property<"llvm::SmallVector<subop::Member>">: $relevant_members);
   let results = (outs SegmentTreeView:$result);
   let hasCustomAssemblyFormat = 1;
         let extraClassDeclaration = [{
@@ -895,7 +895,7 @@ def ReduceOp : SubOperator_Op<"reduce",[SubOperator,DeclareOpInterfaceMethods<St
   ```
   }];
   let regions = (region SizedRegion<1>:$region,AnyRegion:$combine);
-  let arguments = (ins TupleStream: $stream, ColumnRefAttr: $ref, ArrayAttr: $columns, ArrayAttr: $members);
+  let arguments = (ins TupleStream: $stream, ColumnRefAttr: $ref, ArrayAttr: $columns, Property<"llvm::SmallVector<Member>">: $members);
   let hasCustomAssemblyFormat = 1;
         let extraClassDeclaration = [{
             llvm::SmallVector<Member> getWrittenMembers();
@@ -942,8 +942,8 @@ def LoopOp : SubOperator_Op<"loop",[SubOperator,ContainsNestedSubOps]> {
   }];
 }
 def LoopContinueOp : SubOperator_Op<"loop_continue",[Terminator]> {
-    let arguments = (ins AnyType:$cond_state, Member: $cond_member, Variadic<AnyType>:$values);
-    let assemblyFormat = [{ `(` $cond_state `:` type($cond_state) `[`custom<CustMemberAttr>($cond_member) `]` `)` ($values^ `:` type($values))?  attr-dict }];
+    let arguments = (ins AnyType:$cond_state, Property<"Member">: $cond_member, Variadic<AnyType>:$values);
+    let assemblyFormat = [{ `(` $cond_state `:` type($cond_state) `[`custom<CustMember>($cond_member) `]` `)` ($values^ `:` type($values))?  attr-dict }];
 }
 
 def SetTrackedCountOp : SubOperator_Op<"set_tracked_count",[SubOperator,DeclareOpInterfaceMethods<StateUsingSubOperator>]> {

@@ -353,7 +353,7 @@ class ProjectionDistinctLowering : public OpConversionPattern<relalg::Projection
       }
       lookupOp.getInitFn().push_back(initialValueBlock);
       lookupOp.getEqFn().push_back(createCompareBlock(keyTypes, rewriter, loc));
-      auto reduceOp = rewriter.create<subop::ReduceOp>(loc, lookupOp, referenceRef, rewriter.getArrayAttr({}), rewriter.getArrayAttr({}));
+      auto reduceOp = rewriter.create<subop::ReduceOp>(loc, lookupOp, referenceRef, rewriter.getArrayAttr({}),  llvm::SmallVector<subop::Member>{});
 
       {
          mlir::Block* reduceBlock = new Block;
@@ -658,7 +658,7 @@ class UnionDistinctLowering : public OpConversionPattern<relalg::UnionOp> {
       lookupOpLeft.getInitFn().push_back(leftInitialValueBlock);
       lookupOpLeft.getEqFn().push_back(createCompareBlock(keyTypes, rewriter, loc));
 
-      auto reduceOpLeft = rewriter.create<subop::ReduceOp>(loc, lookupOpLeft, referenceRefLeft, rewriter.getArrayAttr({}), rewriter.getArrayAttr({}));
+      auto reduceOpLeft = rewriter.create<subop::ReduceOp>(loc, lookupOpLeft, referenceRefLeft, rewriter.getArrayAttr({}), llvm::SmallVector<subop::Member>{});
 
       {
          mlir::Block* reduceBlock = new Block;
@@ -685,7 +685,7 @@ class UnionDistinctLowering : public OpConversionPattern<relalg::UnionOp> {
       }
       lookupOpRight.getInitFn().push_back(rightInitialValueBlock);
       lookupOpRight.getEqFn().push_back(createCompareBlock(keyTypes, rewriter, loc));
-      auto reduceOpRight = rewriter.create<subop::ReduceOp>(loc, lookupOpRight, referenceRefRight, rewriter.getArrayAttr({}), rewriter.getArrayAttr({}));
+      auto reduceOpRight = rewriter.create<subop::ReduceOp>(loc, lookupOpRight, referenceRefRight, rewriter.getArrayAttr({}),  llvm::SmallVector<subop::Member>{});
 
       {
          mlir::Block* reduceBlock = new Block;
@@ -770,7 +770,7 @@ class CountingSetOperationLowering : public ConversionPattern {
       lookupOpLeft.getInitFn().push_back(leftInitialValueBlock);
       lookupOpLeft.getEqFn().push_back(createCompareBlock(keyTypes, rewriter, loc));
       {
-         auto reduceOp = rewriter.create<subop::ReduceOp>(loc, lookupOpLeft, referenceRefLeft, rewriter.getArrayAttr({}), rewriter.getArrayAttr({subop::MemberAttr::get(context, counterMember1), subop::MemberAttr::get(context, counterMember2)}));
+         auto reduceOp = rewriter.create<subop::ReduceOp>(loc, lookupOpLeft, referenceRefLeft, rewriter.getArrayAttr({}),  llvm::SmallVector<subop::Member>{counterMember1,counterMember2});
 
          {
             mlir::Block* reduceBlock = new Block;
@@ -802,7 +802,7 @@ class CountingSetOperationLowering : public ConversionPattern {
       lookupOpRight.getEqFn().push_back(createCompareBlock(keyTypes, rewriter, loc));
 
       {
-         auto reduceOp = rewriter.create<subop::ReduceOp>(loc, lookupOpRight, referenceRefRight, rewriter.getArrayAttr({}), createMemberAttrArray(context, {counterMember1, counterMember2}));
+         auto reduceOp = rewriter.create<subop::ReduceOp>(loc, lookupOpRight, referenceRefRight, rewriter.getArrayAttr({}),  llvm::SmallVector<subop::Member>{counterMember1, counterMember2});
          {
             mlir::Block* reduceBlock = new Block;
             mlir::Value otherCounter = reduceBlock->addArgument(rewriter.getI64Type(), loc);
@@ -939,7 +939,7 @@ static mlir::Value translateNLJ(mlir::Value left, mlir::Value right, relalg::Col
       auto lookup = rewriter.create<subop::LookupOp>(loc, tuples::TupleStreamType::get(rewriter.getContext()), right, counterState, rewriter.getArrayAttr({}), referenceDefAttr);
 
       // Create reduce operation that increases counter for each seen tuple
-      auto reduceOp = rewriter.create<subop::ReduceOp>(loc, lookup, colManager.createRef(&referenceDefAttr.getColumn()), rewriter.getArrayAttr({}), createMemberAttrArray(rewriter.getContext(), {counterMember}));
+      auto reduceOp = rewriter.create<subop::ReduceOp>(loc, lookup, colManager.createRef(&referenceDefAttr.getColumn()), rewriter.getArrayAttr({}),   llvm::SmallVector<subop::Member>{counterMember});
       mlir::Block* reduceBlock = new Block;
       auto counter = reduceBlock->addArgument(rewriter.getI64Type(), loc);
       {
@@ -1556,7 +1556,7 @@ class LimitLowering : public OpConversionPattern<relalg::LimitOp> {
       MaterializationHelper helper(requiredColumns, rewriter.getContext());
 
       auto* block = new Block;
-      std::vector<Attribute> sortByMembers;
+      llvm::SmallVector<Member> sortByMembers;
       std::vector<Location> locs;
       std::vector<std::pair<mlir::Value, mlir::Value>> sortCriteria;
 
@@ -1567,7 +1567,7 @@ class LimitLowering : public OpConversionPattern<relalg::LimitOp> {
          rewriter.create<tuples::ReturnOp>(loc, isLt);
       }
       auto heapType = subop::HeapType::get(getContext(), helper.createStateMembersAttr(), limitOp.getMaxRows());
-      auto createHeapOp = rewriter.create<subop::CreateHeapOp>(loc, heapType, rewriter.getArrayAttr(sortByMembers));
+      auto createHeapOp = rewriter.create<subop::CreateHeapOp>(loc, heapType, sortByMembers);
       createHeapOp.getRegion().getBlocks().push_back(block);
       rewriter.create<subop::MaterializeOp>(loc, adaptor.getRel(), createHeapOp.getRes(), helper.createColumnstateMapping());
       rewriter.replaceOpWithNewOp<subop::ScanOp>(limitOp, createHeapOp.getRes(), helper.createStateColumnMapping());
@@ -1588,14 +1588,14 @@ static mlir::Value spaceShipCompare(mlir::OpBuilder& builder, std::vector<std::p
 }
 static mlir::Value createSortedView(ConversionPatternRewriter& rewriter, mlir::Value buffer, mlir::ArrayAttr sortSpecs, mlir::Location loc, MaterializationHelper& helper) {
    auto* block = new Block;
-   std::vector<Attribute> sortByMembers;
+   llvm::SmallVector<Member> sortByMembers;
    std::vector<Type> argumentTypes;
    std::vector<Location> locs;
    for (auto attr : sortSpecs) {
       auto sortspecAttr = mlir::cast<relalg::SortSpecificationAttr>(attr);
       argumentTypes.push_back(sortspecAttr.getAttr().getColumn().type);
       locs.push_back(loc);
-      sortByMembers.push_back(createMemberAttr(rewriter.getContext(), helper.lookupStateMemberForMaterializedColumn(&sortspecAttr.getAttr().getColumn())));
+      sortByMembers.push_back(helper.lookupStateMemberForMaterializedColumn(&sortspecAttr.getAttr().getColumn()));
    }
    block->addArguments(argumentTypes, locs);
    block->addArguments(argumentTypes, locs);
@@ -1618,7 +1618,7 @@ static mlir::Value createSortedView(ConversionPatternRewriter& rewriter, mlir::V
       rewriter.create<tuples::ReturnOp>(loc, isLt);
    }
 
-   auto subOpSort = rewriter.create<subop::CreateSortedViewOp>(loc, subop::SortedViewType::get(rewriter.getContext(), mlir::cast<subop::State>(buffer.getType())), buffer, rewriter.getArrayAttr(sortByMembers));
+   auto subOpSort = rewriter.create<subop::CreateSortedViewOp>(loc, subop::SortedViewType::get(rewriter.getContext(), mlir::cast<subop::State>(buffer.getType())), buffer, sortByMembers);
    subOpSort.getRegion().getBlocks().push_back(block);
    return subOpSort.getResult();
 }
@@ -1652,14 +1652,14 @@ class TopKLowering : public OpConversionPattern<relalg::TopKOp> {
       MaterializationHelper helper(requiredColumns, rewriter.getContext());
 
       auto* block = new Block;
-      std::vector<Attribute> sortByMembers;
+      llvm::SmallVector<Member> sortByMembers;
       std::vector<Type> argumentTypes;
       std::vector<Location> locs;
       for (auto attr : topk.getSortspecs()) {
          auto sortspecAttr = mlir::cast<relalg::SortSpecificationAttr>(attr);
          argumentTypes.push_back(sortspecAttr.getAttr().getColumn().type);
          locs.push_back(loc);
-         sortByMembers.push_back(createMemberAttr(rewriter.getContext(), helper.lookupStateMemberForMaterializedColumn(&sortspecAttr.getAttr().getColumn())));
+         sortByMembers.push_back(helper.lookupStateMemberForMaterializedColumn(&sortspecAttr.getAttr().getColumn()));
       }
       block->addArguments(argumentTypes, locs);
       block->addArguments(argumentTypes, locs);
@@ -1682,7 +1682,7 @@ class TopKLowering : public OpConversionPattern<relalg::TopKOp> {
          rewriter.create<tuples::ReturnOp>(loc, isLt);
       }
       auto heapType = subop::HeapType::get(getContext(), helper.createStateMembersAttr(), topk.getMaxRows());
-      auto createHeapOp = rewriter.create<subop::CreateHeapOp>(loc, heapType, rewriter.getArrayAttr(sortByMembers));
+      auto createHeapOp = rewriter.create<subop::CreateHeapOp>(loc, heapType, sortByMembers);
       createHeapOp.getRegion().getBlocks().push_back(block);
       rewriter.create<subop::MaterializeOp>(loc, adaptor.getRel(), createHeapOp.getRes(), helper.createColumnstateMapping());
       auto scanOp = rewriter.replaceOpWithNewOp<subop::ScanOp>(topk, createHeapOp.getRes(), helper.createStateColumnMapping());
@@ -2017,7 +2017,7 @@ static Block* createAggrFuncInitialValueBlock(mlir::Location loc, mlir::OpBuilde
    }
    return initialValueBlock;
 }
-void performAggrFuncReduce(mlir::Location loc, mlir::OpBuilder& rewriter, std::vector<std::shared_ptr<DistAggrFunc>> distAggrFuncs, tuples::ColumnRefAttr reference, mlir::Value stream, std::vector<mlir::Attribute> names, DefMappingCollector defMapping) {
+void performAggrFuncReduce(mlir::Location loc, mlir::OpBuilder& rewriter, std::vector<std::shared_ptr<DistAggrFunc>> distAggrFuncs, tuples::ColumnRefAttr reference, mlir::Value stream,  llvm::SmallVector<subop::Member> names, DefMappingCollector defMapping) {
    mlir::Block* reduceBlock = new Block;
    mlir::Block* combineBlock = new Block;
    std::vector<mlir::Attribute> relevantColumns;
@@ -2035,7 +2035,7 @@ void performAggrFuncReduce(mlir::Location loc, mlir::OpBuilder& rewriter, std::v
       mlir::Value state = reduceBlock->addArgument(aggrFn->getStateType(), loc);
       stateMap.insert({&aggrFn->getDestAttribute().getColumn(), state});
    }
-   auto reduceOp = rewriter.create<subop::ReduceOp>(loc, stream, reference, rewriter.getArrayAttr(relevantColumns), rewriter.getArrayAttr(names));
+   auto reduceOp = rewriter.create<subop::ReduceOp>(loc, stream, reference, rewriter.getArrayAttr(relevantColumns), names);
    {
       mlir::OpBuilder::InsertionGuard guard(rewriter);
       rewriter.setInsertionPointToStart(reduceBlock);
@@ -2073,7 +2073,7 @@ void performAggrFuncReduce(mlir::Location loc, mlir::OpBuilder& rewriter, std::v
    reduceOp.getRegion().push_back(reduceBlock);
    reduceOp.getCombine().push_back(combineBlock);
 }
-static std::tuple<mlir::Value, subop::ColumnDefMemberMappingAttr, subop::ColumnDefMemberMappingAttr> performAggregation(mlir::Location loc, mlir::OpBuilder& rewriter, std::vector<std::shared_ptr<DistAggrFunc>> distAggrFuncs, relalg::OrderedAttributes keyAttributes, mlir::Value stream, std::function<void(mlir::Location, mlir::OpBuilder&, std::vector<std::shared_ptr<DistAggrFunc>>, tuples::ColumnRefAttr, mlir::Value, std::vector<mlir::Attribute>, DefMappingCollector)> createReduceFn) {
+static std::tuple<mlir::Value, subop::ColumnDefMemberMappingAttr, subop::ColumnDefMemberMappingAttr> performAggregation(mlir::Location loc, mlir::OpBuilder& rewriter, std::vector<std::shared_ptr<DistAggrFunc>> distAggrFuncs, relalg::OrderedAttributes keyAttributes, mlir::Value stream, std::function<void(mlir::Location, mlir::OpBuilder&, std::vector<std::shared_ptr<DistAggrFunc>>, tuples::ColumnRefAttr, mlir::Value, llvm::SmallVector<subop::Member>, DefMappingCollector)> createReduceFn) {
    auto* context = rewriter.getContext();
    auto& colManager = context->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
    mlir::Value state;
@@ -2135,7 +2135,7 @@ static std::tuple<mlir::Value, subop::ColumnDefMemberMappingAttr, subop::ColumnD
    referenceDefAttr.getColumn().type = subop::LookupEntryRefType::get(context, mlir::cast<subop::LookupAbleState>(stateType));
 
    auto referenceRefAttr = colManager.createRef(&referenceDefAttr.getColumn());
-   createReduceFn(loc, rewriter, distAggrFuncs, referenceRefAttr, afterLookup, createMemberAttrArray(context, members).getValue().vec(), defMapping);
+   createReduceFn(loc, rewriter, distAggrFuncs, referenceRefAttr, afterLookup, members, defMapping);
    return {state, createColumnDefMemberMappingAttr(context, defMapping), createColumnDefMemberMappingAttr(context, computedDefMapping)};
 }
 class WindowLowering : public OpConversionPattern<relalg::WindowOp> {
@@ -2273,7 +2273,7 @@ class WindowLowering : public OpConversionPattern<relalg::WindowOp> {
          auto referenceRefAttr = colManager.createRef(&referenceDefAttr.getColumn());
          auto orderedValueColumns = relalg::OrderedAttributes::fromColumns(valueColumns);
 
-         auto reduceOp = rewriter.create<subop::ReduceOp>(loc, afterLookup, referenceRefAttr, orderedValueColumns.getArrayAttr(context), createMemberAttrArray(context, {bufferMember}));
+         auto reduceOp = rewriter.create<subop::ReduceOp>(loc, afterLookup, referenceRefAttr, orderedValueColumns.getArrayAttr(context),  llvm::SmallVector<subop::Member>{bufferMember});
          {
             mlir::Block* reduceBlock = new Block;
 
@@ -2349,7 +2349,7 @@ class WindowLowering : public OpConversionPattern<relalg::WindowOp> {
    }
 
    std::tuple<Value, subop::ColumnDefMemberMappingAttr> buildSegmentTree(Location loc, ConversionPatternRewriter& rewriter, std::vector<std::shared_ptr<DistAggrFunc>> aggrFuncs, Value continuousView, subop::ColumnDefMemberMappingAttr continuousViewMapping) const {
-      llvm::SmallVector<Attribute> relevantMembers;
+      llvm::SmallVector<subop::Member> relevantMembers;
       llvm::DenseMap<tuples::Column*, mlir::Value> stateMap;
       auto* initBlock = new Block;
       {
@@ -2362,7 +2362,7 @@ class WindowLowering : public OpConversionPattern<relalg::WindowOp> {
             if (sourceColumn) {
                for (auto x : continuousViewMapping.getMapping()) {
                   if (&x.second.getColumn() == &sourceColumn.getColumn()) {
-                     relevantMembers.push_back(subop::MemberAttr::get(getContext(), x.first));
+                     relevantMembers.push_back(x.first);
                   }
                }
                mlir::Value arg = initBlock->addArgument(sourceColumn.getColumn().type, loc);
@@ -2409,7 +2409,7 @@ class WindowLowering : public OpConversionPattern<relalg::WindowOp> {
       auto keyStateMembers = createStateMembersAttr(rewriter.getContext(), {fromMember, toMember});
       auto valueStateMembers = createStateMembersAttr(rewriter.getContext(), members);
       auto segmentTreeViewType = subop::SegmentTreeViewType::get(rewriter.getContext(), keyStateMembers, valueStateMembers);
-      auto createOp = rewriter.create<subop::CreateSegmentTreeView>(loc, segmentTreeViewType, continuousView, rewriter.getArrayAttr(relevantMembers));
+      auto createOp = rewriter.create<subop::CreateSegmentTreeView>(loc, segmentTreeViewType, continuousView, relevantMembers);
       createOp.getInitialFn().push_back(initBlock);
       createOp.getCombineFn().push_back(combineBlock);
       return {createOp.getResult(), createColumnDefMemberMappingAttr(rewriter.getContext(), defMapping)};
@@ -2708,7 +2708,7 @@ class GroupJoinLowering : public OpConversionPattern<relalg::GroupJoinOp> {
          rewriter.create<tuples::ReturnOp>(loc, defaultValues);
       }
       llvm::SmallVector<Member> members;
-      std::vector<mlir::Attribute> reduceNames;
+      llvm::SmallVector<subop::Member> reduceNames;
       std::vector<mlir::Type> valueTypes;
       std::vector<mlir::Location> valueLocations;
       DefMappingCollector defMapping;
@@ -2745,7 +2745,7 @@ class GroupJoinLowering : public OpConversionPattern<relalg::GroupJoinOp> {
       for (auto aggrFn : distAggrFuncs) {
          auto member = createMember(getContext(), "aggrval", aggrFn->getStateType());
          members.push_back(member);
-         reduceNames.push_back(subop::MemberAttr::get(context, member));
+         reduceNames.push_back(member);
          auto def = aggrFn->getDestAttribute();
          defMapping.push_back({member, def});
          valueTypes.push_back(aggrFn->getStateType());
@@ -2789,7 +2789,7 @@ class GroupJoinLowering : public OpConversionPattern<relalg::GroupJoinOp> {
             rewriter.create<tuples::ReturnOp>(loc, compared);
          }
       }
-      auto reduceOp = rewriter.create<subop::ReduceOp>(loc, lookupOp, referenceRefAttr, rewriter.getArrayAttr(additionalColsRefs), createMemberAttrArray(rewriter.getContext(), members));
+      auto reduceOp = rewriter.create<subop::ReduceOp>(loc, lookupOp, referenceRefAttr, rewriter.getArrayAttr(additionalColsRefs), members);
 
       {
          mlir::Block* reduceBlock = new Block;
@@ -2933,7 +2933,7 @@ class TrackTuplesLowering : public OpConversionPattern<relalg::TrackTuplesOP> {
       auto lookup = rewriter.create<subop::LookupOp>(loc, tuples::TupleStreamType::get(rewriter.getContext()), adaptor.getRel(), counterState, rewriter.getArrayAttr({}), referenceDefAttr);
 
       // Create reduce operation that increases counter for each seen tuple
-      auto reduceOp = rewriter.create<subop::ReduceOp>(loc, lookup, colManager.createRef(&referenceDefAttr.getColumn()), rewriter.getArrayAttr({}), createMemberAttrArray(rewriter.getContext(), {counterMember}));
+      auto reduceOp = rewriter.create<subop::ReduceOp>(loc, lookup, colManager.createRef(&referenceDefAttr.getColumn()), rewriter.getArrayAttr({}),  llvm::SmallVector<subop::Member>{counterMember});
       mlir::Block* reduceBlock = new Block;
       auto counter = reduceBlock->addArgument(rewriter.getI64Type(), loc);
       {

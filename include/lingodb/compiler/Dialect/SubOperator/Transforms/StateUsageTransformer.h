@@ -26,6 +26,7 @@ class SubOpStateUsageTransformer {
    subop::ColumnDefMemberMappingAttr updateMapping(subop::ColumnDefMemberMappingAttr currentMapping);
    void mapMembers(const llvm::DenseMap<subop::Member, subop::Member>& memberMapping);
    mlir::ArrayAttr updateMembers(mlir::ArrayAttr currentMembers);
+   llvm::SmallVector<subop::Member> updateMembers(const llvm::SmallVector<subop::Member>& currentMembers);
    dialect::tuples::ColumnDefAttr createReplacementColumn(dialect::tuples::ColumnDefAttr oldColumn, mlir::Type newType);
    tuples::ColumnManager& getColumnManager() const {
       return columnManager;

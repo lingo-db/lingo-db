@@ -15,6 +15,21 @@
 
 using namespace mlir;
 using namespace lingodb::compiler::dialect;
+
+namespace llvm {
+hash_code hash_value(const lingodb::compiler::dialect::subop::Member& m) {
+   return hash_combine(static_cast<const void*>(m.internal));
+}
+
+hash_code hash_value(const llvm::SmallVector<lingodb::compiler::dialect::subop::Member>& members) {
+   llvm::hash_code hc = 0;
+   for (const auto& m : members) {
+      hc = hash_combine(hc, hash_value(m));
+   }
+   return hc;
+}
+
+}
 namespace {
 tuples::ColumnManager& getColumnManager(::mlir::OpAsmParser& parser) {
    return parser.getBuilder().getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
@@ -242,44 +257,98 @@ void printCustDefArr(OpAsmPrinter& p, mlir::Operation* op, ArrayAttr arrayAttr) 
    p << "]";
 }
 
-ParseResult parseCustMemberAttr(OpAsmParser& parser, subop::MemberAttr& attr) {
+ParseResult parseCustMember(OpAsmParser& parser, subop::Member& m) {
    auto& memberManager = parser.getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
    std::string memberName;
    if (parser.parseString(&memberName).failed()) {
       return failure();
    }
-   attr = subop::MemberAttr::get(parser.getContext(), memberManager.lookupMember(memberName));
+   m = memberManager.lookupMember(memberName);
    return success();
 }
-void printCustMemberAttr(OpAsmPrinter& p, mlir::Operation* op, subop::MemberAttr attr) {
-   auto& memberManager = op->getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
-   p.printString(memberManager.getName(attr.getMember()));
+void writeToMlirBytecode(::mlir::DialectBytecodeWriter& writer, subop::Member& member) {
+   //todo: implement
+   writer.writeOwnedString(member.internal->name);
 }
-ParseResult parseCustMemberArrayAttr(OpAsmParser& parser, mlir::ArrayAttr& attr) {
+mlir::LogicalResult readFromMlirBytecode(::mlir::DialectBytecodeReader& reader, subop::Member& member) {
+   auto& memberManager = reader.getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
+   llvm::StringRef name;
+   if (reader.readString(name).failed()) {
+      return failure();
+   }
+   member = memberManager.lookupMember(name.str());
+
+   return success();
+}
+void printCustMember(OpAsmPrinter& p, mlir::Operation* op, subop::Member member) {
+   auto& memberManager = op->getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
+   p.printString(memberManager.getName(member));
+}
+
+void writeToMlirBytecode(::mlir::DialectBytecodeWriter& writer, const llvm::SmallVector<subop::Member>& members) {
+   writer.writeList(members, [&](subop::Member m) {
+      writeToMlirBytecode(writer, m);
+   });
+}
+mlir::LogicalResult readFromMlirBytecode(::mlir::DialectBytecodeReader& reader, llvm::SmallVector<subop::Member>& members) {
+   return reader.readList(members, [&](subop::Member& m) {
+      return readFromMlirBytecode(reader, m);
+   });
+}
+LogicalResult
+convertFromAttribute(subop::Member& storage, Attribute attr,
+                     function_ref<InFlightDiagnostic()> emitError) {
+   if (auto memberAttr = mlir::dyn_cast<subop::MemberAttr>(attr)) {
+      storage = memberAttr.getMember();
+      return success();
+   }
+   return mlir::failure();
+}
+LogicalResult convertFromAttribute(llvm::SmallVector<subop::Member>& storage, Attribute attr,
+                     function_ref<InFlightDiagnostic()> emitError) {
+   if (auto arrayAttr = mlir::dyn_cast<mlir::ArrayAttr>(attr)) {
+      for (auto a : arrayAttr) {
+         subop::Member m;
+         if (convertFromAttribute(m, a, emitError).failed()) {
+            return mlir::failure();
+         }
+         storage.push_back(m);
+      }
+      return success();
+   }
+   return mlir::failure();
+}
+
+mlir::Attribute convertToAttribute(MLIRContext* ctxt, subop::Member m) {
+   return subop::MemberAttr::get(ctxt, m);
+}
+mlir::Attribute convertToAttribute(MLIRContext* ctxt, const llvm::SmallVector<subop::Member>& members) {
+   llvm::SmallVector<mlir::Attribute> attrs;
+   for (auto m : members) {
+      attrs.push_back(convertToAttribute(ctxt, m));
+   }
+   return ArrayAttr::get(ctxt, attrs);
+}
+ParseResult parseCustMemberArray(OpAsmParser& parser, llvm::SmallVector<subop::Member>& array) {
    // first parse the array as arrayattr of string attributes
    mlir::ArrayAttr parsedAttr;
    if (parser.parseAttribute(parsedAttr)) {
       return failure();
    }
-   std::vector<Attribute> attributes;
    for (auto a : parsedAttr) {
       mlir::StringAttr strAttr = mlir::dyn_cast<mlir::StringAttr>(a);
       if (!strAttr) {
          return parser.emitError(parser.getNameLoc(), "Expected string in member array");
       }
-      subop::MemberAttr memberAttr = subop::MemberAttr::get(parser.getBuilder().getContext(),
-                                                            parser.getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager().lookupMember(strAttr.getValue().str()));
-      attributes.push_back(memberAttr);
+      array.push_back(parser.getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager().lookupMember(strAttr.getValue().str()));
    }
-   attr = parser.getBuilder().getArrayAttr(attributes);
    return success();
 }
-void printCustMemberArrayAttr(OpAsmPrinter& p, mlir::Operation* op, mlir::ArrayAttr arrayAttr) {
+void printCustMemberArray(OpAsmPrinter& p, mlir::Operation* op, const llvm::SmallVector<subop::Member>& array) {
    auto& memberManager = op->getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
    llvm::SmallVector<mlir::Attribute> attributes;
-   for (auto a : arrayAttr) {
-      subop::MemberAttr memberAttr = mlir::cast<subop::MemberAttr>(a);
-      attributes.push_back(mlir::StringAttr::get(op->getContext(), memberManager.getName(memberAttr.getMember())));
+   for (auto m : array) {
+      attributes.push_back(mlir::StringAttr::get(op->getContext(), memberManager.getName(m)));
    }
    p << mlir::ArrayAttr::get(op->getContext(), attributes);
 }
@@ -292,18 +361,18 @@ ParseResult subop::CreateHeapOp::parse(::mlir::OpAsmParser& parser, ::mlir::Oper
    if (parser.parseType(heapType)) {
       return failure();
    }
-   mlir::ArrayAttr sortBy;
-   if (parseCustMemberArrayAttr(parser, sortBy).failed()) {
+   llvm::SmallVector<Member> sortBy;
+   if (parseCustMemberArray(parser, sortBy).failed()) {
       return failure();
    }
-   result.addAttribute("sortBy", sortBy);
+   result.getOrAddProperties<Properties>().sortBy = sortBy;
    std::vector<OpAsmParser::Argument> leftArgs(sortBy.size());
    std::vector<OpAsmParser::Argument> rightArgs(sortBy.size());
    if (parser.parseLParen() || parser.parseLSquare()) {
       return failure();
    }
    for (size_t i = 0; i < sortBy.size(); i++) {
-      leftArgs[i].type = memberManager.getType(mlir::cast<subop::MemberAttr>(sortBy[i]).getMember());
+      leftArgs[i].type = memberManager.getType(sortBy[i]);
       if (i > 0 && parser.parseComma().failed()) return failure();
       if (parser.parseArgument(leftArgs[i])) return failure();
    }
@@ -311,7 +380,7 @@ ParseResult subop::CreateHeapOp::parse(::mlir::OpAsmParser& parser, ::mlir::Oper
       return failure();
    }
    for (size_t i = 0; i < sortBy.size(); i++) {
-      rightArgs[i].type = memberManager.getType(mlir::cast<subop::MemberAttr>(sortBy[i]).getMember());
+      rightArgs[i].type = memberManager.getType(sortBy[i]);
       if (i > 0 && parser.parseComma().failed()) return failure();
       if (parser.parseArgument(rightArgs[i])) return failure();
    }
@@ -331,7 +400,7 @@ ParseResult subop::CreateHeapOp::parse(::mlir::OpAsmParser& parser, ::mlir::Oper
 
 void subop::CreateHeapOp::print(OpAsmPrinter& p) {
    p << " " << getType() << " ";
-   printCustMemberArrayAttr(p, getOperation(), getSortBy());
+   printCustMemberArray(p, getOperation(), getSortBy());
    p << " ([";
    bool first = true;
    for (size_t i = 0; i < getSortBy().size(); i++) {
@@ -354,7 +423,7 @@ void subop::CreateHeapOp::print(OpAsmPrinter& p) {
    }
    p << "])";
    p.printRegion(getRegion(), false, true);
-   p.printOptionalAttrDict(getOperation()->getAttrs(), {getSortByAttrName()});
+   p.printOptionalAttrDict(getOperation()->getAttrs());
 }
 ParseResult subop::CreateSortedViewOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
    auto& memberManager = parser.getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
@@ -367,18 +436,18 @@ ParseResult subop::CreateSortedViewOp::parse(::mlir::OpAsmParser& parser, ::mlir
       return failure();
    }
 
-   mlir::ArrayAttr sortBy;
-   if (parseCustMemberArrayAttr(parser, sortBy).failed()) {
+   llvm::SmallVector<Member> sortBy;
+   if (parseCustMemberArray(parser, sortBy).failed()) {
       return failure();
    }
-   result.addAttribute("sortBy", sortBy);
+   result.getOrAddProperties<Properties>().sortBy = sortBy;
    std::vector<OpAsmParser::Argument> leftArgs(sortBy.size());
    std::vector<OpAsmParser::Argument> rightArgs(sortBy.size());
    if (parser.parseLParen() || parser.parseLSquare()) {
       return failure();
    }
    for (size_t i = 0; i < sortBy.size(); i++) {
-      leftArgs[i].type = memberManager.getType(mlir::cast<subop::MemberAttr>(sortBy[i]).getMember());
+      leftArgs[i].type = memberManager.getType(sortBy[i]);
       if (i > 0 && parser.parseComma().failed()) return failure();
       if (parser.parseArgument(leftArgs[i])) return failure();
    }
@@ -386,7 +455,7 @@ ParseResult subop::CreateSortedViewOp::parse(::mlir::OpAsmParser& parser, ::mlir
       return failure();
    }
    for (size_t i = 0; i < sortBy.size(); i++) {
-      rightArgs[i].type = memberManager.getType(mlir::cast<subop::MemberAttr>(sortBy[i]).getMember());
+      rightArgs[i].type = memberManager.getType(sortBy[i]);
       if (i > 0 && parser.parseComma().failed()) return failure();
       if (parser.parseArgument(rightArgs[i])) return failure();
    }
@@ -407,7 +476,7 @@ ParseResult subop::CreateSortedViewOp::parse(::mlir::OpAsmParser& parser, ::mlir
 void subop::CreateSortedViewOp::print(OpAsmPrinter& p) {
    subop::CreateSortedViewOp& op = *this;
    p << " " << op.getToSort() << " : " << op.getToSort().getType() << " ";
-   printCustMemberArrayAttr(p, getOperation(), op.getSortBy());
+   printCustMemberArray(p, getOperation(), op.getSortBy());
    p << " ([";
    bool first = true;
    for (size_t i = 0; i < op.getSortBy().size(); i++) {
@@ -801,18 +870,18 @@ void subop::LoopOp::print(::mlir::OpAsmPrinter& p) {
       return failure();
    }
    result.types.push_back(resultType);
-   ArrayAttr relevantMembers;
-   if (parser.parseKeyword("initial") || parseCustMemberArrayAttr(parser, relevantMembers) || parser.parseColon()) {
+   llvm::SmallVector<Member> relevantMembers;
+   if (parser.parseKeyword("initial") || parseCustMemberArray(parser, relevantMembers) || parser.parseColon()) {
       return failure();
    }
-   result.addAttribute("relevant_members", relevantMembers);
+   result.getOrAddProperties<Properties>().relevant_members = relevantMembers;
    llvm::SmallVector<OpAsmParser::Argument> initialFnArguments;
    if (parser.parseLParen() || parser.parseArgumentList(initialFnArguments) || parser.parseRParen()) {
       return failure();
    }
    auto sourceMembers = continuousViewType.getMembers().getMembers();
    for (size_t i = 0; i < relevantMembers.size(); i++) {
-      initialFnArguments[i].type = memberManager.getType(mlir::cast<subop::MemberAttr>(relevantMembers[i]).getMember());
+      initialFnArguments[i].type = memberManager.getType(relevantMembers[i]);
    }
    Region* initialFn = result.addRegion();
    if (parser.parseRegion(*initialFn, initialFnArguments)) return failure();
@@ -845,7 +914,7 @@ void subop::LoopOp::print(::mlir::OpAsmPrinter& p) {
 void subop::CreateSegmentTreeView::print(::mlir::OpAsmPrinter& p) {
    p << " " << getSource() << " : " << getSource().getType() << " -> " << getType() << " ";
    p << "initial";
-   printCustMemberArrayAttr(p, getOperation(), getRelevantMembers());
+   printCustMemberArray(p, getOperation(), getRelevantMembers());
    p << ":(";
    bool first = true;
    for (auto arg : getInitialFn().getArguments()) {
@@ -897,11 +966,11 @@ ParseResult subop::ReduceOp::parse(::mlir::OpAsmParser& parser, ::mlir::Operatio
       return failure();
    }
    result.addAttribute("columns", columns);
-   mlir::ArrayAttr members;
-   if (parseCustMemberArrayAttr(parser, members).failed()) {
+   llvm::SmallVector<Member> members;
+   if (parseCustMemberArray(parser, members).failed()) {
       return failure();
    }
-   result.addAttribute("members", members);
+   result.getOrAddProperties<Properties>().members = members;
    std::vector<OpAsmParser::Argument> leftArgs(columns.size());
    std::vector<OpAsmParser::Argument> rightArgs(members.size());
    if (parser.parseLParen() || parser.parseLSquare()) {
@@ -916,7 +985,7 @@ ParseResult subop::ReduceOp::parse(::mlir::OpAsmParser& parser, ::mlir::Operatio
       return failure();
    }
    for (size_t i = 0; i < members.size(); i++) {
-      rightArgs[i].type = memberManager.getType(mlir::cast<subop::MemberAttr>(members[i]).getMember());
+      rightArgs[i].type = memberManager.getType(members[i]);
       if (i > 0 && parser.parseComma().failed()) return failure();
       if (parser.parseArgument(rightArgs[i])) return failure();
    }
@@ -943,7 +1012,7 @@ ParseResult subop::ReduceOp::parse(::mlir::OpAsmParser& parser, ::mlir::Operatio
          return failure();
       }
       for (size_t i = 0; i < members.size(); i++) {
-         auto t = memberManager.getType(mlir::cast<subop::MemberAttr>(members[i]).getMember());
+         auto t = memberManager.getType(members[i]);
          combineFnLeftArguments[i].type = t;
          combineFnRightArguments[i].type = t;
       }
@@ -963,7 +1032,7 @@ void subop::ReduceOp::print(OpAsmPrinter& p) {
    printCustRef(p, op, op.getRef());
    printCustRefArr(p, op, op.getColumns());
    p << " ";
-   printCustMemberArrayAttr(p, getOperation(), op.getMembers());
+   printCustMemberArray(p, getOperation(), op.getMembers());
    p << " ";
    p << "([";
    bool first = true;
@@ -1230,11 +1299,7 @@ llvm::SmallVector<subop::Member> subop::CreateSegmentTreeView::getWrittenMembers
    return mlir::cast<subop::SegmentTreeViewType>(getType()).getValueMembers().getMembers();
 }
 llvm::SmallVector<subop::Member> subop::CreateSegmentTreeView::getReadMembers() {
-   llvm::SmallVector<Member> res;
-   for (auto name : getRelevantMembers()) {
-      res.push_back(mlir::cast<MemberAttr>(name).getMember());
-   }
-   return res;
+   return getRelevantMembers();
 }
 llvm::SmallVector<subop::Member> subop::CreateContinuousView::getWrittenMembers() {
    return mlir::cast<State>(getSource().getType()).getMembers().getMembers();
@@ -1247,25 +1312,13 @@ llvm::SmallVector<subop::Member> subop::SimpleStateGetScalar::getReadMembers() {
    return {getMember().getMember()};
 }
 llvm::SmallVector<subop::Member> subop::CreateSortedViewOp::getReadMembers() {
-   llvm::SmallVector<Member> res;
-   for (auto x : getSortBy()) {
-      res.push_back(mlir::cast<MemberAttr>(x).getMember());
-   }
-   return res;
+   return getSortBy();
 }
 llvm::SmallVector<subop::Member> subop::ReduceOp::getWrittenMembers() {
-   llvm::SmallVector<Member> res;
-   for (auto x : getMembers()) {
-      res.push_back(mlir::cast<MemberAttr>(x).getMember());
-   }
-   return res;
+   return getMembers();
 }
 llvm::SmallVector<subop::Member> subop::ReduceOp::getReadMembers() {
-   llvm::SmallVector<Member> res;
-   for (auto x : getMembers()) {
-      res.push_back(mlir::cast<MemberAttr>(x).getMember());
-   }
-   return res;
+   return getMembers();
 }
 
 mlir::Operation* subop::ReduceOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, subop::ColumnMapping& columnMapping) {
@@ -1479,7 +1532,7 @@ void subop::ReduceOp::updateStateType(subop::SubOpStateUsageTransformer& transfo
 void subop::ReduceOp::replaceColumns(subop::SubOpStateUsageTransformer& transformer, tuples::Column* oldColumn, tuples::Column* newColumn) {
    if (&getRef().getColumn() == oldColumn) {
       setRefAttr(transformer.getColumnManager().createRef(newColumn));
-      setMembersAttr(transformer.updateMembers(getMembers()));
+      setMembers(transformer.updateMembers(getMembers()));
    }
 }
 void subop::UnwrapOptionalRefOp::updateStateType(subop::SubOpStateUsageTransformer& transformer, mlir::Value state, mlir::Type newType) {
