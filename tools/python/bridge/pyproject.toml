@@ -1,5 +1,5 @@
 [build-system]
-requires = ["scikit-build-core", "nanobind", "cmake", "ninja","pyarrow===21.0.0"]
+requires = ["scikit-build-core", "nanobind", "cmake", "ninja","pyarrow===22.0.0"]
 build-backend = "scikit_build_core.build"
 
 [project]
@@ -7,7 +7,7 @@ name = "lingodb-bridge"
 version = "0.0.5"
 dependencies = [
     "numpy===1.26.4",
-    "pyarrow===21.0.0"
+    "pyarrow===22.0.0"
 ]
 
 [tool.scikit-build]
