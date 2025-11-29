@@ -268,7 +268,7 @@ mlir::LogicalResult dateSubtractFoldFn(mlir::TypeRange types, ::llvm::ArrayRef<:
 } // namespace
 std::shared_ptr<db::RuntimeFunctionRegistry> db::RuntimeFunctionRegistry::getBuiltinRegistry(mlir::MLIRContext* context) {
    auto builtinRegistry = std::make_shared<RuntimeFunctionRegistry>(context);
-   builtinRegistry->add("DumpValue").handlesNulls().matchesTypes({RuntimeFunction::anyType}, RuntimeFunction::noReturnType).implementedAs(dumpValuesImpl);
+   builtinRegistry->add("DumpValue").hasSideEffects(true).handlesNulls().matchesTypes({RuntimeFunction::anyType}, RuntimeFunction::noReturnType).implementedAs(dumpValuesImpl);
    auto resTypeIsI64 = [](mlir::Type t, mlir::TypeRange) { return t.isInteger(64); };
    auto resTypeIsF64 = [](mlir::Type t, mlir::TypeRange) { return t.isF64(); };
    auto resTypeIsBool = [](mlir::Type t, mlir::TypeRange) { return t.isInteger(1); };
@@ -279,7 +279,7 @@ std::shared_ptr<db::RuntimeFunctionRegistry> db::RuntimeFunctionRegistry::getBui
    builtinRegistry->add("StringLength").implementedAs(StringRuntime::len).matchesTypes({RuntimeFunction::stringLike}, resTypeIsI64);
    builtinRegistry->add("StringSplit").implementedAs(StringRuntime::split).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike, RuntimeFunction::intLike}, [](mlir::Type t, mlir::TypeRange) { return mlir::isa<db::ListType>(t) && mlir::isa<db::StringType>(mlir::cast<db::ListType>(t).getElementType()); });
    builtinRegistry->add("RegexSearch").implementedAs(StringRuntime::regexSearch).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike}, [](mlir::Type t, mlir::TypeRange) { return mlir::isa<db::ListType>(t); });
-   builtinRegistry->add("RaiseRuntimeError").implementedAs(DumpRuntime::error).matchesTypes({RuntimeFunction::stringLike}, [](mlir::Type t, mlir::TypeRange) {return true;});
+   builtinRegistry->add("RaiseRuntimeError").hasSideEffects(true).implementedAs(DumpRuntime::error).matchesTypes({RuntimeFunction::stringLike}, [](mlir::Type t, mlir::TypeRange) {return true;});
    builtinRegistry->add("Ord").implementedAs(StringRuntime::ord).matchesTypes({RuntimeFunction::stringLike}, resTypeIsI64);
 
    builtinRegistry->add("ToUpper").implementedAs(StringRuntime::toUpper).matchesTypes({RuntimeFunction::stringLike}, RuntimeFunction::matchesArgument());
@@ -303,10 +303,10 @@ std::shared_ptr<db::RuntimeFunctionRegistry> db::RuntimeFunctionRegistry::getBui
       return res;
    });
    builtinRegistry->add("RoundInt64").implementedAs(IntegerRuntime::round64).matchesTypes({RuntimeFunction::intLike, RuntimeFunction::intLike}, RuntimeFunction::matchesArgument());
-   builtinRegistry->add("startTiming").implementedAs(Timing::start).matchesTypes({}, resTypeIsI64);
-   builtinRegistry->add("startPerf").implementedAs(Timing::startPerf).matchesTypes({}, RuntimeFunction::noReturnType);
-   builtinRegistry->add("stopPerf").implementedAs(Timing::stopPerf).matchesTypes({}, RuntimeFunction::noReturnType);
-   builtinRegistry->add("stopTiming").implementedAs(Timing::stop).matchesTypes({RuntimeFunction::intLike}, RuntimeFunction::noReturnType);
+   builtinRegistry->add("startTiming").hasSideEffects(true).implementedAs(Timing::start).matchesTypes({}, resTypeIsI64);
+   builtinRegistry->add("startPerf").hasSideEffects(true).implementedAs(Timing::startPerf).matchesTypes({}, RuntimeFunction::noReturnType);
+   builtinRegistry->add("stopPerf").hasSideEffects(true).implementedAs(Timing::stopPerf).matchesTypes({}, RuntimeFunction::noReturnType);
+   builtinRegistry->add("stopTiming").hasSideEffects(true).implementedAs(Timing::stop).matchesTypes({RuntimeFunction::intLike}, RuntimeFunction::noReturnType);
    builtinRegistry->add("RoundInt32").implementedAs(IntegerRuntime::round32).matchesTypes({RuntimeFunction::intLike, RuntimeFunction::intLike}, RuntimeFunction::matchesArgument());
    builtinRegistry->add("RoundInt16").implementedAs(IntegerRuntime::round16).matchesTypes({RuntimeFunction::intLike, RuntimeFunction::intLike}, RuntimeFunction::matchesArgument());
    builtinRegistry->add("RoundInt8").implementedAs(IntegerRuntime::round8).matchesTypes({RuntimeFunction::intLike, RuntimeFunction::intLike}, RuntimeFunction::matchesArgument());

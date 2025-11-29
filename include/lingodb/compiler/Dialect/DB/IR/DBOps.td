@@ -165,7 +165,7 @@ def CreateListOp : DB_Op<"create_list", []> {
     let assemblyFormat = "type($list) attr-dict";
 }
 
-def DB_ListGetOp : DB_Op<"list_get", []> {
+def DB_ListGetOp : DB_Op<"list_get", [Pure]> {
     let summary = "Get element from list";
 
     let arguments = (ins ListType:$list, Index:$index);
@@ -323,7 +323,7 @@ def DB_NullableGetVal : DB_Op<"nullable_get_val", [Pure,DeclareOpInterfaceMethod
 
 }
 
-def DB_RuntimeCall : DB_Op<"runtime_call", [DB_MayNeedNullWrap,DB_MaySupportInvalidValues]> {
+def DB_RuntimeCall : DB_Op<"runtime_call", [DB_MayNeedNullWrap,DB_MaySupportInvalidValues,DeclareOpInterfaceMethods<MemoryEffectsOpInterface>]> {
     let summary = "Call runtime function";
 
     let arguments = (ins StrAttr:$fn,Variadic<AnyType>: $args);
