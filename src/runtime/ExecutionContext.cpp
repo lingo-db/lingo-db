@@ -17,17 +17,18 @@ void lingodb::runtime::ExecutionContext::setTupleCount(uint32_t id, int64_t tupl
 }
 
 lingodb::runtime::ExecutionContext::~ExecutionContext() {
-   states.forEach([&](void* key, State value) {
-      value.freeFn(value.ptr);
-   });
-
+   for (auto threadLocal : perWorkerStates) {
+      for (auto s : threadLocal) {
+         s.freeFn(s.ptr);
+      }
+   }
    for (auto local : allocators) {
       for (auto a : local) {
          a.second.freeFn(a.second.ptr);
       }
    }
    allocators.clear();
-   states.clear();
+   perWorkerStates.clear();
 }
 
 uint8_t* lingodb::runtime::ExecutionContext::allocStateRaw(size_t size) {

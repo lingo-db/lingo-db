@@ -57,8 +57,8 @@ struct Arena {
 class ExecutionContext {
    std::unordered_map<uint32_t, uint8_t*> results;
    std::unordered_map<uint32_t, int64_t> tupleCounts;
-   ConcurrentMap<void*, State> states;
    std::vector<std::unordered_map<size_t, State>> allocators;
+   std::vector<std::vector<State>> perWorkerStates;
    std::vector<Arena> stringArenas;
    Session& session;
 
@@ -66,6 +66,7 @@ class ExecutionContext {
    ExecutionContext(Session& session) : session(session) {
       allocators.resize(lingodb::scheduler::getNumWorkers());
       stringArenas.resize(lingodb::scheduler::getNumWorkers());
+      perWorkerStates.resize(lingodb::scheduler::getNumWorkers());
    }
    Session& getSession() {
       return session;
@@ -97,7 +98,7 @@ class ExecutionContext {
    static void clearResult(uint32_t id);
    static void setTupleCount(uint32_t id, int64_t tupleCount);
    void registerState(const State& s) {
-      states.insert(s.ptr, s);
+      perWorkerStates[lingodb::scheduler::currentWorkerId()].push_back(s);
    }
    State& getAllocator(size_t group) {
       return allocators[lingodb::scheduler::currentWorkerId()][group];
