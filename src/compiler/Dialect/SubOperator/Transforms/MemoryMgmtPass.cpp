@@ -41,14 +41,17 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
       }
       return false;
    }
-   void addUse(mlir::Value val, mlir::Operation* insertBeforeOp) {
+   void addUse(mlir::Value val, mlir::Operation* insertBeforeOp, llvm::DenseSet<mlir::Value>& notCounted) {
+        if (notCounted.contains(val)) {
+           return;
+        }
       if (typeNeedsManagement(val.getType())) {
          if (mlir::isa<mlir::TupleType>(val.getType())) {
             mlir::OpBuilder builder(insertBeforeOp);
             llvm::SmallVector<mlir::Value> unpacked;
             builder.createOrFold<util::UnPackOp>(unpacked, insertBeforeOp->getLoc(), val);
             for (auto element : unpacked) {
-               addUse(element, insertBeforeOp);
+               addUse(element, insertBeforeOp,notCounted);
             }
 
          } else {
@@ -57,7 +60,10 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
          }
       }
    }
-   void addUseAfter(mlir::Value val, mlir::Operation* insertAfterOp) {
+   void addUseAfter(mlir::Value val, mlir::Operation* insertAfterOp, llvm::DenseSet<mlir::Value>& notCounted) {
+      if (notCounted.contains(val)) {
+         return;
+      }
       if (typeNeedsManagement(val.getType())) {
          if (mlir::isa<mlir::TupleType>(val.getType())) {
             mlir::OpBuilder builder(insertAfterOp->getContext());
@@ -66,7 +72,7 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
             builder.createOrFold<util::UnPackOp>(unpacked, insertAfterOp->getLoc(), val);
             auto insertionPoint=&*builder.getInsertionPoint();
             for (auto element : unpacked) {
-               addUseAfter(element, insertionPoint);
+               addUseAfter(element, insertionPoint, notCounted);
             }
 
          } else {
@@ -76,7 +82,10 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
          }
       }
    }
-   void cleanupUse(mlir::Operation* insertBeforeOp, mlir::Value val) {
+   void cleanupUse(mlir::Operation* insertBeforeOp, mlir::Value val, llvm::DenseSet<mlir::Value>& notCounted) {
+      if (notCounted.contains(val)) {
+         return;
+      }
       if (auto tupleType = mlir::dyn_cast<mlir::TupleType>(val.getType())) {
          // for tuples, we need to cleanup each element
          mlir::OpBuilder builder(insertBeforeOp);
@@ -84,7 +93,7 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
          builder.createOrFold<util::UnPackOp>(unpacked, insertBeforeOp->getLoc(), val);
          for (auto element : unpacked) {
             if (typeNeedsManagement(element.getType())) {
-               cleanupUse(insertBeforeOp, element);
+               cleanupUse(insertBeforeOp, element, notCounted);
             }
          }
          return;
@@ -124,7 +133,7 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
       }
    }
 
-   void handleBlock(mlir::Block* block, mlir::Block* mapBlock) {
+   void handleBlock(mlir::Block* block, mlir::Block* mapBlock, llvm::DenseSet<mlir::Value>& notCounted) {
        llvm::DenseSet<mlir::Value> returnedValues;
             auto terminator = block->getTerminator();
             for (auto retVal : terminator->getOperands()) {
@@ -139,45 +148,45 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
                llvm::TypeSwitch<mlir::Operation*, void>(op)
                   .Case<mlir::scf::ForOp>([&](mlir::scf::ForOp forOp) {
                      for (auto arg : forOp.getInitArgs()) {
-                        addUse(arg, op);
+                        addUse(arg, op, notCounted);
                      }
                   })
                   .Case<mlir::scf::WhileOp>([&](mlir::scf::WhileOp whileOp) {
                      for (auto arg : whileOp.getInits()) {
-                        addUse(arg, op);
+                        addUse(arg, op, notCounted);
                      }
                   })
                   .Case<db::ListAppendOp>([&](db::ListAppendOp appendOp) {
-                     addUse(appendOp.getElement(), op);
+                     addUse(appendOp.getElement(), op, notCounted);
                   })
                   .Case<db::ListGetOp>([&](db::ListGetOp listGetOp) {
-                     addUseAfter(listGetOp.getElement(), op);
+                     addUseAfter(listGetOp.getElement(), op, notCounted);
                   })
                   .Case<util::UnPackOp>([&](util::UnPackOp unpackOp) {
                      for (auto value : unpackOp.getVals()) {
-                        addUseAfter(value, op);
+                        addUseAfter(value, op, notCounted);
                      }
                   })
                   .Case<util::GetTupleOp>([&](util::GetTupleOp getTupleOp) {
-                     addUseAfter(getTupleOp.getVal(), op);
+                     addUseAfter(getTupleOp.getVal(), op, notCounted);
                   })
                   .Case<db::ListSetOp>([&](db::ListSetOp setOp) {
-                     addUse(setOp.getElement(), op);
+                     addUse(setOp.getElement(), op, notCounted);
                   })
                   .Case<db::TryExcept>([&](db::TryExcept tryOp) {
                      if (tryOp.getTryArg()) {
-                        addUse(tryOp.getTryArg(), op);
+                        addUse(tryOp.getTryArg(), op, notCounted);
                      }
                       if (tryOp.getExceptArg()) {
-                         addUse(tryOp.getExceptArg(), op);
+                         addUse(tryOp.getExceptArg(), op, notCounted);
                       }
                   })
                   .Case<db::AsNullableOp>([&](db::AsNullableOp asNullableOp) {
-                     addUse(asNullableOp.getVal(), op);
+                     addUse(asNullableOp.getVal(), op, notCounted);
                   })
                   .Case<util::PackOp>([&](util::PackOp packOp) {
                      for (auto value : packOp.getVals()) {
-                        addUse(value, op);
+                        addUse(value, op, notCounted);
                      }
                   })
                   .Case<mlir::arith::SelectOp>([&](mlir::arith::SelectOp selectOp) {
@@ -225,7 +234,7 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
             }
 
             for (auto value : valuesToManage) {
-               cleanupUse(block->getTerminator(), value);
+               cleanupUse(block->getTerminator(), value,notCounted);
             }
             if (block == mapBlock) {
                for (auto& operand : terminator->getOpOperands()) {
@@ -239,7 +248,7 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
                for (auto value : returnedValues) {
                   if (typeNeedsManagement(value.getType())) {
                      mlir::OpBuilder builder(block, block->getTerminator()->getIterator());
-                     addUse(value, block->getTerminator());
+                     addUse(value, block->getTerminator(),notCounted);
                   }
                }
             }
@@ -249,21 +258,34 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
       // Currently we iterate the MapOp's regions and blocks so we can
       // inspect and later transform per-block nested code (placeholder).
       auto module = getOperation();
+
       module.walk([&](subop::MapOp mapOp) {
+         llvm::DenseSet<mlir::Value> notCounted;
+         mapOp.getFn().walk([&](mlir::Operation* op){
+            if(mlir::isa<db::ConstantOp>(op)){
+               notCounted.insert(op->getResult(0));
+            }
+         });
          // Iterate all regions and blocks inside the MapOp.
          mapOp->walk([&](mlir::Block* block) {
-           handleBlock(block, &mapOp.getFn().front());
+           handleBlock(block, &mapOp.getFn().front(), notCounted);
          });
       });
       module.walk([&](mlir::func::FuncOp funcOp) {
+         llvm::DenseSet<mlir::Value> notCounted;
          if (funcOp.isDeclaration()) {
             return;
          }
          if (funcOp.getName()=="main") {
             return;
          }
+         funcOp.getBody().walk([&](mlir::Operation* op){
+            if(mlir::isa<db::ConstantOp>(op)){
+               notCounted.insert(op->getResult(0));
+            }
+         });
          funcOp->walk([&](mlir::Block* block) {
-            handleBlock(block, nullptr);
+            handleBlock(block, nullptr, notCounted);
          });
       });
    }
