@@ -170,7 +170,7 @@ struct LegacyFixedSizedBuffer {
 template <class T>
 struct FixedSizedBuffer {
    static bool shouldUseMMAP(size_t elements) {
-      return (sizeof(T) * elements) >= 65536;
+      return false; //(sizeof(T) * elements) >= 65536;
    }
    static T* createZeroed(size_t elements) {
       if (shouldUseMMAP(elements)) {
