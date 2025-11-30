@@ -220,33 +220,35 @@ class HiPyFunctionImplementer : public lingodb::catalog::MLIRUDFImplementor {
    HiPyFunctionImplementer(std::string functionName, std::string byteCode, std::vector<lingodb::catalog::Type> argumentTypes, lingodb::catalog::Type returnType) : functionName(std::move(functionName)), byteCode(std::move(byteCode)), argumentTypes(std::move(argumentTypes)), returnType(std::move(returnType)) {}
    mlir::Value callFunction(mlir::ModuleOp& moduleOp, mlir::OpBuilder& builder, mlir::Location loc, mlir::ValueRange args, lingodb::catalog::Catalog* catalog) override {
       using namespace lingodb::compiler::dialect;
-      auto parseBlock = new mlir::Block;
-      std::unique_ptr<llvm::MemoryBuffer> buf =
-         llvm::MemoryBuffer::getMemBufferCopy(llvm::StringRef(byteCode.data(), byteCode.size()));
-      llvm::MemoryBufferRef bufRef = buf->getMemBufferRef();
+      if (!moduleOp.lookupSymbol(functionName+"_"+functionName)) {
+         auto parseBlock = new mlir::Block;
+         std::unique_ptr<llvm::MemoryBuffer> buf =
+            llvm::MemoryBuffer::getMemBufferCopy(llvm::StringRef(byteCode.data(), byteCode.size()));
+         llvm::MemoryBufferRef bufRef = buf->getMemBufferRef();
 
-      // ParserConfig constructed with the context.
-      mlir::ParserConfig config(builder.getContext());
+         // ParserConfig constructed with the context.
+         mlir::ParserConfig config(builder.getContext());
 
-      // Read the bytecode into the module's top block. `buf` must remain alive
-      // until readBytecodeFile returns (it does while we hold `buf`).
-      if (mlir::readBytecodeFile(bufRef, parseBlock, config).failed()) {
-         throw std::runtime_error("Failed to parse HiPy UDF bytecode");
-      }
-      //parse bytecode
-      llvm::SourceMgr sourceMgr;
-      std::vector<mlir::Operation*> toMove;
-      for (auto& op : mlir::cast<mlir::ModuleOp>(parseBlock->front()).getOps()) {
-         toMove.push_back(&op);
-      }
-      for (auto* op : toMove) {
-         op->remove();
-         if (auto funcOp = mlir::dyn_cast<mlir::func::FuncOp>(op)) {
-            funcOp.setSymVisibility("private");
+         // Read the bytecode into the module's top block. `buf` must remain alive
+         // until readBytecodeFile returns (it does while we hold `buf`).
+         if (mlir::readBytecodeFile(bufRef, parseBlock, config).failed()) {
+            throw std::runtime_error("Failed to parse HiPy UDF bytecode");
          }
-         moduleOp.getBody()->push_back(op);
+         //parse bytecode
+         llvm::SourceMgr sourceMgr;
+         std::vector<mlir::Operation*> toMove;
+         for (auto& op : mlir::cast<mlir::ModuleOp>(parseBlock->front()).getOps()) {
+            toMove.push_back(&op);
+         }
+         for (auto* op : toMove) {
+            op->remove();
+            if (auto funcOp = mlir::dyn_cast<mlir::func::FuncOp>(op)) {
+               funcOp.setSymVisibility("private");
+            }
+            moduleOp.getBody()->push_back(op);
+         }
+         delete parseBlock;
       }
-      delete parseBlock;
       std::vector<mlir::Value> values;
       std::vector<mlir::Value> isNull;
       for (auto arg : args) {
