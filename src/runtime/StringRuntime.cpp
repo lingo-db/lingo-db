@@ -591,6 +591,6 @@ inline std::string_view trim(std::string_view str) {
 } // namespace
 
 lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::strip(lingodb::runtime::VarLen32 str) {
-        auto trimmed = trim(str.str());
+        auto trimmed = trim(std::string_view(str.data(), str.getLen()));
         return VarLen32::fromString(trimmed, StorageClass::REFCOUNTED);
 }
