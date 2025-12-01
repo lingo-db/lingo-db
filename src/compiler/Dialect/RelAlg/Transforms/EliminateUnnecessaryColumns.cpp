@@ -33,16 +33,15 @@ class EliminateUnnecessaryColumns : public mlir::PassWrapper<EliminateUnnecessar
          }
       });
       getOperation().walk([&](relalg::BaseTableOp baseTableOp) {
-         std::vector<mlir::NamedAttribute> mapping;
-         for (auto x : baseTableOp.getColumnsAttr()) {
-            auto colDef = mlir::cast<tuples::ColumnDefAttr>(x.getValue());
-            if (usedColumns.contains(&colDef.getColumn())) {
+         llvm::SmallVector<std::pair<std::string, tuples::Column*>> mapping;
+         for (auto x : baseTableOp.getColumns()) {
+            if (usedColumns.contains(x.second)) {
                mapping.push_back(x);
             } else {
                //colDef.dump();
             }
          }
-         baseTableOp.setColumnsAttr(builder.getDictionaryAttr(mapping));
+         baseTableOp.setColumns(mapping);
       });
    }
 };

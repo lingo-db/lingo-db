@@ -14,6 +14,7 @@ class ColumnManager {
 
    void setContext(mlir::MLIRContext* context);
    std::shared_ptr<Column> get(llvm::StringRef scope, llvm::StringRef attribute);
+   ColumnDefAttr createRaw(mlir::SymbolRefAttr name);
    ColumnDefAttr createDef(mlir::SymbolRefAttr name, mlir::Attribute fromExisting = mlir::Attribute());
    ColumnDefAttr createDef(llvm::StringRef scope, llvm::StringRef name, mlir::Attribute fromExisting = mlir::Attribute());
    ColumnDefAttr createDef(const Column* attr, mlir::Attribute fromExisting = mlir::Attribute());

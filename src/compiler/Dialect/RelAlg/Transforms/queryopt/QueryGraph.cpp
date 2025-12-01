@@ -205,7 +205,7 @@ namespace {
 void appendRestrictions(relalg::BaseTableOp baseTableOp, std::vector<std::unique_ptr<lingodb::compiler::support::eval::expr>>& expressions) {
    std::unordered_map<std::string, mlir::Type> typeMapping;
    for (auto c : baseTableOp.getColumns()) {
-      typeMapping[c.getName().str()] = mlir::cast<tuples::ColumnDefAttr>(c.getValue()).getColumn().type;
+      typeMapping[c.first] = c.second->type;
    }
    if (baseTableOp->hasAttr("restriction")) {
       auto restrictionsStr = cast<mlir::StringAttr>(baseTableOp->getAttr("restriction")).getValue();
@@ -279,7 +279,7 @@ std::optional<double> estimateUsingSample(QueryGraph::Node& n) {
       llvm::DenseMap<const tuples::Column*, std::string> mapping;
       std::unordered_map<std::string, mlir::Type> typeMapping;
       for (auto c : baseTableOp.getColumns()) {
-         mapping[&mlir::cast<tuples::ColumnDefAttr>(c.getValue()).getColumn()] = c.getName().str();
+         mapping[c.second] = c.first;
       }
       auto meta = mlir::dyn_cast_or_null<TableMetaDataAttr>(baseTableOp->getAttr("meta"));
       if (!meta) return {};
@@ -350,7 +350,7 @@ ColumnSet QueryGraph::getPKey(QueryGraph::Node& n) {
          ColumnSet attributes;
          std::unordered_map<std::string, const tuples::Column*> mapping;
          for (auto c : baseTableOp.getColumns()) {
-            mapping[c.getName().str()] = &mlir::cast<tuples::ColumnDefAttr>(c.getValue()).getColumn();
+            mapping[c.first] = c.second;
          }
          for (auto c : meta.getMeta()->getPrimaryKey()) {
             if (mapping.contains(c)) {

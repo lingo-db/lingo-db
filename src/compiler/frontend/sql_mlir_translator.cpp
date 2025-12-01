@@ -1190,13 +1190,13 @@ mlir::Value SQLMlirTranslator::translateTableRef(mlir::OpBuilder& builder, std::
          auto rel = baseTableRef->columnReferenceEntries;
          std::string uniqueScope = baseTableRef->mlirScope;
 
-         std::vector<mlir::NamedAttribute> columns{};
+         llvm::SmallVector<std::pair<std::string, tuples::Column*>> columns{};
          for (auto& info : rel) {
             auto attrDef = info->createDef(builder, attrManager);
             attrDef.getColumn().type = info->resultType.toMlirType(mlirContext);
-            columns.push_back(builder.getNamedAttr(info->name, attrDef));
+            columns.push_back({info->name, &attrDef.getColumn()});
          }
-         return builder.create<relalg::BaseTableOp>(location, tuples::TupleStreamType::get(mlirContext), relation, builder.getDictionaryAttr(columns));
+         return builder.create<relalg::BaseTableOp>(location, tuples::TupleStreamType::get(mlirContext), relation, columns);
       }
       case ast::TableReferenceType::CROSS_PRODUCT: {
          auto crossProd = std::static_pointer_cast<ast::BoundCrossProductRef>(tableRef);

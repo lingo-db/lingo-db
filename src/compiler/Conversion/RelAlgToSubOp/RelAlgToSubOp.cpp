@@ -96,6 +96,7 @@ class BaseTableLowering : public OpConversionPattern<relalg::BaseTableOp> {
    using OpConversionPattern<relalg::BaseTableOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(relalg::BaseTableOp baseTableOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto& memberManager = getContext()->getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager();
+      auto& colManager = getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
       auto required = getRequired(baseTableOp);
       llvm::SmallVector<Member> members;
       llvm::SmallVector<subop::DefMappingPairT> defMapping;
@@ -108,20 +109,18 @@ class BaseTableLowering : public OpConversionPattern<relalg::BaseTableOp> {
       std::string tableName = mlir::cast<mlir::StringAttr>(baseTableOp->getAttr("table_identifier")).str();
       std::string scanDescription = R"({ "table": ")" + tableName + R"(", "mapping": { )";
       bool first = true;
-      for (auto namedAttr : baseTableOp.getColumns().getValue()) {
-         auto identifier = namedAttr.getName();
-         auto attr = namedAttr.getValue();
-         auto attrDef = mlir::dyn_cast_or_null<tuples::ColumnDefAttr>(attr);
+      for (auto [identifier, attr] : baseTableOp.getColumns()) {
          if (!first) {
             scanDescription += ",";
          } else {
             first = false;
          }
-         auto member = createMember(rewriter.getContext(), identifier.str(), attrDef.getColumn().type);
-         scanDescription += "\"" + memberManager.getName(member) + "\" :\"" + identifier.str() + "\"";
+         auto member = createMember(rewriter.getContext(), identifier, attr->type);
+         scanDescription += "\"" + memberManager.getName(member) + "\" :\"" + identifier + "\"";
          members.push_back(member);
-         if (required.contains(&attrDef.getColumn())) {
-            defMapping.push_back({member, attrDef});
+
+         if (required.contains(attr)) {
+            defMapping.push_back({member, colManager.createDef(attr)});
          }
       }
       scanDescription += "}, \"restrictions\": " + restrictions + "}";

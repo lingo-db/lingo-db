@@ -13,10 +13,55 @@
 #include <queue>
 
 using namespace mlir;
+namespace llvm {
+hash_code hash_value(const lingodb::compiler::dialect::tuples::Column* m) {
+   return hash_combine(static_cast<const void*>(m));
+}
 
+hash_code hash_value(const llvm::SmallVector<std::pair<std::string, lingodb::compiler::dialect::tuples::Column*>>& members) {
+   llvm::hash_code hc = 0;
+   for (const auto& m : members) {
+      hc = hash_combine(hc, hash_value(m.second));
+   }
+   return hc;
+}
+
+}
 namespace {
 using namespace lingodb::compiler::dialect;
-
+::mlir::Attribute convertToAttribute(mlir::MLIRContext* ctx, const llvm::SmallVector<std::pair<std::__cxx11::basic_string<char>, lingodb::compiler::dialect::tuples::Column*>>& mapping) {
+   auto& colManager = ctx->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+   llvm::SmallVector<mlir::NamedAttribute> attrs;
+   for (auto& pair : mapping) {
+      auto defAttr = colManager.createDef(pair.second);
+      attrs.push_back(mlir::NamedAttribute(mlir::StringAttr::get(ctx, pair.first), defAttr));
+   }
+   return mlir::DictionaryAttr::get(ctx, attrs);
+}
+mlir::LogicalResult convertFromAttribute(llvm::SmallVector<std::pair<std::string, lingodb::compiler::dialect::tuples::Column*>>& storage, mlir::Attribute attr,
+                                         std::function<mlir::InFlightDiagnostic()> emitError) {
+   if (auto dictAttr = mlir::dyn_cast<mlir::DictionaryAttr>(attr)) {
+      auto& colManager = attr.getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+      for (auto namedAttr : dictAttr.getValue()) {
+         auto colDefAttr = mlir::dyn_cast<tuples::ColumnDefAttr>(namedAttr.getValue());
+         if (!colDefAttr) {
+            return emitError() << "Expected ColumnDefAttr in column mapping dictionary";
+         }
+         storage.push_back(std::make_pair(namedAttr.getName().str(), &colDefAttr.getColumn()));
+      }
+      return mlir::success();
+   }
+   return mlir::failure();
+}
+void writeToMlirBytecode(mlir::DialectBytecodeWriter& writer, const llvm::SmallVector<std::pair<std::string, lingodb::compiler::dialect::tuples::Column*>>& mapping) {
+   writer.writeList(mapping, [&](const std::pair<std::string, lingodb::compiler::dialect::tuples::Column*>& pair) {
+      writer.writeOwnedString(pair.first);
+      //todo: writeToMlirBytecode(writer, pair.second);
+   });
+}
+mlir::LogicalResult readFromMlirBytecode(mlir::DialectBytecodeReader& reader, llvm::SmallVector<std::pair<std::string, lingodb::compiler::dialect::tuples::Column*>>& mapping) {
+   return mlir::failure(); //todo
+}
 tuples::ColumnManager& getColumnManager(::mlir::OpAsmParser& parser) {
    return parser.getBuilder().getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
 }
@@ -185,6 +230,15 @@ void printCustDef(OpAsmPrinter& p, mlir::Operation* op, tuples::ColumnDefAttr at
       printCustRefArr(p, op, fromExistingArr);
    }
 }
+void printCustDefRaw(OpAsmPrinter& p, mlir::Operation* op, tuples::Column* attr) {
+   auto& colManager = op->getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+   auto [scope, name] = colManager.getName(attr);
+   p << "@" << scope << "::@" << name;
+   std::vector<mlir::NamedAttribute> relAttrDefProps;
+   MLIRContext* context = op->getContext();
+   relAttrDefProps.push_back({mlir::StringAttr::get(context, "type"), mlir::TypeAttr::get(attr->type)});
+   p << "(" << mlir::DictionaryAttr::get(context, relAttrDefProps) << ")";
+}
 
 ParseResult parseCustDefArr(OpAsmParser& parser, ArrayAttr& attr) {
    std::vector<Attribute> attributes;
@@ -257,7 +311,7 @@ void printCustAttrMapping(OpAsmPrinter& p, mlir::Operation* op, Attribute mappin
 ParseResult relalg::BaseTableOp::parse(OpAsmParser& parser, OperationState& result) {
    if (parser.parseOptionalAttrDict(result.attributes)) return failure();
    if (parser.parseKeyword("columns") || parser.parseColon() || parser.parseLBrace()) return failure();
-   std::vector<mlir::NamedAttribute> columns;
+   llvm::SmallVector<std::pair<std::string, tuples::Column*>> columns;
    while (true) {
       if (!parser.parseOptionalRBrace()) { break; }
       StringRef colName;
@@ -267,12 +321,12 @@ ParseResult relalg::BaseTableOp::parse(OpAsmParser& parser, OperationState& resu
       if (parseCustDef(parser, attrDefAttr)) {
          return failure();
       }
-      columns.push_back({StringAttr::get(parser.getBuilder().getContext(), colName), attrDefAttr});
+      columns.push_back({colName.str(), &attrDefAttr.getColumn()});
       if (!parser.parseOptionalComma()) { continue; }
       if (parser.parseRBrace()) { return failure(); }
       break;
    }
-   result.addAttribute("columns", mlir::DictionaryAttr::get(parser.getBuilder().getContext(), columns));
+   result.getOrAddProperties<Properties>().columns = columns;
    return parser.addTypeToList(tuples::TupleStreamType::get(parser.getBuilder().getContext()), result.types);
 }
 void relalg::BaseTableOp::print(OpAsmPrinter& p) {
@@ -281,16 +335,15 @@ void relalg::BaseTableOp::print(OpAsmPrinter& p) {
    p << " columns: {";
    auto first = true;
    for (auto mapping : getColumns()) {
-      auto columnName = mapping.getName();
-      auto attr = mapping.getValue();
-      auto relationDefAttr = mlir::dyn_cast_or_null<tuples::ColumnDefAttr>(attr);
+      auto columnName = mapping.first;
+      auto attr = mapping.second;
       if (first) {
          first = false;
       } else {
          p << ", ";
       }
-      p << columnName.getValue() << " => ";
-      printCustDef(p, *this, relationDefAttr);
+      p << columnName << " => ";
+      printCustDefRaw(p, *this, attr);
    }
    p << "}";
 }
