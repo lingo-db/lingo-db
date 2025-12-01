@@ -36,84 +36,36 @@ RESULT_TIMEOUT_S = 60.0
 
 # Scenario configurations
 SCENARIOS = {
-    # Vectorized Filters
-    "Filters1": {
-        "LINGODB_OPT_PUSHDOWN_RESTRICTIONS": "true",
-        "LINGODB_OPT_INFER_NOT_NULL": "false",
-        "LINGODB_OPT_ELIMINATE_NULLABLE": "false",
+    "Baseline": ({
         "LINGODB_OPT_PATTERNS_EXTRA_OPT": "true",
+        "LINGODB_OPT_CLEANUP_AFTER_IMPERATIVE": "true",
         "LINGODB_OPT_CLEANUP_AFTER_SUBOP": "true",
-        "LINGODB_OPT_CLEANUP_AFTER_IMPERATIVE": "true"
-    },
-    "Filters2": {
         "LINGODB_OPT_PUSHDOWN_RESTRICTIONS": "false",
-        "LINGODB_OPT_INFER_NOT_NULL": "false",
-        "LINGODB_OPT_ELIMINATE_NULLABLE": "false",
-        "LINGODB_OPT_PATTERNS_EXTRA_OPT": "true",
-        "LINGODB_OPT_CLEANUP_AFTER_SUBOP": "true",
-        "LINGODB_OPT_CLEANUP_AFTER_IMPERATIVE": "true"
-    },
-    
-    # Eliminate Null Types
-    "EliminateNulls1": {
-        "LINGODB_OPT_INFER_NOT_NULL": "false",
-        "LINGODB_OPT_ELIMINATE_NULLABLE": "false",
-        "LINGODB_OPT_PATTERNS_EXTRA_OPT": "true",
-        "LINGODB_OPT_CLEANUP_AFTER_SUBOP": "true",
-        "LINGODB_OPT_CLEANUP_AFTER_IMPERATIVE": "true"
-    },
-    "EliminateNulls2": {
-        "LINGODB_OPT_INFER_NOT_NULL": "false",
-        "LINGODB_OPT_ELIMINATE_NULLABLE": "true",
-        "LINGODB_OPT_PATTERNS_EXTRA_OPT": "true",
-        "LINGODB_OPT_CLEANUP_AFTER_SUBOP": "true",
-        "LINGODB_OPT_CLEANUP_AFTER_IMPERATIVE": "true"
-    },
-    "EliminateNulls3": {
-        "LINGODB_OPT_INFER_NOT_NULL": "true",
-        "LINGODB_OPT_ELIMINATE_NULLABLE": "true",
-        "LINGODB_OPT_PATTERNS_EXTRA_OPT": "true",
-        "LINGODB_OPT_CLEANUP_AFTER_SUBOP": "true",
-        "LINGODB_OPT_CLEANUP_AFTER_IMPERATIVE": "true"
-    },
-    
-    # Cleanup
-    "Cleanup1": {
-        "LINGODB_OPT_PATTERNS_EXTRA_OPT": "true",
-        "LINGODB_OPT_CLEANUP_AFTER_SUBOP": "true",
-        "LINGODB_OPT_CLEANUP_AFTER_IMPERATIVE": "true"
-    },
-    "Cleanup2": {
+    },BINARY),
+    "CheaperPatterns": ({
         "LINGODB_OPT_PATTERNS_EXTRA_OPT": "false",
+        "LINGODB_OPT_CLEANUP_AFTER_IMPERATIVE": "true",
         "LINGODB_OPT_CLEANUP_AFTER_SUBOP": "true",
-        "LINGODB_OPT_CLEANUP_AFTER_IMPERATIVE": "true"
-    },
-    "Cleanup3": {
-        "LINGODB_OPT_PATTERNS_EXTRA_OPT": "true",
+        "LINGODB_OPT_PUSHDOWN_RESTRICTIONS": "false",
+    }, BINARY),
+    "LessCleanup" : ({
+     "LINGODB_OPT_PATTERNS_EXTRA_OPT": "false",
+     "LINGODB_OPT_CLEANUP_AFTER_IMPERATIVE": "false",
+     "LINGODB_OPT_CLEANUP_AFTER_SUBOP": "false",
+     "LINGODB_OPT_PUSHDOWN_RESTRICTIONS": "false",
+    },BINARY),
+    "Restrictions":({
+        "LINGODB_OPT_PATTERNS_EXTRA_OPT": "false",
+        "LINGODB_OPT_CLEANUP_AFTER_IMPERATIVE": "false",
         "LINGODB_OPT_CLEANUP_AFTER_SUBOP": "false",
-        "LINGODB_OPT_CLEANUP_AFTER_IMPERATIVE": "false"
-    },
-    "Cleanup4": {
-        "LINGODB_OPT_PATTERNS_EXTRA_OPT": "true",
+        "LINGODB_OPT_PUSHDOWN_RESTRICTIONS": "true",
+    }, BINARY),
+    "MiMalloc":({
+        "LINGODB_OPT_PATTERNS_EXTRA_OPT": "false",
+        "LINGODB_OPT_CLEANUP_AFTER_IMPERATIVE": "false",
         "LINGODB_OPT_CLEANUP_AFTER_SUBOP": "false",
-        "LINGODB_OPT_CLEANUP_AFTER_IMPERATIVE": "false"
-    },
-    "Cleanup5": {
-        "LINGODB_OPT_CLEANUP_AFTER_SUBOP": "true",
-        "LINGODB_OPT_CLEANUP_AFTER_IMPERATIVE": "true"
-    },
-    "Cleanup6": {
-        "LINGODB_OPT_CLEANUP_AFTER_SUBOP": "true",
-        "LINGODB_OPT_CLEANUP_AFTER_IMPERATIVE": "false"
-    },
-    "Cleanup7": {
-        "LINGODB_OPT_CLEANUP_AFTER_SUBOP": "false",
-        "LINGODB_OPT_CLEANUP_AFTER_IMPERATIVE": "true"
-    },
-    "Cleanup8": {
-        "LINGODB_OPT_CLEANUP_AFTER_SUBOP": "false",
-        "LINGODB_OPT_CLEANUP_AFTER_IMPERATIVE": "false"
-    }
+        "LINGODB_OPT_PUSHDOWN_RESTRICTIONS": "true",
+    }, Path("./build/lingodb-release-mimalloc/sql")),
 }
 # ----------------
 
@@ -314,13 +266,13 @@ def main():
 
     results=[]
 
-    for scenario_name, scenario_env in SCENARIOS.items():
+    for scenario_name, (scenario_env, binary) in SCENARIOS.items():
         print(f"\nRunning scenario: {scenario_name}")
         
         # Combine base environment with scenario-specific environment
         full_env = {**BASE_ENV, **scenario_env}
         
-        with Runner(BINARY, DB_BASE_DIR, DATASET, full_env) as runner:
+        with Runner(binary, DB_BASE_DIR, DATASET, full_env) as runner:
             sql_files: List[Path]
             if target.is_file():
                 sql_files = [target]
