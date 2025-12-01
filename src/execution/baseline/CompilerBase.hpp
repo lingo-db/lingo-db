@@ -31,7 +31,7 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
    using IRInstRef = IRAdaptor::IRInstRef;
    using IRValueRef = IRAdaptor::IRValueRef;
    using AsmReg = typename Base::AsmReg;
-   using Assembler = typename Base::Assembler;
+   using Assembler = typename tpde::Assembler;
    using SymRef = tpde::SymRef;
 
    class BuiltinFuncStorage {

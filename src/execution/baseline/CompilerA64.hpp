@@ -20,7 +20,6 @@ struct IRCompilerA64
    using ValuePartRef = typename Base::ValuePartRef;
    using ValuePart = typename Base::ValuePart;
    using ValueRef = typename Base::ValueRef;
-   using Assembler = typename Base::Assembler;
    using SymRef = tpde::SymRef;
    using AsmReg = typename Base::AsmReg;
    using GenericValuePart = typename Base::GenericValuePart;
@@ -37,10 +36,10 @@ struct IRCompilerA64
    void load_address_of_global(const SymRef global_sym, const AsmReg dst) {
       // emit lea with relocation
       reloc_text(
-          global_sym, R_AARCH64_ADR_PREL_PG_HI21, this->text_writer.offset());
+          global_sym, tpde::elf::R_AARCH64_ADR_PREL_PG_HI21, this->text_writer.offset());
       ASMNC(ADRP, dst, 0, 0);
       reloc_text(
-          global_sym, R_AARCH64_ADD_ABS_LO12_NC, this->text_writer.offset());
+          global_sym, tpde::elf::R_AARCH64_ADD_ABS_LO12_NC, this->text_writer.offset());
       ASMNC(ADDxi, dst, dst, 0);
    }
 
@@ -271,10 +270,10 @@ struct IRCompilerA64
       assert(sym.valid());
       // mov the ptr from the GOT
       reloc_text(
-          sym, R_AARCH64_ADR_GOT_PAGE, this->text_writer.offset());
+          sym, tpde::elf::R_AARCH64_ADR_GOT_PAGE, this->text_writer.offset());
       ASMNC(ADRP, dst, 0, 0);
       reloc_text(
-          sym, R_AARCH64_LD64_GOT_LO12_NC, this->text_writer.offset());
+          sym, tpde::elf::R_AARCH64_LD64_GOT_LO12_NC, this->text_writer.offset());
       ASMNC(LDRxu, dst, dst, 0);
    }
    CallBuilder create_call_builder() {
