@@ -1,4 +1,6 @@
 #include "lingodb/compiler/Conversion/DBToStd/DBToStd.h"
+#include "lingodb/compiler/Dialect/Arrow/IR/ArrowDialect.h"
+#include "lingodb/compiler/Dialect/Arrow/IR/ArrowOps.h"
 #include "lingodb/compiler/Conversion/UtilToLLVM/Passes.h"
 #include "lingodb/compiler/Dialect/Arrow/IR/ArrowDialect.h"
 #include "lingodb/compiler/Dialect/Arrow/IR/ArrowOps.h"
@@ -13,6 +15,8 @@
 #include "lingodb/compiler/runtime/Hashtable.h"
 #include "lingodb/compiler/runtime/ListRuntime.h"
 #include "lingodb/compiler/runtime/StringRuntime.h"
+#include <lingodb/compiler/runtime/ArrowColumn.h>
+
 
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -32,6 +36,7 @@
 #include "mlir/Transforms/Passes.h"
 
 using namespace mlir;
+namespace arrow_dialect = lingodb::compiler::dialect::arrow;
 
 namespace {
 using namespace lingodb::compiler::dialect;
@@ -43,7 +48,7 @@ struct DBToStdLoweringPass
 
    DBToStdLoweringPass() {}
    void getDependentDialects(DialectRegistry& registry) const override {
-      registry.insert<db::DBDialect, scf::SCFDialect, mlir::cf::ControlFlowDialect, util::UtilDialect, memref::MemRefDialect, arith::ArithDialect>();
+      registry.insert<arrow_dialect::ArrowDialect, db::DBDialect, scf::SCFDialect, mlir::cf::ControlFlowDialect, util::UtilDialect, memref::MemRefDialect, arith::ArithDialect>();
    }
    void runOnOperation() final;
 };
@@ -60,6 +65,203 @@ static bool hasDBType(TypeConverter& converter, TypeRange types) {
    return llvm::any_of(types, [&converter](mlir::Type t) { auto converted = converter.convertType(t);return converted&&converted!=t; });
 }
 
+template <class Fn>
+static void createAtArrayCreation(ConversionPatternRewriter& rewriter, mlir::Value array, const Fn& fn) {
+   if (auto* creationOp = array.getDefiningOp()) {
+      mlir::OpBuilder::InsertionGuard guard(rewriter);
+      rewriter.setInsertionPointAfter(creationOp);
+      fn(rewriter);
+   } else {
+      fn(rewriter);
+   }
+}
+
+class ArrayLoadFixedSizedLowering : public OpConversionPattern<arrow_dialect::LoadFixedSizedOp> {
+   public:
+   using OpConversionPattern<arrow_dialect::LoadFixedSizedOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(arrow_dialect::LoadFixedSizedOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      mlir::Value valueBuffer;
+      createAtArrayCreation(rewriter, adaptor.getArray(), [&](mlir::ConversionPatternRewriter& rewriter) {
+         auto offsetPtr = rewriter.create<util::TupleElementPtrOp>(op.getLoc(), util::RefType::get(rewriter.getIndexType()), adaptor.getArray(), 2);
+         auto offset = rewriter.create<util::LoadOp>(op.getLoc(), offsetPtr);
+         auto bufferArrayPtr = rewriter.create<util::TupleElementPtrOp>(op.getLoc(), util::RefType::get(util::RefType::get(util::RefType::get(rewriter.getI8Type()))), adaptor.getArray(), 5);
+         auto bufferArray = rewriter.create<util::LoadOp>(op.getLoc(), bufferArrayPtr);
+         //load buffer with main values (offset 1)
+         auto c1 = rewriter.create<arith::ConstantIndexOp>(op.getLoc(), 1);
+         auto buffer = rewriter.create<util::LoadOp>(op.getLoc(), bufferArray, c1);
+         valueBuffer = rewriter.create<util::GenericMemrefCastOp>(op.getLoc(), util::RefType::get(op.getType()), buffer);
+         valueBuffer = rewriter.create<util::ArrayElementPtrOp>(op.getLoc(), util::RefType::get(op.getType()), valueBuffer, offset);
+      });
+
+      rewriter.replaceOpWithNewOp<util::LoadOp>(op, valueBuffer, adaptor.getOffset());
+      return success();
+   }
+};
+static Value getBit(OpBuilder builder, Location loc, Value bits, Value pos) {
+   auto i1Type = IntegerType::get(builder.getContext(), 1);
+   auto i8Type = IntegerType::get(builder.getContext(), 8);
+
+   auto indexType = IndexType::get(builder.getContext());
+   Value const3 = builder.create<arith::ConstantOp>(loc, indexType, builder.getIntegerAttr(indexType, 3));
+   Value const7 = builder.create<arith::ConstantOp>(loc, indexType, builder.getIntegerAttr(indexType, 7));
+   Value const1Byte = builder.create<arith::ConstantOp>(loc, i8Type, builder.getIntegerAttr(i8Type, 1));
+
+   Value div8 = builder.create<arith::ShRUIOp>(loc, indexType, pos, const3);
+   Value rem8 = builder.create<arith::AndIOp>(loc, indexType, pos, const7);
+   Value loadedByte = builder.create<util::LoadOp>(loc, i8Type, bits, div8);
+   Value rem8AsByte = builder.create<arith::IndexCastOp>(loc, i8Type, rem8);
+   Value shifted = builder.create<arith::ShRUIOp>(loc, i8Type, loadedByte, rem8AsByte);
+   Value res1 = shifted;
+
+   Value anded = builder.create<arith::AndIOp>(loc, i8Type, res1, const1Byte);
+   Value res = builder.create<arith::CmpIOp>(loc, i1Type, mlir::arith::CmpIPredicate::eq, anded, const1Byte);
+   return res;
+}
+class ArrayLoadBoolLowering : public OpConversionPattern<arrow_dialect::LoadBoolOp> {
+   public:
+   using OpConversionPattern<arrow_dialect::LoadBoolOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(arrow_dialect::LoadBoolOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      mlir::Value buffer;
+      mlir::Value arrayOffset;
+      createAtArrayCreation(rewriter, adaptor.getArray(), [&](mlir::ConversionPatternRewriter& rewriter) {
+         auto offsetPtr = rewriter.create<util::TupleElementPtrOp>(op.getLoc(), util::RefType::get(rewriter.getIndexType()), adaptor.getArray(), 2);
+         arrayOffset = rewriter.create<util::LoadOp>(op.getLoc(), offsetPtr);
+         auto bufferArrayPtr = rewriter.create<util::TupleElementPtrOp>(op.getLoc(), util::RefType::get(util::RefType::get(util::RefType::get(rewriter.getI8Type()))), adaptor.getArray(), 5);
+         auto bufferArray = rewriter.create<util::LoadOp>(op.getLoc(), bufferArrayPtr);
+         //load buffer with main values (offset 1)
+         auto c1 = rewriter.create<arith::ConstantIndexOp>(op.getLoc(), 1);
+         buffer = rewriter.create<util::LoadOp>(op.getLoc(), bufferArray, c1);
+      });
+      mlir::Value offset = rewriter.create<arith::AddIOp>(op.getLoc(), rewriter.getIndexType(), arrayOffset, adaptor.getOffset());
+      rewriter.replaceOp(op, getBit(rewriter, op.getLoc(), buffer, offset));
+
+      return success();
+   }
+};
+
+class ArrayLoadVariableSizeBinaryLowering : public OpConversionPattern<arrow_dialect::LoadVariableSizeBinaryOp> {
+   public:
+   using OpConversionPattern<arrow_dialect::LoadVariableSizeBinaryOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(arrow_dialect::LoadVariableSizeBinaryOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      mlir::Value valueBuffer;
+      mlir::Value binaryBuffer;
+      mlir::Value c1;
+      createAtArrayCreation(rewriter, adaptor.getArray(), [&](mlir::ConversionPatternRewriter& rewriter) {
+         auto offsetPtr = rewriter.create<util::TupleElementPtrOp>(op.getLoc(), util::RefType::get(rewriter.getIndexType()), adaptor.getArray(), 2);
+         auto offset = rewriter.create<util::LoadOp>(op.getLoc(), offsetPtr);
+         auto bufferArrayPtr = rewriter.create<util::TupleElementPtrOp>(op.getLoc(), util::RefType::get(util::RefType::get(util::RefType::get(rewriter.getI8Type()))), adaptor.getArray(), 5);
+         auto bufferArray = rewriter.create<util::LoadOp>(op.getLoc(), bufferArrayPtr);
+         //load buffer with main values (offset 1)
+         c1 = rewriter.create<arith::ConstantIndexOp>(op.getLoc(), 1);
+         auto c2 = rewriter.create<arith::ConstantIndexOp>(op.getLoc(), 2);
+         valueBuffer = rewriter.create<util::LoadOp>(op.getLoc(), bufferArray, c1);
+         valueBuffer = rewriter.create<util::GenericMemrefCastOp>(op.getLoc(), util::RefType::get(rewriter.getI32Type()), valueBuffer);
+         valueBuffer = rewriter.create<util::ArrayElementPtrOp>(op.getLoc(), util::RefType::get(rewriter.getI32Type()), valueBuffer, offset);
+         binaryBuffer = rewriter.create<util::LoadOp>(op.getLoc(), bufferArray, c2);
+      });
+      auto pos1 = rewriter.create<util::LoadOp>(op.getLoc(), valueBuffer, adaptor.getOffset());
+      Value ip1 = rewriter.create<arith::AddIOp>(op.getLoc(), rewriter.getIndexType(), adaptor.getOffset(), c1);
+      Value pos2 = rewriter.create<util::LoadOp>(op.getLoc(), rewriter.getI32Type(), valueBuffer, ip1);
+      Value len = rewriter.create<arith::SubIOp>(op.getLoc(), rewriter.getI32Type(), pos2, pos1);
+      auto pos1AsIndex = rewriter.create<arith::IndexCastOp>(op.getLoc(), rewriter.getIndexType(), pos1);
+      Value ptr = rewriter.create<util::ArrayElementPtrOp>(op.getLoc(), util::RefType::get(rewriter.getI8Type()), binaryBuffer, pos1AsIndex);
+      rewriter.replaceOp(op, {len, ptr});
+      return success();
+   }
+};
+
+class ArrayIsValidLowering : public OpConversionPattern<arrow_dialect::IsValidOp> {
+   public:
+   using OpConversionPattern<arrow_dialect::IsValidOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(arrow_dialect::IsValidOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      mlir::Value buffer;
+      mlir::Value arrayOffset;
+      createAtArrayCreation(rewriter, adaptor.getArray(), [&](mlir::ConversionPatternRewriter& rewriter) {
+         auto offsetPtr = rewriter.create<util::TupleElementPtrOp>(op.getLoc(), util::RefType::get(rewriter.getIndexType()), adaptor.getArray(), 2);
+         arrayOffset = rewriter.create<util::LoadOp>(op.getLoc(), offsetPtr);
+         auto bufferArrayPtr = rewriter.create<util::TupleElementPtrOp>(op.getLoc(), util::RefType::get(util::RefType::get(util::RefType::get(rewriter.getI8Type()))), adaptor.getArray(), 5);
+         auto bufferArray = rewriter.create<util::LoadOp>(op.getLoc(), bufferArrayPtr);
+         //load  validity buffer (offset 0)
+         auto c0 = rewriter.create<arith::ConstantIndexOp>(op.getLoc(), 0);
+         buffer = rewriter.create<util::LoadOp>(op.getLoc(), bufferArray, c0);
+      });
+      auto offset = rewriter.create<arith::AddIOp>(op.getLoc(), rewriter.getIndexType(), arrayOffset, adaptor.getOffset());
+      rewriter.replaceOp(op, getBit(rewriter, op.getLoc(), buffer, offset));
+      return success();
+   }
+};
+
+class BuilderFromPtrLowering : public OpConversionPattern<arrow_dialect::BuilderFromPtr> {
+   public:
+   using OpConversionPattern<arrow_dialect::BuilderFromPtr>::OpConversionPattern;
+   LogicalResult matchAndRewrite(arrow_dialect::BuilderFromPtr op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      rewriter.replaceOp(op, adaptor.getPtr());
+      return success();
+   }
+};
+class BuilderAppendFixedSizedLowering : public OpConversionPattern<arrow_dialect::AppendFixedSizedOp> {
+   public:
+   using OpConversionPattern<arrow_dialect::AppendFixedSizedOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(arrow_dialect::AppendFixedSizedOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op.getLoc();
+      auto builderVal = adaptor.getBuilder();
+      auto isValid = adaptor.getValid();
+      if (!isValid) {
+         isValid = rewriter.create<mlir::arith::ConstantIntOp>(loc, 1, 1);
+      }
+      auto val = adaptor.getValue();
+      // create stack slot (using alloca) for the value, so that we can then provide the pointer to the value to a generic function. (alloca needs to be in the beginning of the function, not nested in some loop)
+      auto funcParent = op->getParentOfType<func::FuncOp>();
+      mlir::Value stackSlot;
+      {
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(&funcParent.getBody().front());
+         stackSlot = rewriter.create<util::AllocaOp>(loc, util::RefType::get(val.getType()), mlir::Value{});
+      }
+      // store the value in the allocated stack slot
+      rewriter.create<util::StoreOp>(loc, val, stackSlot, mlir::Value{});
+      rt::ArrowColumnBuilder::addFixedSized(rewriter, loc)({builderVal, isValid, stackSlot});
+      rewriter.eraseOp(op);
+
+      return success();
+   }
+};
+class BuilderAppendBoolLowering : public OpConversionPattern<arrow_dialect::AppendBoolOp> {
+   public:
+   using OpConversionPattern<arrow_dialect::AppendBoolOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(arrow_dialect::AppendBoolOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op.getLoc();
+      auto builderVal = adaptor.getBuilder();
+      auto isValid = adaptor.getValid();
+      if (!isValid) {
+         isValid = rewriter.create<mlir::arith::ConstantIntOp>(loc, 1, 1);
+      }
+      auto val = adaptor.getValue();
+
+      rt::ArrowColumnBuilder::addBool(rewriter, loc)({builderVal, isValid, val});
+      rewriter.eraseOp(op);
+
+      return success();
+   }
+};
+class BuilderAppendVariableSizeBinaryLowering : public OpConversionPattern<arrow_dialect::AppendVariableSizeBinaryOp> {
+   public:
+   using OpConversionPattern<arrow_dialect::AppendVariableSizeBinaryOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(arrow_dialect::AppendVariableSizeBinaryOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op.getLoc();
+      auto builderVal = adaptor.getBuilder();
+      auto isValid = adaptor.getValid();
+      if (!isValid) {
+         isValid = rewriter.create<mlir::arith::ConstantIntOp>(loc, 1, 1);
+      }
+      auto val = adaptor.getValue();
+
+      rt::ArrowColumnBuilder::addBinary(rewriter, loc)({builderVal, isValid, val});
+      rewriter.eraseOp(op);
+
+      return success();
+   }
+};
 std::pair<mlir::Value, mlir::Value> unpackNullable(mlir::OpBuilder& rewriter, mlir::Location loc, mlir::Value nullableVal) {
    if (mlir::isa<TupleType>(nullableVal.getType())) {
       llvm::SmallVector<mlir::Value> unpacked;
@@ -109,15 +311,18 @@ class LoadArrowOpLowering : public OpConversionPattern<db::LoadArrowOp> {
       auto baseType = nullableType ? nullableType.getType() : loadArrowOp.getType();
       auto convertedBaseType = typeConverter->convertType(baseType);
       mlir::Value loaded;
-      auto array = adaptor.getArray();
+      mlir::Value array;
+      createAtArrayCreation(rewriter, adaptor.getArray(), [&](mlir::ConversionPatternRewriter& rewriter) {
+         array = rewriter.create<mlir::UnrealizedConversionCastOp>(loc,loadArrowOp.getArray().getType(), adaptor.getArray()).getResult(0);
+      });
       auto offset = adaptor.getOffset();
       //todo: add logic for other types (temporarily: also for some basic types, but especially high-level types defined by DB dialect)
       if (baseType.isInteger(1)) {
-         loaded = rewriter.create<lingodb::compiler::dialect::arrow::LoadBoolOp>(loc, baseType, array, offset);
+         loaded = rewriter.create<arrow_dialect::LoadBoolOp>(loc, baseType, array, offset);
       } else if (baseType.isInteger() || baseType.isF32() || baseType.isF64()) {
-         loaded = rewriter.create<lingodb::compiler::dialect::arrow::LoadFixedSizedOp>(loc, baseType, array, offset);
+         loaded = rewriter.create<arrow_dialect::LoadFixedSizedOp>(loc, baseType, array, offset);
       } else if (auto decimalType = mlir::dyn_cast_or_null<db::DecimalType>(baseType)) {
-         loaded = rewriter.create<lingodb::compiler::dialect::arrow::LoadFixedSizedOp>(loc, IntegerType::get(rewriter.getContext(), 128), array, offset);
+         loaded = rewriter.create<arrow_dialect::LoadFixedSizedOp>(loc, IntegerType::get(rewriter.getContext(), 128), array, offset);
          if (convertedBaseType.getIntOrFloatBitWidth() != 128) {
             loaded = rewriter.create<arith::TruncIOp>(loc, convertedBaseType, loaded);
          }
@@ -125,12 +330,12 @@ class LoadArrowOpLowering : public OpConversionPattern<db::LoadArrowOp> {
          size_t multiplier;
          switch (dateType.getUnit()) {
             case db::DateUnitAttr::day:
-               loaded = rewriter.create<lingodb::compiler::dialect::arrow::LoadFixedSizedOp>(loc, rewriter.getI32Type(), array, offset);
+               loaded = rewriter.create<arrow_dialect::LoadFixedSizedOp>(loc, rewriter.getI32Type(), array, offset);
                loaded = rewriter.create<arith::ExtSIOp>(loc, rewriter.getI64Type(), loaded);
                multiplier = 86400000000000;
                break;
             case db::DateUnitAttr::millisecond:
-               loaded = rewriter.create<lingodb::compiler::dialect::arrow::LoadFixedSizedOp>(loc, rewriter.getI64Type(), array, offset);
+               loaded = rewriter.create<arrow_dialect::LoadFixedSizedOp>(loc, rewriter.getI64Type(), array, offset);
                multiplier = 1000000;
                break;
             default:
@@ -139,7 +344,7 @@ class LoadArrowOpLowering : public OpConversionPattern<db::LoadArrowOp> {
          mlir::Value multiplierConst = rewriter.create<mlir::arith::ConstantIntOp>(loc, multiplier, 64);
          loaded = rewriter.create<mlir::arith::MulIOp>(loc, loaded, multiplierConst);
       } else if (auto timestampType = mlir::dyn_cast_or_null<db::TimestampType>(baseType)) {
-         loaded = rewriter.create<lingodb::compiler::dialect::arrow::LoadFixedSizedOp>(loc, rewriter.getI64Type(), array, offset);
+         loaded = rewriter.create<arrow_dialect::LoadFixedSizedOp>(loc, rewriter.getI64Type(), array, offset);
          size_t multiplier = 1;
          if (timestampType.getUnit() == db::TimeUnitAttr::second) {
             multiplier = 1000000000;
@@ -151,13 +356,13 @@ class LoadArrowOpLowering : public OpConversionPattern<db::LoadArrowOp> {
          mlir::Value multiplierConst = rewriter.create<mlir::arith::ConstantIntOp>(loc, multiplier, 64);
          loaded = rewriter.create<mlir::arith::MulIOp>(loc, loaded, multiplierConst);
       } else if (mlir::isa<db::StringType>(baseType)) {
-         auto loadVarBinary = rewriter.create<lingodb::compiler::dialect::arrow::LoadVariableSizeBinaryOp>(loc, array, offset);
+         auto loadVarBinary = rewriter.create<arrow_dialect::LoadVariableSizeBinaryOp>(loc, array, offset);
          loaded = rewriter.create<util::CreateVarLen>(loc, util::VarLen32Type::get(rewriter.getContext()), loadVarBinary.getPtr(), loadVarBinary.getLength());
       } else if (auto charType = mlir::dyn_cast_or_null<db::CharType>(baseType)) {
          if (charType.getLen() <= 1) {
-            loaded = rewriter.create<lingodb::compiler::dialect::arrow::LoadFixedSizedOp>(loc, rewriter.getI32Type(), array, offset);
+            loaded = rewriter.create<arrow_dialect::LoadFixedSizedOp>(loc, rewriter.getI32Type(), array, offset);
          } else {
-            auto loadVarBinary = rewriter.create<lingodb::compiler::dialect::arrow::LoadVariableSizeBinaryOp>(loc, array, offset);
+            auto loadVarBinary = rewriter.create<arrow_dialect::LoadVariableSizeBinaryOp>(loc, array, offset);
             loaded = rewriter.create<util::CreateVarLen>(loc, util::VarLen32Type::get(rewriter.getContext()), loadVarBinary.getPtr(), loadVarBinary.getLength());
          }
       } else {
@@ -165,7 +370,7 @@ class LoadArrowOpLowering : public OpConversionPattern<db::LoadArrowOp> {
       }
 
       if (nullableType) {
-         auto isValid = rewriter.create<lingodb::compiler::dialect::arrow::IsValidOp>(loc, array, offset);
+         auto isValid = rewriter.create<arrow_dialect::IsValidOp>(loc, array, offset);
          mlir::Value isNull = rewriter.create<db::NotOp>(loc, isValid);
          mlir::Value packed = packNullable(rewriter, loc, isNull, loaded);
          rewriter.replaceOp(loadArrowOp, packed);
@@ -182,7 +387,10 @@ class AppendArrowLowering : public OpConversionPattern<db::AppendArrowOp> {
    LogicalResult matchAndRewrite(db::AppendArrowOp appendArrowOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto loc = appendArrowOp->getLoc();
       auto nullableType = mlir::dyn_cast_or_null<db::NullableType>(appendArrowOp.getValue().getType());
-      auto builder = adaptor.getBuilder();
+      mlir::Value builder;
+      createAtArrayCreation(rewriter, adaptor.getBuilder(), [&](mlir::ConversionPatternRewriter& rewriter) {
+         builder=rewriter.create<mlir::UnrealizedConversionCastOp>(loc, appendArrowOp.getBuilder().getType(),adaptor.getBuilder()).getResult(0);
+      });
       mlir::Value value = adaptor.getValue();
       auto baseType = nullableType ? nullableType.getType() : appendArrowOp.getValue().getType();
       auto convertedBaseType = typeConverter->convertType(baseType);
@@ -195,16 +403,16 @@ class AppendArrowLowering : public OpConversionPattern<db::AppendArrowOp> {
       }
       //todo: also support more base types here
       if (baseType.isIndex()) {
-         rewriter.create<lingodb::compiler::dialect::arrow::AppendFixedSizedOp>(loc, builder, value, valid); //todo: necessary?
+         rewriter.create<arrow_dialect::AppendFixedSizedOp>(loc, builder, value, valid); //todo: necessary?
       } else if (baseType.isInteger(1)) {
-         rewriter.create<lingodb::compiler::dialect::arrow::AppendBoolOp>(loc, builder, value, valid);
+         rewriter.create<arrow_dialect::AppendBoolOp>(loc, builder, value, valid);
       } else if (baseType.isInteger() || baseType.isF32() || baseType.isF64()) {
-         rewriter.create<lingodb::compiler::dialect::arrow::AppendFixedSizedOp>(loc, builder, value, valid);
+         rewriter.create<arrow_dialect::AppendFixedSizedOp>(loc, builder, value, valid);
       } else if (auto decimalType = mlir::dyn_cast_or_null<db::DecimalType>(baseType)) {
          if (convertedBaseType.getIntOrFloatBitWidth() != 128) {
             value = rewriter.create<arith::ExtSIOp>(loc, IntegerType::get(rewriter.getContext(), 128), value);
          }
-         rewriter.create<lingodb::compiler::dialect::arrow::AppendFixedSizedOp>(loc, builder, value, valid);
+         rewriter.create<arrow_dialect::AppendFixedSizedOp>(loc, builder, value, valid);
       } else if (auto dateType = mlir::dyn_cast_or_null<db::DateType>(baseType)) {
          size_t multiplier = dateType.getUnit() == db::DateUnitAttr::day ? 86400000000000 : 1000000;
          mlir::Value multiplierConst = rewriter.create<mlir::arith::ConstantIntOp>(loc, multiplier, 64);
@@ -212,7 +420,7 @@ class AppendArrowLowering : public OpConversionPattern<db::AppendArrowOp> {
          if (dateType.getUnit() == db::DateUnitAttr::day) {
             value = rewriter.create<arith::TruncIOp>(loc, rewriter.getI32Type(), value);
          }
-         rewriter.create<lingodb::compiler::dialect::arrow::AppendFixedSizedOp>(loc, builder, value, valid);
+         rewriter.create<arrow_dialect::AppendFixedSizedOp>(loc, builder, value, valid);
       } else if (auto timestampType = mlir::dyn_cast_or_null<db::TimestampType>(baseType)) {
          size_t multiplier = 1;
          if (timestampType.getUnit() == db::TimeUnitAttr::second) {
@@ -224,14 +432,14 @@ class AppendArrowLowering : public OpConversionPattern<db::AppendArrowOp> {
          }
          mlir::Value multiplierConst = rewriter.create<mlir::arith::ConstantIntOp>(loc, multiplier, 64);
          value = rewriter.create<mlir::arith::DivSIOp>(loc, value, multiplierConst);
-         rewriter.create<lingodb::compiler::dialect::arrow::AppendFixedSizedOp>(loc, builder, value, valid);
+         rewriter.create<arrow_dialect::AppendFixedSizedOp>(loc, builder, value, valid);
       } else if (mlir::isa<db::StringType>(baseType)) {
-         rewriter.create<lingodb::compiler::dialect::arrow::AppendVariableSizeBinaryOp>(loc, builder, value, valid);
+         rewriter.create<arrow_dialect::AppendVariableSizeBinaryOp>(loc, builder, value, valid);
       } else if (auto charType = mlir::dyn_cast_or_null<db::CharType>(baseType)) {
          if (charType.getLen() <= 1) {
-            rewriter.create<lingodb::compiler::dialect::arrow::AppendFixedSizedOp>(loc, builder, value, valid);
+            rewriter.create<arrow_dialect::AppendFixedSizedOp>(loc, builder, value, valid);
          } else {
-            rewriter.create<lingodb::compiler::dialect::arrow::AppendVariableSizeBinaryOp>(loc, builder, value, valid);
+            rewriter.create<arrow_dialect::AppendVariableSizeBinaryOp>(loc, builder, value, valid);
          }
       } else {
          return failure();
@@ -1389,6 +1597,17 @@ void DBToStdLoweringPass::runOnOperation() {
       }
    });
 
+   typeConverter.addConversion([&](arrow_dialect::ArrayType arrayType) {
+      auto idxType = IndexType::get(ctxt);
+      auto bufferType = util::RefType::get(ctxt, mlir::IntegerType::get(ctxt, 8));
+      auto bufferArrayType = util::RefType::get(ctxt, bufferType);
+      //todo: childArrayType
+      return util::RefType::get(&getContext(), mlir::TupleType::get(ctxt, {idxType, idxType, idxType, idxType, idxType, bufferArrayType}));
+   });
+   typeConverter.addConversion([&](arrow_dialect::ArrayBuilderType builderType) {
+      return util::RefType::get(&getContext(), IntegerType::get(&getContext(), 8));
+   });
+
    typeConverter.addConversion([&](db::NullableType type) {
       mlir::Type payloadType = typeConverter.convertType(type.getType());
       if (mlir::isa<util::VarLen32Type>(payloadType)) {
@@ -1400,7 +1619,7 @@ void DBToStdLoweringPass::runOnOperation() {
    });
    auto opIsWithoutDBTypes = [&](Operation* op) { return !hasDBType(typeConverter, op->getOperandTypes()) && !hasDBType(typeConverter, op->getResultTypes()); };
    target.addDynamicallyLegalDialect<scf::SCFDialect>(opIsWithoutDBTypes);
-   target.addDynamicallyLegalDialect<lingodb::compiler::dialect::arrow::ArrowDialect>(opIsWithoutDBTypes);
+   target.addDynamicallyLegalDialect<arrow_dialect::ArrowDialect>(opIsWithoutDBTypes);
    target.addDynamicallyLegalDialect<arith::ArithDialect>(opIsWithoutDBTypes);
 
    target.addLegalDialect<cf::ControlFlowDialect>();
@@ -1501,6 +1720,14 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<DictIterGetKeyLowering>(typeConverter, ctxt);
    patterns.insert<DictIterGetValueLowering>(typeConverter, ctxt);
 
+   patterns.insert<ArrayIsValidLowering>(typeConverter, &getContext());
+   patterns.insert<ArrayLoadFixedSizedLowering>(typeConverter, &getContext());
+   patterns.insert<ArrayLoadVariableSizeBinaryLowering>(typeConverter, &getContext());
+   patterns.insert<ArrayLoadBoolLowering>(typeConverter, &getContext());
+   patterns.insert<BuilderFromPtrLowering>(typeConverter, &getContext());
+   patterns.insert<BuilderAppendFixedSizedLowering>(typeConverter, &getContext());
+   patterns.insert<BuilderAppendBoolLowering>(typeConverter, &getContext());
+   patterns.insert<BuilderAppendVariableSizeBinaryLowering>(typeConverter, &getContext());
    if (failed(applyFullConversion(module, target, std::move(patterns))))
       signalPassFailure();
 }
