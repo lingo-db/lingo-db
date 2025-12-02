@@ -277,7 +277,6 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
       }
    }
    void runOnOperation() override {
-      subop::ColumnUsageAnalysis usedColumns(getOperation());
       subop::ColumnCreationAnalysis createdColumns(getOperation());
       std::vector<mlir::Operation*> opsToErase;
       getOperation()->walk([&](subop::NestedMapOp nestedMapOp) { // for each nested map
@@ -312,7 +311,7 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
                std::function<void(mlir::Operation*, std::unordered_set<tuples::Column*>)> addRequiredColumns = [&](mlir::Operation* op, std::unordered_set<tuples::Column*> availableColumns) {
                   auto created = createdColumns.getCreatedColumns(op); // for the combine op, get the columns it creates
                   availableColumns.insert(created.begin(), created.end()); // aggregate them in availableColumns, it contains all columns that are in the tuple-stream up to the current  combineOp
-                  for (auto* usedColumn : usedColumns.getUsedColumns(op)) {
+                  for (auto* usedColumn : subop::ColumnUsageAnalysis::getUsedColumnsForOp(op)) {
                      if (!availableColumns.contains(usedColumn)) {
                         requiredColumns.insert(usedColumn); // if the combineOp uses a column that it doesn't create or that doesn't come from its definitions, the combineOp requires it
                      }

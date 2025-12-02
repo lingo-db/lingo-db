@@ -36,3 +36,36 @@ subop::ColumnUsageAnalysis::ColumnUsageAnalysis(mlir::Operation* op) {
       }
    });
 }
+namespace {
+void analyze(mlir::Operation* op, mlir::Attribute attr, llvm::DenseSet<tuples::Column*>& usedColumns) {
+   if (!attr) return;
+   if (auto arrayAttr = mlir::dyn_cast_or_null<mlir::ArrayAttr>(attr)) {
+      for (auto x : arrayAttr) {
+         analyze(op, x, usedColumns);
+      }
+   } else if (auto mappingDefAttr = mlir::dyn_cast_or_null<subop::ColumnDefMemberMappingAttr>(attr)) {
+      for (auto x : mappingDefAttr.getMapping()) {
+         analyze(op, x.second, usedColumns);
+      }
+   } else if (auto mappingRefAttr = mlir::dyn_cast_or_null<subop::ColumnRefMemberMappingAttr>(attr)) {
+      for (auto x : mappingRefAttr.getMapping()) {
+         analyze(op, x.second, usedColumns);
+      }
+   } else if (auto columnRefAttr = mlir::dyn_cast_or_null<tuples::ColumnRefAttr>(attr)) {
+      usedColumns.insert(&columnRefAttr.getColumn());
+
+   } else if (auto columnDefAttr = mlir::dyn_cast_or_null<tuples::ColumnDefAttr>(attr)) {
+      analyze(op, columnDefAttr.getFromExisting(), usedColumns);
+   }
+}
+} // end anonymous namespace
+
+llvm::DenseSet<tuples::Column*> subop::ColumnUsageAnalysis::getUsedColumnsForOp(mlir::Operation* op) {
+   llvm::DenseSet<tuples::Column*> usedcolumns;
+   op->walk([&](mlir::Operation* curr) {
+      for (auto attr : curr->getAttrs()) {
+         ::analyze(curr, attr.getValue(), usedcolumns);
+      }
+   });
+   return usedcolumns;
+}

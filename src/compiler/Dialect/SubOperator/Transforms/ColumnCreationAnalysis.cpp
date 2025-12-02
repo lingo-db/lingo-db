@@ -39,3 +39,33 @@ void subop::ColumnCreationAnalysis::update(mlir::Operation* op) {
       analyze(op, attr.getValue());
    }
 }
+namespace {
+void analyze(mlir::Operation* op, mlir::Attribute attr, std::unordered_set<tuples::Column*>& createdColumns) {
+   if (!attr) return;
+   if (auto arrayAttr = mlir::dyn_cast_or_null<mlir::ArrayAttr>(attr)) {
+      for (auto x : arrayAttr) {
+         analyze(op, x, createdColumns);
+      }
+   } else if (auto mappingDefAttr = mlir::dyn_cast_or_null<subop::ColumnDefMemberMappingAttr>(attr)) {
+      for (auto x : mappingDefAttr.getMapping()) {
+         analyze(op, x.second, createdColumns);
+      }
+   } else if (auto mappingRefAttr = mlir::dyn_cast_or_null<subop::ColumnRefMemberMappingAttr>(attr)) {
+      for (auto x : mappingRefAttr.getMapping()) {
+         analyze(op, x.second, createdColumns);
+      }
+   } else if (auto columnDefAttr = mlir::dyn_cast_or_null<tuples::ColumnDefAttr>(attr)) {
+      createdColumns.insert(&columnDefAttr.getColumn());
+      analyze(op, columnDefAttr.getFromExisting(), createdColumns);
+   }
+}
+} // end anonymous namespace
+std::unordered_set<tuples::Column*> subop::ColumnCreationAnalysis::getCreatedColumnsForOp(mlir::Operation* op) {
+   std::unordered_set<tuples::Column*> createdCols;
+   op->walk([&](mlir::Operation* curr) {
+      for (auto attr : curr->getAttrs()) {
+         ::analyze(curr, attr.getValue(), createdCols);
+      }
+   });
+   return createdCols;
+}

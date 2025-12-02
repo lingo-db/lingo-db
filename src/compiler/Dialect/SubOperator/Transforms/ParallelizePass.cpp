@@ -40,7 +40,8 @@ struct ExecutionStepAnalyzed {
    bool notParallel = false;
 };
 
-ExecutionStepAnalyzed analyze(subop::ExecutionStepOp executionStepOp, subop::ColumnCreationAnalysis& columnCreationAnalysis) {
+ExecutionStepAnalyzed analyze(subop::ExecutionStepOp executionStepOp) {
+   subop::ColumnCreationAnalysis columnCreationAnalysis(executionStepOp);
    ExecutionStepAnalyzed result;
    llvm::DenseMap<mlir::Value, mlir::Value> extStates;
    llvm::EquivalenceClasses<mlir::Operation*> equivalenceClasses;
@@ -197,16 +198,16 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
       bool isClosed = false;
    };
    void runOnOperation() override {
+      auto columnUsageAnalysis = getAnalysis<subop::ColumnUsageAnalysis>();
       auto& colManager = getContext().getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
 
       std::vector<subop::ExecutionGroupOp> executionGroupOps;
       getOperation()->walk([&](subop::ExecutionGroupOp executionGroupOp) {
          executionGroupOps.push_back(executionGroupOp);
+         return mlir::WalkResult::skip();
       });
       for (auto executionGroup : executionGroupOps) {
          //todo: maybe move outside?
-         auto columnCreationAnalysis = getAnalysis<subop::ColumnCreationAnalysis>();
-         auto columnUsageAnalysis = getAnalysis<subop::ColumnUsageAnalysis>();
          llvm::DenseMap<mlir::Value, GlobalThreadLocalInfo> toThreadLocalsGlobal;
          std::map<tuples::Column*, std::vector<std::pair<mlir::Value, mlir::Operation*>>> toLockGlobal;
          llvm::DenseSet<mlir::Value> threadLocalNotPossibleAnymore;
@@ -219,7 +220,7 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
 
                if (auto scanRefsOp = mlir::dyn_cast_or_null<subop::ScanRefsOp>(*executionStepOp.getSubOps().getOps().begin())) {
                   if (!scanRefsOp->hasAttr("sequential")) {
-                     ExecutionStepAnalyzed analyzed = analyze(executionStepOp, columnCreationAnalysis);
+                     ExecutionStepAnalyzed analyzed = analyze(executionStepOp);
                      std::unordered_set<mlir::Operation*> markAsAtomic;
                      std::map<tuples::Column*, std::vector<std::pair<mlir::Value, mlir::Operation*>>> toLock;
                      llvm::DenseMap<mlir::Value, ToThreadLocalInfo> toThreadLocals;
