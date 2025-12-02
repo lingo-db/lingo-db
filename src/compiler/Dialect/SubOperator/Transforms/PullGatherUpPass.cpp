@@ -15,9 +15,6 @@ class PullGatherUpPass : public mlir::PassWrapper<PullGatherUpPass, mlir::Operat
    virtual llvm::StringRef getArgument() const override { return "subop-pull-gather-up"; }
 
    void runOnOperation() override {
-      //transform "standalone" aggregation functions
-      auto columnUsageAnalysis = getAnalysis<subop::ColumnUsageAnalysis>();
-
       std::vector<subop::GatherOp> gatherOps;
       getOperation()->walk([&](subop::GatherOp gatherOp) {
          gatherOps.push_back(gatherOp);
@@ -68,7 +65,7 @@ class PullGatherUpPass : public mlir::PassWrapper<PullGatherUpPass, mlir::Operat
                otherStreams |= v != currStream && mlir::isa<tuples::TupleStreamType>(v.getType());
             }
             if (otherStreams) break;
-            auto usedColumns = columnUsageAnalysis.getUsedColumns(currentParent);
+            auto usedColumns = subop::ColumnUsageAnalysis::getUsedColumnsForOp(currentParent);
             llvm::SmallVector<subop::DefMappingPairT> usedByCurrent;
             llvm::SmallVector<subop::DefMappingPairT> notUsedByCurrent;
             for (auto x : remaining) {

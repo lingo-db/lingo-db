@@ -100,19 +100,19 @@ class NormalizeSubOpPass : public mlir::PassWrapper<NormalizeSubOpPass, mlir::Op
    public:
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(NormalizeSubOpPass)
    virtual llvm::StringRef getArgument() const override { return "subop-normalize"; }
-   void getRecursivelyUsedColumns(std::unordered_set<tuples::Column*>& usedColumns, subop::ColumnUsageAnalysis& columnUsageAnalysis, mlir::Operation* op) {
-      const auto& currentUsed = columnUsageAnalysis.getUsedColumns(op);
+   void getRecursivelyUsedColumns(std::unordered_set<tuples::Column*>& usedColumns, mlir::Operation* op) {
+      const auto& currentUsed = subop::ColumnUsageAnalysis::getUsedColumnsForOp(op);
       usedColumns.insert(currentUsed.begin(), currentUsed.end());
       for (auto res : op->getResults()) {
          if (mlir::isa<tuples::TupleStreamType>(res.getType())) {
             for (auto* user : res.getUsers()) {
-               getRecursivelyUsedColumns(usedColumns, columnUsageAnalysis, user);
+               getRecursivelyUsedColumns(usedColumns, user);
             }
          }
       }
    }
-   void getRequired(std::unordered_set<tuples::Column*>& requiredColumns, const std::unordered_set<tuples::Column*>& usedColumns, subop::ColumnCreationAnalysis& columnCreationAnalysis, mlir::Operation* op) {
-      const auto& createdCols = columnCreationAnalysis.getCreatedColumns(op);
+   void getRequired(std::unordered_set<tuples::Column*>& requiredColumns, const std::unordered_set<tuples::Column*>& usedColumns, mlir::Operation* op) {
+      const auto& createdCols = subop::ColumnCreationAnalysis::getCreatedColumnsForOp(op);
       for (auto* c : createdCols) {
          if (usedColumns.contains(c)) {
             requiredColumns.insert(c);
@@ -121,15 +121,13 @@ class NormalizeSubOpPass : public mlir::PassWrapper<NormalizeSubOpPass, mlir::Op
       for (auto operand : op->getOperands()) {
          if (mlir::isa<tuples::TupleStreamType>(operand.getType())) {
             if (auto* defOp = operand.getDefiningOp()) {
-               getRequired(requiredColumns, usedColumns, columnCreationAnalysis, defOp);
+               getRequired(requiredColumns, usedColumns, defOp);
             }
          }
       }
    }
    void runOnOperation() override {
       llvm::DenseMap<mlir::Operation*, size_t> unionStreamCount;
-      auto columnUsageAnalysis = getAnalysis<subop::ColumnUsageAnalysis>();
-      auto columnCreationAnalysis = getAnalysis<subop::ColumnCreationAnalysis>();
 
       getOperation()->walk([&](mlir::Operation* op) {
          if (auto unionOp = mlir::dyn_cast_or_null<subop::UnionOp>(op)) {
@@ -165,8 +163,8 @@ class NormalizeSubOpPass : public mlir::PassWrapper<NormalizeSubOpPass, mlir::Op
             } else {
                std::unordered_set<tuples::Column*> usedColumns;
                std::unordered_set<tuples::Column*> requiredColumns;
-               getRecursivelyUsedColumns(usedColumns, columnUsageAnalysis, unionOp);
-               getRequired(requiredColumns, usedColumns, columnCreationAnalysis, unionOp);
+               getRecursivelyUsedColumns(usedColumns, unionOp);
+               getRequired(requiredColumns, usedColumns, unionOp);
                mlir::OpBuilder builder(&getContext());
 
                auto& memberManager = builder.getContext()->getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager();
@@ -241,9 +239,9 @@ class NormalizeSubOpPass : public mlir::PassWrapper<NormalizeSubOpPass, mlir::Op
                      std::unordered_set<tuples::Column*> usedColumns;
                      std::unordered_set<tuples::Column*> requiredColumns;
                      for (auto* user : op->getUsers()) {
-                        getRecursivelyUsedColumns(usedColumns, columnUsageAnalysis, user);
+                        getRecursivelyUsedColumns(usedColumns, user);
                      }
-                     getRequired(requiredColumns, usedColumns, columnCreationAnalysis, op);
+                     getRequired(requiredColumns, usedColumns, op);
                      mlir::OpBuilder builder(&getContext());
 
                      auto& memberManager = builder.getContext()->getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager();

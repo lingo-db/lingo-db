@@ -13,6 +13,7 @@ struct ColumnCreationAnalysis {
    llvm::DenseMap<dialect::tuples::Column*, mlir::Operation*> columnCreators;
    ColumnCreationAnalysis(mlir::Operation* op);
    void analyze(mlir::Operation* op, mlir::Attribute attr);
+   static std::unordered_set<dialect::tuples::Column*> getCreatedColumnsForOp(mlir::Operation* op);
    const std::unordered_set<dialect::tuples::Column*>& getCreatedColumns(mlir::Operation* op) {
       return createdColumns[op];
    }
