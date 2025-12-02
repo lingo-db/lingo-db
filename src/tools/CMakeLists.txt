@@ -18,7 +18,7 @@ add_executable(sql sql.cpp)
 if (ENABLE_MIMALLOC)
     list(APPEND LIBS mimalloc-static)
 endif ()
-target_link_libraries(sql runner utility runtime mlir-support scheduler linenoise-ng mimalloc-static)
+target_link_libraries(sql runner utility runtime mlir-support scheduler linenoise-ng)
 set_target_properties(sql PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 target_compile_definitions(sql PRIVATE ${COMPILE_DEFS})
 
