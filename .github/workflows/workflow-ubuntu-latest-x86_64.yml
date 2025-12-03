@@ -16,7 +16,7 @@ jobs:
       matrix:
         build_type: [ debug, asan, release ]
     runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:57e90585270a4d9743a43c1cca175d6f6d7dbbab
+    container: ghcr.io/lingo-db/lingodb-dev:89088a70dfe905e9da42772888ec22af7035d964
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -50,7 +50,7 @@ jobs:
       matrix:
         build_type: [ debug, asan ]
     runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:57e90585270a4d9743a43c1cca175d6f6d7dbbab
+    container: ghcr.io/lingo-db/lingodb-dev:89088a70dfe905e9da42772888ec22af7035d964
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
@@ -100,7 +100,7 @@ jobs:
         build_type: [ release, asan ]
     needs: build
     runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:57e90585270a4d9743a43c1cca175d6f6d7dbbab
+    container: ghcr.io/lingo-db/lingodb-dev:89088a70dfe905e9da42772888ec22af7035d964
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
@@ -132,7 +132,7 @@ jobs:
         build_type: [ release, asan ]
     needs: build
     runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:57e90585270a4d9743a43c1cca175d6f6d7dbbab
+    container: ghcr.io/lingo-db/lingodb-dev:89088a70dfe905e9da42772888ec22af7035d964
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
@@ -214,8 +214,8 @@ jobs:
 
   build_lingodb_python:
     runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-py-dev:57e90585270a4d9743a43c1cca175d6f6d7dbbab
-    steps:
+    container: ghcr.io/lingo-db/lingodb-py-dev:16387d412a5824bad8031811bebc136b1cd6da1f
+steps:
       - name: Checkout
         uses: actions/checkout@v2
       - name: Build
@@ -252,7 +252,7 @@ jobs:
       matrix:
         build_type: [ debug]
     runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:57e90585270a4d9743a43c1cca175d6f6d7dbbab
+    container: ghcr.io/lingo-db/lingodb-dev:89088a70dfe905e9da42772888ec22af7035d964
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
