@@ -27,7 +27,7 @@ COPY --from=buildllvm /built-llvm /built-llvm
 RUN wget https://dlcdn.apache.org/arrow/arrow-22.0.0/apache-arrow-22.0.0.tar.gz && tar -xf apache-arrow-22.0.0.tar.gz && rm apache-arrow-22.0.0.tar.gz
 RUN mkdir /built-arrow
 RUN cd /apache-arrow-22.0.0/cpp && cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/built-arrow -DARROW_DEPENDENCY_SOURCE=AUTO -DARROW_BUILD_STATIC=ON -DARROW_CSV=ON -DARROW_COMPUTE=ON  \
-      -ARROW_ENABLE_TIMING_TESTS="OFF" \
+      -DARROW_ENABLE_TIMING_TESTS="OFF" \
       -DARROW_EXTRA_ERROR_CONTEXT="ON" \
       -DARROW_WITH_RE2="OFF" \
       -DARROW_BUILD_SHARED="OFF" \
