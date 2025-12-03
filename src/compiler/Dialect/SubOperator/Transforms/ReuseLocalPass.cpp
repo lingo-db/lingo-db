@@ -56,6 +56,19 @@ class AvoidUnnecessaryMaterialization : public mlir::RewritePattern {
       if (!stateCreateOp) {
          return mlir::failure();
       }
+      //quick check before doing extensive analysis
+      bool seenMaterialize = false;
+      for (auto* users : stateCreateOp->getUsers()) {
+         if (mlir::isa<subop::MaterializeOp>(users)) {
+            if (seenMaterialize) {
+               return mlir::failure();
+            }
+            seenMaterialize = true;
+         }
+         if (mlir::isa<subop::CreateContinuousView, subop::CreateHashIndexedView>(users)) {
+            return mlir::failure();
+         }
+      }
       auto writingOps = findWritingOps(*stateCreateOp->getBlock(), readMembers);
       if (writingOps.size() != 1) {
          return mlir::failure();
