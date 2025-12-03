@@ -26,21 +26,21 @@ else
 fi
 
 # Build Arrow if not already installed or version is not 21.0.0
-if [ ! -d "$ARROW_INSTALL_DIR" ] || [ ! -f "$ARROW_INSTALL_DIR/lib/cmake/Arrow/ArrowConfig.cmake" ] || [ "$(grep -Eo 'PACKAGE_VERSION[[:space:]]+"[0-9]+\.[0-9]+\.[0-9]+"\)' $ARROW_INSTALL_DIR/lib/cmake/Arrow/ArrowConfigVersion.cmake | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+')" != "21.0.0" ]; then
+if [ ! -d "$ARROW_INSTALL_DIR" ] || [ ! -f "$ARROW_INSTALL_DIR/lib/cmake/Arrow/ArrowConfig.cmake" ] || [ "$(grep -Eo 'PACKAGE_VERSION[[:space:]]+"[0-9]+\.[0-9]+\.[0-9]+"\)' $ARROW_INSTALL_DIR/lib/cmake/Arrow/ArrowConfigVersion.cmake | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+')" != "22.0.0" ]; then
   echo "Arrow not found or incorrect version. Building Arrow..."
   mkdir -p $ARROW_BUILD_DIR
   cd $ARROW_BUILD_DIR
-  wget -nc https://github.com/apache/arrow/releases/download/apache-arrow-21.0.0/apache-arrow-21.0.0.tar.gz
-  tar -xf apache-arrow-21.0.0.tar.gz
-  rm apache-arrow-21.0.0.tar.gz
-  cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$ARROW_INSTALL_DIR -DARROW_DEPENDENCY_SOURCE=BUNDLED -DARROW_BUILD_STATIC=ON -DARROW_CSV=ON -DARROW_COMPUTE=ON -DCMAKE_PREFIX_PATH=/opt/homebrew/ -DCMAKE_CXX_COMPILER=/opt/homebrew/opt/llvm@20/bin/clang++ -DCMAKE_C_COMPILER=/opt/homebrew/opt/llvm@20/bin/clang apache-arrow-21.0.0/cpp
+  wget -nc https://github.com/apache/arrow/releases/download/apache-arrow-22.0.0/apache-arrow-22.0.0.tar.gz
+  tar -xf apache-arrow-22.0.0.tar.gz
+  rm apache-arrow-22.0.0.tar.gz
+  cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$ARROW_INSTALL_DIR -DARROW_DEPENDENCY_SOURCE=BUNDLED -DARROW_BUILD_STATIC=ON -DARROW_CSV=ON -DARROW_COMPUTE=ON -DCMAKE_PREFIX_PATH=/opt/homebrew/ -DCMAKE_CXX_COMPILER=/opt/homebrew/opt/llvm@20/bin/clang++ -DCMAKE_C_COMPILER=/opt/homebrew/opt/llvm@20/bin/clang apache-arrow-22.0.0/cpp
   cmake --build build --target install -j$(sysctl -n hw.logicalcpu)
 else
-  echo "Arrow version 21.0.0 is already installed. Skipping build."
+  echo "Arrow version 22.0.0 is already installed. Skipping build."
 fi
 
 /opt/homebrew/bin/python3 -m venv $BASE_PATH/build/venv
-$BASE_PATH/build/venv/bin/python3 -m pip install build pyarrow===21.0.0
+$BASE_PATH/build/venv/bin/python3 -m pip install build pyarrow===22.0.0
 $BASE_PATH/build/venv/bin/python3 -c "import pyarrow; pyarrow.create_library_symlinks()"
 
 # Build LingoDB
@@ -86,4 +86,4 @@ $BASE_PATH/build/venv/bin/python3 -m build --wheel --config-setting cmake.define
 
 # Install delocate if not already installed
 $BASE_PATH/build/venv/bin/python3 -m pip install delocate
-$BASE_PATH/build/venv/bin/delocate-wheel -v dist/*.whl -e libarrow_python.2100.dylib -e libarrow.2100.dylib -w ./build-packages --ignore-missing-dependencies
+$BASE_PATH/build/venv/bin/delocate-wheel -v dist/*.whl -e libarrow_python.2200.dylib -e libarrow.2200.dylib -w ./build-packages --ignore-missing-dependencies
