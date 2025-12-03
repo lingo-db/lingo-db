@@ -3,6 +3,8 @@
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/Passes.h"
 
+#include "lingodb/compiler/helper.h"
+
 #include <iostream>
 namespace {
 std::shared_ptr<lingodb::catalog::Catalog> staticCatalog = {};
@@ -17,10 +19,10 @@ void relalg::createQueryOptPipeline(mlir::OpPassManager& pm, lingodb::catalog::C
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createSimplifyAggregationsPass());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createExtractNestedOperatorsPass());
    pm.addPass(mlir::createCSEPass());
-   pm.addPass(mlir::createCanonicalizerPass());
+   pm.addPass(lingodb::compiler::createCanonicalizerPass());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createInferNotNullConditionsPass());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createDecomposeLambdasPass(true));
-   pm.addPass(mlir::createCanonicalizerPass());
+   pm.addPass(lingodb::compiler::createCanonicalizerPass());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createImplicitToExplicitJoinsPass());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createInferNotNullConditionsPass());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createDecomposeLambdasPass());
@@ -43,7 +45,7 @@ void relalg::createQueryOptPipeline(mlir::OpPassManager& pm, lingodb::catalog::C
       pm.addNestedPass<mlir::func::FuncOp>(relalg::createDetachMetaDataPass());
    }
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createIntroduceTmpPass());
-   pm.addPass(mlir::createCanonicalizerPass());
+   pm.addPass(lingodb::compiler::createCanonicalizerPass());
 }
 void relalg::registerQueryOptimizationPasses() {
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
