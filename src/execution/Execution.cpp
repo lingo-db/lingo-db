@@ -21,6 +21,7 @@
 
 #include "json.h"
 #include "lingodb/compiler/frontend/frontend_error.h"
+#include "lingodb/compiler/helper.h"
 
 #include <chrono>
 #include <sstream>
@@ -145,7 +146,7 @@ class SubOpLoweringStep : public LoweringStep {
       subop::setCompressionEnabled(enabledPasses.contains("Compression"));
       lowerSubOpPm.addPass(subop::createLowerSubOpPass());
       if (cleanupAfterSubOp.getValue()) {
-         lowerSubOpPm.addPass(mlir::createCanonicalizerPass());
+         lowerSubOpPm.addPass(lingodb::compiler::createCanonicalizerPass());
          lowerSubOpPm.addPass(mlir::createCSEPass());
       }
       if (mlir::failed(lowerSubOpPm.run(moduleOp))) {
@@ -177,7 +178,7 @@ class DefaultImperativeLowering : public LoweringStep {
       lowerArrowPm.enableVerifier(verify);
       addLingoDBInstrumentation(lowerArrowPm, getSerializationState());
       lowerArrowPm.addPass(arrow::createLowerToStdPass());
-      lowerArrowPm.addPass(mlir::createCanonicalizerPass());
+      lowerArrowPm.addPass(lingodb::compiler::createCanonicalizerPass());
       if (cleanupAfterImperative.getValue()) {
          lowerArrowPm.addPass(mlir::createLoopInvariantCodeMotionPass());
          lowerArrowPm.addPass(mlir::createCSEPass());
