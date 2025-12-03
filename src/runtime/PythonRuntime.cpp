@@ -256,6 +256,10 @@ PyObjectPtr PythonRuntime::getAttr(PyObjectPtr obj, runtime::VarLen32 attr) {
    wasmSession.freeWasmBuffer(wasmAttrStr);
    return pyAttr;
 }
+PyObjectPtr PythonRuntime::getAttr2(PyObjectPtr obj, PyObjectPtr attr) {
+   wasm::WASMSession wasmSession = getCurrentExecutionContext()->getWasmSession();
+   return wasmSession.callPyFunc<PyObjectPtr>("PyObject_GetAttr", obj, attr).at(0).of.i32;
+}
 
 void PythonRuntime::setAttr(PyObjectPtr obj, runtime::VarLen32 attr, PyObjectPtr value) {
 #ifdef ASAN_ACTIVE
@@ -463,6 +467,9 @@ PyObject* PythonRuntime::createModule(runtime::VarLen32 /*modname*/, runtime::Va
     throw std::runtime_error("CPython runtime is not enabled");
 }
 PyObject* PythonRuntime::getAttr(PyObject* /*obj*/, runtime::VarLen32 /*attr*/) {
+    throw std::runtime_error("CPython runtime is not enabled");
+}
+PyObjectPtr PythonRuntime::getAttr2(PyObjectPtr /*obj*/, PyObjectPtr /*attr*/) {
     throw std::runtime_error("CPython runtime is not enabled");
 }
 void PythonRuntime::setAttr(PyObject* /*obj*/, runtime::VarLen32 /*attr*/, PyObject* /*value*/) {
