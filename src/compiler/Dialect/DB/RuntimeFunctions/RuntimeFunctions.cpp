@@ -273,6 +273,7 @@ std::shared_ptr<db::RuntimeFunctionRegistry> db::RuntimeFunctionRegistry::getBui
    auto resTypeIsF64 = [](mlir::Type t, mlir::TypeRange) { return t.isF64(); };
    auto resTypeIsBool = [](mlir::Type t, mlir::TypeRange) { return t.isInteger(1); };
    auto resTypeIsIndex = [](mlir::Type t, mlir::TypeRange) { return t.isIndex(); };
+   auto resTypeIsStr = [](mlir::Type t, mlir::TypeRange) { return mlir::isa<db::StringType>(t); };
    builtinRegistry->add("Substring").implementedAs(StringRuntime::substr).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::intLike, RuntimeFunction::intLike}, RuntimeFunction::matchesArgument());
    builtinRegistry->add("StringStrip").implementedAs(StringRuntime::strip).matchesTypes({RuntimeFunction::stringLike}, RuntimeFunction::matchesArgument());
    builtinRegistry->add("StringFind").implementedAs(StringRuntime::findNext).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike, RuntimeFunction::intLike}, resTypeIsI64);
@@ -283,6 +284,8 @@ std::shared_ptr<db::RuntimeFunctionRegistry> db::RuntimeFunctionRegistry::getBui
    builtinRegistry->add("Ord").implementedAs(StringRuntime::ord).matchesTypes({RuntimeFunction::stringLike}, resTypeIsI64);
 
    builtinRegistry->add("ToUpper").implementedAs(StringRuntime::toUpper).matchesTypes({RuntimeFunction::stringLike}, RuntimeFunction::matchesArgument());
+   builtinRegistry->add("FmtInt").implementedAs(StringRuntime::formatInt).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::intLike}, resTypeIsStr);
+   builtinRegistry->add("FmtDouble").implementedAs(StringRuntime::formatDouble).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::float64}, resTypeIsStr);
    builtinRegistry->add("ToLower").implementedAs(StringRuntime::toLower).matchesTypes({RuntimeFunction::stringLike}, RuntimeFunction::matchesArgument());
    builtinRegistry->add("Contains").implementedAs(StringRuntime::contains).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike}, resTypeIsBool);
    builtinRegistry->add("Concatenate").implementedAs(StringRuntime::concat).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike}, RuntimeFunction::matchesArgument());

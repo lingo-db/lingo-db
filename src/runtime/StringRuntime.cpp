@@ -594,3 +594,9 @@ lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::strip(lingodb::runti
         auto trimmed = trim(std::string_view(str.data(), str.getLen()));
         return VarLen32::fromString(trimmed, StorageClass::REFCOUNTED);
 }
+lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::formatInt(VarLen32 format, int64_t value){
+   return VarLen32::fromString(std::vformat(std::string_view(format.data(), format.getLen()), std::make_format_args(value)), StorageClass::REFCOUNTED);
+}
+lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::formatDouble(VarLen32 format, double value){
+   return VarLen32::fromString(std::vformat(std::string_view(format.data(), format.getLen()), std::make_format_args(value)), StorageClass::REFCOUNTED);
+}
