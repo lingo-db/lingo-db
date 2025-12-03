@@ -134,6 +134,9 @@ jobs:
     runs-on: ubuntu-24.04
     container: ghcr.io/lingo-db/lingodb-dev:89088a70dfe905e9da42772888ec22af7035d964
     steps:
+      - name: Freeing up space
+        run: |
+          sudo rm -rf /usr/local/lib/android
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
         with:
