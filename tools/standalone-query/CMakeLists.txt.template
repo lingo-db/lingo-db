@@ -5,7 +5,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DMLIR_DISABLED")
 
 set(CMAKE_CXX_STANDARD 20 CACHE STRING "C++ standard to conform to")
 
-find_package(Arrow 21 REQUIRED)
+find_package(Arrow 22 REQUIRED)
 find_package(LLVM 20.1 REQUIRED)
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
