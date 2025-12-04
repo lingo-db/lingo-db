@@ -18,6 +18,12 @@ print(con.sql("""
 select * from studenten s
 where not exists(select * from hoeren h where h.matrnr=s.matrnr)
 """).to_pandas())
+print(con.sql("""
+-- all lectures that students starting with 'A' attend
+select distinct s.name, v.titel
+from vorlesungen v, hoeren h, studenten s
+where s.name like 'F%' and s.matrnr=h.matrnr and h.vorlnr=v.vorlnr
+""").to_pandas())
 print(con.sql("select 1").to_pandas())
 
 df = pd.DataFrame(data={'col1': [1, 2, 3, 4], 'col2': ["foo", "foo", "bar", "bar"]})
