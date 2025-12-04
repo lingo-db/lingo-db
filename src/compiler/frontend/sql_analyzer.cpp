@@ -1144,7 +1144,7 @@ std::shared_ptr<ast::BoundAggregationNode> SQLQueryAnalyzer::analyzeAggregation(
          }
 
          std::vector<std::shared_ptr<ast::ColumnReference>> localAggregationColumnReferences{};
-         for (auto& aggr : boundAggrNode->aggregations[0]) {
+         for (auto& aggr : i== 0 ? originalAggrFunctions : boundAggrNode->aggregations[i-1]) {
             auto columnReferenceAggr = std::make_shared<ast::ColumnReference>("groupingSetAgg_" + std::to_string(groupingSetId), aggr->columnReference.value()->resultType, aggr->columnReference.value()->name);
             columnReferenceAggr->displayName = aggr->columnReference.value()->displayName;
             localAggregationColumnReferences.emplace_back(columnReferenceAggr);
@@ -1152,6 +1152,11 @@ std::shared_ptr<ast::BoundAggregationNode> SQLQueryAnalyzer::analyzeAggregation(
             auto localFunction = std::make_shared<ast::BoundFunctionExpression>(*aggr.get());
             localFunction->columnReference = columnReferenceAggr;
             localFunctions.push_back(localFunction);
+            assert(localFunction->arguments.size() == 1 || localFunction->arguments.size() == 0);
+            if (localFunction->arguments.size() == 1 && i>0) {
+               localFunction->arguments[0] = std::make_shared<ast::BoundColumnRefExpression>(aggr->columnReference.value()->resultType, std::make_shared<ast::ColumnReference>(aggr->columnReference.value()->scope, aggr->columnReference.value()->resultType, aggr->columnReference.value()->name), "");
+
+            }
          }
 
          boundAggrNode->aggregations.at(i) = localFunctions;

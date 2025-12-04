@@ -1703,7 +1703,7 @@ mlir::Value SQLMlirTranslator::translateAggregation(mlir::OpBuilder& builder, st
       static size_t rollupId = 0;
       auto scopeName = "rollup_" + std::to_string(rollupId);
       rollupId++;
-
+      mlir::Value prevAggr = tree;
       for (size_t i = 0; i < aggregation->groupByNode->localGroupByColumnReferences.size(); i++) {
          std::vector<std::shared_ptr<ast::ColumnReference>> localGroupByAttrs = aggregation->groupByNode->localGroupByColumnReferences.at(i);
          std::vector<std::shared_ptr<ast::ColumnReference>> localGroupByAttrsNullable = aggregation->groupByNode->localMapToNullColumnReferences.at(i);
@@ -1715,7 +1715,8 @@ mlir::Value SQLMlirTranslator::translateAggregation(mlir::OpBuilder& builder, st
             computed.emplace_back(aggregation->aggregations.at(i).at(j)->columnReference.value());
          }
 
-         auto tree2 = translateGroupByAttributesAndAggregate(builder, tree, location, localGroupByAttrs, aggregation->aggregations.at(i), aggregation->mapName);
+         auto tree2 = translateGroupByAttributesAndAggregate(builder, prevAggr, location, localGroupByAttrs, aggregation->aggregations.at(i), aggregation->mapName);
+         prevAggr = tree2;
          tree2 = mapToNull(builder, notAvailable, tree2);
          tree2 = mapToNullable(builder, localGroupByAttrs, localGroupByAttrsNullable, tree2);
 
