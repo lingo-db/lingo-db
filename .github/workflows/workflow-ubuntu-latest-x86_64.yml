@@ -137,6 +137,9 @@ jobs:
       - name: Freeing up space
         run: |
           rm -rf /usr/local/lib/android
+          rm -rf /usr/share/dotnet
+          rm -rf /usr/lib/jvm
+          rm -rf /opt/ghc /opt/cabal
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
         with:
@@ -180,31 +183,30 @@ jobs:
           mkdir -p /db/tpcds-1
           cd /datasets/tpcds-1
           $BASE_PATH/build/lingodb-${{ matrix.build_type }}/sql /db/tpcds-1 < $BASE_PATH/resources/sql/tpcds/initialize.sql
+      - name: Test tpcds (llvm)
+        run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpchSf1.test /db/tpch-1
+        env:
+          LINGODB_EXECUTION_MODE: DEFAULT
+      - name: Test tpcds (baseline)
+        run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpchSf1.test /db/tpch-1
+        env:
+          LINGODB_EXECUTION_MODE: BASELINE
+
+      - name: Test tpcds (llvm)
+        run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpcdsSf1.test /db/tpcds-1
+        env:
+          LINGODB_EXECUTION_MODE: DEFAULT
+      - name: Test tpcds (baseline)
+        run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpcdsSf1.test /db/tpcds-1
+        env:
+          LINGODB_EXECUTION_MODE: BASELINE
       - name: Load dataset job
         run: |
+          rm -rf /db
           export BASE_PATH=$(pwd)
           mkdir -p /db/job
           cd /datasets/job
           $BASE_PATH/build/lingodb-${{ matrix.build_type }}/sql /db/job < $BASE_PATH/resources/sql/job/initialize.sql
-
-      - name: Test tpcds (llvm)
-        run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpchSf1.test /db/tpch-1
-        env:
-          LINGODB_EXECUTION_MODE: DEFAULT
-      - name: Test tpcds (baseline)
-        run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpchSf1.test /db/tpch-1
-        env:
-          LINGODB_EXECUTION_MODE: BASELINE
-
-      - name: Test tpcds (llvm)
-        run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpcdsSf1.test /db/tpcds-1
-        env:
-          LINGODB_EXECUTION_MODE: DEFAULT
-      - name: Test tpcds (baseline)
-        run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpcdsSf1.test /db/tpcds-1
-        env:
-          LINGODB_EXECUTION_MODE: BASELINE
-
       - name: Test job (llvm)
         run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/job.test /db/job
         env:
