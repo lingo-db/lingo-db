@@ -425,7 +425,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                if (baseTableOp) {
                   llvm::DenseMap<const tuples::Column*, std::string> mapping;
                   for (auto c : baseTableOp.getColumns()) {
-                     mapping[&mlir::cast<tuples::ColumnDefAttr>(c.getValue()).getColumn()] = c.getName().str();
+                     mapping[c.second] = c.first;
                   }
                   if (auto meta = mlir::dyn_cast_or_null<relalg::TableMetaDataAttr>(baseTableOp->getAttr("meta"))) {
                      auto sample = meta.getMeta()->getSample();

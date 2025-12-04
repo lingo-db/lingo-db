@@ -188,8 +188,8 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
          nullable = false;
       }
       for (auto x : baseTableOp.getColumns()) {
-         if (&mlir::cast<tuples::ColumnDefAttr>(x.getValue()).getColumn() == &column) {
-            outColumnName = x.getName().str();
+         if (x.second == &column) {
+            outColumnName = x.first;
             return true;
          }
       }

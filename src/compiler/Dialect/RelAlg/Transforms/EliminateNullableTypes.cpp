@@ -124,22 +124,22 @@ class EliminateNullableTypes : public mlir::PassWrapper<EliminateNullableTypes, 
                }
             }
             if (notNullColumns.empty()) return;
-            std::vector<mlir::NamedAttribute> mapping;
-            for (auto x : baseTableOp.getColumnsAttr()) {
-               if (notNullColumns.contains(x.getName().str())) {
-                  auto colDef = mlir::cast<tuples::ColumnDefAttr>(x.getValue());
-                  if (required.contains(&colDef.getColumn())) {
-                     auto [scope, name] = colManager.getName(&colDef.getColumn());
-                     auto newColDef = colManager.createDef(scope, name + "__notnull");
-                     newColDef.getColumn().type = getBaseType(colDef.getColumn().type);
-                     info.directMappings[&colDef.getColumn()] = &newColDef.getColumn();
-                     mapping.push_back(builder.getNamedAttr(x.getName(), newColDef));
+            llvm::SmallVector<std::pair<std::string, tuples::Column*>> mapping;
+            for (auto x : baseTableOp.getColumns()) {
+               if (notNullColumns.contains(x.first)) {
+                  auto col = x.second;
+                  if (required.contains(col)) {
+                     auto [scope, name] = colManager.getName(col);
+                     auto newColDef = colManager.get(scope, name + "__notnull");
+                     newColDef->type = getBaseType(col->type);
+                     info.directMappings[col] = newColDef.get();
+                     mapping.push_back({x.first, newColDef.get()});
                   }
                } else {
                   mapping.push_back(x);
                }
             }
-            baseTableOp.setColumnsAttr(builder.getDictionaryAttr(mapping));
+            baseTableOp.setColumns(mapping);
             handleRec(baseTableOp.asRelation(), info);
          }
       });

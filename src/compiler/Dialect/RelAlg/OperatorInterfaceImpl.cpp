@@ -449,9 +449,7 @@ ColumnSet MarkJoinOp::getCreatedColumns() {
 ColumnSet BaseTableOp::getCreatedColumns() {
    ColumnSet creations;
    for (auto mapping : getColumns()) {
-      auto attr = mapping.getValue();
-      auto relationDefAttr = mlir::dyn_cast_or_null<ColumnDefAttr>(attr);
-      creations.insert(&relationDefAttr.getColumn());
+      creations.insert(mapping.second);
    }
    return creations;
 }
@@ -465,10 +463,9 @@ relalg::FunctionalDependencies BaseTableOp::getFDs() {
    std::unordered_set<std::string> pks(primaryKey.begin(), primaryKey.end());
    ColumnSet pk;
    for (auto mapping : getColumns()) {
-      auto attr = mapping.getValue();
-      auto relationDefAttr = mlir::dyn_cast_or_null<ColumnDefAttr>(attr);
-      if (pks.contains(mapping.getName().str())) {
-         pk.insert(&relationDefAttr.getColumn());
+      auto attr = mapping.second;
+      if (pks.contains(mapping.first)) {
+         pk.insert(attr);
       }
    }
    right.remove(pk);
