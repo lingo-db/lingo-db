@@ -10,6 +10,8 @@
 #include "sql_context.h"
 #define DEBUG false
 
+#include "ast/bound/bound_aggregation.h"
+
 #include <boost/context/detail/disable_overload.hpp>
 #include <boost/context/stack_context.hpp>
 #include <functional>
@@ -139,6 +141,7 @@ class SQLQueryAnalyzer {
    std::shared_ptr<ast::CreateNode> analyzeFunctionCreate(std::shared_ptr<ast::CreateNode> createNode, std::shared_ptr<ast::CreateFunctionInfo> createFunctionInfo, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope);
    std::shared_ptr<ast::BoundInsertNode> analyzeInsertNode(std::shared_ptr<ast::InsertNode> insertNode, std::shared_ptr<SQLContext> context, SQLContext::ResolverScope& resolverScope);
    std::shared_ptr<ast::SetNode> analyzeSetNode(std::shared_ptr<ast::SetNode> setNode);
+   std::shared_ptr<ast::BoundAggregationNode> analyzeAggregation(std::shared_ptr<ast::PipeOperator> pipeOperator, std::shared_ptr<ast::AggregationNode> aggregationNode, std::shared_ptr<SQLContext>& context, ResolverScope& resolverScope);
    /**
     * Analyzes a single PIPE operator
     *

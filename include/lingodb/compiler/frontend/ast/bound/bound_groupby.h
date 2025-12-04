@@ -26,7 +26,7 @@ class BoundGroupByNode : public AstNode {
    * Stores the ColumnReferences of the aggregation functions for each grouping set
    * This is necessary because the scope of the aggregation functions changes between the different grouping sets
    */
-   std::vector<std::vector<std::shared_ptr<ColumnReference>>> localAggregationColumnReferences;
+   //TODO removestd::vector<std::vector<std::shared_ptr<ColumnReference>>> localAggregationColumnReferences;
 
    /**
     * The 'group by' expression must be nullable for grouping sets. These are mapped to nullable types and the resulting references are stored here.

@@ -1022,6 +1022,222 @@ std::shared_ptr<ast::SetNode> SQLQueryAnalyzer::analyzeSetNode(std::shared_ptr<a
    }
 }
 
+std::shared_ptr<ast::BoundAggregationNode> SQLQueryAnalyzer::analyzeAggregation(std::shared_ptr<ast::PipeOperator> pipeOperator, std::shared_ptr<ast::AggregationNode> aggregationNode, std::shared_ptr<SQLContext>& context, ResolverScope& resolverScope) {
+   std::vector<std::shared_ptr<ast::ColumnReference>> groupColumnReferences{};
+   std::vector<std::shared_ptr<ast::BoundExpression>> evalBeforeAggr;
+
+   //Clear targetinfo (see PIPE SQL Syntax)
+   context->currentScope->targetInfo.targetColumns.clear();
+
+   std::vector<std::shared_ptr<ast::BoundFunctionExpression>> boundAggregationExpressions{};
+   /**
+          * Analyze AggregationExpressions
+          */
+   bool nullable = !aggregationNode->groupByNode || aggregationNode->groupByNode->groupByExpressions.empty();
+   std::ranges::transform(aggregationNode->aggregations, std::back_inserter(boundAggregationExpressions), [&](auto expr) {
+      auto boundExpr = analyzeExpression(expr, context, resolverScope);
+      assert(boundExpr->exprClass == ast::ExpressionClass::BOUND_FUNCTION);
+      auto boundFunction = std::static_pointer_cast<ast::BoundFunctionExpression>(boundExpr);
+
+      auto fName = boundFunction->functionName;
+      std::ranges::transform(fName, fName.begin(), ::toupper);/**
+             * Updadte nullable flag for count aggregation.
+             * If empty group by clause set nullable=true else false
+             */
+      if (fName != "COUNT" && fName != "COUNT*" && nullable) {
+         boundExpr->resultType->isNullable = nullable;
+         boundExpr->columnReference.value()->resultType.isNullable = nullable;
+      }
+      return boundFunction;
+   });
+   /**
+          * Analyze GroupByNode
+          */
+   if (aggregationNode->groupByNode) {
+      std::ranges::transform(aggregationNode->groupByNode->groupByExpressions, std::back_inserter(groupColumnReferences), [&](auto expr) {
+         auto boundExpression = analyzeExpression(expr, context, resolverScope);
+         assert(boundExpression->columnReference.has_value());
+         context->mapAttribute(resolverScope, boundExpression->columnReference.value()->name, boundExpression->columnReference.value());
+         //Add GROUP BY to TargetInfo for the current scope (see PIPE SQL Syntax)
+         context->currentScope->targetInfo.add(boundExpression->columnReference.value());
+         return boundExpression->columnReference.value();
+      });
+   }
+   if (!groupColumnReferences.empty() || !boundAggregationExpressions.empty()) {
+            for (auto& c : context->getTopDefinedColumns()) {
+               auto found = std::ranges::find_if(groupColumnReferences, [&](auto cRef) {
+                  return cRef->name == c.second->name && cRef->scope == c.second->scope;
+               });
+               auto found2 = std::ranges::find_if(boundAggregationExpressions, [&](auto& cExpr) {
+                  return cExpr->columnReference.value()->name == c.second->name && cExpr->columnReference.value()->scope == c.second->scope;
+               });
+               /*
+                * If a column reference is not part of the GROUP BY, mark it as not selectable.
+                * It cannot be removed from defined columns because aggregation functions may still reference it.
+                * A future scope-lookup redesign could allow safely pruning such columns instead of toggling selectability.
+                */
+               if (found == groupColumnReferences.end() && found2 == boundAggregationExpressions.end()) {
+                  c.second->isSelectable = false;
+               }
+            }
+         }auto boundGroupByNode = drv.nf.node<ast::BoundGroupByNode>(aggregationNode->groupByNode ? aggregationNode->groupByNode->loc : aggregationNode->loc, groupColumnReferences);
+   std::vector<std::shared_ptr<ast::BoundExpression>> toMap{};
+
+   /**
+          * Find Arguments of aggregation functions that need to be extended/mapped first
+          */
+   auto mapName = context->getUniqueScope("aggMap");
+   for (auto& aggr : boundAggregationExpressions) {
+      //Add Aggregations to TargetInfo for the current scope (see PIPE SQL Syntax)
+      context->currentScope->targetInfo.add(aggr->columnReference.value());
+      if (aggr->arguments.empty() || aggr->arguments[0]->type == ast::ExpressionType::BOUND_COLUMN_REF) {
+         continue;
+      }
+      toMap.emplace_back(aggr->arguments[0]);
+      aggr->arguments[0]->alias = context->getUniqueScope("tmp_attr");
+      aggr->arguments[0]->columnReference = std::make_shared<ast::ColumnReference>(mapName, aggr->arguments[0]->resultType.value(), aggr->arguments[0]->alias);
+   }
+
+   for (auto boundAggr : boundAggregationExpressions) {
+      auto fName = boundAggr->functionName;
+      std::ranges::transform(fName, fName.begin(), ::toupper);
+      if (fName == "COUNT" || fName == "COUNT*") {
+         boundAggr->columnReference.value()->resultType.useZeroInsteadOfNull = !aggregationNode->groupByNode || aggregationNode->groupByNode->groupByExpressions.empty();
+         boundAggr->resultType->useZeroInsteadOfNull = !aggregationNode->groupByNode || aggregationNode->groupByNode->groupByExpressions.empty();
+      }
+   }
+
+   auto boundAggrNode = drv.nf.node<ast::BoundAggregationNode>(pipeOperator->loc, boundGroupByNode, std::vector<std::vector<std::shared_ptr<ast::BoundFunctionExpression>>>{boundAggregationExpressions}, toMap, mapName, evalBeforeAggr);
+
+   /**
+          * Handle grouping sets
+          */
+   if (aggregationNode->groupByNode && !aggregationNode->groupByNode->groupingSet.empty()) {
+      auto originalAggrFunctions = boundAggrNode->aggregations.front();
+      static size_t groupingSetId = 0;
+      auto groupingSets = aggregationNode->groupByNode->groupingSet;
+      boundAggrNode->aggregations.resize(groupingSets.size());
+      for (size_t i = 0; i < groupingSets.size(); i++) {
+         auto groupingSet = groupingSets[i];
+         std::vector<std::shared_ptr<ast::ColumnReference>> localGroupBy{};
+         std::vector<std::shared_ptr<ast::ColumnReference>> mapToNull{};
+         std::vector<std::shared_ptr<ast::ColumnReference>> notAvailable{};
+         std::vector<std::shared_ptr<ast::BoundFunctionExpression>> localFunctions;
+         int present = 0;
+         /*
+                * Get localGroupBy, mapToNull and notAvailable ColumnReferences
+                */
+         for (size_t j = 0; j < aggregationNode->groupByNode->groupByExpressions.size(); j++) {
+            if (groupingSet.contains(j)) {
+               localGroupBy.emplace_back(groupColumnReferences[j]);
+               auto mappedColumnReference = std::make_shared<ast::ColumnReference>("groupingSetMapToNull_" + std::to_string(groupingSetId), groupColumnReferences[j]->resultType, "tmp_" + std::to_string(j));
+               mappedColumnReference->displayName = groupColumnReferences[j]->displayName;
+               mapToNull.emplace_back(mappedColumnReference);
+               mappedColumnReference->resultType.isNullable = true;
+            } else {
+               present |= (1 << j);
+               auto mappedColumnReference = std::make_shared<ast::ColumnReference>("groupingSet_" + std::to_string(groupingSetId), groupColumnReferences[j]->resultType, "tmp_" + std::to_string(j));
+               notAvailable.emplace_back(mappedColumnReference);
+               mappedColumnReference->displayName = groupColumnReferences[j]->displayName;
+               mappedColumnReference->resultType.isNullable = true;
+            }
+         }
+
+         std::vector<std::shared_ptr<ast::ColumnReference>> localAggregationColumnReferences{};
+         for (auto& aggr : boundAggrNode->aggregations[0]) {
+            auto columnReferenceAggr = std::make_shared<ast::ColumnReference>("groupingSetAgg_" + std::to_string(groupingSetId), aggr->columnReference.value()->resultType, aggr->columnReference.value()->name);
+            columnReferenceAggr->displayName = aggr->columnReference.value()->displayName;
+            localAggregationColumnReferences.emplace_back(columnReferenceAggr);
+
+            auto localFunction = std::make_shared<ast::BoundFunctionExpression>(*aggr.get());
+            localFunction->columnReference = columnReferenceAggr;
+            localFunctions.push_back(localFunction);
+         }
+
+         boundAggrNode->aggregations.at(i) = localFunctions;
+
+         boundAggrNode->groupByNode->localGroupByColumnReferences.emplace_back(std::move(localGroupBy));
+         boundAggrNode->groupByNode->localMapToNullColumnReferences.emplace_back(std::move(mapToNull));
+         boundAggrNode->groupByNode->localNotAvailableColumnReferences.emplace_back(std::move(notAvailable));
+         auto presentColumnReference = std::make_shared<ast::ColumnReference>(boundAggrNode->mapName, catalog::Type::int64(), "intval" + std::to_string(present));
+         boundAggrNode->groupByNode->localPresentIntval.emplace_back(std::pair{present, presentColumnReference});
+         groupingSetId++;
+      }
+
+      std::vector<std::shared_ptr<ast::ColumnReference>> currentAttributes(
+         boundAggrNode->groupByNode->localMapToNullColumnReferences.at(0).begin(),
+         boundAggrNode->groupByNode->localMapToNullColumnReferences.at(0).end());
+
+      currentAttributes.insert(currentAttributes.end(),
+                               boundAggrNode->groupByNode->localNotAvailableColumnReferences.at(0).begin(),
+                               boundAggrNode->groupByNode->localNotAvailableColumnReferences.at(0).end());
+
+      for (auto& f : boundAggrNode->aggregations.front()) {
+         currentAttributes.emplace_back(f->columnReference.value());
+      }
+
+      currentAttributes.emplace_back(boundAggrNode->groupByNode->localPresentIntval.at(0).second);
+      for (size_t i = 1; i < boundAggrNode->groupByNode->localGroupByColumnReferences.size(); i++) {
+         auto rollUpUnionName = context->getUniqueScope("rollupUnion");
+         std::vector<std::shared_ptr<ast::ColumnReference>> currentLocalAttributes(
+            boundAggrNode->groupByNode->localMapToNullColumnReferences.at(i).begin(),
+            boundAggrNode->groupByNode->localMapToNullColumnReferences.at(i).end());
+         currentLocalAttributes.insert(currentLocalAttributes.end(),
+                                       boundAggrNode->groupByNode->localNotAvailableColumnReferences.at(i).begin(),
+                                       boundAggrNode->groupByNode->localNotAvailableColumnReferences.at(i).end());
+         for (auto& f : boundAggrNode->aggregations[i]) {
+            currentLocalAttributes.emplace_back(f->columnReference.value());
+         }
+
+         currentLocalAttributes.emplace_back(boundAggrNode->groupByNode->localPresentIntval.at(i).second);
+
+         std::vector<std::shared_ptr<ast::ColumnReference>> unionColumnReferences{};
+         for (size_t j = 0; j < currentLocalAttributes.size(); j++) {
+            auto left = currentAttributes[j];
+            auto right = currentLocalAttributes[j];
+            auto unionColumnReference = std::make_shared<ast::ColumnReference>(rollUpUnionName + std::to_string(i), right->resultType, left->name);
+            unionColumnReferences.emplace_back(unionColumnReference);
+            unionColumnReference->displayName = left->displayName;
+         }
+         currentAttributes = unionColumnReferences;
+
+         boundAggrNode->groupByNode->unionColumnReferences.emplace_back(std::move(unionColumnReferences));
+      }
+      for (size_t i = 0; i < boundAggrNode->groupByNode->groupByColumnReferences.size(); i++) {
+         auto old = boundAggrNode->groupByNode->groupByColumnReferences[i];
+         auto newN = boundAggrNode->groupByNode->unionColumnReferences.back().at(i);
+         context->replace(resolverScope, old, newN);
+      }
+      for (size_t i = 0; i < originalAggrFunctions.size(); i++) {
+         auto old = originalAggrFunctions[i]->columnReference.value();
+         auto newN = boundAggrNode->groupByNode->unionColumnReferences.back().at(boundAggrNode->groupByNode->groupByColumnReferences.size() + i);
+         context->replace(resolverScope, old, newN);
+      }
+
+      std::vector<std::shared_ptr<ast::BoundFunctionExpression>> boundGroupingFunctions;
+      for (size_t i = 0; i < aggregationNode->groupByNode->groupingFunctions.size(); i++) {
+         auto boundGroupingFunction = analyzeExpression(*std::next(aggregationNode->groupByNode->groupingFunctions.begin(), i), context, resolverScope);
+         boundGroupingFunctions.emplace_back(std::static_pointer_cast<ast::BoundFunctionExpression>(boundGroupingFunction));
+         context->mapAttribute(resolverScope, boundGroupingFunction->alias, boundGroupingFunction->columnReference.value());
+
+         assert(std::static_pointer_cast<ast::BoundFunctionExpression>(boundGroupingFunction)->arguments[0]->columnReference.has_value());
+         auto functionArgColumnReference = std::static_pointer_cast<ast::BoundFunctionExpression>(boundGroupingFunction)->arguments[0];
+         ;
+         size_t j = 0;
+         for (; j < boundAggrNode->groupByNode->groupByColumnReferences.size(); j++) {
+            auto groupColumnReference = boundAggrNode->groupByNode->unionColumnReferences.back().at(j);
+            if (groupColumnReference->name == functionArgColumnReference->columnReference.value()->name) {
+               break;
+            }
+         }
+
+         boundAggrNode->groupByNode->groupingFunctions.emplace_back(std::pair{j, boundGroupingFunction->columnReference.value()});
+      }
+
+      groupingSetId++;
+   }
+   return boundAggrNode;
+}
 std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::shared_ptr<ast::PipeOperator> pipeOperator, std::shared_ptr<SQLContext>& context, ResolverScope& resolverScope) {
    std::shared_ptr<ast::AstNode> boundAstNode = pipeOperator->node;
    switch (pipeOperator->pipeOpType) {
@@ -1078,209 +1294,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
       }
       case ast::PipeOperatorType::AGGREGATE: {
          auto aggregationNode = std::static_pointer_cast<ast::AggregationNode>(pipeOperator->node);
-         std::vector<std::shared_ptr<ast::ColumnReference>> groupColumnReferences{};
-         std::vector<std::shared_ptr<ast::BoundExpression>> evalBeforeAggr;
-
-         //Clear targetinfo (see PIPE SQL Syntax)
-         context->currentScope->targetInfo.clear();
-
-         std::vector<std::shared_ptr<ast::BoundFunctionExpression>> boundAggregationExpressions{};
-         /**
-          * Analyze AggregationExpressions
-          */
-         bool nullable = !aggregationNode->groupByNode || aggregationNode->groupByNode->groupByExpressions.empty();
-         std::ranges::transform(aggregationNode->aggregations, std::back_inserter(boundAggregationExpressions), [&](auto expr) {
-            auto boundExpr = analyzeExpression(expr, context, resolverScope);
-            assert(boundExpr->exprClass == ast::ExpressionClass::BOUND_FUNCTION);
-            auto boundFunction = std::static_pointer_cast<ast::BoundFunctionExpression>(boundExpr);
-            auto fName = boundFunction->functionName;
-            std::ranges::transform(fName, fName.begin(), ::toupper);
-            /**
-             * Updadte nullable flag for count aggregation.
-             * If empty group by clause set nullable=true else false
-             */
-            if (fName != "COUNT" && fName != "COUNT*" && nullable) {
-               boundExpr->resultType->isNullable = nullable;
-               boundExpr->columnReference.value()->resultType.isNullable = nullable;
-            }
-            return boundFunction;
-         });
-         /**
-          * Analyze GroupByNode
-          */
-         if (aggregationNode->groupByNode) {
-            std::ranges::transform(aggregationNode->groupByNode->groupByExpressions, std::back_inserter(groupColumnReferences), [&](auto expr) {
-               auto boundExpression = analyzeExpression(expr, context, resolverScope);
-               assert(boundExpression->columnReference.has_value());
-               context->mapAttribute(resolverScope, boundExpression->columnReference.value()->name, boundExpression->columnReference.value());
-               //Add GROUP BY to TargetInfo for the current scope (see PIPE SQL Syntax)
-               context->currentScope->targetInfo.add(boundExpression->columnReference.value());
-               return boundExpression->columnReference.value();
-            });
-         }
-         if (!groupColumnReferences.empty() || !boundAggregationExpressions.empty()) {
-            for (auto& c : context->getTopDefinedColumns()) {
-               auto found = std::ranges::find_if(groupColumnReferences, [&](auto cRef) {
-                  return cRef->name == c.second->name && cRef->scope == c.second->scope;
-               });
-               auto found2 = std::ranges::find_if(boundAggregationExpressions, [&](auto& cExpr) {
-                  return cExpr->columnReference.value()->name == c.second->name && cExpr->columnReference.value()->scope == c.second->scope;
-               });
-               /*
-                * If a column reference is not part of the GROUP BY, mark it as not selectable.
-                * It cannot be removed from defined columns because aggregation functions may still reference it.
-                * A future scope-lookup redesign could allow safely pruning such columns instead of toggling selectability.
-                */
-               if (found == groupColumnReferences.end() && found2 == boundAggregationExpressions.end()) {
-                  c.second->isSelectable = false;
-               }
-            }
-         }
-
-         auto boundGroupByNode = drv.nf.node<ast::BoundGroupByNode>(aggregationNode->groupByNode ? aggregationNode->groupByNode->loc : aggregationNode->loc, groupColumnReferences);
-         std::vector<std::shared_ptr<ast::BoundExpression>> toMap{};
-
-         /**
-          * Find Arguments of aggregation functions that need to be extended/mapped first
-          */
-         auto mapName = context->getUniqueScope("aggMap");
-         for (auto& aggr : boundAggregationExpressions) {
-            //Add Aggregations to TargetInfo for the current scope (see PIPE SQL Syntax)
-            context->currentScope->targetInfo.add(aggr->columnReference.value());
-            if (aggr->arguments.empty() || aggr->arguments[0]->type == ast::ExpressionType::BOUND_COLUMN_REF) {
-               continue;
-            }
-            toMap.emplace_back(aggr->arguments[0]);
-            aggr->arguments[0]->alias = context->getUniqueScope("tmp_attr");
-            aggr->arguments[0]->columnReference = std::make_shared<ast::ColumnReference>(mapName, aggr->arguments[0]->resultType.value(), aggr->arguments[0]->alias);
-         }
-
-         for (auto boundAggr : boundAggregationExpressions) {
-            auto fName = boundAggr->functionName;
-            std::ranges::transform(fName, fName.begin(), ::toupper);
-            if (fName == "COUNT" || fName == "COUNT*") {
-               boundAggr->columnReference.value()->resultType.useZeroInsteadOfNull = !aggregationNode->groupByNode || aggregationNode->groupByNode->groupByExpressions.empty();
-               boundAggr->resultType->useZeroInsteadOfNull = !aggregationNode->groupByNode || aggregationNode->groupByNode->groupByExpressions.empty();
-            }
-         }
-
-         auto boundAggrNode = drv.nf.node<ast::BoundAggregationNode>(pipeOperator->loc, boundGroupByNode, boundAggregationExpressions, toMap, mapName, evalBeforeAggr);
-         boundAstNode = boundAggrNode;
-         /**
-          * Handle grouping sets
-          */
-         if (aggregationNode->groupByNode && !aggregationNode->groupByNode->groupingSet.empty()) {
-            static size_t groupingSetId = 0;
-            auto groupingSets = aggregationNode->groupByNode->groupingSet;
-            for (size_t i = 0; i < groupingSets.size(); i++) {
-               auto groupingSet = groupingSets[i];
-               std::vector<std::shared_ptr<ast::ColumnReference>> localGroupBy{};
-               std::vector<std::shared_ptr<ast::ColumnReference>> mapToNull{};
-               std::vector<std::shared_ptr<ast::ColumnReference>> notAvailable{};
-               int present = 0;
-
-               for (size_t j = 0; j < aggregationNode->groupByNode->groupByExpressions.size(); j++) {
-                  if (groupingSet.contains(j)) {
-                     localGroupBy.emplace_back(groupColumnReferences[j]);
-                     auto mappedColumnReference = std::make_shared<ast::ColumnReference>("groupingSetMapToNull_" + std::to_string(groupingSetId), groupColumnReferences[j]->resultType, "tmp_" + std::to_string(j));
-                     mappedColumnReference->displayName = groupColumnReferences[j]->displayName;
-                     mapToNull.emplace_back(mappedColumnReference);
-                     mappedColumnReference->resultType.isNullable = true;
-                  } else {
-                     present |= (1 << j);
-                     auto mappedColumnReference = std::make_shared<ast::ColumnReference>("groupingSet_" + std::to_string(groupingSetId), groupColumnReferences[j]->resultType, "tmp_" + std::to_string(j));
-                     notAvailable.emplace_back(mappedColumnReference);
-                     mappedColumnReference->displayName = groupColumnReferences[j]->displayName;
-                     mappedColumnReference->resultType.isNullable = true;
-                  }
-               }
-
-               std::vector<std::shared_ptr<ast::ColumnReference>> aggregationColumnReferences{};
-               for (auto& aggr : boundAggrNode->aggregations) {
-                  auto columnReferenceAggr = std::make_shared<ast::ColumnReference>("groupingSetAgg_" + std::to_string(groupingSetId), aggr->columnReference.value()->resultType, aggr->columnReference.value()->name);
-                  columnReferenceAggr->displayName = aggr->columnReference.value()->displayName;
-                  aggregationColumnReferences.emplace_back(columnReferenceAggr);
-               }
-               boundAggrNode->groupByNode->localAggregationColumnReferences.emplace_back(std::move(aggregationColumnReferences));
-
-               boundAggrNode->groupByNode->localGroupByColumnReferences.emplace_back(std::move(localGroupBy));
-               boundAggrNode->groupByNode->localMapToNullColumnReferences.emplace_back(std::move(mapToNull));
-               boundAggrNode->groupByNode->localNotAvailableColumnReferences.emplace_back(std::move(notAvailable));
-               auto presentColumnReference = std::make_shared<ast::ColumnReference>(boundAggrNode->mapName, catalog::Type::int64(), "intval" + std::to_string(present));
-               boundAggrNode->groupByNode->localPresentIntval.emplace_back(std::pair{present, presentColumnReference});
-               groupingSetId++;
-            }
-
-            std::vector<std::shared_ptr<ast::ColumnReference>> currentAttributes(
-               boundAggrNode->groupByNode->localMapToNullColumnReferences.at(0).begin(),
-               boundAggrNode->groupByNode->localMapToNullColumnReferences.at(0).end());
-
-            currentAttributes.insert(currentAttributes.end(),
-                                     boundAggrNode->groupByNode->localNotAvailableColumnReferences.at(0).begin(),
-                                     boundAggrNode->groupByNode->localNotAvailableColumnReferences.at(0).end());
-
-            currentAttributes.insert(currentAttributes.end(),
-                                     boundAggrNode->groupByNode->localAggregationColumnReferences.at(0).begin(),
-                                     boundAggrNode->groupByNode->localAggregationColumnReferences.at(0).end());
-            currentAttributes.emplace_back(boundAggrNode->groupByNode->localPresentIntval.at(0).second);
-            for (size_t i = 1; i < boundAggrNode->groupByNode->localGroupByColumnReferences.size(); i++) {
-               auto rollUpUnionName = context->getUniqueScope("rollupUnion");
-               std::vector<std::shared_ptr<ast::ColumnReference>> currentLocalAttributes(
-                  boundAggrNode->groupByNode->localMapToNullColumnReferences.at(i).begin(),
-                  boundAggrNode->groupByNode->localMapToNullColumnReferences.at(i).end());
-               currentLocalAttributes.insert(currentLocalAttributes.end(),
-                                             boundAggrNode->groupByNode->localNotAvailableColumnReferences.at(i).begin(),
-                                             boundAggrNode->groupByNode->localNotAvailableColumnReferences.at(i).end());
-               currentLocalAttributes.insert(currentLocalAttributes.end(),
-                                             boundAggrNode->groupByNode->localAggregationColumnReferences.at(i).begin(),
-                                             boundAggrNode->groupByNode->localAggregationColumnReferences.at(i).end());
-               currentLocalAttributes.emplace_back(boundAggrNode->groupByNode->localPresentIntval.at(i).second);
-
-               std::vector<std::shared_ptr<ast::ColumnReference>> unionColumnReferences{};
-               for (size_t j = 0; j < currentLocalAttributes.size(); j++) {
-                  auto left = currentAttributes[j];
-                  auto right = currentLocalAttributes[j];
-                  auto unionColumnReference = std::make_shared<ast::ColumnReference>(rollUpUnionName + std::to_string(i), right->resultType, left->name);
-                  unionColumnReferences.emplace_back(unionColumnReference);
-                  unionColumnReference->displayName = left->displayName;
-               }
-               currentAttributes = unionColumnReferences;
-
-               boundAggrNode->groupByNode->unionColumnReferences.emplace_back(std::move(unionColumnReferences));
-            }
-            for (size_t i = 0; i < boundAggrNode->groupByNode->groupByColumnReferences.size(); i++) {
-               auto old = boundAggrNode->groupByNode->groupByColumnReferences[i];
-               auto newN = boundAggrNode->groupByNode->unionColumnReferences.back().at(i);
-               context->replace(resolverScope, old, newN);
-            }
-            for (size_t i = 0; i < boundAggrNode->aggregations.size(); i++) {
-               auto old = boundAggrNode->aggregations[i]->columnReference.value();
-               auto newN = boundAggrNode->groupByNode->unionColumnReferences.back().at(boundAggrNode->groupByNode->groupByColumnReferences.size() + i);
-               context->replace(resolverScope, old, newN);
-            }
-
-            std::vector<std::shared_ptr<ast::BoundFunctionExpression>> boundGroupingFunctions;
-            for (size_t i = 0; i < aggregationNode->groupByNode->groupingFunctions.size(); i++) {
-               auto boundGroupingFunction = analyzeExpression(*std::next(aggregationNode->groupByNode->groupingFunctions.begin(), i), context, resolverScope);
-               boundGroupingFunctions.emplace_back(std::static_pointer_cast<ast::BoundFunctionExpression>(boundGroupingFunction));
-               context->mapAttribute(resolverScope, boundGroupingFunction->alias, boundGroupingFunction->columnReference.value());
-
-               assert(std::static_pointer_cast<ast::BoundFunctionExpression>(boundGroupingFunction)->arguments[0]->columnReference.has_value());
-               auto functionArgColumnReference = std::static_pointer_cast<ast::BoundFunctionExpression>(boundGroupingFunction)->arguments[0];
-               ;
-               size_t j = 0;
-               for (; j < boundAggrNode->groupByNode->groupByColumnReferences.size(); j++) {
-                  auto groupColumnReference = boundAggrNode->groupByNode->unionColumnReferences.back().at(j);
-                  if (groupColumnReference->name == functionArgColumnReference->columnReference.value()->name) {
-                     break;
-                  }
-               }
-
-               boundAggrNode->groupByNode->groupingFunctions.emplace_back(std::pair{j, boundGroupingFunction->columnReference.value()});
-            }
-
-            groupingSetId++;
-         }
+         boundAstNode = analyzeAggregation(pipeOperator, aggregationNode, context, resolverScope);
 
          break;
       }
