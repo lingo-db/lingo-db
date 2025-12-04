@@ -28,8 +28,6 @@ RUN wget https://dlcdn.apache.org/arrow/arrow-22.0.0/apache-arrow-22.0.0.tar.gz 
 RUN mkdir /built-arrow
 RUN cd /apache-arrow-22.0.0/cpp && cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/built-arrow -DARROW_DEPENDENCY_SOURCE=AUTO -DARROW_BUILD_STATIC=ON -DARROW_CSV=ON -DARROW_COMPUTE=ON  \
       -DARROW_ENABLE_TIMING_TESTS="OFF" \
-      -DARROW_EXTRA_ERROR_CONTEXT="ON" \
-      -DARROW_WITH_RE2="OFF" \
       -DARROW_BUILD_SHARED="OFF" \
     && cmake --build build --target install -j$(nproc) && cd .. && rm  -r /apache-arrow-22.0.0
 RUN wget https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.0-rc1/llvm-project-20.1.0-rc1.src.tar.xz && tar -xf llvm-project-20.1.0-rc1.src.tar.xz && mv /llvm-project-20.1.0-rc1.src /llvm-src

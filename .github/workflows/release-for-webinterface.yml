@@ -12,7 +12,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-py-dev:16387d412a5824bad8031811bebc136b1cd6da1f
+    container: ghcr.io/lingo-db/lingodb-py-dev:cb8141fb8f200d11ca497107b797e24e72335c1c
 
     steps:
       - name: Checkout code
