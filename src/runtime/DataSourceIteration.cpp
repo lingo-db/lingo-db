@@ -11,6 +11,7 @@
 
 #include "lingodb/utility/Tracer.h"
 
+#include <iostream>
 #include <arrow/array.h>
 #include <arrow/table.h>
 namespace utility = lingodb::utility;
