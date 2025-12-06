@@ -2,9 +2,11 @@
 #define LINGODB_RUNTIME_LAZYJOINHASHTABLE_H
 #include "lingodb/runtime/Buffer.h"
 #include "lingodb/runtime/helpers.h"
+#include <atomic>
 namespace lingodb::runtime {
 class GrowingBuffer;
 class HashIndexedView {
+   public:
    struct Entry {
       Entry* next;
       uint64_t hashValue;
@@ -28,6 +30,12 @@ class HashIndexedView {
    public:
    static HashIndexedView* build(GrowingBuffer* buffer);
    static void destroy(HashIndexedView*);
+   size_t getHtMask() {
+      return htMask;
+   }
+   Entry** getHashTable() {
+      return ht;
+   }
    ~HashIndexedView();
 };
 } // end namespace lingodb::runtime

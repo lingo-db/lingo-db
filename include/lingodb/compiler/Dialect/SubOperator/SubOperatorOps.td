@@ -1003,5 +1003,31 @@ def NestedExecutionGroupReturnOp : SubOperator_Op<"nested_execution_group_return
    let arguments = (ins Variadic<AnyType>:$inputs);
    let assemblyFormat = [{ ($inputs^ `:` type($inputs))? attr-dict-with-keyword }];
 }
+ def BloomFilter : SubOperator_Type<"BloomFilter", "bloom_filter", [State]> {
+        let summary = "A bloom filter for sideways information passing.";
+        let parameters = (ins "StateMembersAttr":$members);
+        let assemblyFormat = "`<` custom<StateMembers>($members) `>`";
+  }
+  def CreateBloomFilterOp : SubOperator_Op<"create_bloom_filter", [SubOperator, DeclareOpInterfaceMethods<ColumnFoldable>]> {
+        let summary = "Materializes a stream of tuples into a bloom filter.";
+
+        let arguments = (ins TupleStream : $stream, BloomFilter: $filter, ArrayAttr : $columns);
+       let assemblyFormat = [{ $stream `,` $filter `:` type($filter) `on` custom<CustRefArr>($columns) attr-dict-with-keyword }];
+ }
+def SipId : SubOperator_Type<"SipId", "sip_id"> {
+  let summary = "string identifier for SIP filtering";
+  let assemblyFormat = "";
+}
+def CreateSIPFilterOp : SubOperator_Op<"create_sip_filter", [SubOperator]> {
+    let summary = "Creates a id which can be used for SIP filtering.";
+    let arguments = (ins HashIndexedView:$hashView, StrAttr:$sip_name);
+    let results = (outs SipId:$res);
+
+    let assemblyFormat = [{  $hashView `:` type($hashView) `->` type($res)  attr-dict }];
+
+}
+
+
+
 
 #endif // LINGODB_DIALECT_SubOperator_IR_OPS
