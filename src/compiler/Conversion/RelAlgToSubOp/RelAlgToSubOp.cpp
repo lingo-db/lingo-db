@@ -1713,18 +1713,33 @@ class MaterializeLowering : public OpConversionPattern<relalg::MaterializeOp> {
    using OpConversionPattern<relalg::MaterializeOp>::OpConversionPattern;
 
    LogicalResult matchAndRewrite(relalg::MaterializeOp materializeOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto& memberManager = getContext()->getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager();
       auto localTableType = mlir::cast<subop::LocalTableType>(materializeOp.getResult().getType());
       std::vector<Attribute> colNames;
       RefMappingCollector mapping;
+      std::unordered_map<Member, mlir::Type> memberTypes;
       for (size_t i = 0; i < materializeOp.getColumns().size(); i++) {
          auto columnName = mlir::cast<mlir::StringAttr>(materializeOp.getColumns()[i]);
          auto colMember = localTableType.getMembers().getMembers()[i];
          auto columnAttr = mlir::cast<tuples::ColumnRefAttr>(materializeOp.getCols()[i]);
-         mapping.push_back({colMember, columnAttr});
          colNames.push_back(columnName);
+         memberTypes[colMember] = columnAttr.getColumn().type;
+      }
+      llvm::SmallVector<subop::Member> members;
+      std::unordered_map<Member, subop::Member> oldToNewMember;
+      for (auto member : localTableType.getMembers().getMembers()) {
+         auto name =memberManager.getName(member);
+         auto newMember=memberManager.createMember(name, memberTypes[member]);
+         members.push_back(newMember);
+         oldToNewMember[member]=newMember;
+      }
+      for (size_t i = 0; i < materializeOp.getColumns().size(); i++) {
+         auto colMember = localTableType.getMembers().getMembers()[i];
+         auto columnAttr = mlir::cast<tuples::ColumnRefAttr>(materializeOp.getCols()[i]);
+         mapping.push_back({oldToNewMember[colMember], columnAttr});
       }
       //todo: think about if this is really okay: two states have the same members...
-      mlir::Value resultTable = rewriter.create<subop::GenericCreateOp>(materializeOp->getLoc(), subop::ResultTableType::get(getContext(), localTableType.getMembers()));
+      mlir::Value resultTable = rewriter.create<subop::GenericCreateOp>(materializeOp->getLoc(), subop::ResultTableType::get(getContext(), subop::StateMembersAttr::get(getContext(), members)));
       rewriter.create<subop::MaterializeOp>(materializeOp->getLoc(), adaptor.getRel(), resultTable, createColumnRefMemberMappingAttr(rewriter.getContext(), mapping));
       mlir::Value localTable = rewriter.create<subop::CreateFrom>(materializeOp.getLoc(), localTableType, rewriter.getArrayAttr(colNames), resultTable);
       rewriter.replaceOp(materializeOp, localTable);

@@ -909,6 +909,21 @@ mlir::LogicalResult relalg::RenamingOp::changeForColumns(lingodb::compiler::dial
    setColumnsAttr(mlir::ArrayAttr::get(getContext(), newColDefs));
    return mlir::success();
 }
+mlir::LogicalResult relalg::MaterializeOp::changeForColumns(lingodb::compiler::dialect::relalg::ColumnNullableChangeInfo& columnInfo) {
+   std::vector<mlir::Attribute> newCols;
+   for (auto col : getCols()) {
+      auto colRef = mlir::cast<tuples::ColumnRefAttr>(col);
+      if (columnInfo.directMappings.contains(&colRef.getColumn())) {
+         auto& colManager = getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+         newCols.push_back(colManager.createRef(columnInfo.directMappings[&colRef.getColumn()]));
+      } else {
+         newCols.push_back(col);
+      }
+   }
+   setColsAttr(mlir::ArrayAttr::get(getContext(), newCols));
+   return mlir::success();
+}
+
 mlir::LogicalResult relalg::CrossProductOp::foldColumns(relalg::ColumnFoldInfo& columnInfo) {
    return mlir::success();
 }

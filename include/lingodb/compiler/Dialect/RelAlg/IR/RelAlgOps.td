@@ -484,7 +484,7 @@ def ExistsOp : RelAlg_Op<"exists", [Pure]> {
     let assemblyFormat = [{  $rel attr-dict }];
 }
 
-def MaterializeOp : RelAlg_Op<"materialize", [Pure]> {
+def MaterializeOp : RelAlg_Op<"materialize", [Pure,DeclareOpInterfaceMethods<NullColumnTypeChangeable>]> {
     let arguments = (ins TupleStream:$rel,ArrayAttr:$cols,ArrayAttr:$columns);
     let results = (outs SubOp_ResultTable:$result);
     let assemblyFormat = [{  $rel custom<CustRefArr>($cols) `=` `>` $columns `:` type($result) attr-dict }];
