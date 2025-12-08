@@ -276,10 +276,6 @@ struct IRCompilerA64
           sym, tpde::elf::R_AARCH64_LD64_GOT_LO12_NC, this->text_writer.offset());
       ASMNC(LDRxu, dst, dst, 0);
    }
-   CallBuilder create_call_builder() {
-      cc_assigners = tpde::a64::CCAssignerAAPCS();
-      return CallBuilder{*this, std::get<tpde::a64::CCAssignerAAPCS>(cc_assigners)};
-   }
 
    void reset() noexcept {
       Base::reset();
@@ -287,6 +283,11 @@ struct IRCompilerA64
    }
 
    Error& getError() { return Base::getError(); }
+
+   CallBuilder create_call_builder() {
+      cc_assigners = tpde::a64::CCAssignerAAPCS();
+      return CallBuilder{*this, std::get<tpde::a64::CCAssignerAAPCS>(cc_assigners)};
+   }
 };
 
 

@@ -725,7 +725,23 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
             if (auto string_attr = mlir::dyn_cast<mlir::StringAttr>(attr[i]);
                 string_attr && string_attr.getValue() == "llvm.zeroext") { flag = Base::CallArg::Flag::zext; }
          }
-         builder.add_arg(typename Base::CallArg{arg, flag, 0, 0});
+
+         uint8_t byval_align = 0;
+         uint32_t byval_size = 0;
+         if (auto int_type = dyn_cast<mlir::IntegerType>(arg.getType())) {
+            if (int_type.getWidth() == 128) {
+               flag = Base::CallArg::Flag::allow_split;
+               byval_align = 16;
+               byval_size = 16;
+            }
+         }
+         if (auto varlenTy = dyn_cast<dialect::util::VarLen32Type>(arg.getType())) {
+            flag = Base::CallArg::Flag::allow_split;
+            byval_align = 16;
+            byval_size = 16;
+         }
+
+         builder.add_arg(typename Base::CallArg{arg, flag, byval_align, byval_size});
       }
 
       if (callee_func.isExternal()) {
@@ -972,6 +988,7 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
       // part1 is the pointer to the content
       // -> content is a StringRef pointing inside the mlir module
       // -> as long as we keep that alive past query execution, we can just hand out the pointer!
+      std::cout << reinterpret_cast<const void*> (content.data()) << std::endl;
       res_ref.part(1).set_value(ValuePart{std::bit_cast<uint64_t>(content.data()), 8, Config::GP_BANK});
       return true;
    }
