@@ -41,7 +41,7 @@ add_custom_command(
 # arm-apple
 add_custom_command(
         OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/snippets_arm-apple.bc
-        COMMAND ${CLANG_EXECUTABLE} -c -emit-llvm -ffreestanding -fcf-protection=none -O3 -fomit-frame-pointer -fno-math-errno --target=aarch64 -march=armv8.5-a -o ${CMAKE_CURRENT_BINARY_DIR}/snippets_arm-apple.bc ${CMAKE_CURRENT_SOURCE_DIR}/snippets_arm-apple.c
+        COMMAND ${CLANG_EXECUTABLE} -c -emit-llvm -ffreestanding -fcf-protection=none -O3 -fomit-frame-pointer -fno-math-errno --target=aarch64 -march=armv8.1-a -o ${CMAKE_CURRENT_BINARY_DIR}/snippets_arm-apple.bc ${CMAKE_CURRENT_SOURCE_DIR}/snippets_arm-apple.c
         DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/snippets_arm-apple.c
         DEPENDS_EXPLICIT_ONLY
         COMMENT "Generating arm-apple LLVM bitcode from snippets.c"
