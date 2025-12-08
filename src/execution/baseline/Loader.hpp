@@ -71,7 +71,7 @@ class DebugLoader final : public DynamicLoader {
          hasError = true;
          return;
       }
-      std::string cmd = std::string("cc -shared -o -fPIC") + linkedFileName + " " + objFileName;
+      std::string cmd = std::string("cc -shared -fPIC -o ") + linkedFileName + " " + objFileName;
       auto* pPipe = ::popen(cmd.c_str(), "r");
       if (pPipe == nullptr) {
          hasError = true;
