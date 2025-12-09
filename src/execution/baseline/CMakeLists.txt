@@ -1,5 +1,5 @@
-if(NOT (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64"))
-    message(FATAL_ERROR "The TPDE baseline backend can only be built for linux x86_64 targets.")
+if(NOT (CMAKE_SYSTEM_NAME STREQUAL "Linux"))
+    message(FATAL_ERROR "The TPDE baseline backend can only be built for linux targets.")
 endif()
 
 ## Add baseline backend to the runner target

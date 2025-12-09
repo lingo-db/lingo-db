@@ -1,7 +1,7 @@
 #if BASELINE_ENABLED == 1
-#if defined(__x86_64__) && false
+#if defined(__x86_64__)
    #include "CompilerX64.hpp"
-#elif defined(__aarch64__) || true
+#elif defined(__aarch64__)
    #include "CompilerA64.hpp"
 #endif
 #include "Loader.hpp"
@@ -50,9 +50,9 @@ class BaselineBackend : public ExecutionBackend {
       timing["baselineLowering"] = std::chrono::duration_cast<std::chrono::microseconds>(endLowering - startLowering).count() / 1000.0;
 
       static SpdLogSpoof logSpoof;
-#if defined(__x86_64__) && false
+#if defined(__x86_64__)
       IRCompilerX64 compiler{std::make_unique<IRAdaptor>(&moduleOp, error)};
-#elif defined(__aarch64__) || true
+#elif defined(__aarch64__)
       IRCompilerA64 compiler{std::make_unique<IRAdaptor>(&moduleOp, error)};
 #else
 #error "Baseline backend is only supported on x86_64 or aarch64 architectures."
@@ -72,10 +72,10 @@ class BaselineBackend : public ExecutionBackend {
       const auto baselineEmitStart = std::chrono::high_resolution_clock::now();
       std::unique_ptr<DynamicLoader> loader;
       if (!baselineDebugFileOut.getValue().empty()) {
-#if defined(__x86_64__) && false
+#if defined(__x86_64__)
          loader = std::make_unique<DebugLoader<IRCompilerX64::Assembler>>(compiler.assembler, error,
                                                                           baselineDebugFileOut.getValue());
-#elif defined(__aarch64__) || true
+#elif defined(__aarch64__)
          loader = std::make_unique<DebugLoader<IRCompilerA64::Assembler>>(compiler.assembler, error,
                                                                           baselineDebugFileOut.getValue());
 #else
