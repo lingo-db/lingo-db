@@ -713,10 +713,13 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
 
          mlir::Type type = nameResult->resultType.toMlirType(mlirContext);
 
+
          auto attrDef = nameResult->createRef(builder, attrManager);
-         return builder.create<tuples::GetColumnOp>(
+         mlir::Value col =  builder.create<tuples::GetColumnOp>(
             exprLocation,
             type, attrDef, translationContext->getCurrentTuple());
+
+         return col;
       }
       case ast::ExpressionClass::BOUND_CONSTANT: {
          auto constExpr = std::static_pointer_cast<ast::BoundConstantExpression>(expression);
@@ -846,7 +849,14 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
             case ast::ExpressionType::OPERATOR_PLUS: {
                assert(operatorExpr->children.size() == 2);
                left = translateExpression(builder, operatorExpr->children[0], context);
+             //  left = operatorExpr->children[0]->columnReference.value()->resultType.castValue(builder, left);
+
                right = translateExpression(builder, operatorExpr->children[1], context);
+               if (operatorExpr->children[1]->columnReference.has_value()) {
+                  right = operatorExpr->children[1]->columnReference.value()->resultType.castValue(builder, right);
+               }
+
+
                return translateBinaryOperatorExpression(builder, operatorExpr, context, left, right);
             }
             case ast::ExpressionType::OPERATOR_IS_NOT_NULL:
@@ -1714,9 +1724,16 @@ mlir::Value SQLMlirTranslator::translateAggregation(mlir::OpBuilder& builder, st
          for (size_t j = 0; j < aggregation->aggregations.at(i).size(); j++) {
             computed.emplace_back(aggregation->aggregations.at(i).at(j)->columnReference.value());
          }
+         std::vector<std::shared_ptr<ast::BoundFunctionExpression>> funcs;
+         for (auto& f: aggregation->aggregations.at(i)) {
+            if (f->functionName != "avg") {
+               funcs.emplace_back(f);
+            }
+         }
 
-         auto tree2 = translateGroupByAttributesAndAggregate(builder, prevAggr, location, localGroupByAttrs, aggregation->aggregations.at(i), aggregation->mapName);
+         auto tree2 = translateGroupByAttributesAndAggregate(builder, prevAggr, location, localGroupByAttrs, funcs, aggregation->mapName);
          prevAggr = tree2;
+         tree2 = createMap(builder, location, aggregation->mapName, aggregation->reconstructs.at(i), context, tree2);
          tree2 = mapToNull(builder, notAvailable, tree2);
          tree2 = mapToNullable(builder, localGroupByAttrs, localGroupByAttrsNullable, tree2);
 
@@ -1724,6 +1741,7 @@ mlir::Value SQLMlirTranslator::translateAggregation(mlir::OpBuilder& builder, st
 
          parts.push_back({tree2, localGroupByAttrsNullable, notAvailable, computed, aggregation->groupByNode->localPresentIntval[i].second});
       }
+
       mlir::Value currTree = parts[0].tree;
       std::vector currentAttributes(parts[0].groupByCols.begin(), parts[0].groupByCols.end());
       currentAttributes.insert(currentAttributes.end(), parts[0].groupByCols2.begin(), parts[0].groupByCols2.end());
