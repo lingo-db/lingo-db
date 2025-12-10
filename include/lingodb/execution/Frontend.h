@@ -11,12 +11,16 @@ class Frontend {
    protected:
    catalog::Catalog* catalog;
    Error error;
+   bool needsLLVM = true;
 
    std::unordered_map<std::string, double> timing;
 
    public:
    catalog::Catalog* getCatalog() const {
       return catalog;
+   }
+   void setNeedsLLVM(bool needsLLVM) {
+      Frontend::needsLLVM = needsLLVM;
    }
    void setCatalog(catalog::Catalog* catalog) {
       Frontend::catalog = catalog;
@@ -33,7 +37,7 @@ class Frontend {
 };
 std::unique_ptr<Frontend> createMLIRFrontend();
 std::unique_ptr<Frontend> createSQLFrontend();
-void initializeContext(mlir::MLIRContext& context);
+void initializeContext(mlir::MLIRContext& context, bool includeLLVM = true);
 
 } //namespace lingodb::execution
 

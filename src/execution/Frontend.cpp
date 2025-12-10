@@ -34,7 +34,7 @@
 #include <llvm/Support/SourceMgr.h>
 
 #include <iostream>
-void lingodb::execution::initializeContext(mlir::MLIRContext& context) {
+void lingodb::execution::initializeContext(mlir::MLIRContext& context, bool includeLLVM) {
    using namespace lingodb::compiler::dialect;
    mlir::DialectRegistry registry;
    registry.insert<mlir::BuiltinDialect>();
@@ -51,17 +51,18 @@ void lingodb::execution::initializeContext(mlir::MLIRContext& context) {
    registry.insert<mlir::memref::MemRefDialect>();
    registry.insert<util::UtilDialect>();
    registry.insert<mlir::scf::SCFDialect>();
-   // TODO: should we make this optional? Would require a cmake flag that deactivates the LLVM backend.
-   registry.insert<mlir::LLVM::LLVMDialect>();
-
+   if (includeLLVM) {
+      registry.insert<mlir::LLVM::LLVMDialect>();
+   }
 #if GPU_ENABLED == 1
    registry.insert<mlir::async::AsyncDialect>();
    registry.insert<mlir::gpu::GPUDialect>();
    mlir::NVVM::registerNVVMTargetInterfaceExternalModels(registry);
 #endif
-   mlir::registerAllExtensions(registry);
-   // TODO: same as above, should we make this optional?
-   mlir::registerAllToLLVMIRTranslations(registry);
+   if (includeLLVM) {
+      mlir::registerAllExtensions(registry);
+      mlir::registerAllToLLVMIRTranslations(registry);
+   }
    context.appendDialectRegistry(registry);
    context.loadAllAvailableDialects();
    context.loadDialect<relalg::RelAlgDialect>();
@@ -106,7 +107,8 @@ class SQLFrontend : public lingodb::execution::Frontend {
    mlir::OwningOpRef<mlir::ModuleOp> module;
    bool isFile = false;
    void load(std::string fileOrDirect) {
-      lingodb::execution::initializeContext(context);
+      auto start = std::chrono::high_resolution_clock::now();
+      lingodb::execution::initializeContext(context, needsLLVM);
       Driver drv;
       try {
          if (!drv.parse(fileOrDirect, isFile)) {
@@ -146,6 +148,8 @@ class SQLFrontend : public lingodb::execution::Frontend {
       } catch (lingodb::FrontendError& e) {
          error.emit() << e.what();
       }
+      auto end = std::chrono::high_resolution_clock::now();
+      timing["frontend"] = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000.0;
    }
 
    void loadFromString(std::string sql) override {

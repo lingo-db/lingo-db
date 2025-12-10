@@ -23,6 +23,7 @@ class ExecutionBackend {
    void disableVerification() {
       verify = false;
    }
+   virtual bool isLLVMBased() const { return false; }
    virtual void execute(mlir::ModuleOp& moduleOp, runtime::ExecutionContext* executionContext) = 0;
    void setSerializationState(std::shared_ptr<SnapshotState> serializationState) {
       ExecutionBackend::serializationState = serializationState;

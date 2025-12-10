@@ -42,6 +42,7 @@ class BaselineBackend : public ExecutionBackend {
       }
       return true;
    }
+   bool isLLVMBased() const override { return false; }
 
    void execute(mlir::ModuleOp& moduleOp, lingodb::runtime::ExecutionContext* executionContext) override {
       auto startLowering = std::chrono::high_resolution_clock::now();

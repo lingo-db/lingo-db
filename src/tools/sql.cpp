@@ -48,6 +48,8 @@ class LoggingTimingPrinter : public execution::TimingProcessor {
             timings["execution"] += t;
          } else if (name == "QOpt") {
             timings["qopt"] += t;
+         } else if (name == "frontend") {
+            timings["frontend"] += t;
          } else if (name == "lowerRelAlg") {
             timings["lowerrelalg"] += t;
          } else if (name == "lowerSubOp") {
