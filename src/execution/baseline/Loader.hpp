@@ -87,7 +87,7 @@ class DebugLoader final : public DynamicLoader {
       auto rc = ::pclose(pPipe);
       if (WEXITSTATUS(rc)) {
          hasError = true;
-         error.emit() << "Could not compile query module statically (Pipe could not be closed)C";
+         error.emit() << "Could not compile query module statically (Pipe could not be closed)";
          return;
       }
       handle = dlopen(linkedFileName.c_str(), RTLD_LAZY);
