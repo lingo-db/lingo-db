@@ -33,10 +33,12 @@ endif ()
 
 if(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "x86_64")
     set(TPDE_TARGET "x86_64-linux")
+    set(TPDE_ARCH "opteron")
     set(BC_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/snippets_x64.bc")
     set(HPP_OUTPUT "${SNIPPED_INCLUDE_DIR}/snippet_encoders_x64.hpp")
 elseif(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "aarch64")
     set(TPDE_TARGET "aarch64-linux")
+    set(TPDE_ARCH "armv8.5-a")
     set(BC_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/snippets_arm.bc")
     set(HPP_OUTPUT "${SNIPPED_INCLUDE_DIR}/snippet_encoders_arm.hpp")
 else()
@@ -45,7 +47,7 @@ endif()
 
 add_custom_command(
         OUTPUT ${BC_OUTPUT}
-        COMMAND ${CLANG_EXECUTABLE} -c -emit-llvm -ffreestanding -fcf-protection=none -O3 -fomit-frame-pointer -fno-math-errno --target=${TPDE_TARGET} -o ${BC_OUTPUT} ${CMAKE_CURRENT_SOURCE_DIR}/snippets.c
+        COMMAND ${CLANG_EXECUTABLE} -c -emit-llvm -ffreestanding -fcf-protection=none -O3 -fomit-frame-pointer -fno-math-errno --target=${TPDE_TARGET} -march=${TPDE_ARCH} -o ${BC_OUTPUT} ${CMAKE_CURRENT_SOURCE_DIR}/snippets.c
         DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/snippets.c
         DEPENDS_EXPLICIT_ONLY
         COMMENT "Generating LLVM bitcode for ${CMAKE_HOST_SYSTEM_PROCESSOR}"
