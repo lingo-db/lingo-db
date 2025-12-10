@@ -94,10 +94,18 @@ PyObject* PythonRuntime::getAttr2(PyObject* obj, PyObject* attr){
    return PyObject_GetAttr(obj, attr);
 }
 PyObject* PythonRuntime::call0(PyObject* callable){
-   return PyObject_CallFunctionObjArgs(callable, NULL);
+   auto res= PyObject_CallFunctionObjArgs(callable, NULL);
+   if (! res) {
+      throw_python_error();
+   }
+   return res;
 }
 PyObject* PythonRuntime::call1(PyObject* callable, PyObject* arg1){
-        return PyObject_CallFunctionObjArgs(callable, arg1, NULL);
+   auto res =PyObject_CallFunctionObjArgs(callable, arg1, NULL);
+   if (! res) {
+      throw_python_error();
+   }
+   return res;
 }
 PyObject* PythonRuntime::call2(PyObject* callable, PyObject* arg1, PyObject* arg2){
    return PyObject_CallFunctionObjArgs(callable, arg1, arg2, NULL);

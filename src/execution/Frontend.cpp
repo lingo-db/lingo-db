@@ -111,6 +111,7 @@ class SQLFrontend : public lingodb::execution::Frontend {
       auto start = std::chrono::high_resolution_clock::now();
       lingodb::execution::initializeContext(context);
       Driver drv;
+      auto* queryBlock = new mlir::Block;
       try {
          if (!drv.parse(fileOrDirect, isFile)) {
             auto results = drv.result;
@@ -123,13 +124,12 @@ class SQLFrontend : public lingodb::execution::Frontend {
             sqlContext->catalog = catalog;
             lingodb::analyzer::SQLQueryAnalyzer analyzer{catalog};
             mlir::OpBuilder builder(&context);
-            mlir::ModuleOp moduleOp = builder.create<mlir::ModuleOp>(builder.getUnknownLoc());
-            auto* queryBlock = new mlir::Block;
+            module = builder.create<mlir::ModuleOp>(builder.getUnknownLoc());
             if (drv.result[0]) {
                drv.result[0] = analyzer.canonicalizeAndAnalyze(drv.result[0], sqlContext);
 
 
-               lingodb::translator::SQLMlirTranslator translator{moduleOp, catalog};
+               lingodb::translator::SQLMlirTranslator translator{*module, catalog};
                std::vector<mlir::Type> returnTypes;
                {
                   mlir::OpBuilder::InsertionGuard guard(builder);
@@ -145,15 +145,15 @@ class SQLFrontend : public lingodb::execution::Frontend {
                builder.setInsertionPointToStart(queryBlock);
                builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc());
             }
-            builder.setInsertionPointToStart(moduleOp.getBody());
+            builder.setInsertionPointToStart(module->getBody());
             mlir::func::FuncOp funcOp = builder.create<mlir::func::FuncOp>(builder.getUnknownLoc(), "main", builder.getFunctionType({}, {}));
             funcOp.getBody().push_back(queryBlock);
-            module = moduleOp;
          } else {
             error.emit() << "Error during parsing";
          }
       } catch (lingodb::FrontendError& e) {
          error.emit() << e.what();
+         delete queryBlock;
       }
       auto end = std::chrono::high_resolution_clock::now();
       timing["frontend"] = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000.0;

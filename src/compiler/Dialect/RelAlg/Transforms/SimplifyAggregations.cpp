@@ -190,6 +190,7 @@ class PyInterpConstantPattern : public mlir::RewritePattern {
 
    mlir::LogicalResult matchAndRewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
       auto castToPyOp = mlir::cast<py_interp::CastToPyObject>(op);
+      if (!mlir::isa<db::StringType>(castToPyOp.getFrom().getType())) return mlir::failure();
       if (auto constOp = mlir::dyn_cast_or_null<db::ConstantOp>(castToPyOp.getFrom().getDefiningOp())) {
          rewriter.replaceOpWithNewOp<py_interp::ConstStrPyObject>(op, castToPyOp.getType(), mlir::cast<mlir::StringAttr>(constOp.getValue()));
          return mlir::success(true);
@@ -228,8 +229,8 @@ class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir
          patterns.insert<WrapAggrFuncPattern>(&getContext());
          patterns.insert<WrapCountRowsPattern>(&getContext());
          patterns.insert<RewriteComplexAggrFuncs>(&getContext());
-         patterns.insert<PyInterpConstantPattern>(&getContext());
-         patterns.insert<RewriteGetAttrPattern>(&getContext());
+         //patterns.insert<PyInterpConstantPattern>(&getContext());
+         //patterns.insert<RewriteGetAttrPattern>(&getContext());
 
          if (lingodb::compiler::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
             assert(false && "should not happen");

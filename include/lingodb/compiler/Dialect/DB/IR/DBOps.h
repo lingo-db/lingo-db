@@ -13,7 +13,10 @@
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
-
+struct ListMemory
+    : public mlir::SideEffects::Resource::Base<ListMemory> {
+   mlir::StringRef getName() final { return "ListMemory"; }
+};
 #define GET_OP_CLASSES
 #include "lingodb/compiler/Dialect/DB/IR/DBOps.h.inc"
 mlir::Type getBaseType(mlir::Type t);

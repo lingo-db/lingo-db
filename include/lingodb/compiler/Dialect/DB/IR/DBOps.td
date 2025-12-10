@@ -157,15 +157,15 @@ def DB_ConstantOp : DB_Op<"constant", [ConstantLike,Pure]> {
     let assemblyFormat = "`(` $value `)` `:` type($result) attr-dict";
     let hasFolder = 1;
 }
+def ListMemory : Resource<"ListMemory">;
 
-
-def CreateListOp : DB_Op<"create_list", []> {
+def CreateListOp : DB_Op<"create_list", [MemoryEffects<[MemAlloc<ListMemory>]>]> {
     let summary = "Create list";
     let results = (outs ListType:$list);
     let assemblyFormat = "type($list) attr-dict";
 }
 
-def DB_ListGetOp : DB_Op<"list_get", [Pure]> {
+def DB_ListGetOp : DB_Op<"list_get", [MemoryEffects<[MemRead<ListMemory>]>]> {
     let summary = "Get element from list";
 
     let arguments = (ins ListType:$list, Index:$index);
@@ -173,21 +173,21 @@ def DB_ListGetOp : DB_Op<"list_get", [Pure]> {
     let assemblyFormat = "$list `:` type($list) `[` $index `]` `:` type($element) attr-dict";
 }
 
-def DB_ListSetOp : DB_Op<"list_set", []> {
+def DB_ListSetOp : DB_Op<"list_set", [MemoryEffects<[MemWrite<ListMemory>]>]> {
     let summary = "Set element in list";
 
     let arguments = (ins ListType:$list, Index:$index, AnyType:$element);
     let assemblyFormat = "$list `:` type($list) `[` $index `]` `=` $element `:` type($element) attr-dict";
 }
 
-def DB_ListAppendOp : DB_Op<"list_append"> {
+def DB_ListAppendOp : DB_Op<"list_append",[MemoryEffects<[MemWrite<ListMemory>]>]> {
     let summary = "Append element to list";
 
     let arguments = (ins ListType:$list, AnyType:$element);
     let assemblyFormat = "$list `:` type($list)  `,` $element `:` type($element) attr-dict";
 }
 
-def ListLengthOp : DB_Op<"list_length", []> {
+def ListLengthOp : DB_Op<"list_length", [MemoryEffects<[MemRead<ListMemory>]>]> {
     let summary = "Get length of list";
 
     let arguments = (ins ListType:$list);

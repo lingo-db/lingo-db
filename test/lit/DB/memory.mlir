@@ -1,5 +1,6 @@
-// RUN: env LINGODB_EXECUTION_MODE=DEFAULT run-mlir %s | FileCheck %s
-// RUN: %if baseline-backend %{LINGODB_EXECUTION_MODE=BASELINE run-mlir %s | FileCheck %s %}
+// RUN: LINGODB_EXECUTION_MODE=DEFAULT LINGODB_OPT_MEMORY_MANAGEMENT=false run-mlir %s | FileCheck %s
+// RUN: %if baseline-backend %{LINGODB_EXECUTION_MODE=BASELINE LINGODB_OPT_MEMORY_MANAGEMENT=false run-mlir %s | FileCheck %s %}
+
 
  module {
     func.func @list_str_cleanup(%arg0: !db.list<!db.string>) {
@@ -31,8 +32,9 @@
         //CHECK: index(0)
         db.runtime_call "DumpValue" (%len_empty2) : (index) -> ()
 	    db.memory.cleanup_use %list : !db.list<i32>
+		%otherstr = db.constant ("This is another long string!") : !db.string
 
-	    %tstr = db.runtime_call "ToLower"(%0) : (!db.string) -> !db.string
+	    %tstr = db.runtime_call "ToLower"(%otherstr) : (!db.string) -> !db.string
 
 	    %list_str = db.create_list !db.list<!db.string>
 	    db.memory.add_use %tstr : !db.string
