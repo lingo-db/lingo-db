@@ -225,9 +225,9 @@ select * from (values (1,2,3)) t(x,y,z) order by x, y desc, z asc;
 select * from (values (1,2,3)) t(x,y,z) order by 1, 2 desc, 3 asc;
 --//CHECK: %{{.*}} = relalg.sort %{{.*}} [(@{{.*}}::@const{{.*}},asc),(@{{.*}}::@const{{.*}},desc),(@{{.*}}::@const{{.*}},asc)]
 with t (x,y,z) as (select * from (values (1,2,3)) t(x,y,z) order by x, y desc, z asc) select * from t where x=1;
---//CHECK: %{{.*}} = relalg.aggregation
---//CHECK: %{{.*}} = relalg.aggregation
---//CHECK: %{{.*}} = relalg.aggregation
+--//CHECK: %[[AGGR1:.*]] = relalg.aggregation
+--//CHECK: %[[AGGR2:.*]] = relalg.aggregation %[[AGGR1]]
+--//CHECK: %{{.*}} = relalg.aggregation %[[AGGR2]]
 --//CHECK: %{{.*}} = relalg.union all
 --//CHECK: %{{.*}} = relalg.union all
 select x,y,sum(z) from (values (1,2,3)) t(x,y,z) group by rollup(x,y);
@@ -327,9 +327,9 @@ select x::float from (values (1)) t(x) group by x::float;
 --//CHECK:  %{{.*}} = relalg.aggregation %2 [@{{.*}}::@{{.*}}] computes : [@{{.*}}::@{{.*}}({type = i32})] (%arg0: !tuples.tuplestream,%arg1: !tuples.tuple){
 --//CHECK:      %5 = relalg.aggrfn min @{{.*}}::@{{.*}} %arg0 : i32
 select UPPER(y || 'extra'), min(y) from (values ('Value1', 1), ('VALUE2', 2), ('VALUE3', 3) ) t(x,y) group by UPPER(y || 'extra');
---//CHECK: %{{.*}} = relalg.aggregation
---//CHECK: %{{.*}} = relalg.aggregation
---//CHECK: %{{.*}} = relalg.aggregation
+--//CHECK: %[[AGGR1:.*]] = relalg.aggregation
+--//CHECK: %[[AGGR2:.*]] = relalg.aggregation %[[AGGR1]]
+--//CHECK: %[[AGGR3:.*]] = relalg.aggregation %[[AGGR2]]
 --//CHECK: %{{.*}} = relalg.union all
 --//CHECK: %{{.*}} = relalg.union all
 --//CHECK:  %{{.*}} = relalg.map %{{.*}} computes : [@{{.*}}::@{{.*}}({type = i64})] (%arg0: !tuples.tuple)
@@ -377,6 +377,13 @@ from (values (1,1), (2,2), (3,3)) t(x,y)
 from test
 |> LIMIT 1
 |> union all (select * from test);
+--//CHECK: %[[AGGR1:.*]] = relalg.aggregation
+--//CHECK: %[[AGGR2:.*]] = relalg.aggregation %[[AGGR1]]
+--//CHECK: %{{.*}} = relalg.aggregation %[[AGGR2]]
+--//CHECK: %{{.*}} = relalg.union all
+--//CHECK: %{{.*}} = relalg.union all
+from (values (1,2,3)) t(x,y,z)
+ |> AGGREGATE sum(z) group by rollup(x,y);
 --//CHECK:  %{{.*}} = relalg.basetable  {table_identifier = "test"} columns: {}
 select 1 from test;
 --//CHECK:  %{{.*}} = relalg.basetable  {table_identifier = "test"} columns: {bool => @test::@bool({type = !db.nullable<i1>})}
