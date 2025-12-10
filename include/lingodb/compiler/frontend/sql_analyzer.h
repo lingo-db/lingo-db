@@ -1,6 +1,7 @@
 #ifndef LINGODB_COMPILER_FRONTEND_SQL_ANALYZER_H
 #define LINGODB_COMPILER_FRONTEND_SQL_ANALYZER_H
 
+#include "ast/bound/bound_aggregation.h"
 #include "ast/bound/bound_insert_node.h"
 #include "lingodb/compiler/frontend/ast/bound/bound_expression.h"
 #include "lingodb/compiler/frontend/ast/bound/bound_resultmodifier.h"
@@ -9,8 +10,6 @@
 #include "lingodb/compiler/frontend/frontend_error.h"
 #include "sql_context.h"
 #define DEBUG false
-
-#include "ast/bound/bound_aggregation.h"
 
 #include <boost/context/detail/disable_overload.hpp>
 #include <boost/context/stack_context.hpp>

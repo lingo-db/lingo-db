@@ -20,8 +20,7 @@ class BoundAggregationNode : public AstNode {
 
    std::vector<std::shared_ptr<BoundExpression>> evalBeforeAggr;
 
-
-   std::vector<std::vector<std::shared_ptr<ast::BoundExpression>>> reconstructs;
+   std::vector<std::vector<std::shared_ptr<BoundExpression>>> reconstructs;
 };
 } // namespace lingodb::ast
 #endif

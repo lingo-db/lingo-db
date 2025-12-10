@@ -713,13 +713,10 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
 
          mlir::Type type = nameResult->resultType.toMlirType(mlirContext);
 
-
          auto attrDef = nameResult->createRef(builder, attrManager);
-         mlir::Value col =  builder.create<tuples::GetColumnOp>(
+         return builder.create<tuples::GetColumnOp>(
             exprLocation,
             type, attrDef, translationContext->getCurrentTuple());
-
-         return col;
       }
       case ast::ExpressionClass::BOUND_CONSTANT: {
          auto constExpr = std::static_pointer_cast<ast::BoundConstantExpression>(expression);
@@ -849,14 +846,7 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
             case ast::ExpressionType::OPERATOR_PLUS: {
                assert(operatorExpr->children.size() == 2);
                left = translateExpression(builder, operatorExpr->children[0], context);
-             //  left = operatorExpr->children[0]->columnReference.value()->resultType.castValue(builder, left);
-
                right = translateExpression(builder, operatorExpr->children[1], context);
-               if (operatorExpr->children[1]->columnReference.has_value()) {
-                  right = operatorExpr->children[1]->columnReference.value()->resultType.castValue(builder, right);
-               }
-
-
                return translateBinaryOperatorExpression(builder, operatorExpr, context, left, right);
             }
             case ast::ExpressionType::OPERATOR_IS_NOT_NULL:
@@ -1725,7 +1715,7 @@ mlir::Value SQLMlirTranslator::translateAggregation(mlir::OpBuilder& builder, st
             computed.emplace_back(aggregation->aggregations.at(i).at(j)->columnReference.value());
          }
          std::vector<std::shared_ptr<ast::BoundFunctionExpression>> funcs;
-         for (auto& f: aggregation->aggregations.at(i)) {
+         for (auto& f : aggregation->aggregations.at(i)) {
             if (f->functionName != "avg") {
                funcs.emplace_back(f);
             }
