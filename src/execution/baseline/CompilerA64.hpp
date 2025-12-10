@@ -3,7 +3,7 @@
 #include "Adaptor.hpp"
 #include "CompilerBase.hpp"
 #include "CompilerConfig.hpp"
-#include "snippet_encoders_arm-apple.hpp"
+#include "snippet_encoders_arm.hpp"
 
 #include <tpde/ValueRef.hpp>
 #include <tpde/arm64/CompilerA64.hpp>
