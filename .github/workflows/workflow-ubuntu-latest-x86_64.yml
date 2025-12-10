@@ -20,6 +20,12 @@ jobs:
       image: ghcr.io/lingo-db/lingodb-udf-dev:ec1cc4a4753753a45aabf663272997413746ea7b
       options: --cpus 12
     steps:
+      - name: Cleanup
+        run : |
+          rm -rf ${GITHUB_WORKSPACE}
+          mkdir -p ${GITHUB_WORKSPACE}
+      - name: Rewrite git URLs to use mirror
+        run: git config --global url.https://github.com/spack/gnuconfig.git.insteadOf https://git.savannah.gnu.org/git/config.git
       - name: Checkout
         uses: actions/checkout@v2
         with:
@@ -66,8 +72,16 @@ jobs:
       options: --cpus 12
       image: ghcr.io/lingo-db/lingodb-py-dev:cb8141fb8f200d11ca497107b797e24e72335c1c
     steps:
+      - name: Cleanup
+        run: |
+          rm -rf ${GITHUB_WORKSPACE}
+          mkdir -p ${GITHUB_WORKSPACE}
+      - name: Rewrite git URLs to use mirror
+        run: git config --global url.https://github.com/spack/gnuconfig.git.insteadOf https://git.savannah.gnu.org/git/config.git
       - name: Checkout
         uses: actions/checkout@v2
+        with:
+          submodules: recursive
       - name: Build
         run: |
           rm -rf /built-packages
