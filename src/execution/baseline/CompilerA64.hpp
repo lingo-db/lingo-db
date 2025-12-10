@@ -36,10 +36,10 @@ struct IRCompilerA64
    void load_address_of_global(const SymRef global_sym, const AsmReg dst) {
       // emit lea with relocation
       reloc_text(
-          global_sym, tpde::elf::R_AARCH64_ADR_PREL_PG_HI21, this->text_writer.offset());
+         global_sym, tpde::elf::R_AARCH64_ADR_PREL_PG_HI21, this->text_writer.offset());
       ASMNC(ADRP, dst, 0, 0);
       reloc_text(
-          global_sym, tpde::elf::R_AARCH64_ADD_ABS_LO12_NC, this->text_writer.offset());
+         global_sym, tpde::elf::R_AARCH64_ADD_ABS_LO12_NC, this->text_writer.offset());
       ASMNC(ADDxi, dst, dst, 0);
    }
 
@@ -162,8 +162,7 @@ struct IRCompilerA64
                case 64: {
                   AsmReg rhs_reg = rhs_pr.has_reg() ? rhs_pr.cur_reg() : rhs_pr.load_to_reg();
                   ASM(CMPx, lhs_reg, rhs_reg);
-               }
-                  break;
+               } break;
                default:
                   assert(0);
                   return false;
@@ -267,10 +266,10 @@ struct IRCompilerA64
       assert(sym.valid());
       // mov the ptr from the GOT
       reloc_text(
-          sym, tpde::elf::R_AARCH64_ADR_GOT_PAGE, this->text_writer.offset());
+         sym, tpde::elf::R_AARCH64_ADR_GOT_PAGE, this->text_writer.offset());
       ASMNC(ADRP, dst, 0, 0);
       reloc_text(
-          sym, tpde::elf::R_AARCH64_LD64_GOT_LO12_NC, this->text_writer.offset());
+         sym, tpde::elf::R_AARCH64_LD64_GOT_LO12_NC, this->text_writer.offset());
       ASMNC(LDRxu, dst, dst, 0);
    }
 
@@ -286,7 +285,6 @@ struct IRCompilerA64
       return CallBuilder{*this, std::get<tpde::a64::CCAssignerAAPCS>(cc_assigners)};
    }
 };
-
 
 // NOLINTEND(readability-identifier-naming)
 }

@@ -18,6 +18,5 @@ struct CompilerConfig : tpde::a64::PlatformConfig {
 };
 #endif
 
-
 // NOLINTEND(readability-identifier-naming)
 }
