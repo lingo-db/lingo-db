@@ -3502,7 +3502,10 @@ agg_expr:
     {
         auto aggNode = mkNode<lingodb::ast::AggregationNode>(@$);
         aggNode->groupByNode = $group_clause_with_alias;
-        aggNode->aggregations = $func_expr_list;
+        for(auto& funcExpr : $func_expr_list) {
+             aggNode->aggregations.emplace(funcExpr,  aggNode->aggregations.size() );
+        }
+
         $$ = aggNode;
       
         

@@ -110,6 +110,14 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                extendBeforeWindowPipeOp->input = transformed;
                transformed = extendBeforeWindowPipeOp;
 
+               if (selectNode->having) {
+                  auto pipe = drv.nf.node<ast::PipeOperator>(selectNode->having->loc, ast::PipeOperatorType::WHERE, selectNode->having);
+                  pipe->input = transformed;
+
+                  transformed = pipe;
+                  selectNode->having = nullptr;
+               }
+
                //Transform target selection
                if (selectNode->selectList) {
                   auto pipe = drv.nf.node<ast::PipeOperator>(selectNode->selectList->loc, ast::PipeOperatorType::SELECT, selectNode->selectList);
@@ -125,13 +133,7 @@ std::shared_ptr<ast::TableProducer> SQLCanonicalizer::canonicalize(std::shared_p
                   selectNode->selectList = nullptr;
                }
 
-               if (selectNode->having) {
-                  auto pipe = drv.nf.node<ast::PipeOperator>(selectNode->having->loc, ast::PipeOperatorType::WHERE, selectNode->having);
-                  pipe->input = transformed;
 
-                  transformed = pipe;
-                  selectNode->having = nullptr;
-               }
 
                //Transform modifiers
                for (auto modifier : selectNode->modifiers) {
@@ -434,12 +436,21 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeFunctionExp
 
    std::string alias = functionExpr->alias.empty() ? functionExpr->functionName : functionExpr->alias;
    if (functionExpr->type == ast::ExpressionType::AGGREGATE) {
+      bool force = !functionExpr->alias.empty();
       functionExpr->alias = functionExpr->functionName + "_" + std::to_string(i);
       i++;
 
       auto columnRef = drv.nf.node<ast::ColumnRefExpression>(functionExpr->loc, functionExpr->alias);
       columnRef->alias = columnAlias;
-      context->currentScope->aggregationNode->aggregations.push_back(functionExpr);
+
+      auto r = context->currentScope->aggregationNode->aggregations.emplace(functionExpr, context->currentScope->aggregationNode->aggregations.size());
+      if (!r.second) {
+         // For duplicate aggregations, reference the already-registered aggregation
+         // by its generated alias, but preserve the original columnAlias as the displayName
+         columnRef->columnNames[0] = r.first->first->alias;
+         columnRef->alias = columnAlias;
+      }
+
       return columnRef;
 
    } else {
@@ -1220,11 +1231,12 @@ std::shared_ptr<ast::BoundAggregationNode> SQLQueryAnalyzer::analyzeAggregation(
    context->currentScope->targetInfo.clear();
 
    std::vector<std::shared_ptr<ast::BoundFunctionExpression>> boundAggregationExpressions{};
-   /**
-   * Analyze AggregationExpressions
-   */
-   bool nullable = !aggregationNode->groupByNode || aggregationNode->groupByNode->groupByExpressions.empty();
-   std::ranges::transform(aggregationNode->aggregations, std::back_inserter(boundAggregationExpressions), [&](auto expr) {
+   boundAggregationExpressions.resize(aggregationNode->aggregations.size());
+         /**
+          * Analyze AggregationExpressions
+          */
+         bool nullable = !aggregationNode->groupByNode || aggregationNode->groupByNode->groupByExpressions.empty();
+         for (auto& [expr, index]: aggregationNode->aggregations) {
       auto boundExpr = analyzeExpression(expr, context, resolverScope);
       assert(boundExpr->exprClass == ast::ExpressionClass::BOUND_FUNCTION);
       auto boundFunction = std::static_pointer_cast<ast::BoundFunctionExpression>(boundExpr);
@@ -1239,8 +1251,9 @@ std::shared_ptr<ast::BoundAggregationNode> SQLQueryAnalyzer::analyzeAggregation(
          boundExpr->resultType->isNullable = nullable;
          boundExpr->columnReference.value()->resultType.isNullable = nullable;
       }
-      return boundFunction;
-   });
+      boundAggregationExpressions[index] = boundFunction;
+         }
+
    /**
    * Analyze GroupByNode
    */
@@ -1647,7 +1660,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableRef(std::share
             context->pushNewScope();
             subQueryScope = context->currentScope;
             t = analyzeTableProducer(subquery->subSelectNode, context, subQueryResolverScope);
-            targetInfo = context->currentScope->targetInfo;
+            targetInfo = subQueryScope->targetInfo;
             context->popCurrentScope();
          }
          size_t i = 0;
@@ -2952,7 +2965,11 @@ std::shared_ptr<ast::BoundColumnRefExpression> SQLQueryAnalyzer::analyzeColumnRe
    if (!found) {
       error("Column not found", columnRef->loc);
    }
+
    found->displayName = !columnRef->alias.empty() || columnRef->forceToUseAlias ? columnRef->alias : found->displayName;
+
+
+
    return drv.nf.node<ast::BoundColumnRefExpression>(columnRef->loc, found->resultType, found, columnRef->alias);
 }
 
