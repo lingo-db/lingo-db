@@ -735,12 +735,16 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
                byval_size = 16;
             }
          }
-         if (auto varlenTy = dyn_cast<dialect::util::VarLen32Type>(arg.getType())) {
+         if (dyn_cast<dialect::util::VarLen32Type>(arg.getType())) {
             flag = Base::CallArg::Flag::allow_split;
             byval_align = 16;
             byval_size = 16;
          }
-
+         if (dyn_cast<dialect::util::BufferType>(arg.getType())) {
+            flag = Base::CallArg::Flag::allow_split;
+            byval_align = 16;
+            byval_size = 16;
+         }
          builder.add_arg(typename Base::CallArg{arg, flag, byval_align, byval_size});
       }
 
@@ -988,7 +992,6 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
       // part1 is the pointer to the content
       // -> content is a StringRef pointing inside the mlir module
       // -> as long as we keep that alive past query execution, we can just hand out the pointer!
-      std::cout << reinterpret_cast<const void*> (content.data()) << std::endl;
       res_ref.part(1).set_value(ValuePart{std::bit_cast<uint64_t>(content.data()), 8, Config::GP_BANK});
       return true;
    }
