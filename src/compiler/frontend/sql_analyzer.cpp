@@ -1027,12 +1027,12 @@ std::shared_ptr<ast::BoundAggregationNode> SQLQueryAnalyzer::analyzeAggregation(
    std::vector<std::shared_ptr<ast::BoundExpression>> evalBeforeAggr;
 
    //Clear targetinfo (see PIPE SQL Syntax)
-   context->currentScope->targetInfo.targetColumns.clear();
+   context->currentScope->targetInfo.clear();
 
    std::vector<std::shared_ptr<ast::BoundFunctionExpression>> boundAggregationExpressions{};
    /**
-          * Analyze AggregationExpressions
-          */
+   * Analyze AggregationExpressions
+   */
    bool nullable = !aggregationNode->groupByNode || aggregationNode->groupByNode->groupByExpressions.empty();
    std::ranges::transform(aggregationNode->aggregations, std::back_inserter(boundAggregationExpressions), [&](auto expr) {
       auto boundExpr = analyzeExpression(expr, context, resolverScope);
@@ -1040,10 +1040,11 @@ std::shared_ptr<ast::BoundAggregationNode> SQLQueryAnalyzer::analyzeAggregation(
       auto boundFunction = std::static_pointer_cast<ast::BoundFunctionExpression>(boundExpr);
 
       auto fName = boundFunction->functionName;
-      std::ranges::transform(fName, fName.begin(), ::toupper);/**
-             * Updadte nullable flag for count aggregation.
-             * If empty group by clause set nullable=true else false
-             */
+      std::ranges::transform(fName, fName.begin(), ::toupper);
+      /**
+      * Updadte nullable flag for count aggregation.
+      * If empty group by clause set nullable=true else false
+      */
       if (fName != "COUNT" && fName != "COUNT*" && nullable) {
          boundExpr->resultType->isNullable = nullable;
          boundExpr->columnReference.value()->resultType.isNullable = nullable;
@@ -1051,8 +1052,8 @@ std::shared_ptr<ast::BoundAggregationNode> SQLQueryAnalyzer::analyzeAggregation(
       return boundFunction;
    });
    /**
-          * Analyze GroupByNode
-          */
+   * Analyze GroupByNode
+   */
    if (aggregationNode->groupByNode) {
       std::ranges::transform(aggregationNode->groupByNode->groupByExpressions, std::back_inserter(groupColumnReferences), [&](auto expr) {
          auto boundExpression = analyzeExpression(expr, context, resolverScope);
@@ -1084,8 +1085,8 @@ std::shared_ptr<ast::BoundAggregationNode> SQLQueryAnalyzer::analyzeAggregation(
    std::vector<std::shared_ptr<ast::BoundExpression>> toMap{};
 
    /**
-          * Find Arguments of aggregation functions that need to be extended/mapped first
-          */
+   * Find Arguments of aggregation functions that need to be extended/mapped first
+   */
    auto mapName = context->getUniqueScope("aggMap");
    for (auto& aggr : boundAggregationExpressions) {
       //Add Aggregations to TargetInfo for the current scope (see PIPE SQL Syntax)
@@ -1110,17 +1111,22 @@ std::shared_ptr<ast::BoundAggregationNode> SQLQueryAnalyzer::analyzeAggregation(
    auto boundAggrNode = drv.nf.node<ast::BoundAggregationNode>(pipeOperator->loc, boundGroupByNode, std::vector<std::vector<std::shared_ptr<ast::BoundFunctionExpression>>>{boundAggregationExpressions}, toMap, mapName, evalBeforeAggr);
 
    /**
-          * Handle grouping sets
-          */
+   * Handle grouping sets
+   */
    if (aggregationNode->groupByNode && !aggregationNode->groupByNode->groupingSet.empty()) {
+      auto originalAggrFunctions = boundAggrNode->aggregations.front();
+
+      /**
+       * Struct to hold decomposed aggregation information: currently only AVG is decomposed into SUM and COUNT
+       */
       struct DecomposedAggregation {
          std::shared_ptr<ast::BoundFunctionExpression> originalFunction;
          std::shared_ptr<ast::BoundFunctionExpression> prev;
          std::vector<std::shared_ptr<ast::BoundFunctionExpression>> decomposedFunctions; // e.g., [SUM, COUNT] for AVG
          bool needsDecomposition;
       };
-      auto originalAggrFunctions = boundAggrNode->aggregations.front();
       std::vector<DecomposedAggregation> decomposedAggregations;
+      //Decompose necessary aggregation functions
       for (auto& aggr : boundAggregationExpressions) {
          auto fName = aggr->functionName;
          std::ranges::transform(fName, fName.begin(), ::toupper);
@@ -1153,7 +1159,8 @@ std::shared_ptr<ast::BoundAggregationNode> SQLQueryAnalyzer::analyzeAggregation(
          decomposedAggregations.push_back(decomposed);
       }
 
-      std::vector<std::pair<size_t, std::shared_ptr<ast::ColumnReference>>> avgReconstructionPairs; // {originalIdx, sumColRef, countColRef}
+      // {originalIdx, sumColRef | countColRef}
+      std::vector<std::pair<size_t, std::shared_ptr<ast::ColumnReference>>> avgReconstructionPairs;
 
 
       static size_t groupingSetId = 0;
@@ -1166,10 +1173,17 @@ std::shared_ptr<ast::BoundAggregationNode> SQLQueryAnalyzer::analyzeAggregation(
          std::vector<std::shared_ptr<ast::ColumnReference>> mapToNull{};
          std::vector<std::shared_ptr<ast::ColumnReference>> notAvailable{};
          std::vector<std::shared_ptr<ast::BoundFunctionExpression>> localFunctions;
+         /**
+          * Present bitmask: encodes which GROUP BY columns are NOT included in this grouping set.
+          * Each bit position j corresponds to a GROUP BY column. If bit j is set (1), that column
+          * is excluded from this grouping set and will be mapped to NULL in the result.
+          * Example: For GROUP BY a, b, c with grouping set (a, c), present = 0b010 (bit 1 set for column b)
+          * This is used by the GROUPING() function to identify which columns are aggregated.
+          */
          int present = 0;
          /*
-                * Get localGroupBy, mapToNull and notAvailable ColumnReferences
-                */
+         * Get localGroupBy, mapToNull and notAvailable ColumnReferences
+         */
          for (size_t j = 0; j < aggregationNode->groupByNode->groupByExpressions.size(); j++) {
             if (groupingSet.contains(j)) {
                localGroupBy.emplace_back(groupColumnReferences[j]);
@@ -1186,7 +1200,7 @@ std::shared_ptr<ast::BoundAggregationNode> SQLQueryAnalyzer::analyzeAggregation(
             }
          }
          std::vector<std::shared_ptr<ast::BoundExpression>> reconstructs{};
-         size_t x = 0;
+         size_t localFunctionIdx = 0;
          for (size_t aggrIdx = 0; aggrIdx < decomposedAggregations.size(); aggrIdx++) {
             auto& decomposed = decomposedAggregations[aggrIdx];
             auto columnReferenceAggr = std::make_shared<ast::ColumnReference>("groupingSetAgg_" + std::to_string(groupingSetId), decomposed.originalFunction->columnReference.value()->resultType, decomposed.originalFunction->columnReference.value()->name);
@@ -1195,30 +1209,32 @@ std::shared_ptr<ast::BoundAggregationNode> SQLQueryAnalyzer::analyzeAggregation(
             if (decomposed.needsDecomposition) {
                avgReconstructionPairs.push_back({aggrIdx, decomposed.originalFunction->columnReference.value()});
                //Handle AVG
-               size_t decompFuncIdx = 0;
                for (auto& decompFunc : decomposed.decomposedFunctions) {
-                  auto columnReferenceAggr = std::make_shared<ast::ColumnReference>(
+                  auto columnReferenceAggrDecompFunc = std::make_shared<ast::ColumnReference>(
                      "groupingSetAgg_" + std::to_string(groupingSetId),
                      decompFunc->columnReference.value()->resultType,
                      decompFunc->columnReference.value()->name);
                   auto localFunction = std::make_shared<ast::BoundFunctionExpression>(*decompFunc);
-                  localFunction->columnReference = columnReferenceAggr;
+                  localFunction->columnReference = columnReferenceAggrDecompFunc;
                   if (i > 0) {
-                     // For COUNT in rollup: SUM(previous_counts)
+                     // For COUNT/SUM in rollup: SUM(previous_counts/previous_sum)
                      localFunction->functionName = "SUM";
+                     //Get previous result
                      auto prevCountRef = std::make_shared<ast::BoundColumnRefExpression>(
                         decompFunc->resultType.value(),
                         std::make_shared<ast::ColumnReference>(
-                           boundAggrNode->aggregations[i - 1][x]->columnReference.value()->scope,
+                           boundAggrNode->aggregations[i - 1][localFunctionIdx]->columnReference.value()->scope,
                            decompFunc->resultType.value(),
-                           boundAggrNode->aggregations[i - 1][x]->columnReference.value()->name),
+                           boundAggrNode->aggregations[i - 1][localFunctionIdx]->columnReference.value()->name),
                         "");
                      localFunction->arguments[0] = prevCountRef;
                   }
                   localFunctions.emplace_back(localFunction);
-                  decompFuncIdx++;
-                  x++;
+                  localFunctionIdx++;
                }
+               /*
+                * Reconstruct AVG using SUM/COUNT
+                **/
                auto sumColRef = std::make_shared<ast::ColumnReference>(
                      "groupingSetAgg_" + std::to_string(groupingSetId),
                      decomposed.decomposedFunctions[0]->columnReference.value()->resultType,
@@ -1230,35 +1246,27 @@ std::shared_ptr<ast::BoundAggregationNode> SQLQueryAnalyzer::analyzeAggregation(
                auto originalColRef = decomposed.originalFunction->columnReference.value();
 
 
-               //Get common type
-
-               std::vector<NullableType> types{sumColRef->resultType, countColRef->resultType};
+               //Get common type for division operation
+               //Cast INT to DECIMAL(19,0) to match the AVG function's implementation,
+               //which performs decimal division to preserve precision
+               std::vector types{sumColRef->resultType.type.getTypeId() == catalog::LogicalTypeId::INT ? catalog::Type::decimal(19,0) : sumColRef->resultType , countColRef->resultType.type.getTypeId() == catalog::LogicalTypeId::INT ? catalog::Type::decimal(19,0) : countColRef->resultType};
 
                auto commonNumbers = SQLTypeUtils::toCommonNumber(types);
 
                std::vector<NullableType> castValues{};
                std::ranges::transform(commonNumbers, std::back_inserter(castValues), [](auto c) {
                   if (c.castType) {
-                     if (c.castType->type.getTypeId() == catalog::LogicalTypeId::INT) {
-                        //Change to decimal to mimic avg function behavior
-                        return NullableType(catalog::Type::decimal(19,0));
-                     }
                      return *c.castType;
                   }
                   return c;
                });
                sumColRef->resultType.castType = std::make_shared<NullableType>(castValues[0]);
-
                countColRef->resultType.castType = std::make_shared<NullableType>(castValues[1]);
-
                NullableType resultType = SQLTypeUtils::getCommonBaseType(castValues,  ast::ExpressionType::OPERATOR_DIVIDE);
-
-
-
                auto divisionExpr = drv.nf.node<ast::BoundOperatorExpression>(
                   pipeOperator->loc,
                   ast::ExpressionType::OPERATOR_DIVIDE,
-                  catalog::Type::decimal(38,19),
+                  resultType,
                   "",
                   std::vector<std::shared_ptr<ast::BoundExpression>>{
                      std::make_shared<ast::BoundColumnRefExpression>(
@@ -1266,7 +1274,7 @@ std::shared_ptr<ast::BoundAggregationNode> SQLQueryAnalyzer::analyzeAggregation(
                         sumColRef,
                         ""),
                      std::make_shared<ast::BoundColumnRefExpression>(
-                        catalog::Type::decimal(19,0),
+                        countColRef->resultType,
                         countColRef,
                         ""),
                   });
@@ -1275,7 +1283,7 @@ std::shared_ptr<ast::BoundAggregationNode> SQLQueryAnalyzer::analyzeAggregation(
 
 
             }
-            x++;
+            localFunctionIdx++;
 
                auto localFunction = std::make_shared<ast::BoundFunctionExpression>(*decomposed.originalFunction.get());
                localFunction->columnReference = columnReferenceAggr;
@@ -1345,7 +1353,8 @@ std::shared_ptr<ast::BoundAggregationNode> SQLQueryAnalyzer::analyzeAggregation(
          for (size_t j = 0; j < currentLocalAttributes.size(); j++) {
             auto left = currentAttributes[j];
             auto right = currentLocalAttributes[j];
-            auto unionColumnReference = std::make_shared<ast::ColumnReference>(rollUpUnionName + std::to_string(i), right->resultType, left->name);
+            // Union column: name from left (for consistency), type from right (for type widening)
+            auto unionColumnReference = std::make_shared<ast::ColumnReference>(rollUpUnionName + std::to_string(i), left->resultType, left->name);
             unionColumnReferences.emplace_back(unionColumnReference);
             unionColumnReference->displayName = left->displayName;
          }
@@ -1353,17 +1362,25 @@ std::shared_ptr<ast::BoundAggregationNode> SQLQueryAnalyzer::analyzeAggregation(
 
          boundAggrNode->groupByNode->unionColumnReferences.emplace_back(std::move(unionColumnReferences));
       }
+      /**
+       * Replace column references in the resolver scope to point to the final union results.
+       * 
+       * 1. GROUP BY columns: 
+       *    -  GROUP BY columns maintain their order through all grouping sets
+       * 
+       * 2. Aggregation columns: Use NAME matching (find_if with name/displayName)
+       *    - Necessary because AVG decomposition changes the number of aggregation columns
+       */
       for (size_t i = 0; i < boundAggrNode->groupByNode->groupByColumnReferences.size(); i++) {
          auto old = boundAggrNode->groupByNode->groupByColumnReferences[i];
          auto newN = boundAggrNode->groupByNode->unionColumnReferences.back().at(i);
          context->replace(resolverScope, old, newN);
       }
-      // Map original aggregation column refs to their final union refs
       const auto& finalUnion = boundAggrNode->groupByNode->unionColumnReferences.back();
       for (auto& origAggr : originalAggrFunctions) {
          auto old = origAggr->columnReference.value();
          auto it = std::ranges::find_if(finalUnion, [&](const auto& col) {
-            return col->name == old->name || col->displayName == old->displayName;
+            return col->name == old->name;
          });
          if (it != finalUnion.end()) {
             context->replace(resolverScope, old, *it);
