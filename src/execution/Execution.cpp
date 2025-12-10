@@ -145,8 +145,8 @@ class SubOpLoweringStep : public LoweringStep {
 
       subop::setCompressionEnabled(enabledPasses.contains("Compression"));
       lowerSubOpPm.addPass(subop::createLowerSubOpPass());
-      lowerSubOpPm.addPass(lingodb::compiler::createCanonicalizerPass());
       if (cleanupAfterSubOp.getValue()) {
+         lowerSubOpPm.addPass(lingodb::compiler::createCanonicalizerPass());
          lowerSubOpPm.addPass(mlir::createCSEPass());
       }
       if (mlir::failed(lowerSubOpPm.run(moduleOp))) {
@@ -281,7 +281,7 @@ class DefaultQueryExecuter : public QueryExecuter {
          exit(1);
       }
       auto& frontend = *queryExecutionConfig->frontend;
-
+      frontend.setNeedsLLVM(queryExecutionConfig->executionBackend && queryExecutionConfig->executionBackend->isLLVMBased());
       frontend.setCatalog(catalog);
       if (data) {
          frontend.loadFromString(data.value());
