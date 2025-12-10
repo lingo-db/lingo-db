@@ -54,13 +54,10 @@ struct IRCompilerA64
       unsigned int_width;
       if (mlir::isa<mlir::IntegerType>(ty)) {
          int_width = ty.getIntOrFloatBitWidth();
-      } else if (mlir::isa<
-                    mlir::IndexType>(ty)) {
-         // index type is always 64-bit on x86_64
+      } else if (mlir::isa<mlir::IndexType>(ty)) {
          int_width = 64;
       } else {
          assert(0 && "Unsupported type for comparison operation");
-         return false;
       }
       Jump::Kind jump;
 

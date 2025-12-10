@@ -1,4 +1,7 @@
 #if BASELINE_ENABLED == 1
+#if !defined(__linux__)
+#error "Baseline backend is only supported on Linux systems."
+#endif
 #if defined(__x86_64__)
    #include "CompilerX64.hpp"
 #elif defined(__aarch64__)

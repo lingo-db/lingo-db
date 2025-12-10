@@ -106,7 +106,7 @@ struct IRAdaptor {
              });
    }
 
-   bool cur_arg_is_byval(uint32_t t) noexcept {
+   [[maybe_unused]] bool cur_arg_is_byval(uint32_t t) noexcept {
       auto arg = cur_func.getArgument(t);
       if (auto int_type = dyn_cast<mlir::IntegerType>(arg.getType())) {
          if (int_type.getWidth() == 128) {
@@ -119,14 +119,14 @@ struct IRAdaptor {
       return false;
    }
 
-   uint32_t cur_arg_byval_align(uint32_t t) noexcept {
+   [[maybe_unused]] uint32_t cur_arg_byval_align(uint32_t t) noexcept {
       auto arg = cur_func.getArgument(t);
       if (auto int_type = dyn_cast<mlir::IntegerType>(arg.getType())) {
          if (int_type.getWidth() == 128) {
             return 16;
          }
       }
-      if (auto varlenTy = dyn_cast<dialect::util::VarLen32Type>(arg.getType())) {
+      if (dyn_cast<dialect::util::VarLen32Type>(arg.getType())) {
          return 16;
       }
 
