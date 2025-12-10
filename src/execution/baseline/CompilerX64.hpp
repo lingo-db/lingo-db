@@ -36,7 +36,7 @@ struct IRCompilerX64
 
    void load_address_of_global(const SymRef global_sym, const AsmReg dst) {
       ASM(MOV64rm, dst, FE_MEM(FE_IP, 0, FE_NOREG, -1));
-      reloc_text(global_sym, R_X86_64_PC32, text_writer.offset() - 4, -4);
+      reloc_text(global_sym, tpde::elf::R_X86_64_PC32, text_writer.offset() - 4, -4);
    }
 
    void create_helper_call(std::span<IRValueRef> args, ValueRef* result, SymRef sym) noexcept {
@@ -281,7 +281,7 @@ struct IRCompilerX64
    void load_address_of_got_sym(const SymRef sym, const AsmReg dst) noexcept {
       assert(sym.valid());
       ASM(MOV64rm, dst, FE_MEM(FE_IP, 0, FE_NOREG, -1));
-      reloc_text(sym, R_X86_64_GOTPCREL, text_writer.offset() - 4, -4);
+      reloc_text(sym, tpde::elf::R_X86_64_GOTPCREL, text_writer.offset() - 4, -4);
    }
 
    void reset() noexcept {
