@@ -72,7 +72,7 @@ bool ComparisonExpression::operator==(ParsedExpression& other) {
    if (!((left == otherComp.left) ||
          (left && otherComp.left && *left == *otherComp.left))) {
       return false;
-         }
+   }
 
    // Compare number of right children
    if (rightChildren.size() != otherComp.rightChildren.size()) {
@@ -90,7 +90,6 @@ bool ComparisonExpression::operator==(ParsedExpression& other) {
 
    return true;
 }
-
 
 /// ConjunctionExpression
 ConjunctionExpression::ConjunctionExpression(ExpressionType type, std::shared_ptr<lingodb::ast::ParsedExpression> left, std::shared_ptr<lingodb::ast::ParsedExpression> right) : ConjunctionExpression(type, std::vector{left, right}) {}

@@ -3505,7 +3505,6 @@ agg_expr:
         for(auto& funcExpr : $func_expr_list) {
              aggNode->aggregations.emplace(funcExpr,  aggNode->aggregations.size() );
         }
-
         $$ = aggNode;
       
         

@@ -19,11 +19,16 @@ class AggregationNode : public AstNode {
          return *lhs.first == *rhs.first;
       }
    };
+
    public:
    AggregationNode() : AstNode(NodeType::AGGREGATION) {}
 
    std::shared_ptr<GroupByNode> groupByNode;
-   std::unordered_set<std::pair<std::shared_ptr<FunctionExpression>, size_t>, AggregationsHash, AggregationsEqual > aggregations;
+   /**
+    * Stores a FunctionExpression together with its original index.
+    * The index is used to preserve the original selection order required for pipe sql
+    */
+   std::unordered_set<std::pair<std::shared_ptr<FunctionExpression>, size_t>, AggregationsHash, AggregationsEqual> aggregations;
 };
 } // namespace lingodb::ast
 #endif
