@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - tools/docker/Dockerfile
+      - .github/workflows/build-dev-docker.yml
 env:
   REGISTRY: ghcr.io
 
