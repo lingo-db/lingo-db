@@ -605,7 +605,6 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
                         });
                         for (auto o : sameOps) {
                            o.replaceAllUsesWith(o.getRel());
-                           o->remove();
                            toErase.insert(o.getOperation());
                         }
                      } else {
