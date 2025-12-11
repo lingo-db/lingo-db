@@ -175,9 +175,10 @@ select min(x),max(x),sum(x),count(x), count(*)  from (values (1)) t(x);
 --//CHECK-DAG:       %{{.*}} = relalg.aggrfn sum @{{.*}}{{.*}}::@const{{.*}} %arg0 : i32
 --//CHECK-DAG:       %{{.*}} = relalg.aggrfn max @{{.*}}{{.*}}::@const{{.*}} %arg0 : i32
 --//CHECK-DAG:       %{{.*}} = relalg.aggrfn min @{{.*}}{{.*}}::@const{{.*}} %arg0 : i32
+--//CHECK-NOT:       %{{.*}} = relalg.aggrfn count @{{.*}}{{.*}}::@const{{.*}} %arg0 : i64
 --//CHECK:       tuples.return
 --//CHECK: }
-select y, min(x),max(x),sum(x),count(x), count(*) from (values (1,2)) t(x,y) group by y;
+select y, min(x),max(x),sum(x),count(x), count(*) from (values (1,2)) t(x,y) group by y having count(x)>0;
 --//CHECK: module
 --//CHECK: call @{{.*}}RelationHelper{{.*}}createTable{{.*}}(%{{.*}}) : (!util.varlen32) -> ()
 create table test_tmp(
@@ -226,11 +227,17 @@ select * from (values (1,2,3)) t(x,y,z) order by 1, 2 desc, 3 asc;
 --//CHECK: %{{.*}} = relalg.sort %{{.*}} [(@{{.*}}::@const{{.*}},asc),(@{{.*}}::@const{{.*}},desc),(@{{.*}}::@const{{.*}},asc)]
 with t (x,y,z) as (select * from (values (1,2,3)) t(x,y,z) order by x, y desc, z asc) select * from t where x=1;
 --//CHECK: %{{.*}} = relalg.aggregation
+--//CHECK:      %{{.*}} = relalg.aggrfn sum @{{.*}}::@{{.*}} %arg0 : i32
+--//CHECK-NOT:  %{{.*}} = relalg.aggrfn sum @{{.*}}::@{{.*}} %arg0 : i32
 --//CHECK: %{{.*}} = relalg.aggregation
+--//CHECK:      %{{.*}} = relalg.aggrfn sum @{{.*}}::@{{.*}} %arg0 : i32
+--//CHECK-NOT:  %{{.*}} = relalg.aggrfn sum @{{.*}}::@{{.*}} %arg0 : i32
 --//CHECK: %{{.*}} = relalg.aggregation
+--//CHECK:      %{{.*}} = relalg.aggrfn sum @{{.*}}::@{{.*}} %arg0 : i32
+--//CHECK-NOT:  %{{.*}} = relalg.aggrfn sum @{{.*}}::@{{.*}} %arg0 : i32
 --//CHECK: %{{.*}} = relalg.union all
 --//CHECK: %{{.*}} = relalg.union all
-select x,y,sum(z) from (values (1,2,3)) t(x,y,z) group by rollup(x,y);
+select x,y,sum(z) from (values (1,2,3)) t(x,y,z) group by rollup(x,y) having sum(z)<1 order by sum(z);
 --//CHECK: %{{.*}} = relalg.window %{{.*}} partitionBy : [@{{.*}}::@const{{.*}}] orderBy : [(@{{.*}}::@const{{.*}},asc)] rows_between : -9223372036854775808 and 0 computes : [@tmp_attr::@sum({type = !db.nullable<i32>})] (%arg0: !tuples.tuplestream,%arg1: !tuples.tuple){
 --//CHECK:       %{{.*}} = relalg.aggrfn sum @{{.*}}::@const{{.*}} %arg0 : !db.nullable<i32>
 --//CHECK:       tuples.return %{{.*}} : !db.nullable<i32>
@@ -325,9 +332,13 @@ select x::float from (values (1)) t(x) group by x::float;
 --//CHECK:  %{{.*}} = db.runtime_call "ToUpper"({{.*}}) : (!db.string) -> !db.string
 --//CHECK: }
 --//CHECK:  %{{.*}} = relalg.aggregation %2 [@{{.*}}::@{{.*}}] computes : [@{{.*}}::@{{.*}}({type = i32})] (%arg0: !tuples.tuplestream,%arg1: !tuples.tuple){
+--//CHECK-NOT:  %{{.*}} = db.runtime_call "ToUpper"({{.*}}) : (!db.string) -> !db.string
+--//CHECK-NOT:  %{{.*}} = db.runtime_call "Concatenate"({{.*}}) : (!db.string) -> !db.string
 --//CHECK:      %5 = relalg.aggrfn min @{{.*}}::@{{.*}} %arg0 : i32
 select UPPER(y || 'extra'), min(y) from (values ('Value1', 1), ('VALUE2', 2), ('VALUE3', 3) ) t(x,y) group by UPPER(y || 'extra');
 --//CHECK: %{{.*}} = relalg.aggregation
+--//CHECK: %{{.*}} = relalg.aggrfn sum @{{.*}}::@{{.*}} %arg0 : i32
+--//CHECK-NOT: %{{.*}} = relalg.aggrfn sum @{{.*}}::@{{.*}} %arg0 : i32
 --//CHECK: %{{.*}} = relalg.aggregation
 --//CHECK: %{{.*}} = relalg.aggregation
 --//CHECK: %{{.*}} = relalg.union all
@@ -344,7 +355,7 @@ select UPPER(y || 'extra'), min(y) from (values ('Value1', 1), ('VALUE2', 2), ('
 --//CHECK:      %{{.*}} = arith.constant 1 : i64
 --//CHECK:      %{{.*}} = arith.andi %{{.*}}, %{{.*}} : i64
 --//CHECK:      tuples.return %{{.*}} : i64
-select x,y, sum(z), grouping(x), grouping(y) from (values (1,2,3)) t(x,y,z) group by rollup(x,y) order by x;
+select x,y, sum(z), grouping(x), grouping(y) from (values (1,2,3)) t(x,y,z) group by rollup(x,y) having  sum(z) > 1 order by x;
 --//CHECK: %{{.*}} = db.compare eq {{.*}} : i32, %5 : i32
 select x from (values (1), (2), (3)) t(x) where x=1;
 --//CHECK: %{{.*}} = db.compare lt {{.*}} : i32, %5 : i32
