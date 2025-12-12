@@ -1,7 +1,6 @@
 name: Build dev Docker image also used to run github actions
 
 on:
-  workflow_dispatch:
   push:
     paths:
       - tools/docker/Dockerfile
