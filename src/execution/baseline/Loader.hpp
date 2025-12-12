@@ -27,11 +27,11 @@ class DynamicLoader {
 };
 
 class InMemoryLoader final : public DynamicLoader {
-   tpde::ElfMapper mapper;
+   tpde::elf::ElfMapper mapper;
    tpde::SymRef mainFunc;
 
    public:
-   InMemoryLoader(tpde::AssemblerElf& assembler, Error& error, const tpde::SymRef mainFunc)
+   InMemoryLoader(tpde::elf::AssemblerElf& assembler, Error& error, const tpde::SymRef mainFunc)
       : DynamicLoader(error),
         mainFunc(mainFunc) {
       mapper.map(assembler, [](const std::string_view name) {
@@ -71,7 +71,7 @@ class DebugLoader final : public DynamicLoader {
          hasError = true;
          return;
       }
-      std::string cmd = std::string("cc -shared -o ") + linkedFileName + " " + objFileName;
+      std::string cmd = std::string("cc -shared -fPIC -o ") + linkedFileName + " " + objFileName;
       auto* pPipe = ::popen(cmd.c_str(), "r");
       if (pPipe == nullptr) {
          hasError = true;

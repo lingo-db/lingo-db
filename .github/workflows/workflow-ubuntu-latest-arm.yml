@@ -1,4 +1,4 @@
-name: build+test (ubuntu 24.04 x86_64)
+name: build+test (ubuntu 24.04 arm)
 
 on:
   push:
@@ -15,7 +15,7 @@ jobs:
     strategy:
       matrix:
         build_type: [ debug, asan, release ]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
     container: ghcr.io/lingo-db/lingodb-dev:9237b839644c4206405d37635ed3403f66219aa7
     steps:
       - name: Checkout
@@ -49,7 +49,7 @@ jobs:
     strategy:
       matrix:
         build_type: [ debug, asan ]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
     container: ghcr.io/lingo-db/lingodb-dev:9237b839644c4206405d37635ed3403f66219aa7
     steps:
       - uses: actions/checkout@master
@@ -99,7 +99,7 @@ jobs:
       matrix:
         build_type: [ release, asan ]
     needs: build
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
     container: ghcr.io/lingo-db/lingodb-dev:9237b839644c4206405d37635ed3403f66219aa7
     steps:
       - uses: actions/checkout@master
@@ -131,7 +131,7 @@ jobs:
       matrix:
         build_type: [ release, asan ]
     needs: build
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
     container: ghcr.io/lingo-db/lingodb-dev:9237b839644c4206405d37635ed3403f66219aa7
     steps:
       - name: Freeing up space
@@ -218,13 +218,13 @@ jobs:
 
 
   build_lingodb_python:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
     container: ghcr.io/lingo-db/lingodb-py-dev:cb8141fb8f200d11ca497107b797e24e72335c1c
     steps:
       - name: Checkout
         uses: actions/checkout@v2
         with:
-            submodules: recursive
+          submodules: recursive
       - name: Build
         run: |
           rm -rf /built-packages
@@ -240,7 +240,7 @@ jobs:
 
   test_lingodb_python:
     needs: build_lingodb_python
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
@@ -257,8 +257,8 @@ jobs:
     needs: build
     strategy:
       matrix:
-        build_type: [ debug]
-    runs-on: ubuntu-24.04
+        build_type: [ debug ]
+    runs-on: ubuntu-24.04-arm
     container: ghcr.io/lingo-db/lingodb-dev:9237b839644c4206405d37635ed3403f66219aa7
     steps:
       - uses: actions/checkout@master
