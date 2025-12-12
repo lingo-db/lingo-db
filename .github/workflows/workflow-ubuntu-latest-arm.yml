@@ -16,10 +16,10 @@ jobs:
       matrix:
         build_type: [ debug, asan, release ]
     runs-on: arm-ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:latest
+    container: ghcr.io/lingo-db/lingodb-dev:9237b839644c4206405d37635ed3403f66219aa7
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v2
         with:
           submodules: recursive
       - name: CCache
@@ -50,7 +50,7 @@ jobs:
       matrix:
         build_type: [ debug, asan ]
     runs-on: arm-ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:57e90585270a4d9743a43c1cca175d6f6d7dbbab
+    container: ghcr.io/lingo-db/lingodb-dev:9237b839644c4206405d37635ed3403f66219aa7
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
@@ -100,7 +100,7 @@ jobs:
         build_type: [ release, asan ]
     needs: build
     runs-on: arm-ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:57e90585270a4d9743a43c1cca175d6f6d7dbbab
+    container: ghcr.io/lingo-db/lingodb-dev:9237b839644c4206405d37635ed3403f66219aa7
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
@@ -132,8 +132,14 @@ jobs:
         build_type: [ release, asan ]
     needs: build
     runs-on: arm-ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:57e90585270a4d9743a43c1cca175d6f6d7dbbab
+    container: ghcr.io/lingo-db/lingodb-dev:9237b839644c4206405d37635ed3403f66219aa7
     steps:
+      - name: Freeing up space
+        run: |
+          rm -rf /usr/local/lib/android
+          rm -rf /usr/share/dotnet
+          rm -rf /usr/lib/jvm
+          rm -rf /opt/ghc /opt/cabal
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
         with:
@@ -177,31 +183,30 @@ jobs:
           mkdir -p /db/tpcds-1
           cd /datasets/tpcds-1
           $BASE_PATH/build/lingodb-${{ matrix.build_type }}/sql /db/tpcds-1 < $BASE_PATH/resources/sql/tpcds/initialize.sql
+      - name: Test tpcds (llvm)
+        run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpchSf1.test /db/tpch-1
+        env:
+          LINGODB_EXECUTION_MODE: DEFAULT
+      - name: Test tpcds (baseline)
+        run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpchSf1.test /db/tpch-1
+        env:
+          LINGODB_EXECUTION_MODE: BASELINE
+
+      - name: Test tpcds (llvm)
+        run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpcdsSf1.test /db/tpcds-1
+        env:
+          LINGODB_EXECUTION_MODE: DEFAULT
+      - name: Test tpcds (baseline)
+        run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpcdsSf1.test /db/tpcds-1
+        env:
+          LINGODB_EXECUTION_MODE: BASELINE
       - name: Load dataset job
         run: |
+          rm -rf /db
           export BASE_PATH=$(pwd)
           mkdir -p /db/job
           cd /datasets/job
           $BASE_PATH/build/lingodb-${{ matrix.build_type }}/sql /db/job < $BASE_PATH/resources/sql/job/initialize.sql
-
-      - name: Test tpcds (llvm)
-        run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpchSf1.test /db/tpch-1
-        env:
-          LINGODB_EXECUTION_MODE: DEFAULT
-      - name: Test tpcds (baseline)
-        run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpchSf1.test /db/tpch-1
-        env:
-          LINGODB_EXECUTION_MODE: BASELINE
-
-      - name: Test tpcds (llvm)
-        run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpcdsSf1.test /db/tpcds-1
-        env:
-          LINGODB_EXECUTION_MODE: DEFAULT
-      - name: Test tpcds (baseline)
-        run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpcdsSf1.test /db/tpcds-1
-        env:
-          LINGODB_EXECUTION_MODE: BASELINE
-
       - name: Test job (llvm)
         run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/job.test /db/job
         env:
@@ -214,10 +219,12 @@ jobs:
 
   build_lingodb_python:
     runs-on: arm-ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-py-dev:57e90585270a4d9743a43c1cca175d6f6d7dbbab
+    container: ghcr.io/lingo-db/lingodb-py-dev:cb8141fb8f200d11ca497107b797e24e72335c1c
     steps:
       - name: Checkout
         uses: actions/checkout@v2
+        with:
+          submodules: recursive
       - name: Build
         run: |
           rm -rf /built-packages
@@ -252,7 +259,7 @@ jobs:
       matrix:
         build_type: [ debug ]
     runs-on: arm-ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:57e90585270a4d9743a43c1cca175d6f6d7dbbab
+    container: ghcr.io/lingo-db/lingodb-dev:9237b839644c4206405d37635ed3403f66219aa7
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
