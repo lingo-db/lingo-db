@@ -1630,7 +1630,7 @@ mlir::Value SQLMlirTranslator::translateAggregation(mlir::OpBuilder& builder, st
    };
 
    //Ignore empty aggregations
-   if ((!aggregation->groupByNode || aggregation->groupByNode->groupByColumnReferences.empty()) && aggregation->aggregations.empty()) {
+   if ((!aggregation->groupByNode || aggregation->groupByNode->groupByColumnReferences.empty()) && aggregation->aggregations.front().empty()) {
       return tree;
    }
    //create map
@@ -1703,19 +1703,27 @@ mlir::Value SQLMlirTranslator::translateAggregation(mlir::OpBuilder& builder, st
       static size_t rollupId = 0;
       auto scopeName = "rollup_" + std::to_string(rollupId);
       rollupId++;
-
+      mlir::Value prevAggr = tree;
       for (size_t i = 0; i < aggregation->groupByNode->localGroupByColumnReferences.size(); i++) {
          std::vector<std::shared_ptr<ast::ColumnReference>> localGroupByAttrs = aggregation->groupByNode->localGroupByColumnReferences.at(i);
          std::vector<std::shared_ptr<ast::ColumnReference>> localGroupByAttrsNullable = aggregation->groupByNode->localMapToNullColumnReferences.at(i);
          std::vector<std::shared_ptr<ast::ColumnReference>> notAvailable = aggregation->groupByNode->localNotAvailableColumnReferences.at(i);
+         //TODO what exactly is this?
          std::vector<std::shared_ptr<ast::ColumnReference>> computed;
 
-         for (size_t j = 0; j < aggregation->aggregations.size(); j++) {
-            aggregation->aggregations.at(j)->columnReference = aggregation->groupByNode->localAggregationColumnReferences.at(i).at(j);
-            computed.emplace_back(aggregation->groupByNode->localAggregationColumnReferences.at(i).at(j));
+         for (size_t j = 0; j < aggregation->aggregations.at(i).size(); j++) {
+            computed.emplace_back(aggregation->aggregations.at(i).at(j)->columnReference.value());
+         }
+         std::vector<std::shared_ptr<ast::BoundFunctionExpression>> funcs;
+         for (auto& f : aggregation->aggregations.at(i)) {
+            if (f->functionName != "avg") {
+               funcs.emplace_back(f);
+            }
          }
 
-         auto tree2 = translateGroupByAttributesAndAggregate(builder, tree, location, localGroupByAttrs, aggregation->aggregations, aggregation->mapName);
+         auto tree2 = translateGroupByAttributesAndAggregate(builder, prevAggr, location, localGroupByAttrs, funcs, aggregation->mapName);
+         prevAggr = tree2;
+         tree2 = createMap(builder, location, aggregation->mapName, aggregation->reconstructs.at(i), context, tree2);
          tree2 = mapToNull(builder, notAvailable, tree2);
          tree2 = mapToNullable(builder, localGroupByAttrs, localGroupByAttrsNullable, tree2);
 
@@ -1723,6 +1731,7 @@ mlir::Value SQLMlirTranslator::translateAggregation(mlir::OpBuilder& builder, st
 
          parts.push_back({tree2, localGroupByAttrsNullable, notAvailable, computed, aggregation->groupByNode->localPresentIntval[i].second});
       }
+
       mlir::Value currTree = parts[0].tree;
       std::vector currentAttributes(parts[0].groupByCols.begin(), parts[0].groupByCols.end());
       currentAttributes.insert(currentAttributes.end(), parts[0].groupByCols2.begin(), parts[0].groupByCols2.end());
@@ -1759,7 +1768,7 @@ mlir::Value SQLMlirTranslator::translateAggregation(mlir::OpBuilder& builder, st
       auto aggregations = aggregation->aggregations;
       std::string mapName = aggregation->mapName;
 
-      return translateGroupByAttributesAndAggregate(builder, tree, location, groupColumnReferences, aggregations, mapName);
+      return translateGroupByAttributesAndAggregate(builder, tree, location, groupColumnReferences, aggregations.front(), mapName);
    }
 
    return tree;

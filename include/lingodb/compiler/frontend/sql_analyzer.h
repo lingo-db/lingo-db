@@ -1,6 +1,7 @@
 #ifndef LINGODB_COMPILER_FRONTEND_SQL_ANALYZER_H
 #define LINGODB_COMPILER_FRONTEND_SQL_ANALYZER_H
 
+#include "ast/bound/bound_aggregation.h"
 #include "ast/bound/bound_insert_node.h"
 #include "lingodb/compiler/frontend/ast/bound/bound_expression.h"
 #include "lingodb/compiler/frontend/ast/bound/bound_resultmodifier.h"
@@ -139,6 +140,7 @@ class SQLQueryAnalyzer {
    std::shared_ptr<ast::CreateNode> analyzeFunctionCreate(std::shared_ptr<ast::CreateNode> createNode, std::shared_ptr<ast::CreateFunctionInfo> createFunctionInfo, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope);
    std::shared_ptr<ast::BoundInsertNode> analyzeInsertNode(std::shared_ptr<ast::InsertNode> insertNode, std::shared_ptr<SQLContext> context, SQLContext::ResolverScope& resolverScope);
    std::shared_ptr<ast::SetNode> analyzeSetNode(std::shared_ptr<ast::SetNode> setNode);
+   std::shared_ptr<ast::BoundAggregationNode> analyzeAggregation(std::shared_ptr<ast::PipeOperator> pipeOperator, std::shared_ptr<ast::AggregationNode> aggregationNode, std::shared_ptr<SQLContext>& context, ResolverScope& resolverScope);
    /**
     * Analyzes a single PIPE operator
     *
