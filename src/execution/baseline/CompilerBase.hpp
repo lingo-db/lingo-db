@@ -730,18 +730,13 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
          uint32_t byval_size = 0;
          if (auto int_type = dyn_cast<mlir::IntegerType>(arg.getType())) {
             if (int_type.getWidth() == 128) {
-               flag = Base::CallArg::Flag::allow_split;
                byval_align = 16;
                byval_size = 16;
             }
-         }
-         if (dyn_cast<dialect::util::VarLen32Type>(arg.getType())) {
-            flag = Base::CallArg::Flag::allow_split;
+         } else if (dyn_cast<dialect::util::VarLen32Type>(arg.getType())) {
             byval_align = 16;
             byval_size = 16;
-         }
-         if (dyn_cast<dialect::util::BufferType>(arg.getType())) {
-            flag = Base::CallArg::Flag::allow_split;
+         } else if (dyn_cast<dialect::util::BufferType>(arg.getType())) {
             byval_align = 16;
             byval_size = 16;
          }
