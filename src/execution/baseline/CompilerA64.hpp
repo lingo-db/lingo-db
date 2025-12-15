@@ -198,7 +198,7 @@ struct IRCompilerA64
          }
          auto* true_block = br.getTrueDest();
          auto* false_block = br.getFalseDest();
-         generate_conditional_branch(jump, true_block, false_block);
+         generate_cond_branch(jump, true_block, false_block);
          this->adaptor->inst_set_fused(br, true);
          return true;
       }
@@ -234,31 +234,7 @@ struct IRCompilerA64
       const auto cond_reg = cond_ref.load_to_reg();
       ASM(TSTwi, cond_reg, 1);
 
-      return generate_conditional_branch(Jump::Jne, true_block, false_block);
-   }
-
-   bool generate_conditional_branch(const Jump jmp, const IRBlockRef true_block, const IRBlockRef false_block) noexcept {
-      auto* const next_block = this->analyzer.block_ref(this->next_block());
-
-      const auto true_needs_split = this->branch_needs_split(true_block);
-      const auto false_needs_split = this->branch_needs_split(false_block);
-
-      const auto spilled = this->spill_before_branch();
-      this->begin_branch_region();
-
-      if (next_block == true_block || (next_block != false_block && true_needs_split)) {
-         generate_branch_to_block(invert_jump(jmp), false_block, false_needs_split, false);
-         generate_branch_to_block(Jump::jmp, true_block, false, true);
-      } else if (next_block == false_block) {
-         generate_branch_to_block(jmp, true_block, true_needs_split, false);
-         generate_branch_to_block(Jump::jmp, false_block, false, true);
-      } else {
-         assert(!true_needs_split);
-         this->generate_branch_to_block(jmp, true_block, false, false);
-         this->generate_branch_to_block(Jump::jmp, false_block, false, true);
-      }
-      this->end_branch_region();
-      this->release_spilled_regs(spilled);
+      generate_cond_branch(Jump::Jne, true_block, false_block);
       return true;
    }
 
