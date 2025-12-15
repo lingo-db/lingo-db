@@ -301,6 +301,9 @@ class ComparisonExpression : public ParsedExpression {
    ///Multiple right children, e.g. for IN expressions IN (1, 2, 3)
    std::vector<std::shared_ptr<ParsedExpression>> rightChildren;
 
+   size_t hash() override;
+   bool operator==(ParsedExpression& other) override;
+
    private:
    std::string typeToAscii(ExpressionType type) const;
 };

@@ -175,9 +175,10 @@ select min(x),max(x),sum(x),count(x), count(*)  from (values (1)) t(x);
 --//CHECK-DAG:       %{{.*}} = relalg.aggrfn sum @{{.*}}{{.*}}::@const{{.*}} %arg0 : i32
 --//CHECK-DAG:       %{{.*}} = relalg.aggrfn max @{{.*}}{{.*}}::@const{{.*}} %arg0 : i32
 --//CHECK-DAG:       %{{.*}} = relalg.aggrfn min @{{.*}}{{.*}}::@const{{.*}} %arg0 : i32
+--//CHECK-NOT:       %{{.*}} = relalg.aggrfn count @{{.*}}{{.*}}::@const{{.*}} %arg0 : i64
 --//CHECK:       tuples.return
 --//CHECK: }
-select y, min(x),max(x),sum(x),count(x), count(*) from (values (1,2)) t(x,y) group by y;
+select y, min(x),max(x),sum(x),count(x), count(*) from (values (1,2)) t(x,y) group by y having count(x)>0;
 --//CHECK: module
 --//CHECK: call @{{.*}}RelationHelper{{.*}}createTable{{.*}}(%{{.*}}) : (!util.varlen32) -> ()
 create table test_tmp(
@@ -209,6 +210,7 @@ copy test from 't.csv' csv escape '\' delimiter '|' null '';
 --//CHECK: %{{.*}} = relalg.aggregation %{{.*}} [@{{.*}}{{.*}}::@const{{.*}}] computes : [@{{.*}}::@{{.*}}({type = i32})] (%arg0: !tuples.tuplestream,%arg1: !tuples.tuple){
 --//CHECK:       %{{.*}} = relalg.projection distinct [@{{.*}}::@const{{.*}}] %arg0
 --//CHECK:       %{{.*}} = relalg.aggrfn sum @{{.*}}::@const{{.*}} %{{.*}} : i32
+--//CHECK-NOT:       %{{.*}} = relalg.aggrfn sum @{{.*}}::@const{{.*}} %{{.*}} : i32
 --//CHECK:       tuples.return %{{.*}} : i32
 --//CHECK: }
 select x,sum(distinct y) from (values (1,2)) t(x,y) group by x;
@@ -216,9 +218,10 @@ select x,sum(distinct y) from (values (1,2)) t(x,y) group by x;
 --//CHECK:       %{{.*}} = db.add %{{.*}} : i32, %{{.*}} : i32
 --//CHECK: %{{.*}} = relalg.aggregation %{{.*}} [@{{.*}}{{.*}}::@const{{.*}}] computes : [@{{.*}}::@{{.*}}({type = i32})] (%arg0: !tuples.tuplestream,%arg1: !tuples.tuple){
 --//CHECK:       %{{.*}} = relalg.aggrfn sum @{{.*}}::@{{.*}} %{{.*}} : i32
+--//CHECK-NOT:       %{{.*}} = relalg.aggrfn sum @{{.*}}::@{{.*}} %{{.*}} : i32
 --//CHECK:       tuples.return %{{.*}} : i32
 --//CHECK: }
-select x,sum(y+1) from (values (1,2)) t(x,y) group by x;
+select x,sum(y+1) from (values (1,2)) t(x,y) group by x having sum(y+1)<x;
 --//CHECK: %{{.*}} = relalg.sort %{{.*}} [(@{{.*}}::@const{{.*}},asc),(@{{.*}}::@const{{.*}},desc),(@{{.*}}::@const{{.*}},asc)]
 select * from (values (1,2,3)) t(x,y,z) order by x, y desc, z asc;
 --//CHECK: %{{.*}} = relalg.sort %{{.*}} [(@{{.*}}::@const{{.*}},asc),(@{{.*}}::@const{{.*}},desc),(@{{.*}}::@const{{.*}},asc)]
@@ -226,11 +229,17 @@ select * from (values (1,2,3)) t(x,y,z) order by 1, 2 desc, 3 asc;
 --//CHECK: %{{.*}} = relalg.sort %{{.*}} [(@{{.*}}::@const{{.*}},asc),(@{{.*}}::@const{{.*}},desc),(@{{.*}}::@const{{.*}},asc)]
 with t (x,y,z) as (select * from (values (1,2,3)) t(x,y,z) order by x, y desc, z asc) select * from t where x=1;
 --//CHECK: %[[AGGR1:.*]] = relalg.aggregation
+--//CHECK: %{{.*}} = relalg.aggrfn sum @{{.*}}::@{{.*}} %{{.*}} : i32
+--//CHECK-NOT: %{{.*}} = relalg.aggrfn sum @{{.*}}::@{{.*}} %{{.*}} : i32
 --//CHECK: %[[AGGR2:.*]] = relalg.aggregation %[[AGGR1]]
+--//CHECK: %{{.*}} = relalg.aggrfn sum @{{.*}}::@{{.*}} %{{.*}} : i32
+--//CHECK-NOT: %{{.*}} = relalg.aggrfn sum @{{.*}}::@{{.*}} %{{.*}} : i32
 --//CHECK: %{{.*}} = relalg.aggregation %[[AGGR2]]
+--//CHECK: %{{.*}} = relalg.aggrfn sum @{{.*}}::@{{.*}} %{{.*}} : i32
+--//CHECK-NOT: %{{.*}} = relalg.aggrfn sum @{{.*}}::@{{.*}} %{{.*}} : i32
 --//CHECK: %{{.*}} = relalg.union all
 --//CHECK: %{{.*}} = relalg.union all
-select x,y,sum(z) from (values (1,2,3)) t(x,y,z) group by rollup(x,y);
+select x,y,sum(z) from (values (1,2,3)) t(x,y,z) group by rollup(x,y) having sum(z)<1 order by sum(z);
 --//CHECK: %{{.*}} = relalg.window %{{.*}} partitionBy : [@{{.*}}::@const{{.*}}] orderBy : [(@{{.*}}::@const{{.*}},asc)] rows_between : -9223372036854775808 and 0 computes : [@tmp_attr::@sum({type = !db.nullable<i32>})] (%arg0: !tuples.tuplestream,%arg1: !tuples.tuple){
 --//CHECK:       %{{.*}} = relalg.aggrfn sum @{{.*}}::@const{{.*}} %arg0 : !db.nullable<i32>
 --//CHECK:       tuples.return %{{.*}} : !db.nullable<i32>
@@ -289,6 +298,7 @@ select 1=any(select 1);
 --//CHECK: call @{{.*}}RelationHelper{{.*}}setPersist{{.*}}(%true) : (i1) -> ()
 set persist=1;
 --//CHECK: module
+--//CHECK:  %{{.*}} = relalg.aggregation
 select case when x=1 then 10 when x=2 then 20 else 0 end from (values (1)) t(x) group by case when x=1 then 10 when x=2 then 20 else 0 end;
 --//CHECK: module
 --//CHECK:  %{{.*}} = db.runtime_call "AbsInt"({{.*}}) : (i32) -> i32
@@ -325,11 +335,20 @@ select x::float from (values (1)) t(x) group by x::float;
 --//CHECK:  %{{.*}} = db.runtime_call "ToUpper"({{.*}}) : (!db.string) -> !db.string
 --//CHECK: }
 --//CHECK:  %{{.*}} = relalg.aggregation %2 [@{{.*}}::@{{.*}}] computes : [@{{.*}}::@{{.*}}({type = i32})] (%arg0: !tuples.tuplestream,%arg1: !tuples.tuple){
---//CHECK:      %5 = relalg.aggrfn min @{{.*}}::@{{.*}} %arg0 : i32
+--//CHECK-NOT:  %{{.*}} = db.runtime_call "ToUpper"({{.*}}) : (!db.string) -> !db.string
+--//CHECK-NOT:  %{{.*}} = db.runtime_call "Concatenate"({{.*}}) : (!db.string) -> !db.string
+--//CHECK:      %{{.*}} = relalg.aggrfn min @{{.*}}::@{{.*}} %arg0 : i32
+--//CHECK-NOT:  %{{.*}} = relalg.aggrfn min @{{.*}}::@{{.*}} %arg0 : i32
 select UPPER(y || 'extra'), min(y) from (values ('Value1', 1), ('VALUE2', 2), ('VALUE3', 3) ) t(x,y) group by UPPER(y || 'extra');
 --//CHECK: %[[AGGR1:.*]] = relalg.aggregation
+--//CHECK: {{.*}} = relalg.aggrfn sum @{{.*}}::@{{.*}} %arg0 : i32
+--//CHECK-NOT: %{{.*}} = relalg.aggrfn sum @{{.*}}::@{{.*}} %arg0 : i32
 --//CHECK: %[[AGGR2:.*]] = relalg.aggregation %[[AGGR1]]
+--//CHECK: {{.*}} = relalg.aggrfn sum @{{.*}}::@{{.*}} %arg0 : i32
+--//CHECK-NOT: %{{.*}} = relalg.aggrfn sum @{{.*}}::@{{.*}} %arg0 : i32
 --//CHECK: %[[AGGR3:.*]] = relalg.aggregation %[[AGGR2]]
+--//CHECK: {{.*}} = relalg.aggrfn sum @{{.*}}::@{{.*}} %arg0 : i32
+--//CHECK-NOT: %{{.*}} = relalg.aggrfn sum @{{.*}}::@{{.*}} %arg0 : i32
 --//CHECK: %{{.*}} = relalg.union all
 --//CHECK: %{{.*}} = relalg.union all
 --//CHECK:  %{{.*}} = relalg.map %{{.*}} computes : [@{{.*}}::@{{.*}}({type = i64})] (%arg0: !tuples.tuple)
@@ -344,7 +363,7 @@ select UPPER(y || 'extra'), min(y) from (values ('Value1', 1), ('VALUE2', 2), ('
 --//CHECK:      %{{.*}} = arith.constant 1 : i64
 --//CHECK:      %{{.*}} = arith.andi %{{.*}}, %{{.*}} : i64
 --//CHECK:      tuples.return %{{.*}} : i64
-select x,y, sum(z), grouping(x), grouping(y) from (values (1,2,3)) t(x,y,z) group by rollup(x,y) order by x;
+select x,y, sum(z), grouping(x), grouping(y) from (values (1,2,3)) t(x,y,z) group by rollup(x,y) having  sum(z) > 1 order by x;
 --//CHECK: %{{.*}} = db.compare eq {{.*}} : i32, %5 : i32
 select x from (values (1), (2), (3)) t(x) where x=1;
 --//CHECK: %{{.*}} = db.compare lt {{.*}} : i32, %5 : i32

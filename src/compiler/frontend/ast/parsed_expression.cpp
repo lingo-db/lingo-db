@@ -45,6 +45,51 @@ ComparisonExpression::ComparisonExpression(ExpressionType type, std::shared_ptr<
 
 ComparisonExpression::ComparisonExpression(ExpressionType type, std::shared_ptr<ParsedExpression> left, std::vector<std::shared_ptr<ParsedExpression>> rightChildren) : ParsedExpression(type, cType), left(std::move(left)), rightChildren(rightChildren) {
 }
+size_t ComparisonExpression::hash() {
+   size_t result = ParsedExpression::hash();
+
+   // Hash the left expression
+   if (left) {
+      result ^= left->hash() + 0x9e3779b9 + (result << 6) + (result >> 2);
+   }
+
+   // Hash all right children expressions
+   for (const auto& child : rightChildren) {
+      if (child) {
+         result ^= child->hash() + 0x9e3779b9 + (result << 6) + (result >> 2);
+      }
+   }
+
+   return result;
+}
+
+bool ComparisonExpression::operator==(ParsedExpression& other) {
+   if (!ParsedExpression::operator==(other)) return false;
+
+   auto& otherComp = static_cast<ComparisonExpression&>(other);
+
+   // Compare left expressions (handle nulls and pointer-equality)
+   if (!((left == otherComp.left) ||
+         (left && otherComp.left && *left == *otherComp.left))) {
+      return false;
+   }
+
+   // Compare number of right children
+   if (rightChildren.size() != otherComp.rightChildren.size()) {
+      return false;
+   }
+
+   // Compare each right child expression (handle nulls and pointer-equality)
+   for (size_t i = 0; i < rightChildren.size(); ++i) {
+      const auto& a = rightChildren[i];
+      const auto& b = otherComp.rightChildren[i];
+      if (!((a == b) || (a && b && *a == *b))) {
+         return false;
+      }
+   }
+
+   return true;
+}
 
 /// ConjunctionExpression
 ConjunctionExpression::ConjunctionExpression(ExpressionType type, std::shared_ptr<lingodb::ast::ParsedExpression> left, std::shared_ptr<lingodb::ast::ParsedExpression> right) : ConjunctionExpression(type, std::vector{left, right}) {}
