@@ -128,7 +128,7 @@ struct IRCompilerA64
             ASM(CCMPx, lhs_reg_hi, rhs_reg_hi, 0, DA_EQ);
          } else {
             // Compare the ints using carried subtraction
-            ASM(CMPx, lhs_reg_lo, rhs_reg_lo);
+            ASM(CMPx, rhs_reg_lo, lhs_reg_lo);
             ASM(SBCSx, DA_ZR, lhs_reg_hi, rhs_reg_hi);
          }
       } else {
