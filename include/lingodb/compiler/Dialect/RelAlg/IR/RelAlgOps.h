@@ -8,6 +8,8 @@
 
 #include "lingodb/compiler/Dialect/DB/IR/DBTypes.h"
 
+#include "lingodb/compiler/Dialect/RelAlg/DatasourceProperty.h"
+
 #include "lingodb/compiler/Dialect/TupleStream/Column.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOpsAttributes.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOpsTypes.h"

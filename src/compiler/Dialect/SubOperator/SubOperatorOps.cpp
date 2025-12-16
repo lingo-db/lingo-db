@@ -4,6 +4,7 @@
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamDialect.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOpsAttributes.h"
+#include "lingodb/utility/Serialization.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/OpImplementation.h"
@@ -15,7 +16,9 @@
 
 using namespace mlir;
 using namespace lingodb::compiler::dialect;
+
 namespace {
+
 tuples::ColumnManager& getColumnManager(::mlir::OpAsmParser& parser) {
    return parser.getBuilder().getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
 }

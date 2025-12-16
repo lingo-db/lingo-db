@@ -7,18 +7,20 @@
 #include <memory>
 #include <variant>
 
-#include <arrow/type_fwd.h>
+#include "lingodb/utility/Serialization.h"
 
+#include <iostream>
+#include <arrow/type_fwd.h>
 namespace lingodb::runtime {
-enum class FilterOp {
-   EQ,
-   NEQ,
-   LT,
-   LTE,
-   GT,
-   GTE,
-   NOTNULL,
-   IN
+enum class FilterOp : uint8_t {
+   EQ = 0,
+   NEQ = 1,
+   LT = 2,
+   LTE = 3,
+   GT = 4,
+   GTE = 5,
+   NOTNULL = 6,
+   IN = 7
 
 };
 struct FilterDescription {
@@ -32,6 +34,49 @@ struct FilterDescription {
          columnId == other.columnId &&
          op == other.op &&
          value == other.value && values == other.values;
+   }
+   void serialize(utility::Serializer& serializer) const {
+      serializer.writeProperty(0, columnName);
+      serializer.writeProperty(1, columnId);
+      serializer.writeProperty(2, op);
+      serializer.writeProperty(3, value.index());
+      std::visit([&](auto const& v) {
+         serializer.writeProperty(4, v);
+      },
+                 value);
+      serializer.writeProperty(5, values.index());
+      std::visit([&](auto const& v) {
+         serializer.writeProperty(6, v);
+      },
+                 values);
+   }
+
+   static FilterDescription deserialize(lingodb::utility::Deserializer& deserializer) {
+      FilterDescription desc{};
+      desc.columnName = deserializer.readProperty<std::string>(0);
+      desc.columnId = deserializer.readProperty<size_t>(1);
+      desc.op = deserializer.readProperty<FilterOp>(2);
+      switch (deserializer.readProperty<size_t>(3)) {
+         case 0:
+            desc.value = deserializer.readProperty<std::string>(4);
+            break;
+         case 1:
+            desc.value = deserializer.readProperty<int64_t>(4);
+            break;
+         default:
+            desc.value = deserializer.readProperty<double>(4);
+      }
+      switch (deserializer.readProperty<size_t>(5)) {
+         case 0:
+            desc.values = deserializer.readProperty<std::vector<std::string>>(6);
+            break;
+         case 1:
+            desc.values = deserializer.readProperty<std::vector<int64_t>>(6);
+            break;
+         default:
+            desc.values = deserializer.readProperty<std::vector<double>>(6);
+      }
+      return desc;
    }
 };
 struct ScanConfig {
