@@ -23,6 +23,11 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Checkout repository
         uses: actions/checkout@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          install: true
+          driver: docker-container
       - name: Build and push Docker image
         id: push
         uses: docker/build-push-action@f2a1d5e99d037542a71f64918e516c093c6f3fc4
@@ -32,6 +37,7 @@ jobs:
           push: true
           tags: ghcr.io/lingo-db/lingodb-py-dev:${{ github.sha }}
           target: devimg
+          platforms: linux/amd64,linux/arm64
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@v2
         with:
