@@ -107,6 +107,9 @@ class Serializer {
    void writeValue(size_t value) {
       writer.write(value);
    }
+   void writeValue(int64_t value) {
+      writer.write(value);
+   }
    void writeValue(const std::string_view& value) {
       writeValue(value.length());
       writer.write(reinterpret_cast<const std::byte*>(value.data()), value.length());
@@ -221,6 +224,10 @@ class Deserializer {
       return reader.read<T>();
    }
    template <std::same_as<size_t> T>
+   T read() {
+      return reader.read<T>();
+   }
+   template <std::same_as<int64_t> T>
    T read() {
       return reader.read<T>();
    }
@@ -358,6 +365,17 @@ class SimpleByteWriter : public ByteWriter {
    }
    size_t size() const {
       return buffer.size();
+   }
+   std::string toHexString() const {
+      static const char hexChars[] = "0123456789ABCDEF";
+      std::string hex;
+
+      for (size_t i = 0; i < size(); ++i) {
+         unsigned char v = std::to_integer<unsigned char>(buffer.data()[i]);
+         hex.push_back(hexChars[v >> 4]);
+         hex.push_back(hexChars[v & 0x0F]);
+      }
+      return hex;
    }
 };
 class SimpleByteReader : public ByteReader {

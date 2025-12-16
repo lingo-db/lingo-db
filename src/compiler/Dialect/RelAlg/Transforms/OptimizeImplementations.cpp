@@ -228,7 +228,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
       return ::llvm::TypeSwitch<mlir::Operation*, bool>(op.getOperation())
          .Case<relalg::BaseTableOp>([&](relalg::BaseTableOp baseTableOp) {
             path.push(baseTableOp.getOperation());
-            if (baseTableOp->hasAttr("restriction")) return false;
+            if (!baseTableOp.getDatasource().filterDescription.empty()) return false;
             return true;
          })
          .Case<relalg::SelectionOp>([&](relalg::SelectionOp selectionOp) {

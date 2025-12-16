@@ -17,6 +17,33 @@ using namespace mlir;
 namespace {
 using namespace lingodb::compiler::dialect;
 
+mlir::Attribute convertToAttribute(MLIRContext* ctx, const lingodb::DatasourceProperty datasource) {
+   assert(ctx && "MLIRContext must not be null");
+
+   lingodb::utility::SimpleByteWriter simpleByteWriter{};
+   lingodb::utility::Serializer s{simpleByteWriter};
+
+   const_cast<lingodb::DatasourceProperty&>(datasource).serialize(s);
+
+   return mlir::StringAttr::get(ctx, simpleByteWriter.toHexString());
+}
+
+mlir::LogicalResult convertFromAttribute(const lingodb::DatasourceProperty& datasource, mlir::Attribute attr,
+                                         std::function<mlir::InFlightDiagnostic()> emitError) {
+   //TODO
+   std::cerr << "Not impleted";
+   return mlir::failure();
+}
+
+void writeToMlirBytecode(mlir::DialectBytecodeWriter& writer, const lingodb::DatasourceProperty& datasource) {
+   //TODO
+   std::cerr << "Not impleted";
+}
+mlir::LogicalResult readFromMlirBytecode(mlir::DialectBytecodeReader& reader, const lingodb::DatasourceProperty& datasource) {
+   //TODO
+   return mlir::failure();
+}
+
 tuples::ColumnManager& getColumnManager(::mlir::OpAsmParser& parser) {
    return parser.getBuilder().getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
 }
@@ -273,6 +300,22 @@ ParseResult relalg::BaseTableOp::parse(OpAsmParser& parser, OperationState& resu
       break;
    }
    result.addAttribute("columns", mlir::DictionaryAttr::get(parser.getBuilder().getContext(), columns));
+   if (parser.parseOptionalKeyword("datasource") || parser.parseColon()) {
+      return parser.addTypeToList(tuples::TupleStreamType::get(parser.getBuilder().getContext()), result.types);
+   }
+   std::string hex;
+   if (parser.parseString(&hex)) { return failure(); }
+   std::vector<std::byte> data;
+   for (size_t i = 0; i < hex.size(); i += 2) {
+      std::string byteString = hex.substr(i, 2);
+      char byte = strtol(byteString.c_str(), nullptr, 16);
+      data.emplace_back(std::byte(byte));
+   }
+   utility::SimpleByteReader simpleByteReader{data.data(), data.size()};
+   utility::Deserializer s{simpleByteReader};
+   auto dataSource = DatasourceProperty::deserialize(s);
+   result.getOrAddProperties<Properties>().datasource = dataSource;
+
    return parser.addTypeToList(tuples::TupleStreamType::get(parser.getBuilder().getContext()), result.types);
 }
 void relalg::BaseTableOp::print(OpAsmPrinter& p) {
@@ -293,6 +336,12 @@ void relalg::BaseTableOp::print(OpAsmPrinter& p) {
       printCustDef(p, *this, relationDefAttr);
    }
    p << "}";
+   p << " datasource: \"";
+   utility::SimpleByteWriter simpleByteWriter{};
+   utility::Serializer s{simpleByteWriter};
+   getDatasource().serialize(s);
+
+   p << simpleByteWriter.toHexString() << "\"";
 }
 
 ::mlir::LogicalResult relalg::MapOp::verify() {
