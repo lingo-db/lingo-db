@@ -126,9 +126,14 @@ struct IRCompilerA64
             // Use CCMP for equality
             ASM(CMPx, lhs_reg_lo, rhs_reg_lo);
             ASM(CCMPx, lhs_reg_hi, rhs_reg_hi, 0, DA_EQ);
-         } else {
-            // Compare the ints using carried subtraction
+         } else if (jump == Jump::Jhi || jump == Jump::Jls || jump == Jump::Jle ||
+                    jump == Jump::Jgt) {
+            // gt and le need inverse operand order for comparison.
+            jump = swap_jump(jump).kind;
             ASM(CMPx, rhs_reg_lo, lhs_reg_lo);
+            ASM(SBCSx, DA_ZR, rhs_reg_hi, lhs_reg_hi);
+         } else {
+            ASM(CMPx, lhs_reg_lo, rhs_reg_lo);
             ASM(SBCSx, DA_ZR, lhs_reg_hi, rhs_reg_hi);
          }
       } else {
