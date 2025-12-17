@@ -295,7 +295,8 @@ class QueryGraph {
    struct Predicate {
       lingodb::compiler::dialect::relalg::ColumnSet left, right;
       bool isEq;
-      Predicate(dialect::relalg::ColumnSet left, lingodb::compiler::dialect::relalg::ColumnSet right, bool isEq) : left(left), right(right), isEq(isEq) {}
+      bool isNeq;
+      Predicate(dialect::relalg::ColumnSet left, lingodb::compiler::dialect::relalg::ColumnSet right, bool isEq, bool isNeq) : left(left), right(right), isEq(isEq), isNeq(isNeq) {}
    };
    std::vector<Predicate> analyzePred(mlir::Block* block, lingodb::compiler::dialect::relalg::ColumnSet availableLeft, lingodb::compiler::dialect::relalg::ColumnSet availableRight) {
       llvm::DenseMap<mlir::Value, lingodb::compiler::dialect::relalg::ColumnSet> required;
@@ -309,17 +310,17 @@ class QueryGraph {
                auto rightAttributes = required[cmpOp.getRight()];
                if (leftAttributes.empty() || rightAttributes.empty()) return;
                if (leftAttributes.isSubsetOf(availableLeft) && rightAttributes.isSubsetOf(availableRight)) {
-                  predicates.push_back(Predicate(leftAttributes, rightAttributes, true));
+                  predicates.push_back(Predicate(leftAttributes, rightAttributes, true, false));
                } else if (leftAttributes.isSubsetOf(availableRight) && rightAttributes.isSubsetOf(availableLeft)) {
-                  predicates.push_back(Predicate(rightAttributes, leftAttributes, true));
+                  predicates.push_back(Predicate(rightAttributes, leftAttributes, true, false));
                }
             } else {
                auto leftAttributes = required[cmpOp.getLeft()];
                auto rightAttributes = required[cmpOp.getRight()];
                if (leftAttributes.isSubsetOf(availableLeft) && rightAttributes.isSubsetOf(availableRight)) {
-                  predicates.push_back(Predicate(leftAttributes, rightAttributes, false));
+                  predicates.push_back(Predicate(leftAttributes, rightAttributes, false, cmpOp.isUnequalityPred()));
                } else if (leftAttributes.isSubsetOf(availableRight) && rightAttributes.isSubsetOf(availableLeft)) {
-                  predicates.push_back(Predicate(rightAttributes, leftAttributes, false));
+                  predicates.push_back(Predicate(rightAttributes, leftAttributes, false, cmpOp.isUnequalityPred()));
                }
             }
          } else {

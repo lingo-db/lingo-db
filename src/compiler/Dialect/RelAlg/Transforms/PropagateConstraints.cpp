@@ -207,6 +207,7 @@ class ExpandTransitiveEqualities : public mlir::PassWrapper<ExpandTransitiveEqua
 
                auto sel = builder.create<relalg::SelectionOp>(loc, tuples::TupleStreamType::get(builder.getContext()), current);
                sel.getPredicate().push_back(block);
+               equalities[sel] = localEqualities;
                current.replaceAllUsesExcept(sel.asRelation(), sel.getOperation());
                current = sel.asRelation();
             }
