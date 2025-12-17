@@ -238,6 +238,8 @@ class LLVMBackend {
          if (!tmOrError)
             return tmOrError.takeError();
          tm = std::move(tmOrError.get());
+         tm->Options.EnableFastISel = options.jitCodeGenOptLevel == llvm::CodeGenOptLevel::None;
+         tm->setOptLevel(options.jitCodeGenOptLevel.value_or(llvm::CodeGenOptLevel::Default));
       }
 
       // TODO: Currently, the LLVM module created above has no triple associated
