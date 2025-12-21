@@ -183,7 +183,7 @@ UtilTryCheapHashRes util_varlen_try_cheap_hash(__uint128_t varlen) {
     uint64_t first64 = (uint64_t)(varlen);
     uint64_t last64 = (uint64_t)(varlen >> 64);
 
-    uint64_t mask = 0xFFFFFFFF;
+    volatile uint64_t mask = 0xFFFFFFFF;
     uint64_t len = first64 & mask;
     bool lenLt13 = len < 13;
     uint64_t fHash = util_hash_64(first64);
