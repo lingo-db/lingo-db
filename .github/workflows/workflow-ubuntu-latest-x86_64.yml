@@ -183,11 +183,11 @@ jobs:
           mkdir -p /db/tpcds-1
           cd /datasets/tpcds-1
           $BASE_PATH/build/lingodb-${{ matrix.build_type }}/sql /db/tpcds-1 < $BASE_PATH/resources/sql/tpcds/initialize.sql
-      - name: Test tpcds (llvm)
+      - name: Test tpch (llvm)
         run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpchSf1.test /db/tpch-1
         env:
           LINGODB_EXECUTION_MODE: DEFAULT
-      - name: Test tpcds (baseline)
+      - name: Test tpch (baseline)
         run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpchSf1.test /db/tpch-1
         env:
           LINGODB_EXECUTION_MODE: BASELINE
