@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - tools/python/bridge/Dockerfile
+      - .github/workflows/build-py-dev-docker.yml
 env:
   REGISTRY: ghcr.io
 jobs:
