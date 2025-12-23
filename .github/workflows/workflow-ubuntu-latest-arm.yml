@@ -219,7 +219,7 @@ jobs:
 
   build_lingodb_python:
     runs-on: ubuntu-24.04-arm
-    container: ghcr.io/lingo-db/lingodb-py-dev:sha256:e74271ce2cb1ccf9f4421f7269d96bfef1a13f851771e8c5d5fceb805ab5d5de
+    container: ghcr.io/lingo-db/lingodb-py-dev@sha256:e74271ce2cb1ccf9f4421f7269d96bfef1a13f851771e8c5d5fceb805ab5d5de
     steps:
       - name: Checkout
         uses: actions/checkout@v2
