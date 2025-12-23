@@ -106,8 +106,10 @@ struct IRAdaptor {
              });
    }
 
-   [[maybe_unused]] static bool cur_arg_is_byval(uint32_t) noexcept { return false; }
-   [[maybe_unused]] static uint32_t cur_arg_byval_align(uint32_t) noexcept { return 0; }
+   [[maybe_unused]] static bool cur_arg_is_byval(uint32_t t) noexcept { return false; }
+
+   [[maybe_unused]] static uint32_t cur_arg_byval_align(uint32_t t) noexcept { return 0; }
+
    [[maybe_unused]] static uint32_t cur_arg_byval_size(uint32_t) noexcept { return 0; }
    [[maybe_unused]] static bool cur_arg_is_sret(uint32_t) noexcept { return false; }
 

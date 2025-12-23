@@ -2,8 +2,11 @@
 #if !defined(__linux__)
 #error "Baseline backend is only supported on Linux systems."
 #endif
-
+#if defined(__x86_64__)
 #include "CompilerX64.hpp"
+#elif defined(__aarch64__)
+#include "CompilerA64.hpp"
+#endif
 #include "Loader.hpp"
 
 #include "lingodb/execution/BackendPasses.h"
@@ -52,8 +55,10 @@ class BaselineBackend : public ExecutionBackend {
       static SpdLogSpoof logSpoof;
 #if defined(__x86_64__)
       IRCompilerX64 compiler{std::make_unique<IRAdaptor>(&moduleOp, error)};
+#elif defined(__aarch64__)
+      IRCompilerA64 compiler{std::make_unique<IRAdaptor>(&moduleOp, error)};
 #else
-#error "Baseline backend is only supported on x86_64 architecture."
+#error "Baseline backend is only supported on x86_64 or aarch64 architectures."
 #endif
       logSpoof.enter();
       const auto baselineCodeGenStart = std::chrono::high_resolution_clock::now();
@@ -70,8 +75,15 @@ class BaselineBackend : public ExecutionBackend {
       const auto baselineEmitStart = std::chrono::high_resolution_clock::now();
       std::unique_ptr<DynamicLoader> loader;
       if (!baselineDebugFileOut.getValue().empty()) {
+#if defined(__x86_64__)
          loader = std::make_unique<DebugLoader<IRCompilerX64::Assembler>>(compiler.assembler, error,
                                                                           baselineDebugFileOut.getValue());
+#elif defined(__aarch64__)
+         loader = std::make_unique<DebugLoader<IRCompilerA64::Assembler>>(compiler.assembler, error,
+                                                                          baselineDebugFileOut.getValue());
+#else
+#error "Baseline backend is only supported on x86_64 or aarch64 architectures."
+#endif
       } else {
          if (!compiler.localFuncMap.contains("main")) {
             error.emit() << "No main function found in query module. Please ensure that the module has a "
