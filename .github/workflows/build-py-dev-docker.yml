@@ -41,6 +41,8 @@ jobs:
           file: tools/python/bridge/Dockerfile
           # Push by digest prevents race conditions on tags between parallel jobs
           platforms: ${{ matrix.platform }}
+          cache-from: type=gha,scope=${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
           outputs: type=image,name=${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
           target: devimg
 
@@ -85,14 +87,22 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Create manifest list and push
+        id: push-manifest
         working-directory: /tmp/digests
         run: |
+          # 1. Create and Push the manifest
           docker buildx imagetools create -t ${{ env.IMAGE_NAME }}:${{ github.sha }} \
             $(printf '${{ env.IMAGE_NAME }}@sha256:%s ' *)
+          
+          # 2. Inspect the image to get the final manifest digest
+          DIGEST=$(docker buildx imagetools inspect ${{ env.IMAGE_NAME }}:${{ github.sha }} --format "{{json .Manifest}}" | jq -r .digest")
+          
+          # 3. Output the digest to GITHUB_OUTPUT so the next step can see it
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
 
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@v2
         with:
           subject-name: ${{ env.IMAGE_NAME }}
-          subject-digest: ${{ steps.push.outputs.digest }}
+          subject-digest: ${{ steps.push-manifest.outputs.digest }}
           push-to-registry: true
