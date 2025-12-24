@@ -41,8 +41,6 @@ jobs:
           file: tools/python/bridge/Dockerfile
           # Push by digest prevents race conditions on tags between parallel jobs
           platforms: ${{ matrix.platform }}
-          cache-from: type=gha,scope=${{ matrix.platform }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
           outputs: type=image,name=${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
           target: devimg
 
