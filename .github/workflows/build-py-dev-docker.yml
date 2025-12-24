@@ -93,7 +93,7 @@ jobs:
             $(printf '${{ env.IMAGE_NAME }}@sha256:%s ' *)
           
           # 2. Inspect the image to get the final manifest digest
-          DIGEST=$(docker buildx imagetools inspect ${{ env.IMAGE_NAME }}:${{ github.sha }} --format "{{json .Manifest}}" | jq -r .digest")
+          DIGEST=$(docker buildx imagetools inspect ${{ env.IMAGE_NAME }}:${{ github.sha }} --format '{{json .Manifest}}' | jq -r .digest)
           
           # 3. Output the digest to GITHUB_OUTPUT so the next step can see it
           echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
