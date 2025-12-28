@@ -113,18 +113,18 @@ jobs:
           touch build/lingodb-${{ matrix.build_type }}/.stamp
           touch build/lingodb-${{ matrix.build_type }}/.buildstamp
           chmod +x build/lingodb-${{ matrix.build_type }}/*
-      - name: Test llvm backend
-        run: |
-          make test-no-rebuild-sqlite
-        env:
-          SQLITE_TEST_BUILD_TYPE: ${{ matrix.build_type }}
-          LINGODB_EXECUTION_MODE: "DEFAULT"
       - name: Test baseline backend
         run: |
           make test-no-rebuild-sqlite
         env:
           SQLITE_TEST_BUILD_TYPE: ${{ matrix.build_type }}
           LINGODB_EXECUTION_MODE: "BASELINE"
+      - name: Test llvm backend
+        run: |
+          make test-no-rebuild-sqlite
+        env:
+          SQLITE_TEST_BUILD_TYPE: ${{ matrix.build_type }}
+          LINGODB_EXECUTION_MODE: "DEFAULT"
 
   sqlite_dataset-tests:
     strategy:
