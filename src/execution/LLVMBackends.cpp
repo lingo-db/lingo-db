@@ -234,6 +234,12 @@ class LLVMBackend {
          if (!tmBuilderOrError)
             return tmBuilderOrError.takeError();
 
+#if defined(__aarch64__) && defined(__linux__)
+         // AArch64 cannot emit absolute relocations in shared objects.
+         // Enforce PIC so LLVM lowers globals via GOT instead of MOVW_UABS_*.
+         tmBuilderOrError->setRelocationModel(llvm::Reloc::PIC_);
+#endif
+
          auto tmOrError = tmBuilderOrError->createTargetMachine();
          if (!tmOrError)
             return tmOrError.takeError();
