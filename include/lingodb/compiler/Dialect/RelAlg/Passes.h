@@ -23,6 +23,7 @@ std::unique_ptr<mlir::Pass> createPushdownPass();
 std::unique_ptr<mlir::Pass> createOptimizeJoinOrderPass();
 std::unique_ptr<mlir::Pass> createCombinePredicatesPass();
 std::unique_ptr<mlir::Pass> createOptimizeImplementationsPass();
+std::unique_ptr<mlir::Pass> createCommonSubtreeEliminationPass();
 std::unique_ptr<mlir::Pass> createIntroduceTmpPass();
 std::unique_ptr<mlir::Pass> createReduceGroupByKeysPass();
 std::unique_ptr<mlir::Pass> createExpandTransitiveEqualities();
