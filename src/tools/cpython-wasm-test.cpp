@@ -8,6 +8,9 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <cstring>
+#include <array>
+#include <cassert>
 
 #ifndef CPYTHON_WASM_SOURCE_DIR
 #error CPYTHON_WASM_SOURCE_DIR not defined
@@ -118,24 +121,15 @@ public:
       char errorBuf[128] = {0};
 
       /* --- 1. Setup 'dir_list' (for --dir=.) --- */
-      // This sets the CWD for python.aot (This is correct)
       std::array dirList{
          CPYTHON_WASM_BUILD_DIR};
 
       /* --- 2. Setup 'map_dir_list' (for --map-dir=...) --- */
-      // !! THIS IS THE CRITICAL CHANGE !!
       std::array mapDirList{
-         // Entry 1: Map the source root
          "/::" CPYTHON_WASM_SOURCE_DIR,
-
-         // Entry 2: Map the python libs (/lib/python3.14)
          "/lib/python3.14::" CPYTHON_WASM_SOURCE_DIR "/Lib",
-
-         // TODO: do we need this?
-         // "/app::/home/bachmaier/projects/lingo-db/ptest"
       };
 
-      // spoof fake program name (since CPython uses it to load relativ libs)
       std::string programName = "./python.aot";
       std::array wasmArgs{programName.data()};
 
@@ -145,7 +139,7 @@ public:
                                  nullptr, 0,
                                  wasmArgs.data(), wasmArgs.size());
       moduleInst = wasm_runtime_instantiate(this->cpythonModule->module, stackSize, heapSize,
-                                                               errorBuf, sizeof(errorBuf));
+                                            errorBuf, sizeof(errorBuf));
       if (!moduleInst) {
          throw std::runtime_error{std::format("Failed to instantiate CPython module: {}", errorBuf)};
       }
@@ -162,8 +156,6 @@ private:
 
 class PyEnv {
 public:
-   // - Outs... must be supplied explicitly
-   // - Ins... are deduced from the provided inputs.
    template <typename... Outs, typename... Ins>
    std::vector<wasm_val_t> callPyFunc(const std::string& funcName, Ins&&... ins) {
       wasm_function_inst_t func = get_py_func(moduleInst, funcName.c_str());
@@ -174,7 +166,6 @@ public:
       assert(nameArgs == sizeof...(Ins));
       bool success = wasm_runtime_call_wasm_a(execEnv, func, numResults, results.data(), nameArgs, args.data());
       if (!success) {
-         /* exception is thrown if call fails */
          throw std::runtime_error{wasm_runtime_get_exception(moduleInst)};
       }
       return results;
@@ -194,15 +185,197 @@ public:
 
    void testSetup() {
       const auto init = callPyFunc<bool>("Py_IsInitialized").at(0).of.i32;
-      if (!init) {
-         throw std::runtime_error{std::format("Py_Initialize failed")};
-      }
+      if (!init) throw std::runtime_error{std::format("Py_Initialize failed")};
       std::cout << "Python initialized successfully" << std::endl;
    }
 
-   wasm_exec_env_t execEnv;
+   void runSimpleString(const std::string& script) {
+      // We must malloc the script into WASM memory
+      void* nativeBuf = nullptr;
+      uint64_t wasmBuf = wasm_runtime_module_malloc(moduleInst, script.size() + 1, &nativeBuf);
+      if (!nativeBuf) throw std::runtime_error{"Malloc failed for script"};
 
-   // for conveniance
+      memcpy(nativeBuf, script.c_str(), script.size() + 1);
+
+      // Call PyRun_SimpleString
+      int ret = callPyFunc<int>("PyRun_SimpleString", (uint32_t)wasmBuf).at(0).of.i32;
+
+      wasm_runtime_module_free(moduleInst, wasmBuf);
+
+      if (ret != 0) {
+         callPyFunc<void>("PyErr_Print");
+         throw std::runtime_error{"Script execution failed"};
+      }
+   }
+
+    // --- HELPER: Create a Python String in WASM Memory ---
+    uint32_t createPyString(const std::string& str) {
+        void* nativeBuf = nullptr;
+        uint64_t wasmBuf = wasm_runtime_module_malloc(moduleInst, str.size() + 1, &nativeBuf);
+        if (!nativeBuf) throw std::runtime_error{"Malloc failed for string"};
+        memcpy(nativeBuf, str.c_str(), str.size() + 1);
+
+        uint32_t pStr = callPyFunc<int32_t>("PyUnicode_DecodeFSDefault", (uint32_t)wasmBuf).at(0).of.i32;
+
+        wasm_runtime_module_free(moduleInst, wasmBuf);
+        if (pStr == 0) {
+             callPyFunc<void>("PyErr_Print");
+             throw std::runtime_error{"Failed to create Python string"};
+        }
+        return pStr;
+    }
+
+    // --- HELPER: Set Attribute using Python Objects ---
+    void setAttr(uint32_t pObj, const std::string& name, uint32_t pVal) {
+        uint32_t pName = createPyString(name);
+        int ret = callPyFunc<int>("PyObject_SetAttr", pObj, pName, pVal).at(0).of.i32;
+        callPyFunc<void>("Py_DecRef", pName);
+        if (ret != 0) {
+             callPyFunc<void>("PyErr_Print");
+             throw std::runtime_error{"Failed to set attribute: " + name};
+        }
+    }
+
+   // --- HELPER: Read a Python String (PyObject*) into C++ std::string ---
+   std::string readPyString(uint32_t pStr) {
+       if (!pStr) return "";
+
+       // PyUnicode_AsUTF8 returns a const char* (which is an int32 pointer in Wasm)
+       // Note: The buffer is owned by Python; it's valid as long as pStr exists.
+       uint32_t wasmPtr = callPyFunc<uint32_t>("PyUnicode_AsUTF8", pStr).at(0).of.i32;
+       if (!wasmPtr) {
+           callPyFunc<void>("PyErr_Print");
+           throw std::runtime_error("Failed to decode Python string via PyUnicode_AsUTF8");
+       }
+
+       // Convert Wasm pointer to Host pointer
+       char* hostPtr = (char*)wasm_runtime_addr_app_to_native(moduleInst, wasmPtr);
+       if (!hostPtr) {
+            throw std::runtime_error("Invalid memory access: could not map WASM string to Host");
+       }
+       return std::string(hostPtr);
+   }
+
+   // --- FUNCTION: Get Inittab Entries as a String ---
+   // Correctly uses a mix of Python Script (to create the string) and C-API (to read it).
+   std::string getInittabString() {
+       // 1. Run Python to create the string and attach it to 'sys' module
+       // We attach it to 'sys' because it's easy to retrieve from C++.
+       const char* script = R"(
+import sys
+# Create the string and save it as an attribute on sys
+sys._inittab_debug_dump = "\n".join(sorted(sys.builtin_module_names))
+)";
+       runSimpleString(script);
+
+       // 2. Import 'sys' module using C-API
+       // We create the string "sys" first
+       uint32_t pSysName = createPyString("sys");
+       uint32_t pSys = callPyFunc<uint32_t>("PyImport_Import", pSysName).at(0).of.i32;
+       callPyFunc<void>("Py_DecRef", pSysName); // Clean up name
+
+       if (!pSys) {
+           callPyFunc<void>("PyErr_Print");
+           throw std::runtime_error("Failed to import 'sys'");
+       }
+
+       // 3. Get the attribute '_inittab_debug_dump'
+       uint32_t pAttrName = createPyString("_inittab_debug_dump");
+       uint32_t pStr = callPyFunc<uint32_t>("PyObject_GetAttr", pSys, pAttrName).at(0).of.i32;
+       callPyFunc<void>("Py_DecRef", pAttrName); // Clean up name
+       callPyFunc<void>("Py_DecRef", pSys);      // Clean up module
+
+       if (!pStr) {
+           callPyFunc<void>("PyErr_Print");
+           throw std::runtime_error("Failed to get inittab string from sys");
+       }
+
+       // 4. Convert to C++ string
+       std::string result = readPyString(pStr);
+
+       // 5. Cleanup the result object
+       callPyFunc<void>("Py_DecRef", pStr);
+
+       return result;
+   }
+
+   // --- HELPER: Pre-register a module in sys.modules with a valid __spec__ ---
+   void preRegisterModule(const std::string& moduleName) {
+      std::string script = std::format(R"(
+import sys
+import importlib.util
+import types
+
+name = "{}"
+# 1. Get or Create the Module
+if name in sys.modules:
+   mod = sys.modules[name]
+else:
+   mod = types.ModuleType(name)
+   sys.modules[name] = mod
+
+# 2. Patch Metadata if missing
+# This is crucial: without __spec__, importlib treats the module as 'uninitialized'
+# and will try to reload it from disk, failing with ModuleNotFoundError.
+if not hasattr(mod, '__spec__') or mod.__spec__ is None:
+   spec = importlib.util.spec_from_loader(name, loader=None, origin='pre-registered')
+   spec.has_location = False
+   mod.__spec__ = spec
+   mod.__package__ = name.rpartition('.')[0]
+)", moduleName);
+      runSimpleString(script);
+   }
+
+  void injectExtensionModule(const std::string& moduleName, const std::string& initFuncName) {
+    std::cout << "Injecting Extension: " << moduleName << "..." << std::endl;
+
+    // 1. Pre-register the placeholder
+    // This MUST happen before PyInit, because PyInit triggers the imports that cause the cycle.
+    preRegisterModule(moduleName);
+
+    // 2. Call PyInit to get the Module Definition
+    wasm_function_inst_t initFunc = wasm_runtime_lookup_function(moduleInst, initFuncName.c_str());
+    if (!initFunc) throw std::runtime_error{std::format("Init function '{}' not found.", initFuncName)};
+
+    std::vector<wasm_val_t> results(1);
+    std::vector<wasm_val_t> args(0);
+    bool success = wasm_runtime_call_wasm_a(execEnv, initFunc, 1, results.data(), 0, args.data());
+
+    if (!success) {
+        callPyFunc<void>("PyErr_Print");
+        throw std::runtime_error{wasm_runtime_get_exception(moduleInst)};
+    }
+
+    uint32_t pDef = results[0].of.i32;
+    if (pDef == 0) {
+        callPyFunc<void>("PyErr_Print");
+        throw std::runtime_error{"PyInit returned NULL"};
+    }
+
+    // 3. Retrieve the Placeholder Module (Object Identity Preservation)
+    int32_t pSysModules = callPyFunc<int32_t>("PyImport_GetModuleDict").at(0).of.i32;
+    uint32_t pName = createPyString(moduleName);
+
+    // Borrowed reference
+    uint32_t pModule = callPyFunc<uint32_t>("PyDict_GetItem", pSysModules, pName).at(0).of.i32;
+    callPyFunc<void>("Py_DecRef", pName);
+
+    if (pModule == 0) {
+        throw std::runtime_error("Pre-registered module disappeared from sys.modules!");
+    }
+
+    // 4. Execute the Definition into the Existing Module
+    int execRet = callPyFunc<int>("PyModule_ExecDef", pModule, pDef).at(0).of.i32;
+
+    if (execRet == -1) {
+       callPyFunc<void>("PyErr_Print");
+       throw std::runtime_error{"Failed to execute module definition"};
+    }
+
+    std::cout << "Success: " << moduleName << " loaded and populated." << std::endl;
+}
+
+   wasm_exec_env_t execEnv;
    wasm_module_inst_t moduleInst;
 private:
    std::unique_ptr<CPythonInst> cpythonInst;
@@ -224,192 +397,78 @@ class PyObjectRef {
 
 static PyObjectRef importModule(const std::string& moduleName, std::shared_ptr<PyEnv> pyEnv) {
    void* nativeBuf = nullptr;
-   uint64_t wasmBuf = wasm_runtime_module_malloc(pyEnv->moduleInst, 200, &nativeBuf);
-   auto* nativeCharBuf = std::bit_cast<char*>(nativeBuf);
+   uint64_t wasmBuf = wasm_runtime_module_malloc(pyEnv->moduleInst, moduleName.size() + 1, &nativeBuf);
+   if (!nativeBuf) throw std::runtime_error{"Malloc failed"};
+   memcpy(nativeBuf, moduleName.c_str(), moduleName.size() + 1);
 
-   memcpy(nativeCharBuf, moduleName.c_str(), moduleName.size() + 1);
-   // pName = PyUnicode_DecodeFSDefault(moduleName);
-   auto pName =  pyEnv->callPyFunc<PyObjectRef>("PyUnicode_DecodeFSDefault", wasmBuf).at(0).of.i32;
-   //pModule = PyImport_Import(pName);
-   auto pModule =  pyEnv->callPyFunc<PyObjectRef>("PyImport_Import", pName).at(0).of.i32;
+   auto pName = pyEnv->callPyFunc<PyObjectRef>("PyUnicode_DecodeFSDefault", (uint32_t)wasmBuf).at(0).of.i32;
+   wasm_runtime_module_free(pyEnv->moduleInst, wasmBuf);
+
+   auto pModule = pyEnv->callPyFunc<PyObjectRef>("PyImport_Import", pName).at(0).of.i32;
    if (!pModule) {
       pyEnv->callPyFunc<void>("PyErr_Print");
-      throw std::runtime_error{"Module not found"};
+      throw std::runtime_error{"Module not found: " + moduleName};
    }
    return {pModule, pyEnv};
 }
 
-void* dlopenSpoof(wasm_exec_env_t execEnv, const char *path, int flags)
-{
-   throw std::runtime_error{std::format("dlopenSpoof called: {} - {}", path, flags)};
-}
 
-static NativeSymbol nativeSymbols[] =
-{
-   {
-      "dlopen", 		// the name of WASM function name
-      (void*)dlopenSpoof,      // the native function pointer
-      "($i)*"		// the function prototype signature
-  },
-};
 
 int main(int argc, char** argv) {
    std::unique_ptr<WasmRuntime> runtime = std::make_unique<WasmRuntime>();
-   int nNativeSymbols = sizeof(nativeSymbols) / sizeof(NativeSymbol);
-   if (!wasm_runtime_register_natives("python.wasm",
-                                      nativeSymbols,
-                                      nNativeSymbols)) {
-      throw std::runtime_error{"Failed to register native symbols"};
-                                      }
    std::unique_ptr<CPythonModule> cpythonModule = std::make_unique<CPythonModule>(std::move(runtime));
    std::unique_ptr<CPythonInst> cpythonInst = std::make_unique<CPythonInst>(std::move(cpythonModule));
    std::shared_ptr<PyEnv> pyEnv = std::make_shared<PyEnv>(std::move(cpythonInst));
    pyEnv->testSetup();
 
-   // //Add module path
-   // {
-   //    const char* script = "import sys; sys.path.append('/app')";
-   //
-   //    // Malloc buffer in wasm for the script
-   //    void* nativeBufAddr = nullptr;
-   //    uint64_t instBufAddr = wasm_runtime_module_malloc(moduleInst, strlen(script) + 1, &nativeBufAddr);
-   //    if (!nativeBufAddr) {
-   //       throw std::runtime_error{"Failed to malloc wasm buffer for script"};
-   //    }
-   //    char* nativeCharBuf = std::bit_cast<char*>(nativeBufAddr);
-   //
-   //    // Copy script into wasm buffer
-   //    memcpy(nativeCharBuf, script, strlen(script) + 1);
-   //
-   //    // Call PyRun_SimpleString(script)
-   //    auto result = callPyFunc<int>(execEnv, moduleInst, "PyRun_SimpleString", (uint32_t)instBufAddr).at(0).of.i32;
-   //
-   //    // Free wasm buffer
-   //    wasm_runtime_module_free(moduleInst, instBufAddr);
-   //
-   //    if (result != 0) {
-   //       callPyFunc<void>(execEnv, moduleInst, "PyErr_Print");
-   //       throw std::runtime_error{"Failed to run sys.path.append script"};
-   //    }
-   //    std::cerr << "Successfully added /app to sys.path" << std::endl;
-   // }
-
-   {
-      PyObjectRef osModule = importModule(std::string{"os"}, pyEnv);
-      const char* fName = "getcwd";
-      // Malloc buffer in wasm for the function
-      void* nativeBufAddr = nullptr;
-      uint64_t fNameWasmAddr = wasm_runtime_module_malloc(pyEnv->moduleInst, strlen(fName) + 1, &nativeBufAddr);
-      if (!nativeBufAddr) {
-         throw std::runtime_error{"Failed to malloc wasm buffer for function name"};
-      }
-      char* nativeCharBuf = std::bit_cast<char*>(nativeBufAddr);
-      // Copy function name into wasm buffer
-      memcpy(nativeCharBuf, fName, strlen(fName) + 1);
-
-      PyObjectRef pFunc = {pyEnv->callPyFunc<uint32_t>("PyObject_GetAttrString", osModule, fNameWasmAddr).at(0).of.i32, pyEnv};
-      //Check callable
-      std::cerr << "pFunc: " << pFunc << std::endl;
-      if (!pFunc || pyEnv->callPyFunc<bool>("PyCallable_Check", pFunc).at(0).of.i32 == 0) {
-         throw std::runtime_error{"Function is not callable"};
-      }
-
-      // call function
-      PyObjectRef resultObj = {pyEnv->callPyFunc<uint32_t>("PyObject_CallObject", pFunc, 0).at(0).of.i32, pyEnv};
-      if (!resultObj) {
-         throw std::runtime_error{"Failed to call function"};
-      }
-      // Convert result to string
-      auto resultStrObj = pyEnv->callPyFunc<PyObjectRef>("PyObject_Str", resultObj).at(0).of.i32;
-      if (!resultStrObj) {
-         throw std::runtime_error{"Failed to convert result to string"};
-      }
-      // Convert string object to C string
-      auto cStrWasmAddr = pyEnv->callPyFunc<uint32_t>("PyUnicode_AsUTF8", resultStrObj).at(0).of.i32;
-      void* nativecStr = wasm_runtime_addr_app_to_native(pyEnv->moduleInst, cStrWasmAddr);
-      std::cout << std::bit_cast<char*>(nativecStr) << std::endl;
-
-      // auto pArgs = callPyFunc<PyObjectPtr>(execEnv, moduleInst, "PyTuple_New", 2).at(0).of.i32;
-      // if (!pArgs) {
-      //    throw std::runtime_error{"Failed to create args tuple"};
-      // }
-      // auto pArg1 = callPyFunc<PyObjectPtr>(execEnv, moduleInst, "PyLong_FromLong", arg1).at(0).of.i32;
-      // auto pArg2 = callPyFunc<PyObjectPtr>(execEnv, moduleInst, "PyLong_FromLong", arg2).at(0).of.i32;
-      // if (!pArg1 || !pArg2) {
-      //    throw std::runtime_error{"Failed to create args"};
-      // }
-      //
-      // callPyFunc<int>(execEnv, moduleInst, "PyTuple_SetItem", pArgs, 0, pArg1);
-      // callPyFunc<int>(execEnv, moduleInst, "PyTuple_SetItem", pArgs, 1, pArg2);
-      //
-      // PyObjectPtr resultObj = callPyFunc<PyObjectPtr>(execEnv, moduleInst, "PyObject_CallObject", pFunc, pArgs).at(0).of.i32;
-      //
-      // if (!resultObj) {
-      //    throw std::runtime_error{"Failed to call function"};
-      // }
-      // auto result = callPyFunc<int64_t>(execEnv, moduleInst, "PyLong_AsLong", resultObj).at(0).of.i64;
-      // std::cerr << "Result: " << result << std::endl;
+   // --- CHECK INITTAB ---
+   try {
+      std::cout << "--- Registered Inittab Modules ---" << std::endl;
+      std::string modules = pyEnv->getInittabString();
+      std::cout << modules << std::endl;
+      std::cout << "----------------------------------" << std::endl;
+   } catch (const std::exception& e) {
+      std::cerr << "Error checking inittab: " << e.what() << std::endl;
    }
 
+   try {
+      // --- MANUAL EXTENSION LOADING ---
+      // We attempt to manually inject the NumPy extension.
+      // This function contains the crucial fix for circular dependencies (pre-registering __spec__).
+      // NOTE: If you see "numpy._core._multiarray_umath" in the Inittab output above,
+      // you can comment this line out, as Python will load it automatically!
+      pyEnv->injectExtensionModule("numpy._core._multiarray_umath", "PyInit__multiarray_umath");
+
+      // Optional: Inject other modules if needed
+      // pyEnv->injectExtensionModule("numpy.linalg._umath_linalg", "PyInit__umath_linalg");
+
+   } catch (const std::exception& e) {
+      std::cerr << "Fatal Error injecting extensions: " << e.what() << std::endl;
+      return 1;
+   }
+
+   // --- Suffix Hack ---
    const char* addSuffixScript =
    "import importlib.machinery\n"
-   "importlib.machinery.EXTENSION_SUFFIXES = importlib.machinery.EXTENSION_SUFFIXES + ['.cpython-313-wasm32-emscripten.so']\n";
+   "importlib.machinery.EXTENSION_SUFFIXES.append('.cpython-313-wasm32-emscripten.so')\n";
 
    void* nativeBuf = nullptr;
    uint64_t instBufAddr = wasm_runtime_module_malloc(pyEnv->moduleInst, strlen(addSuffixScript) + 1, &nativeBuf);
-   if (!nativeBuf) {
-      throw std::runtime_error{"Failed to malloc wasm buffer for extension-suffix script"};
-   }
-   char* nativeCharBuf = std::bit_cast<char*>(nativeBuf);
-   memcpy(nativeCharBuf, addSuffixScript, strlen(addSuffixScript) + 1);
-
-   int runResult = pyEnv->callPyFunc<int>("PyRun_SimpleString", static_cast<uint32_t>(instBufAddr)).at(0).of.i32;
-   wasm_runtime_module_free(pyEnv->moduleInst, instBufAddr);
-
-   if (runResult != 0) {
-      pyEnv->callPyFunc<void>("PyErr_Print");
-      throw std::runtime_error{"Failed to add extension suffix to EXTENSION_SUFFIXES"};
+   if (nativeBuf) {
+       memcpy(nativeBuf, addSuffixScript, strlen(addSuffixScript) + 1);
+       int runResult = pyEnv->callPyFunc<int>("PyRun_SimpleString", static_cast<uint32_t>(instBufAddr)).at(0).of.i32;
+       wasm_runtime_module_free(pyEnv->moduleInst, instBufAddr);
+       if (runResult != 0) pyEnv->callPyFunc<void>("PyErr_Print");
    }
 
-   // import sys
-   PyObjectRef sysModule = importModule(std::string{"importlib.machinery"}, pyEnv);
-
-   // get attribute "machinery" from sys
-   const char* attr = "EXTENSION_SUFFIXES";
-   nativeBuf = nullptr;
-   uint64_t attrWasmAddr = wasm_runtime_module_malloc(pyEnv->moduleInst, strlen(attr) + 1, &nativeBuf);
-   if (!nativeBuf) {
-      throw std::runtime_error{"Failed to malloc wasm buffer for attribute name"};
-   }
-   nativeCharBuf = static_cast<char*>(nativeBuf);
-   memcpy(nativeCharBuf, attr, strlen(attr) + 1);
-
-   PyObjectRef pPath = { pyEnv->callPyFunc<uint32_t>("PyObject_GetAttrString", sysModule, static_cast<uint32_t>(attrWasmAddr)).at(0).of.i32, pyEnv };
-   wasm_runtime_module_free(pyEnv->moduleInst, attrWasmAddr);
-
-   if (!pPath) {
-      pyEnv->callPyFunc<void>("PyErr_Print");
-      throw std::runtime_error{"Failed to get sys.path"};
-   }
-
-   // convert path object to Python string
-   PyObjectRef pathStr = {pyEnv->callPyFunc<PyObjectRef>("PyObject_Str", pPath).at(0).of.i32, pyEnv};
-   if (!pathStr) {
-      throw std::runtime_error{"Failed to convert sys.path to string"};
-   }
-
-   // get UTF-8 C string address in wasm memory and map to native
-   auto cStrWasmAddr = pyEnv->callPyFunc<uint32_t>("PyUnicode_AsUTF8", pathStr).at(0).of.i32;
-   void* nativeCStr = wasm_runtime_addr_app_to_native(pyEnv->moduleInst, cStrWasmAddr);
-   if (!nativeCStr) {
-      throw std::runtime_error{"Failed to map sys.path UTF-8 address to native memory"};
-   }
-
-   // print to stdout
-   std::cout << std::bit_cast<char*>(nativeCStr) << std::endl;
-
-   {
+   // --- Import NumPy ---
+   try {
       std::cerr << "Importing numpy module..." << std::endl;
-      PyObjectRef osModule = importModule(std::string{"numpy"}, pyEnv);
+      PyObjectRef numpyModule = importModule(std::string{"numpy"}, pyEnv);
+      std::cout << "NumPy imported successfully!" << std::endl;
+   } catch (const std::exception& e) {
+       std::cerr << "Failed to import numpy: " << e.what() << std::endl;
    }
+
+   return 0;
 }
