@@ -12,7 +12,10 @@
 #include <arrow/api.h>
 #include <arrow/array/array_primitive.h>
 #include <arrow/io/api.h>
+#include <arrow/compute/exec.h>
 #include <arrow/ipc/api.h>
+#include <arrow/visit_array_inline.h>
+#include <type_traits>
 
 namespace {
 uint64_t nextPow2(uint64_t v) {
@@ -26,6 +29,70 @@ uint64_t nextPow2(uint64_t v) {
    v++;
    return v;
 }
+// TODO use this in the visitor!!
+uint64_t hashCombine(uint64_t hash1, uint64_t hash2) {
+   return hash1 ^ (hash2 + 0x9e3779b9 + (hash1 << 6) + (hash2 >> 2));
+}
+
+struct HashColumnVisitor {
+    // 1. Specific Overload for Strings and Binary (Standard & Large)
+    // This covers StringArray, BinaryArray, LargeStringArray, LargeBinaryArray
+    arrow::Status Visit(const arrow::StringArray& array, std::vector<uint64_t>& hashAccumulator) { return HashStringLike(array, hashAccumulator); }
+    arrow::Status Visit(const arrow::BinaryArray& array, std::vector<uint64_t>& hashAccumulator) { return HashStringLike(array, hashAccumulator); }
+    arrow::Status Visit(const arrow::LargeStringArray& array, std::vector<uint64_t>& hashAccumulator) { return HashStringLike(array, hashAccumulator); }
+    arrow::Status Visit(const arrow::LargeBinaryArray& array, std::vector<uint64_t>& hashAccumulator) { return HashStringLike(array, hashAccumulator); }
+
+    // 2. Specific Overload for View Types
+    arrow::Status Visit(const arrow::StringViewArray& array, std::vector<uint64_t>& hashAccumulator) { return HashStringLike(array, hashAccumulator); }
+    arrow::Status Visit(const arrow::BinaryViewArray& array, std::vector<uint64_t>& hashAccumulator) { return HashStringLike(array, hashAccumulator); }
+
+    // 3. Specific Overload for Booleans (special bit-packed handling)
+    arrow::Status Visit(const arrow::BooleanArray& array, std::vector<uint64_t>& hashAccumulator) {
+        for (int64_t row = 0; row < array.length(); row++) {
+            if (!array.IsNull(row)) {
+                hashAccumulator[row] = hashCombine(hashAccumulator[row], std::hash<bool>{}(array.Value(row)));
+            }
+        }
+        return arrow::Status::OK();
+    }
+
+    // 4. Generic Template for everything else
+    template <typename ArrayType>
+    arrow::Status Visit(const ArrayType& array, std::vector<uint64_t>& hashAccumulator) {
+        using T = typename ArrayType::TypeClass;
+
+        // Use if constexpr to handle types with/without c_type safely
+        if constexpr (arrow::has_c_type<T>::value) {
+            using C_TYPE = typename T::c_type;
+
+            // Further check if std::hash supports this C_TYPE
+            if constexpr (std::is_arithmetic_v<C_TYPE> || std::is_enum_v<C_TYPE>) {
+                for (int64_t row = 0; row < array.length(); row++) {
+                    if (!array.IsNull(row)) {
+                        hashAccumulator[row] = hashCombine(hashAccumulator[row], std::hash<C_TYPE>{}(array.Value(row)));
+                    }
+                }
+            } else {
+                  return arrow::Status::NotImplemented();
+            }
+        }
+        return arrow::Status::OK();
+    }
+
+private:
+    template <typename T>
+    arrow::Status HashStringLike(const T& array, std::vector<uint64_t>& hashAccumulator) {
+        for (int64_t row = 0; row < array.length(); row++) {
+            if (!array.IsNull(row)) {
+                // array.GetView(row) is consistent across String, LargeString, and Views
+                auto view = array.GetView(row);
+                auto hashValue = std::hash<std::string_view>{}(std::string_view(view.data(), view.size()));
+                hashAccumulator[row] = hashCombine(hashAccumulator[row], hashValue);
+            }
+        }
+        return arrow::Status::OK();
+    }
+};
 } //end namespace
 namespace lingodb::runtime {
 
@@ -50,37 +117,40 @@ void LingoDBHashIndex::rawInsert(size_t startRowId, std::shared_ptr<arrow::Table
 #ifndef MLIR_DISABLED
    if (t->num_rows() == 0) {
       throw std::runtime_error("empty table");
-   } else {
-      std::string query = "select row_number() over() -1 as rowid, hash(";
-      for (auto c : indexedColumns) {
-         if (!query.ends_with("(")) {
-            query += ",";
-         }
-         query += c;
-      }
-      query += ") as hash from tmp";
-      auto tmpSession = Session::createSession();
-      auto createTableDef = catalog::CreateTableDef{"tmp", table->getColumns(), {}};
-      tmpSession->getCatalog()->insertEntry(catalog::LingoDBTableCatalogEntry::createFromCreateTable(createTableDef));
-      tmpSession->getCatalog()->getTypedEntry<catalog::LingoDBTableCatalogEntry>("tmp").value()->getTableStorage().append(t);
-      auto queryExecutionConfig = execution::createQueryExecutionConfig(execution::ExecutionMode::SPEED, true);
-      queryExecutionConfig->parallel = false;
-      std::shared_ptr<arrow::Table> result;
-      queryExecutionConfig->resultProcessor = execution::createTableRetriever(result);
+   }
 
-      auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), *tmpSession);
-      executer->fromData(query);
-      scheduler::awaitChildTask(std::make_unique<execution::QueryExecutionTask>(std::move(executer)));
-      auto asBatch = result->CombineChunksToBatch().ValueOrDie();
-      auto hashColumn = std::static_pointer_cast<arrow::Int64Array>(asBatch->GetColumnByName("hash"));
-      auto rowIdColumn = std::static_pointer_cast<arrow::Int64Array>(asBatch->GetColumnByName("rowid"));
-      for (auto i = 0ll; i < asBatch->num_rows(); i++) {
+   arrow::TableBatchReader reader(t);
+   std::shared_ptr<arrow::RecordBatch> batch;
+
+   size_t batchStartRowId = 0;
+
+   while (reader.ReadNext(&batch).ok() && batch != nullptr) {
+      int64_t n_rows = batch->num_rows();
+      int64_t n_cols = batch->num_columns();
+
+      // TODO check 0 initialized
+      std::vector<uint64_t> hashArray(n_rows);
+
+      for (auto col=0; col<n_cols; col++) {
+         const auto& array = *batch->column(col);
+         HashColumnVisitor visitor;
+         // TODO check hashArray is passed as reference
+         auto hash_ok = arrow::VisitArrayInline(array, &visitor, hashArray).ok();
+         if (!hash_ok) {
+           // TODO error handling
+         }
+     }
+
+      for (auto row = 0ll; row < n_rows; row++) {
          Entry* entry = (Entry*) buffer.insert();
-         entry->rowId = rowIdColumn->Value(i) + startRowId;
-         entry->hash = hashColumn->Value(i);
+         entry->rowId = startRowId + batchStartRowId + row;
+         entry->hash = hashArray[row];
          entry->next = nullptr;
       }
+
+      batchStartRowId += n_rows;
    }
+
 #else
    assert(false && "LingoDBHashIndex::rawInsert not supported without MLIR");
 #endif
@@ -135,7 +205,8 @@ void LingoDBHashIndex::bulkInsert(size_t startRowId, std::shared_ptr<arrow::Tabl
    rawBuild();
    flush();
 }
-HashIndexIteration* HashIndexAccess::lookup(size_t hash) {
+// FixMe removed lookup definition from here
+HashIndexIteration* HashIndexAccess::lookupContinuation(size_t hash) {
    auto& iter = iteration[lingodb::scheduler::currentWorkerId()];
    iter.reset(hash, hashIndex.ht[hash & hashIndex.mask]);
    return &iter;
