@@ -1029,7 +1029,6 @@ class HashLowering : public ConversionPattern {
          } else {
             return combineHashes(builder, loc, hashInteger(builder, loc, v), totalHash);
          }
-
       } else if (auto floatType = mlir::dyn_cast_or_null<mlir::FloatType>(v.getType())) {
          Value asInt = builder.create<arith::BitcastOp>(loc, IntegerType::get(builder.getContext(), floatType.getWidth()), v);
          return combineHashes(builder, loc, hashInteger(builder, loc, asInt), totalHash);

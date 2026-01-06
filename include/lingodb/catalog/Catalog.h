@@ -66,10 +66,8 @@ class Catalog {
                return std::static_pointer_cast<T>(entry);
             }
          }
-         return std::nullopt;
-      } else {
-         return std::nullopt;
       }
+      return std::nullopt;
    }
    void persist();
    void setShouldPersist(bool shouldPersist) {
