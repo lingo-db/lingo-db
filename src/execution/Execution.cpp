@@ -12,6 +12,7 @@
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/Passes.h"
 #include "lingodb/execution/BaselineBackend.h"
 #include "lingodb/execution/CBackend.h"
+#include "lingodb/execution/BackendPasses.h"
 #include "lingodb/execution/LLVMBackends.h"
 #include "lingodb/runtime/storage/TableStorage.h"
 #include "lingodb/utility/Setting.h"
@@ -52,6 +53,7 @@ class DefaultQueryOptimizer : public QueryOptimizer {
       addLingoDBInstrumentation(pm, getSerializationState());
       pm.addPass(mlir::createInlinerPass());
       pm.addPass(mlir::createSymbolDCEPass());
+      pm.addPass(createDecomposeTuplePass());
       relalg::createQueryOptPipeline(pm, catalog);
       if (mlir::failed(pm.run(moduleOp))) {
          error.emit() << " Query Optimization failed";

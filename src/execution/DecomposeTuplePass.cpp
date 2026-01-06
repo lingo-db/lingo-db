@@ -6,6 +6,9 @@
 #include "lingodb/compiler/Dialect/util/UtilOps.h"
 #include "lingodb/execution/BackendPasses.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/SCF/Transforms/Patterns.h"
+
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/Pass/Pass.h"
@@ -107,6 +110,21 @@ class CondBranchOpTypeConversion : public OpConversionPattern<cf::CondBranchOp> 
       return success();
    }
 };
+class Yield : public OpConversionPattern<cf::CondBranchOp> {
+   public:
+   using OpConversionPattern::OpConversionPattern;
+
+   LogicalResult
+   matchAndRewrite(cf::CondBranchOp op, OneToNOpAdaptor adaptor,
+                   ConversionPatternRewriter& rewriter) const final {
+      rewriter.replaceOpWithNewOp<cf::CondBranchOp>(op, op.getCondition(), op.getTrueDest(),
+                                                    flattenValues(adaptor.getTrueDestOperands()),
+                                                    op.getFalseDest(),
+                                                    flattenValues(adaptor.getFalseDestOperands()));
+      return success();
+   }
+};
+
 
 struct DecomposeTuplesPass
    : public PassWrapper<DecomposeTuplesPass, OperationPass<ModuleOp>> {
@@ -128,33 +146,8 @@ struct DecomposeTuplesPass
       ModuleOp module = getOperation();
       auto* context = &getContext();
       TypeConverter typeConverter;
-      ConversionTarget target(*context);
       RewritePatternSet patterns(context);
 
-      target.addLegalDialect<lingodb::compiler::dialect::util::UtilDialect>();
-
-      target.addDynamicallyLegalOp<func::ReturnOp>([&](func::ReturnOp op) {
-         return typeConverter.isLegal(op.getOperandTypes());
-      });
-      target.addDynamicallyLegalOp<cf::BranchOp>([&](cf::BranchOp op) {
-         return typeConverter.isLegal(op.getOperandTypes());
-      });
-      target.addDynamicallyLegalOp<cf::CondBranchOp>([&](cf::CondBranchOp op) {
-         return typeConverter.isLegal(op.getOperandTypes());
-      });
-      target.addDynamicallyLegalOp<func::CallOp>(
-         [&](func::CallOp op) { return typeConverter.isLegal(op); });
-      target.addDynamicallyLegalOp<func::FuncOp>([&](func::FuncOp op) {
-         if (!typeConverter.isSignatureLegal(op.getFunctionType())) {
-            return false;
-         }
-         for (auto& block : op.getBody().getBlocks()) {
-            if (!typeConverter.isLegal(block.getArgumentTypes())) {
-               return false;
-            }
-         }
-         return true;
-      });
 
       typeConverter.addConversion([](Type type) { return type; });
       typeConverter.addConversion(
@@ -165,14 +158,16 @@ struct DecomposeTuplesPass
 
       typeConverter.addSourceMaterialization(buildMakeTupleOp);
       typeConverter.addTargetMaterialization(buildDecomposeTuple);
+      typeConverter.addArgumentMaterialization(buildMakeTupleOp);
 
-      populateFunctionOpInterfaceTypeConversionPattern<func::FuncOp>(patterns, typeConverter);
-      populateReturnOpTypeConversionPattern(patterns, typeConverter);
-      populateCallOpTypeConversionPattern(patterns, typeConverter);
-      patterns.add<BranchOpTypeConversion>(typeConverter, patterns.getContext());
-      patterns.add<CondBranchOpTypeConversion>(typeConverter, patterns.getContext());
+      //populateFunctionOpInterfaceTypeConversionPattern<func::FuncOp>(patterns, typeConverter);
+      //populateReturnOpTypeConversionPattern(patterns, typeConverter);
+      //populateCallOpTypeConversionPattern(patterns, typeConverter);
+      mlir::scf::populateSCFStructuralOneToNTypeConversions(typeConverter,patterns);
+      //patterns.add<BranchOpTypeConversion>(typeConverter, patterns.getContext());
+      //patterns.add<CondBranchOpTypeConversion>(typeConverter, patterns.getContext());
 
-      if (failed(applyPartialConversion(module, target, std::move(patterns))))
+      if (failed(applyPartialOneToNConversion(module,typeConverter, std::move(patterns))))
          return signalPassFailure();
    }
 };

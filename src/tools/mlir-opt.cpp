@@ -68,6 +68,9 @@ int main(int argc, char** argv) {
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return util::createUtilToLLVMPass();
    });
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+      return lingodb::execution::createDecomposeTuplePass();
+   });
    lingodb::execution::registerBackendPasses();
    mlir::DialectRegistry registry;
    registry.insert<relalg::RelAlgDialect>();
