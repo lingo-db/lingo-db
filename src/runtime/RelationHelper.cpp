@@ -9,11 +9,11 @@
 #include "lingodb/runtime/storage/TableStorage.h"
 #include "lingodb/utility/Serialization.h"
 
+#include <filesystem>
 #include <arrow/builder.h>
 #include <arrow/csv/api.h>
 #include <arrow/io/api.h>
 #include <dlfcn.h>
-#include <filesystem>
 #include <lingodb/catalog/Defs.h>
 namespace lingodb::runtime {
 void RelationHelper::createTable(lingodb::runtime::VarLen32 meta) {
@@ -193,7 +193,6 @@ HashIndexAccess* RelationHelper::accessHashIndex(lingodb::runtime::VarLen32 desc
    utility::SimpleByteReader simpleByteReader{data.data(), data.size()};
    utility::Deserializer s{simpleByteReader};
    auto dataSource = ExternalDatasourceProperty::deserialize(s);
-
 
    std::string indexName = dataSource.index;
    auto& session = context->getSession();

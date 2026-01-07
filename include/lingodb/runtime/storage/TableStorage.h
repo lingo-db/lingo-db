@@ -1,7 +1,6 @@
 #ifndef LINGODB_RUNTIME_STORAGE_TABLESTORAGE_H
 #define LINGODB_RUNTIME_STORAGE_TABLESTORAGE_H
 
-
 #include <functional>
 #include <memory>
 #include <variant>
@@ -10,8 +9,8 @@
 #include "lingodb/scheduler/Task.h"
 #include "lingodb/utility/Serialization.h"
 
-#include <arrow/type_fwd.h>
 #include <iostream>
+#include <arrow/type_fwd.h>
 namespace lingodb::runtime {
 enum class FilterOp : uint8_t {
    EQ = 0,
