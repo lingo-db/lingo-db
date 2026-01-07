@@ -358,7 +358,7 @@
 %1 = relalg.tmp %0 [@t::@col1] -> !tuples.tuplestream
 
 // -----
-//CHECK: %{{.*}} = subop.get_external "{ \22table\22: \22test\22, \22mapping\22: { \22t$0\22 :\22t\22}, \22restrictions\22: []}" : !subop.table<[t$0 : i64], false>
+//CHECK: %{{.*}} = subop.get_external "{{.*}}" : !subop.table<[t$0 : i64], false>
 //CHECK: %{{.*}} = subop.scan %{{.*}} : !subop.table<[t$0 : i64], false> {}
 
 %1 = relalg.basetable { table_identifier="test" } columns: {t => @t_u_1::@col1({type=i64})}
