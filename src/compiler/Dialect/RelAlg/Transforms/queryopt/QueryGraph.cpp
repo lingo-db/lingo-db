@@ -207,7 +207,7 @@ void appendRestrictions(relalg::BaseTableOp baseTableOp, std::vector<std::unique
       typeMapping[c.getName().str()] = mlir::cast<tuples::ColumnDefAttr>(c.getValue()).getColumn().type;
    }
    // Read from new DatasourceProperty.filterDescription instead of old JSON restriction attribute
-   auto filterDescriptions = baseTableOp.getDatasource().filterDescription;
+   auto filterDescriptions = baseTableOp.getRestriction().filterDescription;
    for (const auto& filterDesc : filterDescriptions) {
       auto type = getBaseType(typeMapping.at(filterDesc.columnName));
 
@@ -266,7 +266,7 @@ std::optional<double> estimateUsingSample(QueryGraph::Node& n) {
    // Check if we have filters (either in datasource property or additional predicates)
    bool hasFilters = false;
    if (auto baseTableOp = mlir::dyn_cast_or_null<BaseTableOp>(n.op.getOperation())) {
-      hasFilters = !baseTableOp.getDatasource().filterDescription.empty();
+      hasFilters = !baseTableOp.getRestriction().filterDescription.empty();
    }
    if (n.additionalPredicates.empty() && !hasFilters) return {};
    if (auto baseTableOp = mlir::dyn_cast_or_null<BaseTableOp>(n.op.getOperation())) {

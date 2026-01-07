@@ -1,9 +1,10 @@
 #ifndef LINGODB_RUNTIME_RELATIONHELPER_H
 #define LINGODB_RUNTIME_RELATIONHELPER_H
-#include <cstddef>
 
 #include "LingoDBHashIndex.h"
 #include "helpers.h"
+
+#include <cstddef>
 
 namespace lingodb::runtime {
 class RelationHelper {

@@ -1,8 +1,8 @@
 #include "lingodb/runtime/DataSourceIteration.h"
 //TODO remove
+#include "../../include/lingodb/runtime/DatasourceRestrictionProperty.h"
 #include "json.h"
 #include "lingodb/catalog/TableCatalogEntry.h"
-#include "lingodb/compiler/Dialect/RelAlg/DatasourceProperty.h"
 #include "lingodb/runtime/ExternalDataSourceProperty.h"
 #include "lingodb/runtime/storage/TableStorage.h"
 #include "lingodb/scheduler/Scheduler.h"
@@ -62,15 +62,7 @@ lingodb::runtime::DataSource* lingodb::runtime::DataSource::get(lingodb::runtime
    std::vector<FilterDescription> restrictions;
 
    std::string dataSourceRaw = description.str();
-   std::vector<std::byte> data;
-   for (size_t i = 0; i < dataSourceRaw.size(); i += 2) {
-      std::string byteString = dataSourceRaw.substr(i, 2);
-      char byte = strtol(byteString.c_str(), nullptr, 16);
-      data.emplace_back(std::byte(byte));
-   }
-   utility::SimpleByteReader simpleByteReader{data.data(), data.size()};
-   utility::Deserializer s{simpleByteReader};
-   auto dataSource = ExternalDatasourceProperty::deserialize(s);
+   auto dataSource = utility::deserializeFromHexString<ExternalDatasourceProperty>(dataSourceRaw);
    tableName = dataSource.tableName;
    for (auto& filterDesc : dataSource.filterDescriptions) {
       if (uniqueRestrictions.contains(filterDesc)) {

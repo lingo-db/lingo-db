@@ -81,15 +81,7 @@ class RelAlgLoweringStep : public LoweringStep {
             auto* catalog = getCatalog();
 
             std::string dataSourceRaw = getExternalOp.getDescr().str();
-            std::vector<std::byte> data;
-            for (size_t i = 0; i < dataSourceRaw.size(); i += 2) {
-               std::string byteString = dataSourceRaw.substr(i, 2);
-               char byte = strtol(byteString.c_str(), nullptr, 16);
-               data.emplace_back(std::byte(byte));
-            }
-            utility::SimpleByteReader simpleByteReader{data.data(), data.size()};
-            utility::Deserializer s{simpleByteReader};
-            auto dataSource = ExternalDatasourceProperty::deserialize(s);
+            auto dataSource = lingodb::utility::deserializeFromHexString<runtime::ExternalDatasourceProperty>(dataSourceRaw);
 
             if (!dataSource.tableName.empty()) {
                if (auto relation = catalog->getTypedEntry<lingodb::catalog::TableCatalogEntry>(dataSource.tableName)) {

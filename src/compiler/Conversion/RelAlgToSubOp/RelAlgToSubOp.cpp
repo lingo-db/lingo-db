@@ -102,15 +102,10 @@ class BaseTableLowering : public OpConversionPattern<relalg::BaseTableOp> {
       llvm::SmallVector<subop::DefMappingPairT> defMapping;
 
       std::vector<mlir::Type> types;
-      std::string restrictions = "[]";
-      if (baseTableOp->hasAttr("restriction")) {
-         restrictions = mlir::cast<mlir::StringAttr>(baseTableOp->getAttr("restriction")).getValue().str();
-      }
-      std::string tableName = mlir::cast<mlir::StringAttr>(baseTableOp->getAttr("table_identifier")).str();
 
-      auto x = baseTableOp.getDatasource().filterDescription;
-      lingodb::ExternalDatasourceProperty externalDatasourceProperty{.tableName = tableName};
-      externalDatasourceProperty.filterDescriptions = x;
+      std::string tableName = mlir::cast<mlir::StringAttr>(baseTableOp->getAttr("table_identifier")).str();
+      lingodb::runtime::ExternalDatasourceProperty externalDatasourceProperty{.tableName = tableName};
+      externalDatasourceProperty.filterDescriptions = baseTableOp.getRestriction().filterDescription;
       for (auto namedAttr : baseTableOp.getColumns().getValue()) {
          auto identifier = namedAttr.getName();
          auto attr = namedAttr.getValue();
@@ -123,11 +118,7 @@ class BaseTableLowering : public OpConversionPattern<relalg::BaseTableOp> {
          }
       }
 
-      lingodb::utility::SimpleByteWriter simpleByteWriter{};
-      lingodb::utility::Serializer s{simpleByteWriter};
-      externalDatasourceProperty.serialize(s);
-
-      std::string scanDescription = simpleByteWriter.toHexString();
+      std::string scanDescription = lingodb::utility::serializeToHexString(externalDatasourceProperty);
 
       bool hasFilters = !externalDatasourceProperty.filterDescriptions.empty();
       auto tableRefType = subop::TableType::get(rewriter.getContext(), createStateMembersAttr(rewriter.getContext(), members), hasFilters);
@@ -1131,10 +1122,10 @@ static mlir::Value translateINLJ(mlir::Value left, mlir::Value right, mlir::Arra
    DefMappingCollector mapping;
 
    // Create description for external index get operation
-   lingodb::ExternalDatasourceProperty externalDatasourceProperty{.tableName = tableName,
-                                                                  .mapping = {},
-                                                                  .index = op->getAttrOfType<mlir::StringAttr>("index").str(),
-                                                                  .indexType = "hash"};
+   lingodb::runtime::ExternalDatasourceProperty externalDatasourceProperty{.tableName = tableName,
+                                                                           .mapping = {},
+                                                                           .index = op->getAttrOfType<mlir::StringAttr>("index").str(),
+                                                                           .indexType = "hash"};
 
    for (auto mappingEntry : rightScan.getMapping().getMapping()) {
       auto attrDef = mappingEntry.second;
@@ -1154,13 +1145,7 @@ static mlir::Value translateINLJ(mlir::Value left, mlir::Value right, mlir::Arra
    auto keyStateMembers = createStateMembersAttr(ctxt, keyMembers);
    auto valueStateMembers = createStateMembersAttr(ctxt, valMembers);
 
-   lingodb::utility::SimpleByteWriter simpleByteWriter{};
-   lingodb::utility::Serializer s{simpleByteWriter};
-   externalDatasourceProperty.serialize(s);
-   lingodb::utility::SimpleByteReader reader{simpleByteWriter.data(), simpleByteWriter.size()};
-   lingodb::utility::Deserializer deserializer{reader};
-
-   std::string externalIndexDescription = simpleByteWriter.toHexString();
+   std::string externalIndexDescription = lingodb::utility::serializeToHexString(externalDatasourceProperty);
 
    auto externalHashIndexType = subop::ExternalHashIndexType::get(rewriter.getContext(), keyStateMembers, valueStateMembers);
    mlir::Value externalHashIndex = rewriter.create<subop::GetExternalOp>(loc, externalHashIndexType, externalIndexDescription);

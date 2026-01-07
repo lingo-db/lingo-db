@@ -216,12 +216,12 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
       return false;
    }
    bool appendRestrictions(relalg::BaseTableOp baseTableOp, std::vector<lingodb::runtime::FilterDescription> restrictions) {
-      std::vector<lingodb::runtime::FilterDescription> existingRestrictions = baseTableOp.getDatasource().filterDescription;
+      std::vector<lingodb::runtime::FilterDescription> existingRestrictions = baseTableOp.getRestriction().filterDescription;
 
       for (auto& r : restrictions) {
          existingRestrictions.push_back(r);
       }
-      baseTableOp.getProperties<>().datasource.filterDescription = existingRestrictions;
+      baseTableOp.getProperties<>().restriction.filterDescription = existingRestrictions;
       return true;
    }
    bool tryPushdownIntoBasetable(relalg::SelectionOp selectionOp, relalg::BaseTableOp baseTableOp) {

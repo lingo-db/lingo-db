@@ -9,18 +9,17 @@
 #include "lingodb/scheduler/Task.h"
 #include "lingodb/utility/Serialization.h"
 
-#include <iostream>
 #include <arrow/type_fwd.h>
 namespace lingodb::runtime {
 enum class FilterOp : uint8_t {
-   EQ = 0,
-   NEQ = 1,
-   LT = 2,
-   LTE = 3,
-   GT = 4,
-   GTE = 5,
-   NOTNULL = 6,
-   IN = 7
+   EQ,
+   NEQ,
+   LT,
+   LTE,
+   GT,
+   GTE,
+   NOTNULL,
+   IN
 
 };
 struct FilterDescription {

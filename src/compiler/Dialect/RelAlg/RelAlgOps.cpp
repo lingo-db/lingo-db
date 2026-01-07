@@ -14,36 +14,34 @@
 
 using namespace mlir;
 namespace llvm {
-static hash_code hash_value(const lingodb::DatasourceProperty& datasource) { // NOLINT(readability-identifier-naming, misc-use-anonymous-namespace)
+static hash_code hash_value(const lingodb::runtime::DatasourceRestrictionProperty& datasource) { // NOLINT(readability-identifier-naming, misc-use-anonymous-namespace)
    return datasource.hash();
 }
 } // namespace llvm
 namespace {
 using namespace lingodb::compiler::dialect;
 
-mlir::Attribute convertToAttribute(MLIRContext* ctx, const lingodb::DatasourceProperty datasource) {
+mlir::Attribute convertToAttribute(MLIRContext* ctx, lingodb::runtime::DatasourceRestrictionProperty datasource) {
+   //TODO
    assert(ctx && "MLIRContext must not be null");
 
-   lingodb::utility::SimpleByteWriter simpleByteWriter{};
-   lingodb::utility::Serializer s{simpleByteWriter};
-
-   const_cast<lingodb::DatasourceProperty&>(datasource).serialize(s);
-
-   return mlir::StringAttr::get(ctx, simpleByteWriter.toHexString());
+   std::string s = lingodb::utility::serializeToHexString(datasource);
+   return mlir::StringAttr::get(ctx, s);
 }
 
-mlir::LogicalResult convertFromAttribute(const lingodb::DatasourceProperty& datasource, mlir::Attribute attr,
+mlir::LogicalResult convertFromAttribute(lingodb::runtime::DatasourceRestrictionProperty& datasource, mlir::Attribute attr,
                                          std::function<mlir::InFlightDiagnostic()> emitError) {
-   //TODO
-   std::cerr << "Not impleted";
+   if (auto stringAttr = mlir::cast_or_null<mlir::StringAttr>(attr)) {
+      std::string hexStr = stringAttr.getValue().str();
+      datasource = lingodb::utility::deserializeFromHexString<lingodb::runtime::DatasourceRestrictionProperty>(hexStr);
+   }
    return mlir::failure();
 }
 
-void writeToMlirBytecode(mlir::DialectBytecodeWriter& writer, const lingodb::DatasourceProperty& datasource) {
+void writeToMlirBytecode(mlir::DialectBytecodeWriter& writer, const lingodb::runtime::DatasourceRestrictionProperty& datasource) {
    //TODO
-   std::cerr << "Not impleted";
 }
-mlir::LogicalResult readFromMlirBytecode(mlir::DialectBytecodeReader& reader, const lingodb::DatasourceProperty& datasource) {
+mlir::LogicalResult readFromMlirBytecode(mlir::DialectBytecodeReader& reader, const lingodb::runtime::DatasourceRestrictionProperty& datasource) {
    //TODO
    return mlir::failure();
 }
@@ -309,16 +307,8 @@ ParseResult relalg::BaseTableOp::parse(OpAsmParser& parser, OperationState& resu
    }
    std::string hex;
    if (parser.parseString(&hex)) { return failure(); }
-   std::vector<std::byte> data;
-   for (size_t i = 0; i < hex.size(); i += 2) {
-      std::string byteString = hex.substr(i, 2);
-      char byte = strtol(byteString.c_str(), nullptr, 16);
-      data.emplace_back(std::byte(byte));
-   }
-   utility::SimpleByteReader simpleByteReader{data.data(), data.size()};
-   utility::Deserializer s{simpleByteReader};
-   auto dataSource = DatasourceProperty::deserialize(s);
-   result.getOrAddProperties<Properties>().datasource = dataSource;
+   auto dataSource = utility::deserializeFromHexString<runtime::DatasourceRestrictionProperty>(hex);
+   result.getOrAddProperties<Properties>().restriction = dataSource;
 
    return parser.addTypeToList(tuples::TupleStreamType::get(parser.getBuilder().getContext()), result.types);
 }
@@ -341,11 +331,8 @@ void relalg::BaseTableOp::print(OpAsmPrinter& p) {
    }
    p << "}";
    p << " datasource: \"";
-   utility::SimpleByteWriter simpleByteWriter{};
-   utility::Serializer s{simpleByteWriter};
-   getDatasource().serialize(s);
 
-   p << simpleByteWriter.toHexString() << "\"";
+   p << utility::serializeToHexString(getRestriction()) << "\"";
 }
 
 ::mlir::LogicalResult relalg::MapOp::verify() {
