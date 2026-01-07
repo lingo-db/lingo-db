@@ -193,11 +193,8 @@ TEST_CASE("Storage:RelationHelper") {
       REQUIRE(indexEntry != std::nullopt);
       lingodb::scheduler::awaitEntryTask(std::make_unique<MockTaskWithContext>(context.get(), [&]() {
          lingodb::runtime::RelationHelper::setPersist(true);
-         lingodb::ExternalDatasourceProperty externalDatasourceProperty{.tableName = "test_table", .mapping = {{"x", "col1"}, {"y", "col2"}}, .index = "test_table.pk", .indexType = "hash"};
-         SimpleByteWriter writer{};
-         Serializer serializer{writer};
-         externalDatasourceProperty.serialize(serializer);
-         auto* access3 = lingodb::runtime::RelationHelper::accessHashIndex(lingodb::runtime::VarLen32::fromString(writer.toHexString()));
+         lingodb::runtime::ExternalDatasourceProperty externalDatasourceProperty{.tableName = "test_table", .mapping = {{"x", "col1"}, {"y", "col2"}}, .index = "test_table.pk", .indexType = "hash"};
+         auto* access3 = lingodb::runtime::RelationHelper::accessHashIndex(lingodb::runtime::VarLen32::fromString(lingodb::utility::serializeToHexString(externalDatasourceProperty)));
          auto* iter3 = access3->lookup(-3797884931935089717);
          REQUIRE(iter3->hasNext());
          lingodb::runtime::BatchView batchView;

@@ -1203,7 +1203,7 @@ mlir::Value SQLMlirTranslator::translateTableRef(mlir::OpBuilder& builder, std::
             columns.push_back(builder.getNamedAttr(info->name, attrDef));
          }
 
-         return builder.create<relalg::BaseTableOp>(location, tuples::TupleStreamType::get(mlirContext), relation, builder.getDictionaryAttr(columns), lingodb::DatasourceProperty{});
+         return builder.create<relalg::BaseTableOp>(location, tuples::TupleStreamType::get(mlirContext), relation, builder.getDictionaryAttr(columns), lingodb::runtime::DatasourceRestrictionProperty{});
       }
       case ast::TableReferenceType::CROSS_PRODUCT: {
          auto crossProd = std::static_pointer_cast<ast::BoundCrossProductRef>(tableRef);

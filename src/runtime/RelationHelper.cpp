@@ -184,15 +184,7 @@ void RelationHelper::setPersist(bool value) {
 HashIndexAccess* RelationHelper::accessHashIndex(lingodb::runtime::VarLen32 description) {
    auto* context = runtime::getCurrentExecutionContext();
    std::string dataSourceRaw = description.str();
-   std::vector<std::byte> data;
-   for (size_t i = 0; i < dataSourceRaw.size(); i += 2) {
-      std::string byteString = dataSourceRaw.substr(i, 2);
-      char byte = strtol(byteString.c_str(), nullptr, 16);
-      data.emplace_back(std::byte(byte));
-   }
-   utility::SimpleByteReader simpleByteReader{data.data(), data.size()};
-   utility::Deserializer s{simpleByteReader};
-   auto dataSource = ExternalDatasourceProperty::deserialize(s);
+   auto dataSource = lingodb::utility::deserializeFromHexString<ExternalDatasourceProperty>(dataSourceRaw);
 
    std::string indexName = dataSource.index;
    auto& session = context->getSession();

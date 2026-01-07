@@ -2,7 +2,7 @@
 #define LINGODB_RUNTIME_EXTERNALDATASOURCEPROPERTY_H
 #include "lingodb/utility/Serialization.h"
 #include "storage/TableStorage.h"
-namespace lingodb {
+namespace lingodb::runtime {
 struct ExternalDatasourceProperty {
    struct Mapping {
       std::string memberName;
@@ -11,16 +11,15 @@ struct ExternalDatasourceProperty {
          serializer.writeProperty(0, memberName);
          serializer.writeProperty(1, identifier);
       }
+      bool operator==(const Mapping& other) const {
+         return other.memberName == memberName && other.identifier == identifier;
+      }
       static Mapping deserialize(lingodb::utility::Deserializer& deserializer) {
          Mapping map{};
          map.memberName = deserializer.readProperty<std::string>(0);
          map.identifier = deserializer.readProperty<std::string>(1);
          return map;
       }
-   };
-   enum class SourceType : uint8_t {
-      TABLE = 0,
-      INDEX = 1
    };
    std::string tableName;
    std::vector<Mapping> mapping;
@@ -35,6 +34,10 @@ struct ExternalDatasourceProperty {
       serializer.writeProperty(3, index);
       serializer.writeProperty(4, indexType);
    }
+   bool operator==(const ExternalDatasourceProperty& other) const {
+      return other.index == index && other.indexType == indexType && other.mapping == mapping && other.tableName == tableName &&
+         other.filterDescriptions == filterDescriptions;
+   }
 
    static ExternalDatasourceProperty deserialize(lingodb::utility::Deserializer& deserializer) {
       ExternalDatasourceProperty prop{};
@@ -47,6 +50,6 @@ struct ExternalDatasourceProperty {
       return prop;
    }
 };
-} // namespace lingodb
+} // namespace lingodb::runtime
 
 #endif // LINGODB_RUNTIME_EXTERNALDATASOURCEPROPERTY_H

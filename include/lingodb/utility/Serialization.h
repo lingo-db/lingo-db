@@ -366,17 +366,6 @@ class SimpleByteWriter : public ByteWriter {
    size_t size() const {
       return buffer.size();
    }
-   std::string toHexString() const {
-      static const char hexChars[] = "0123456789ABCDEF";
-      std::string hex;
-
-      for (size_t i = 0; i < size(); ++i) {
-         unsigned char v = std::to_integer<unsigned char>(buffer.data()[i]);
-         hex.push_back(hexChars[v >> 4]);
-         hex.push_back(hexChars[v & 0x0F]);
-      }
-      return hex;
-   }
 };
 class SimpleByteReader : public ByteReader {
    const std::byte* buffer;
