@@ -1,5 +1,5 @@
-#ifndef LINGODB_EXTERNALDATASOURCEPROPERTY_H
-#define LINGODB_EXTERNALDATASOURCEPROPERTY_H
+#ifndef LINGODB_RUNTIME_EXTERNALDATASOURCEPROPERTY_H
+#define LINGODB_RUNTIME_EXTERNALDATASOURCEPROPERTY_H
 #include "lingodb/utility/Serialization.h"
 #include "storage/TableStorage.h"
 namespace lingodb {
@@ -49,4 +49,4 @@ struct ExternalDatasourceProperty {
 };
 } // namespace lingodb
 
-#endif //LINGODB_EXTERNALDATASOURCEPROPERTY_H
+#endif // LINGODB_RUNTIME_EXTERNALDATASOURCEPROPERTY_H

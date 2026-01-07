@@ -1126,7 +1126,6 @@ static mlir::Value translateINLJ(mlir::Value left, mlir::Value right, mlir::Arra
    auto valueColumns = columns;
    valueColumns.remove(keyColumns);
 
-   bool first = true;
    MemberCollector keyMembers;
    MemberCollector valMembers;
    DefMappingCollector mapping;
