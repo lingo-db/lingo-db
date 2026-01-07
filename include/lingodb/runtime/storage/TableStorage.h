@@ -1,12 +1,12 @@
 #ifndef LINGODB_RUNTIME_STORAGE_TABLESTORAGE_H
 #define LINGODB_RUNTIME_STORAGE_TABLESTORAGE_H
-#include "lingodb/runtime/ArrowView.h"
-#include "lingodb/scheduler/Task.h"
 
 #include <functional>
 #include <memory>
 #include <variant>
 
+#include "lingodb/runtime/ArrowView.h"
+#include "lingodb/scheduler/Task.h"
 #include "lingodb/utility/Serialization.h"
 
 #include <iostream>

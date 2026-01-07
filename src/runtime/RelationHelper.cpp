@@ -5,9 +5,9 @@
 #include "lingodb/catalog/IndexCatalogEntry.h"
 #include "lingodb/catalog/TableCatalogEntry.h"
 #include "lingodb/runtime/ArrowTable.h"
+#include "lingodb/runtime/ExternalDataSourceProperty.h"
 #include "lingodb/runtime/storage/TableStorage.h"
 #include "lingodb/utility/Serialization.h"
-#include "lingodb/runtime/ExternalDataSourceProperty.h"
 
 #include <filesystem>
 #include <arrow/builder.h>
@@ -193,7 +193,6 @@ HashIndexAccess* RelationHelper::accessHashIndex(lingodb::runtime::VarLen32 desc
    utility::SimpleByteReader simpleByteReader{data.data(), data.size()};
    utility::Deserializer s{simpleByteReader};
    auto dataSource = ExternalDatasourceProperty::deserialize(s);
-
 
    std::string indexName = dataSource.index;
    auto& session = context->getSession();

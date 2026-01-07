@@ -210,32 +210,33 @@ void appendRestrictions(relalg::BaseTableOp baseTableOp, std::vector<std::unique
    auto filterDescriptions = baseTableOp.getDatasource().filterDescription;
    for (const auto& filterDesc : filterDescriptions) {
       auto type = getBaseType(typeMapping.at(filterDesc.columnName));
-      
+
       if (filterDesc.op == lingodb::runtime::FilterOp::NOTNULL) {
          auto colExpr = support::eval::createAttrRef(filterDesc.columnName);
          expressions.push_back(support::eval::createNot(support::eval::createIsNull(std::move(colExpr))));
          continue;
       }
-      
+
       if (filterDesc.op == lingodb::runtime::FilterOp::IN) {
          std::vector<std::unique_ptr<support::eval::expr>> orExpressions;
          std::visit([&](const auto& vals) {
             for (const auto& val : vals) {
                orExpressions.push_back(support::eval::createEq(
-                  support::eval::createAttrRef(filterDesc.columnName), 
-                  buildConstant(type, val)
-               ));
+                  support::eval::createAttrRef(filterDesc.columnName),
+                  buildConstant(type, val)));
             }
-         }, filterDesc.values);
+         },
+                    filterDesc.values);
          expressions.push_back(support::eval::createOr(orExpressions));
          continue;
       }
-      
+
       auto colExpr = support::eval::createAttrRef(filterDesc.columnName);
       auto valueExpr = std::visit([&type](const auto& val) {
          return buildConstant(type, val);
-      }, filterDesc.value);
-      
+      },
+                                  filterDesc.value);
+
       switch (filterDesc.op) {
          case lingodb::runtime::FilterOp::EQ:
             expressions.push_back(support::eval::createEq(std::move(colExpr), std::move(valueExpr)));

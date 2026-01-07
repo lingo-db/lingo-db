@@ -9,19 +9,17 @@
 #include "lingodb/compiler/Dialect/RelAlg/Passes.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/Passes.h"
+#include "lingodb/compiler/helper.h"
 #include "lingodb/execution/BaselineBackend.h"
 #include "lingodb/execution/CBackend.h"
 #include "lingodb/execution/LLVMBackends.h"
+#include "lingodb/runtime/ExternalDataSourceProperty.h"
 #include "lingodb/runtime/storage/TableStorage.h"
 #include "lingodb/utility/Setting.h"
 #include "lingodb/utility/Tracer.h"
 
 #include "mlir/InitAllPasses.h"
 #include "mlir/Pass/PassManager.h"
-
-#include "lingodb/runtime/ExternalDataSourceProperty.h"
-#include "lingodb/compiler/frontend/frontend_error.h"
-#include "lingodb/compiler/helper.h"
 
 #include <chrono>
 #include <sstream>

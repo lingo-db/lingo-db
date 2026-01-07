@@ -1,5 +1,5 @@
-#ifndef LINGODB_DATASOURCEPROPERTY_H
-#define LINGODB_DATASOURCEPROPERTY_H
+#ifndef LINGODB_COMPILER_DIALECT_RELALG_DATASOURCEPROPERTY_H
+#define LINGODB_COMPILER_DIALECT_RELALG_DATASOURCEPROPERTY_H
 #include "lingodb/runtime/storage/TableStorage.h"
 #include "lingodb/utility/Serialization.h"
 #include <llvm/ADT/Hashing.h>
@@ -40,9 +40,4 @@ struct DatasourceProperty {
    }
 };
 } // namespace lingodb
-namespace llvm {
-inline hash_code hash_value(const lingodb::DatasourceProperty& datasource) {
-   return datasource.hash();
-}
-} // namespace llvm
-#endif //LINGODB_DATASOURCEPROPERTY_H
+#endif // LINGODB_COMPILER_DIALECT_RELALG_DATASOURCEPROPERTY_H

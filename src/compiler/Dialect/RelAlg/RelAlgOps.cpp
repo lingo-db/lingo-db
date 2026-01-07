@@ -13,7 +13,11 @@
 #include <queue>
 
 using namespace mlir;
-
+namespace llvm {
+static hash_code hash_value(const lingodb::DatasourceProperty& datasource) { // NOLINT(readability-identifier-naming, misc-use-anonymous-namespace)
+   return datasource.hash();
+}
+} // namespace llvm
 namespace {
 using namespace lingodb::compiler::dialect;
 
