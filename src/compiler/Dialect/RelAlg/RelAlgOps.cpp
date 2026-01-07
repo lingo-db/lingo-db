@@ -300,7 +300,9 @@ ParseResult relalg::BaseTableOp::parse(OpAsmParser& parser, OperationState& resu
       break;
    }
    result.addAttribute("columns", mlir::DictionaryAttr::get(parser.getBuilder().getContext(), columns));
-   if (parser.parseKeyword("datasource") || parser.parseColon()) return failure();
+   if (parser.parseOptionalKeyword("datasource") || parser.parseColon()) {
+      return parser.addTypeToList(tuples::TupleStreamType::get(parser.getBuilder().getContext()), result.types);
+   }
    std::string hex;
    if (parser.parseString(&hex)) { return failure(); }
    std::vector<std::byte> data;
