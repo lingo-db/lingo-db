@@ -1,4 +1,3 @@
-#include "json.h"
 #include "lingodb/compiler/Dialect/DB/IR/DBOps.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "lingodb/compiler/Dialect/RelAlg/Passes.h"
@@ -110,17 +109,14 @@ class EliminateNullableTypes : public mlir::PassWrapper<EliminateNullableTypes, 
       mlir::OpBuilder builder(&getContext());
       getOperation().walk([&](relalg::BaseTableOp baseTableOp) {
          auto required = getRequired(baseTableOp);
-         if (baseTableOp->hasAttr("restriction")) {
+         if (!baseTableOp.getRestriction().filterDescription.empty()) {
             auto usedColumns = baseTableOp.getUsedColumns();
-            auto restrictionsStr = cast<mlir::StringAttr>(baseTableOp->getAttr("restriction")).getValue();
-            auto restrictions = nlohmann::json::parse(restrictionsStr.str()).get<nlohmann::json::array_t>();
+            auto restrictions = baseTableOp.getRestriction().filterDescription;
             lingodb::compiler::dialect::relalg::ColumnNullableChangeInfo info;
             std::unordered_set<std::string> notNullColumns;
             for (auto& r : restrictions) {
-               auto cmp = r["cmp"].get<std::string>();
-               auto colName = r["column"].get<std::string>();
-               if (cmp == "isnotnull") {
-                  notNullColumns.insert(colName);
+               if (r.op == lingodb::runtime::FilterOp::NOTNULL) {
+                  notNullColumns.insert(r.columnName);
                }
             }
             if (notNullColumns.empty()) return;
