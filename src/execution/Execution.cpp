@@ -9,19 +9,17 @@
 #include "lingodb/compiler/Dialect/RelAlg/Passes.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/Passes.h"
+#include "lingodb/compiler/helper.h"
 #include "lingodb/execution/BaselineBackend.h"
 #include "lingodb/execution/CBackend.h"
 #include "lingodb/execution/LLVMBackends.h"
+#include "lingodb/runtime/ExternalDataSourceProperty.h"
 #include "lingodb/runtime/storage/TableStorage.h"
 #include "lingodb/utility/Setting.h"
 #include "lingodb/utility/Tracer.h"
 
 #include "mlir/InitAllPasses.h"
 #include "mlir/Pass/PassManager.h"
-
-#include "json.h"
-#include "lingodb/compiler/frontend/frontend_error.h"
-#include "lingodb/compiler/helper.h"
 
 #include <chrono>
 #include <sstream>
@@ -81,17 +79,20 @@ class RelAlgLoweringStep : public LoweringStep {
       moduleOp.walk([&](mlir::Operation* op) {
          if (auto getExternalOp = mlir::dyn_cast_or_null<subop::GetExternalOp>(*op)) {
             auto* catalog = getCatalog();
-            auto json = nlohmann::json::parse(getExternalOp.getDescr().str());
-            if (json.contains("table")) {
-               if (auto relation = catalog->getTypedEntry<lingodb::catalog::TableCatalogEntry>(json["table"])) {
+
+            std::string dataSourceRaw = getExternalOp.getDescr().str();
+            auto dataSource = lingodb::utility::deserializeFromHexString<runtime::ExternalDatasourceProperty>(dataSourceRaw);
+
+            if (!dataSource.tableName.empty()) {
+               if (auto relation = catalog->getTypedEntry<lingodb::catalog::TableCatalogEntry>(dataSource.tableName)) {
                   relation.value()->ensureFullyLoaded();
                }
             }
-            if (json.contains("index")) {
-               if (auto relation = catalog->getTypedEntry<lingodb::catalog::IndexCatalogEntry>(json["index"])) {
+            if (!dataSource.index.empty()) {
+               if (auto relation = catalog->getTypedEntry<lingodb::catalog::IndexCatalogEntry>(dataSource.index)) {
                   relation.value()->ensureFullyLoaded();
                }
-               if (auto relation = catalog->getTypedEntry<lingodb::catalog::TableCatalogEntry>(json["relation"])) {
+               if (auto relation = catalog->getTypedEntry<lingodb::catalog::TableCatalogEntry>(dataSource.tableName)) {
                   relation.value()->ensureFullyLoaded();
                }
             }

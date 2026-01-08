@@ -13,8 +13,6 @@
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
-
-#include "json.h"
 namespace {
 lingodb::utility::GlobalSetting<bool> pushdownRestrictions("system.opt.pushdown_restrictions", true);
 using namespace lingodb::compiler::dialect;
@@ -153,25 +151,35 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
       for (auto& u : o->getUses()) uses++; // NOLINT(clang-diagnostic-unused-variable)
       return uses;
    }
-   std::string convertCmpMode(std::string cmpMode) {
-      if (cmpMode == "eq") return "=";
-      if (cmpMode == "neq") return "!=";
-      if (cmpMode == "lt") return "<";
-      if (cmpMode == "gt") return ">";
-      if (cmpMode == "lte") return "<=";
-      if (cmpMode == "gte") return ">=";
-      if (cmpMode == "isa") return "isa";
-      return "";
+   lingodb::runtime::FilterOp convertCmpMode(std::string cmpMode) {
+      if (cmpMode == "eq") return lingodb::runtime::FilterOp::EQ;
+      if (cmpMode == "neq") return lingodb::runtime::FilterOp::NEQ;
+      if (cmpMode == "lt") return lingodb::runtime::FilterOp::LT;
+      if (cmpMode == "gt") return lingodb::runtime::FilterOp::GT;
+      if (cmpMode == "lte") return lingodb::runtime::FilterOp::LTE;
+      if (cmpMode == "gte") return lingodb::runtime::FilterOp::GTE;
+      std::cerr << "Unsupprted cmpMode" << cmpMode << std::endl;
+      if (cmpMode == "isa") return lingodb::runtime::FilterOp::IN;
+      return lingodb::runtime::FilterOp::NOTNULL;
    }
-   std::string reverseCmpMode(std::string cmpMode) {
-      if (cmpMode == "=") return "=";
-      if (cmpMode == "!=") return "!=";
-      if (cmpMode == "<") return ">";
-      if (cmpMode == ">") return "<";
-      if (cmpMode == "<=") return ">=";
-      if (cmpMode == ">=") return "<=";
-      if (cmpMode == "isa") return "isa";
-      return "";
+   lingodb::runtime::FilterOp reverseCmpMode(lingodb::runtime::FilterOp cmpMode) {
+      switch (cmpMode) {
+         case lingodb::runtime::FilterOp::EQ:
+         case lingodb::runtime::FilterOp::NEQ:
+            return cmpMode;
+         case lingodb::runtime::FilterOp::LT:
+            return lingodb::runtime::FilterOp::GT;
+         case lingodb::runtime::FilterOp::GT:
+            return lingodb::runtime::FilterOp::LT;
+         case lingodb::runtime::FilterOp::LTE:
+            return lingodb::runtime::FilterOp::GTE;
+         case lingodb::runtime::FilterOp::GTE:
+            return lingodb::runtime::FilterOp::LTE;
+         default: {
+            std::cerr << "Unsupported cmp mode for reversal\n";
+            return lingodb::runtime::FilterOp::IN;
+         }
+      }
    }
    bool getColumnName(mlir::Value val, relalg::BaseTableOp baseTableOp, std::string& outColumnName, bool& nullable) {
       auto getColOp = mlir::dyn_cast_or_null<tuples::GetColumnOp>(val.getDefiningOp());
@@ -195,11 +203,11 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
       }
       return false;
    }
-   bool getConstant(mlir::Value val, nlohmann::json& outConst) {
+   bool getConstant(mlir::Value val, std::variant<std::string, int64_t, double>& outConst) {
       auto constOp = mlir::dyn_cast_or_null<db::ConstantOp>(val.getDefiningOp());
       if (!constOp) return false;
       if (auto strAttr = mlir::dyn_cast_or_null<mlir::StringAttr>(constOp.getValue())) {
-         outConst = strAttr.getValue();
+         outConst = strAttr.getValue().str();
          return true;
       } else if (auto intAttr = mlir::dyn_cast_or_null<mlir::IntegerAttr>(constOp.getValue())) {
          outConst = intAttr.getInt();
@@ -207,17 +215,13 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
       }
       return false;
    }
-   bool appendRestrictions(relalg::BaseTableOp baseTableOp, nlohmann::json::array_t restrictions) {
-      nlohmann::json::array_t existingRestrictions;
-      if (baseTableOp->hasAttr("restriction")) {
-         auto existingRestrictionsStr = cast<mlir::StringAttr>(baseTableOp->getAttr("restriction")).getValue();
-         existingRestrictions = nlohmann::json::parse(existingRestrictionsStr.str()).get<nlohmann::json::array_t>();
-      }
+   bool appendRestrictions(relalg::BaseTableOp baseTableOp, std::vector<lingodb::runtime::FilterDescription> restrictions) {
+      std::vector<lingodb::runtime::FilterDescription> existingRestrictions = baseTableOp.getDatasource().filterDescription;
+
       for (auto& r : restrictions) {
          existingRestrictions.push_back(r);
       }
-      auto restrictionsStr = nlohmann::json(existingRestrictions).dump();
-      baseTableOp->setAttr("restriction", mlir::StringAttr::get(baseTableOp.getContext(), restrictionsStr));
+      baseTableOp.getProperties<>().datasource.filterDescription = existingRestrictions;
       return true;
    }
    bool tryPushdownIntoBasetable(relalg::SelectionOp selectionOp, relalg::BaseTableOp baseTableOp) {
@@ -231,11 +235,8 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
             bool colNullable;
             if (getColumnName(isNullOp.getVal(), baseTableOp, columnName, colNullable)) {
                assert(!columnName.empty() && "must be column");
-               appendRestrictions(baseTableOp, nlohmann::json::array_t{{
-                                                  {"column", columnName},
-                                                  {"cmp", "isnotnull"},
-                                                  {"value", 0},
-                                               }});
+               lingodb::runtime::FilterDescription desc{.columnName = columnName, .columnId = 0, .op = lingodb::runtime::FilterOp::NOTNULL, .value = 0, .values = {}};
+               appendRestrictions(baseTableOp, {desc});
                return true;
             }
          }
@@ -245,10 +246,10 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
          auto* left = condOp.getLeft().getDefiningOp();
          auto* right = condOp.getRight().getDefiningOp();
          if (!left || !right) return false;
-         nlohmann::json constValue;
+         std::variant<std::string, int64_t, double> constValue{};
          std::string columnName;
          bool colNullable;
-         std::string cmpMode = convertCmpMode(stringifyDBCmpPredicate(condOp.getPredicate()).str());
+         lingodb::runtime::FilterOp cmpMode = convertCmpMode(stringifyDBCmpPredicate(condOp.getPredicate()).str());
          if (getColumnName(condOp.getLeft(), baseTableOp, columnName, colNullable) &&
              getConstant(condOp.getRight(), constValue)) {
             // left is column, right is constant
@@ -262,23 +263,17 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
          }
          assert(!columnName.empty() && "one side must be column");
          if (colNullable) {
-            appendRestrictions(baseTableOp, nlohmann::json::array_t{{
-                                               {"column", columnName},
-                                               {"cmp", "isnotnull"},
-                                               {"value", 0},
-                                            }});
+            lingodb::runtime::FilterDescription desc{.columnName = columnName, .columnId = 0, .op = lingodb::runtime::FilterOp::NOTNULL, .value = 0, .values = {}};
+            appendRestrictions(baseTableOp, {desc});
          }
-         appendRestrictions(baseTableOp, nlohmann::json::array_t{{
-                                            {"column", columnName},
-                                            {"cmp", cmpMode},
-                                            {"value", constValue},
-                                         }});
+         lingodb::runtime::FilterDescription desc{.columnName = columnName, .columnId = 0, .op = cmpMode, .value = constValue, .values = {}};
+         appendRestrictions(baseTableOp, {desc});
          return true;
       }
       if (auto betweenOp = mlir::dyn_cast_or_null<db::BetweenOp>(returnOp.getResults()[0].getDefiningOp())) {
          std::string columnName;
-         nlohmann::json lowerConst;
-         nlohmann::json upperConst;
+         std::variant<std::string, int64_t, double> lowerConst;
+         std::variant<std::string, int64_t, double> upperConst;
          bool colNullable;
          if (getBaseType(betweenOp.getVal().getType()) != betweenOp.getLower().getType()) return false;
          if (getBaseType(betweenOp.getVal().getType()) != betweenOp.getUpper().getType()) return false;
@@ -286,47 +281,47 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
              getConstant(betweenOp.getLower(), lowerConst) &&
              getConstant(betweenOp.getUpper(), upperConst)) {
             if (colNullable) {
-               appendRestrictions(baseTableOp, nlohmann::json::array_t{{
-                                                  {"column", columnName},
-                                                  {"cmp", "isnotnull"},
-                                                  {"value", 0},
-                                               }});
+               lingodb::runtime::FilterDescription desc{.columnName = columnName, .columnId = 0, .op = lingodb::runtime::FilterOp::NOTNULL, .value = 0, .values = {}};
+               appendRestrictions(baseTableOp, {desc});
             }
-            appendRestrictions(baseTableOp, nlohmann::json::array_t{{
-                                                                       {"column", columnName},
-                                                                       {"cmp", betweenOp.getLowerInclusive() ? ">=" : ">"},
-                                                                       {"value", lowerConst},
-                                                                    },
-                                                                    {
-                                                                       {"column", columnName},
-                                                                       {"cmp", betweenOp.getUpperInclusive() ? "<=" : "<"},
-                                                                       {"value", upperConst},
-                                                                    }});
+
+            lingodb::runtime::FilterDescription desc{.columnName = columnName, .columnId = 0, .op = betweenOp.getLowerInclusive() ? lingodb::runtime::FilterOp::GTE : lingodb::runtime::FilterOp::GT, .value = lowerConst, .values = {}};
+            lingodb::runtime::FilterDescription desc2{.columnName = columnName, .columnId = 0, .op = betweenOp.getUpperInclusive() ? lingodb::runtime::FilterOp::LTE : lingodb::runtime::FilterOp::LT, .value = upperConst, .values = {}};
+            appendRestrictions(baseTableOp, {desc, desc2});
             return true;
          }
       }
       if (auto inOp = mlir::dyn_cast_or_null<db::OneOfOp>(returnOp.getResults()[0].getDefiningOp())) {
          std::string columnName;
          bool colNullable;
-         nlohmann::json::array_t vals;
+         std::variant<std::vector<std::string>, std::vector<int64_t>, std::vector<double>> vals;
          if (!getColumnName(inOp.getVal(), baseTableOp, columnName, colNullable)) return false;
          for (auto val : inOp.getVals()) {
-            nlohmann::json constVal;
+            std::variant<std::string, int64_t, double> constVal;
             if (!getConstant(val, constVal)) return false;
-            vals.push_back(constVal);
+            std::visit([&](auto const& val) {
+               using T = std::decay_t<decltype(val)>;
+               if constexpr (std::is_same_v<T, std::string>) {
+                  if (!std::holds_alternative<std::vector<std::string>>(vals)) vals = std::vector<std::string>{};
+                  std::get<0>(vals).push_back(val);
+               }
+               if constexpr (std::is_same_v<T, int64_t>) {
+                  if (!std::holds_alternative<std::vector<int64_t>>(vals)) vals = std::vector<int64_t>{};
+                  std::get<1>(vals).push_back(val);
+               }
+               if constexpr (std::is_same_v<T, double>) {
+                  if (!std::holds_alternative<std::vector<double>>(vals)) vals = std::vector<double>{};
+                  std::get<2>(vals).push_back(val);
+               }
+            },
+                       constVal);
          }
          if (colNullable) {
-            appendRestrictions(baseTableOp, nlohmann::json::array_t{{
-                                               {"column", columnName},
-                                               {"cmp", "isnotnull"},
-                                               {"value", 0},
-                                            }});
+            lingodb::runtime::FilterDescription desc{.columnName = columnName, .columnId = 0, .op = lingodb::runtime::FilterOp::NOTNULL, .value = 0, .values = {}};
+            appendRestrictions(baseTableOp, {desc});
          }
-         appendRestrictions(baseTableOp, nlohmann::json::array_t{{
-                                            {"column", columnName},
-                                            {"cmp", "in"},
-                                            {"values", vals},
-                                         }});
+         lingodb::runtime::FilterDescription desc{.columnName = columnName, .columnId = 0, .op = lingodb::runtime::FilterOp::IN, .value = 0, .values = vals};
+         appendRestrictions(baseTableOp, {desc});
          return true;
       }
 

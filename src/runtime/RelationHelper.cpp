@@ -1,14 +1,15 @@
 #include "lingodb/runtime/RelationHelper.h"
 
-#include "json.h"
 #include "lingodb/catalog/FunctionCatalogEntry.h"
 
 #include "lingodb/catalog/IndexCatalogEntry.h"
 #include "lingodb/catalog/TableCatalogEntry.h"
 #include "lingodb/runtime/ArrowTable.h"
+#include "lingodb/runtime/ExternalDataSourceProperty.h"
 #include "lingodb/runtime/storage/TableStorage.h"
 #include "lingodb/utility/Serialization.h"
 
+#include <filesystem>
 #include <arrow/builder.h>
 #include <arrow/csv/api.h>
 #include <arrow/io/api.h>
@@ -182,16 +183,19 @@ void RelationHelper::setPersist(bool value) {
 }
 HashIndexAccess* RelationHelper::accessHashIndex(lingodb::runtime::VarLen32 description) {
    auto* context = runtime::getCurrentExecutionContext();
-   auto json = nlohmann::json::parse(description.str());
-   std::string indexName = json["index"];
+   std::string dataSourceRaw = description.str();
+   auto dataSource = lingodb::utility::deserializeFromHexString<ExternalDatasourceProperty>(dataSourceRaw);
+
+   std::string indexName = dataSource.index;
    auto& session = context->getSession();
    auto catalog = session.getCatalog();
    if (auto relation = catalog->getTypedEntry<catalog::LingoDBHashIndexEntry>(indexName)) {
       auto* hashIndex = static_cast<LingoDBHashIndex*>(&relation.value()->getIndex());
       std::vector<std::string> cols;
-      for (auto m : json["mapping"].get<nlohmann::json::object_t>()) {
-         cols.push_back(m.second.get<std::string>());
+      for (auto& m : dataSource.mapping) {
+         cols.push_back(m.identifier);
       }
+
       auto* access = new HashIndexAccess(*hashIndex, cols);
       context->registerState({access, [&](void* ptr) { delete static_cast<HashIndexAccess*>(ptr); }});
       return access;
