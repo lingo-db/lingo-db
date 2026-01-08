@@ -1,15 +1,16 @@
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "lingodb/compiler/Dialect/RelAlg/Passes.h"
 
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/IR/Dominance.h"
+#include "mlir/Pass/Pass.h"
+
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/raw_ostream.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"
-#include "mlir/IR/Dominance.h"
-#include "mlir/Pass/Pass.h"
 
 // Toggle to 1 to enable debug output
 #define CSE_DEBUG 0
@@ -237,6 +238,7 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(CommonSubtreeElimination)
    llvm::StringRef getArgument() const override { return "relalg-cse"; }
 
+   protected:
    void runOnOperation() override {
       auto funcOp = getOperation();
       colMapping.clear();
@@ -257,12 +259,15 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
          for (auto& op : llvm::make_early_inc_range(*block)) {
             if (op.getDialect()->getNamespace() != "relalg") continue;
 
-            bool debugHash = CSE_DEBUG && (op.getName().getStringRef() == "relalg.join" || mlir::isa<relalg::MapOp>(op));
+            bool debugHash = CSE_DEBUG && (mlir::isa<relalg::BaseTableOp>(op));
             auto hash = computeHash(&op, debugHash);
             bool merged = false;
 
             if (CSE_DEBUG) {
                llvm::errs() << "Visiting: " << op.getName() << " (" << &op << ") Hash: " << hash << "\n";
+               if (debugHash) {
+                  op.dump();
+               }
             }
 
             if (auto it = candidates.find(hash); it != candidates.end()) {
@@ -488,7 +493,7 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
              relalg::IntersectOp,
              relalg::ExceptOp>(op)) {
          if (op->getNumOperands() > 0) {
-            if (auto defOp = op->getOperand(0).getDefiningOp()) {
+            if (auto* defOp = op->getOperand(0).getDefiningOp()) {
                if (defOp->getDialect()->getNamespace() == "relalg")
                   getAvailableColumns(defOp, out, visited);
             }
@@ -498,7 +503,7 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
 
       if (mlir::isa<relalg::GroupJoinOp>(op)) {
          if (op->getNumOperands() > 0) {
-            if (auto defOp = op->getOperand(0).getDefiningOp()) {
+            if (auto* defOp = op->getOperand(0).getDefiningOp()) {
                if (defOp->getDialect()->getNamespace() == "relalg")
                   getAvailableColumns(defOp, out, visited);
             }
@@ -507,7 +512,7 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
       }
 
       for (auto operand : op->getOperands()) {
-         if (auto defOp = operand.getDefiningOp()) {
+         if (auto* defOp = operand.getDefiningOp()) {
             if (defOp->getDialect()->getNamespace() == "relalg") {
                getAvailableColumns(defOp, out, visited);
             }
@@ -531,7 +536,7 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
       }
 
       for (auto operand : op->getOperands()) {
-         if (auto definingOp = operand.getDefiningOp()) {
+         if (auto* definingOp = operand.getDefiningOp()) {
             if (definingOp->getDialect()->getNamespace() == "relalg") {
                collectRecursiveDefs(definingOp, defs, visited);
             }
@@ -707,11 +712,11 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
       }
 
       duplicate->getResult(0).replaceAllUsesWith(replacement);
-      if (CSE_DEBUG || true) {
+      if (CSE_DEBUG) {
          llvm::errs() << "[CSE REPLACE] " << duplicate->getName() << " -> " << leader->getName() << "\n";
          leader->dump();
          duplicate->dump();
-         if (auto r = replacement.getDefiningOp()) r->dump();
+         if (auto* r = replacement.getDefiningOp()) r->dump();
       }
       duplicate->erase();
       successfulPhysicalMerges++;
