@@ -119,10 +119,6 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
 
       explicit EquivalenceContext(CommonSubtreeElimination* pass) : pass(pass) {}
 
-      void printIndent() const {
-         if (CSE_DEBUG) llvm::errs().indent(depth * 2);
-      }
-
       bool checkOps(mlir::Operation* leader, mlir::Operation* candidate) {
          if (leader->getName() != candidate->getName()) return false;
          if (leader->getNumOperands() != candidate->getNumOperands()) return false;
