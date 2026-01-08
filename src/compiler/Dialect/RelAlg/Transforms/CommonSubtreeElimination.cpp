@@ -360,9 +360,7 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
    }
 
    static bool shouldIgnoreAttr(llvm::StringRef name) {
-      return name == "rows" || name == "total_rows" || name == "distinct_values" ||
-         name == "id" || name == "scanId" || name == "mapping" ||
-         name == "sym_name" || name == "doc" || name == "comment";
+      return name == "rows" || name == "total_rows";
    }
 
    llvm::hash_code computeHash(mlir::Operation* op, bool debug = false) const {
