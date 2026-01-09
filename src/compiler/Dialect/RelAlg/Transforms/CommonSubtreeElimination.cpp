@@ -25,15 +25,14 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
    };
 
    llvm::DenseMap<const tuples::Column*, LeaderInfo> colMapping;
+   llvm::DenseMap<const tuples::Column*, llvm::SmallVector<LeaderInfo, 1>> inverseColMapping;
    llvm::DenseMap<mlir::Value, mlir::Value> equivalenceMap;
 
    size_t successfulPhysicalMerges = 0;
    size_t successfulVirtualMerges = 0;
    size_t failedPhysicalMerges = 0;
-   size_t failedVirtualMerges = 0;
 
    // Helper to extract local definitions from ANY operation.
-   // Uses collectDefs to find all ColumnDefAttrs in the op's attributes.
    llvm::DenseMap<const tuples::Column*, std::string> getLocalDefs(mlir::Operation* op) const {
       llvm::DenseMap<const tuples::Column*, std::string> localDefs;
       llvm::SmallVector<std::pair<std::string, tuples::ColumnDefAttr>> defs;
@@ -83,6 +82,9 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
       }
 
       if (auto colDef = mlir::dyn_cast<tuples::ColumnDefAttr>(attr)) {
+         if (auto from = colDef.getFromExisting()) {
+            return getCanonicalAttr(from, localDefs);
+         }
          return mlir::StringAttr::get(attr.getContext(), "ColDef");
       }
 
@@ -153,19 +155,6 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
       }
 
       bool checkAttributes(mlir::Operation* leader, mlir::Operation* candidate) const {
-         // Special handling for BaseTableOp: Allow superset merge.
-         if (mlir::isa<relalg::BaseTableOp>(leader)) {
-            auto lCols = leader->getAttrOfType<mlir::DictionaryAttr>("columns");
-            auto cCols = candidate->getAttrOfType<mlir::DictionaryAttr>("columns");
-            if (lCols && cCols) {
-               for (auto cNamed : cCols) {
-                  if (!lCols.get(cNamed.getName())) {
-                     return false;
-                  }
-               }
-            }
-         }
-
          llvm::SmallSetVector<mlir::StringAttr, 4> names;
          if (auto info = leader->getRegisteredInfo()) {
             for (auto name : info->getAttributeNames()) names.insert(name);
@@ -177,6 +166,7 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
 
          for (auto name : names) {
             if (pass->shouldIgnoreAttr(name)) continue;
+            // BaseTableOp: ignore "columns" to allow merging different column sets
             if (mlir::isa<relalg::BaseTableOp>(leader) && name == "columns") continue;
 
             auto lVal = leader->getAttr(name);
@@ -238,11 +228,11 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
    void runOnOperation() override {
       auto funcOp = getOperation();
       colMapping.clear();
+      inverseColMapping.clear();
       equivalenceMap.clear();
       successfulPhysicalMerges = 0;
       failedPhysicalMerges = 0;
       successfulVirtualMerges = 0;
-      failedVirtualMerges = 0;
 
       if (funcOp.getBody().empty()) return;
 
@@ -261,9 +251,7 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
 
             if (CSE_DEBUG) {
                llvm::errs() << "Visiting: " << op.getName() << " (" << &op << ") Hash: " << hash << "\n";
-               if (debugHash) {
-                  op.dump();
-               }
+               if (debugHash) op.dump();
             }
 
             if (auto it = candidates.find(hash); it != candidates.end()) {
@@ -276,11 +264,16 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
                      if (!isSafeCrossRegionMerge(leader, &op)) continue;
                      if (mlir::isa<relalg::AggrFuncOp>(op)) continue;
 
+                     if (mlir::dyn_cast<relalg::BaseTableOp>(leader)) {
+                        mapVirtualBaseTableOpMerge(leader, &op);
+                        merged = true;
+                        break;
+                     }
+
                      bool isCandidateForPhysical = !mlir::isa<
                         relalg::RenamingOp,
                         relalg::GroupJoinOp,
                         relalg::WindowOp,
-                        relalg::BaseTableOp,
                         relalg::ConstRelationOp>(op);
 
                      if (isCandidateForPhysical) {
@@ -337,14 +330,12 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
          traverseRegion(region);
       }
 
-      if (successfulPhysicalMerges > 0 || successfulVirtualMerges > 0 || failedPhysicalMerges > 0 || failedVirtualMerges > 0) {
+      if (!CSE_DEBUG && (successfulPhysicalMerges > 0 || successfulVirtualMerges > 0 || failedPhysicalMerges > 0)) {
          llvm::errs() << "=========================================================\n";
          llvm::errs() << "CSE Pass Summary\n";
          llvm::errs() << "  Successful Physical Merges: " << successfulPhysicalMerges << "\n";
          if (failedPhysicalMerges > 0) llvm::errs() << "  Failed Physical Merges:     " << failedPhysicalMerges << "\n";
-
          llvm::errs() << "  Successful Virtual Merges: " << successfulVirtualMerges << "\n";
-         if (failedVirtualMerges > 0) llvm::errs() << "  Failed virtual Merges:     " << failedVirtualMerges << "\n";
          llvm::errs() << "=========================================================\n";
       }
    }
@@ -385,6 +376,9 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
 
       for (auto name : attrNames) {
          if (shouldIgnoreAttr(name)) continue;
+         // Special case: Ignore "columns" for BaseTableOp to ensure hash collision for same table
+         if (mlir::isa<relalg::BaseTableOp>(op) && name == "columns") continue;
+
          if (auto val = op->getAttr(name)) {
             sortedAttrs.emplace_back(name, getCanonicalAttr(val, &localDefs));
          }
@@ -538,6 +532,59 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
       }
    }
 
+   void mapVirtualBaseTableOpMerge(mlir::Operation* leader, mlir::Operation* duplicate) {
+      auto leaderBase = mlir::dyn_cast<relalg::BaseTableOp>(leader);
+      auto dupBase = mlir::cast<relalg::BaseTableOp>(duplicate);
+
+      auto lColsAttr = leaderBase->getAttrOfType<mlir::DictionaryAttr>("columns");
+      auto dColsAttr = dupBase->getAttrOfType<mlir::DictionaryAttr>("columns");
+
+      llvm::DenseMap<mlir::StringAttr, mlir::Attribute> leaderCols;
+      if (lColsAttr) {
+         for (auto named : lColsAttr) leaderCols[named.getName()] = named.getValue();
+      }
+
+      bool leaderChanged = false;
+      if (dColsAttr) {
+         for (auto named : dColsAttr) {
+            auto physName = named.getName();
+            auto dDef = mlir::cast<tuples::ColumnDefAttr>(named.getValue());
+            tuples::ColumnDefAttr lDef;
+            if (leaderCols.count(physName)) {
+               lDef = mlir::cast<tuples::ColumnDefAttr>(leaderCols[physName]);
+            } else {
+               leaderCols[physName] = dDef;
+               leaderChanged = true;
+               lDef = dDef;
+            }
+
+            if (dDef.getColumnPtr() && lDef.getColumnPtr() && dDef.getColumnPtr() != lDef.getColumnPtr()) {
+               colMapping[dDef.getColumnPtr().get()] = {lDef.getColumnPtr(), lDef.getName()};
+               inverseColMapping[lDef.getColumnPtr().get()].push_back({dDef.getColumnPtr(), dDef.getName()});
+            }
+         }
+      }
+
+      if (leaderChanged) {
+         llvm::SmallVector<mlir::NamedAttribute> newLeaderCols;
+         for (auto it : leaderCols) newLeaderCols.emplace_back(it.first, it.second);
+         llvm::sort(newLeaderCols, [](const mlir::NamedAttribute& a, const mlir::NamedAttribute& b) {
+            return a.getName().strref() < b.getName().strref();
+         });
+         leaderBase->setAttr("columns", mlir::DictionaryAttr::get(leader->getContext(), newLeaderCols));
+      }
+
+      if (duplicate->getNumResults() > 0 && leader->getNumResults() > 0) {
+         equivalenceMap[duplicate->getResult(0)] = leader->getResult(0);
+      }
+
+      successfulVirtualMerges++;
+      if (CSE_DEBUG) {
+         llvm::errs() << "[CSE virtual REPLACE] " << duplicate->getName() << " -> " << leader->getName() << "\n";
+         leader->dump();
+         duplicate->dump();
+      }
+   }
    void mapVirtualMerge(mlir::Operation* leader, mlir::Operation* duplicate) {
       llvm::SmallVector<std::pair<std::string, tuples::ColumnDefAttr>> lDefs, dDefs;
 
@@ -561,7 +608,6 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
       collectLocal(leader, lDefs);
       collectLocal(duplicate, dDefs);
 
-      // Use structural alignment since equivalence is already checked
       if (lDefs.size() == dDefs.size()) {
          for (size_t i = 0; i < lDefs.size(); ++i) {
             auto lDef = lDefs[i].second;
@@ -571,6 +617,7 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
             auto dPtr = dDef.getColumnPtr();
             if (lPtr && dPtr && lPtr != dPtr) {
                colMapping[dPtr.get()] = {lPtr, lDef.getName()};
+               inverseColMapping[lPtr.get()].push_back({dPtr, dDef.getName()});
             }
          }
       }
@@ -588,46 +635,37 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
    }
 
    bool tryMergeOperations(mlir::Operation* leader, mlir::Operation* duplicate) {
-      if (mlir::isa<relalg::BaseTableOp>(duplicate)) {
-         mapVirtualMerge(leader, duplicate);
-         successfulVirtualMerges++;
-         return true;
-      }
+      llvm::SmallVector<std::pair<std::string, tuples::ColumnDefAttr>> lDefs, dDefs;
+      auto collectLocal = [](mlir::Operation* op, auto& out) {
+         llvm::SmallSetVector<mlir::StringAttr, 4> names;
+         if (auto info = op->getRegisteredInfo())
+            for (auto n : info->getAttributeNames()) names.insert(n);
+         for (auto n : op->getAttrs()) names.insert(n.getName());
 
-      {
-         // Build colMapping based on structural alignment
-         llvm::SmallVector<std::pair<std::string, tuples::ColumnDefAttr>> lDefs, dDefs;
-         auto collectLocal = [](mlir::Operation* op, auto& out) {
-            llvm::SmallSetVector<mlir::StringAttr, 4> names;
-            if (auto info = op->getRegisteredInfo())
-               for (auto n : info->getAttributeNames()) names.insert(n);
-            for (auto n : op->getAttrs()) names.insert(n.getName());
+         std::vector<mlir::Attribute> sortedNames;
+         for (auto n : names) sortedNames.push_back(n);
+         llvm::sort(sortedNames, [](mlir::Attribute a, mlir::Attribute b) {
+            return mlir::cast<mlir::StringAttr>(a).getValue() < mlir::cast<mlir::StringAttr>(b).getValue();
+         });
 
-            std::vector<mlir::Attribute> sortedNames;
-            for (auto n : names) sortedNames.push_back(n);
-            llvm::sort(sortedNames, [](mlir::Attribute a, mlir::Attribute b) {
-               return mlir::cast<mlir::StringAttr>(a).getValue() < mlir::cast<mlir::StringAttr>(b).getValue();
-            });
+         for (auto nAttr : sortedNames) {
+            auto n = mlir::cast<mlir::StringAttr>(nAttr);
+            if (auto val = op->getAttr(n)) collectDefs(val, out);
+         }
+      };
+      collectLocal(leader, lDefs);
+      collectLocal(duplicate, dDefs);
 
-            for (auto nAttr : sortedNames) {
-               auto n = mlir::cast<mlir::StringAttr>(nAttr);
-               if (auto val = op->getAttr(n)) collectDefs(val, out);
-            }
-         };
-         collectLocal(leader, lDefs);
-         collectLocal(duplicate, dDefs);
+      if (lDefs.size() == dDefs.size()) {
+         for (size_t i = 0; i < lDefs.size(); ++i) {
+            auto lDef = lDefs[i].second;
+            auto dDef = dDefs[i].second;
 
-         if (lDefs.size() == dDefs.size()) {
-            for (size_t i = 0; i < lDefs.size(); ++i) {
-               auto lDef = lDefs[i].second;
-               auto dDef = dDefs[i].second;
+            auto lPtr = lDef.getColumnPtr();
+            auto dPtr = dDef.getColumnPtr();
 
-               auto lPtr = lDef.getColumnPtr();
-               auto dPtr = dDef.getColumnPtr();
-
-               if (lPtr && dPtr && lPtr != dPtr) {
-                  colMapping[dPtr.get()] = {lPtr, lDef.getName()};
-               }
+            if (lPtr && dPtr && lPtr != dPtr) {
+               colMapping[dPtr.get()] = {lPtr, lDef.getName()};
             }
          }
       }
@@ -671,6 +709,16 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
          } else if (availableLeaderCols.count(dPtr)) {
             lCol = dPtrWrapper;
             lName = dDef.getName();
+         } else {
+            if (auto it = inverseColMapping.find(dPtr); it != inverseColMapping.end()) {
+               for (auto& info : it->second) {
+                  if (availableLeaderCols.count(info.col.get())) {
+                     lCol = info.col;
+                     lName = info.name;
+                     break;
+                  }
+               }
+            }
          }
 
          if (lCol) {
@@ -685,10 +733,22 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
             } else {
                if (CSE_DEBUG) {
                   llvm::errs() << "[CSE FAIL] Physical merge failed: Leader missing column for " << lName << "\n";
+                  leader->dump();
+                  duplicate->dump();
                }
                failedPhysicalMerges++;
                return false;
             }
+         } else {
+            // FIXED: If we cannot resolve a column that is available in the duplicate, we must abort the merge.
+            // Otherwise, we create a RenamingOp that hides this column, causing downstream crashes.
+            if (CSE_DEBUG) {
+               llvm::errs() << "[CSE FAIL] Physical merge failed: Could not resolve duplicate column " << dDef.getName() << "\n";
+               leader->dump();
+               duplicate->dump();
+            }
+            failedPhysicalMerges++;
+            return false;
          }
       }
 
