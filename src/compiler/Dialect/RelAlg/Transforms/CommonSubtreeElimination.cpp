@@ -57,6 +57,39 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
       return localDefs;
    }
 
+   // Locates the operation defining a specific column within the subtree rooted at 'root'.
+   // Returns the defining operation and the path of operand indices from 'root' to it.
+   std::pair<mlir::Operation*, std::vector<unsigned>> findDefiningOp(mlir::Operation* root, const tuples::Column* col) const {
+      auto localDefs = getLocalDefs(root);
+      if (localDefs.count(col)) return {root, {}};
+
+      for (unsigned i = 0; i < root->getNumOperands(); ++i) {
+         auto opd = root->getOperand(i);
+         if (auto defOp = opd.getDefiningOp()) {
+            if (defOp->getDialect()->getNamespace() == "relalg") {
+               auto res = findDefiningOp(defOp, col);
+               if (res.first) {
+                  res.second.push_back(i);
+                  return res;
+               }
+            }
+         }
+      }
+      return {nullptr, {}};
+   }
+
+   // Follows a path of operand indices from 'root' to find the corresponding operation in an equivalent subtree.
+   mlir::Operation* followPath(mlir::Operation* root, const std::vector<unsigned>& path) const {
+      mlir::Operation* curr = root;
+      for (auto it = path.rbegin(); it != path.rend(); ++it) {
+         if (*it >= curr->getNumOperands()) return nullptr;
+         auto opd = curr->getOperand(*it);
+         curr = opd.getDefiningOp();
+         if (!curr) return nullptr;
+      }
+      return curr;
+   }
+
    mlir::Attribute getCanonicalAttr(mlir::Attribute attr, const llvm::DenseMap<const tuples::Column*, std::string>* localDefs = nullptr) const {
       if (!attr) return {};
 
@@ -330,7 +363,7 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
          traverseRegion(region);
       }
 
-      if (!CSE_DEBUG && (successfulPhysicalMerges > 0 || successfulVirtualMerges > 0 || failedPhysicalMerges > 0)) {
+      if (CSE_DEBUG && (successfulPhysicalMerges > 0 || successfulVirtualMerges > 0 || failedPhysicalMerges > 0)) {
          llvm::errs() << "=========================================================\n";
          llvm::errs() << "CSE Pass Summary\n";
          llvm::errs() << "  Successful Physical Merges: " << successfulPhysicalMerges << "\n";
@@ -721,8 +754,66 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
             }
          }
 
+         if (!lCol || !availableLeaderCols.count(lCol.get())) {
+            // Lazy fix: Try to find the column in the leader's BaseTable equivalent
+            auto [dSourceOp, path] = findDefiningOp(duplicate, dPtr);
+            if (dSourceOp && mlir::isa<relalg::BaseTableOp>(dSourceOp)) {
+               if (auto* lSourceOp = followPath(leader, path)) {
+                  if (auto baseTable = mlir::dyn_cast<relalg::BaseTableOp>(lSourceOp)) {
+                     auto dBaseTable = mlir::cast<relalg::BaseTableOp>(dSourceOp);
+                     auto dCols = dBaseTable->getAttrOfType<mlir::DictionaryAttr>("columns");
+                     mlir::StringAttr physName;
+                     if (dCols) {
+                        for (auto named : dCols) {
+                           auto val = mlir::dyn_cast<tuples::ColumnDefAttr>(named.getValue());
+                           if (val && val.getColumnPtr() == dDef.getColumnPtr()) {
+                              physName = named.getName();
+                              break;
+                           }
+                        }
+                     }
+
+                     if (physName) {
+                        auto cols = baseTable->getAttrOfType<mlir::DictionaryAttr>("columns");
+                        llvm::SmallVector<mlir::NamedAttribute> newCols;
+                        if (cols) newCols.append(cols.begin(), cols.end());
+
+                        tuples::ColumnDefAttr existingLDef;
+                        bool exists = false;
+                        for (auto& named : newCols) {
+                           if (named.getName() == physName) {
+                              exists = true;
+                              existingLDef = mlir::cast<tuples::ColumnDefAttr>(named.getValue());
+                              break;
+                           }
+                        }
+
+                        if (!exists) {
+                           newCols.emplace_back(physName, dDef);
+                           llvm::sort(newCols, [](const auto& a, const auto& b) { return a.getName().strref() < b.getName().strref(); });
+                           baseTable->setAttr("columns", mlir::DictionaryAttr::get(baseTable.getContext(), newCols));
+
+                           // We added dDef, so leader now has dDef's column
+                           lCol = dDef.getColumnPtr();
+                           lName = dDef.getName();
+                           availableLeaderCols.insert(lCol.get());
+                        } else {
+                           // Leader already has it, but maybe we missed it?
+                           lCol = existingLDef.getColumnPtr();
+                           lName = existingLDef.getName();
+                           availableLeaderCols.insert(lCol.get());
+                        }
+                     }
+                  }
+               }
+            }
+         }
+
          if (lCol) {
-            if (availableLeaderCols.count(lCol.get())) {
+            bool available = availableLeaderCols.count(lCol.get());
+            if (!available && lCol == dDef.getColumnPtr()) available = true;
+
+            if (available) {
                auto lRef = tuples::ColumnRefAttr::get(builder.getContext(), lName, lCol);
                auto newDef = tuples::ColumnDefAttr::get(
                   builder.getContext(),
