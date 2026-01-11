@@ -346,6 +346,9 @@ std::string compileHiPyUDF(std::string functionName, std::string code, std::vect
             case lingodb::catalog::LogicalTypeId::INT:
                jsonArgs.push_back("int");
                break;
+            case lingodb::catalog::LogicalTypeId::DATE:
+              jsonArgs.push_back("date");
+              break;
             default:
                throw std::runtime_error("Unsupported argument type for Python UDF: " + argType.toString());
          }

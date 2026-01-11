@@ -18,6 +18,7 @@ class List {
    uint8_t* append();
    size_t size();
    Buffer getBuffer();
+   void sort(bool (*compareFn)(const void*, const void*));
    static void cleanupUse(List* list);
    static void cleanupUseCb(List* list, void (*cleanupFn)(List*));
    static void addUse(List* list);

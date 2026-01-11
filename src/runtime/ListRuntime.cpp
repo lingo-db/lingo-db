@@ -44,3 +44,7 @@ void List::cleanupUse(List* list) {
 void List::addUse(List* list) {
    incRefCount<List>(list);
 }
+
+void List::sort(bool (*compareFn)(const void*, const void*)) {
+
+}

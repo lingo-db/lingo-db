@@ -80,6 +80,10 @@ int64_t lingodb::runtime::DateRuntime::subtractMonths(int64_t date, int64_t mont
 int64_t lingodb::runtime::DateRuntime::addMonths(int64_t nanos, int64_t months) {
    return DateHelper(nanos).addMonths(months).nanosSinceEpoch();
 }
+int64_t lingodb::runtime::DateRuntime::dateDiffNanoSeconds(int64_t end, int64_t start) {
+   auto diffNanos = end - start;
+   return diffNanos;
+}
 int64_t lingodb::runtime::DateRuntime::dateDiffSecond(int64_t end, int64_t start) {
    auto diffNanos = end - start;
    return diffNanos / (1000000000ll);
@@ -161,4 +165,18 @@ int64_t lingodb::runtime::DateRuntime::dateTrunc(VarLen32 part, int64_t date) {
    }
 
    throw std::runtime_error("Invalid or unimplemented date part");
+}
+
+int64_t lingodb::runtime::IntervalRuntime::weeks(int64_t interval) {
+   return interval / (1000000000ll) / (60ll * 60ll * 24ll * 7ll);
+}
+int64_t lingodb::runtime::IntervalRuntime::days(int64_t interval) {
+   return interval / (1000000000ll) / (60ll * 60ll * 24ll);
+}
+
+int64_t lingodb::runtime::IntervalRuntime::hours(int64_t interval) {
+   return interval / (1000000000ll) / (60ll * 60ll);
+}
+int64_t lingodb::runtime::IntervalRuntime::minutes(int64_t interval) {
+   return interval / (1000000000ll) / (60ll);
 }

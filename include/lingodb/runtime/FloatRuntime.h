@@ -7,11 +7,14 @@ struct FloatRuntime {
    static double sin(double);
    static double cos(double);
    static double arcsin(double);
+   static double arccos(double);
+   static double arctan2(double, double);
    static double exp(double);
    static double log(double);
    static double erf(double);
    static double pow(double, double);
    static int64_t ceil(double);
+   static double round(double, int64_t);
 };
 
 } // namespace lingodb::runtime

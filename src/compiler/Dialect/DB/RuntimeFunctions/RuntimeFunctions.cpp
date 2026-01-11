@@ -274,6 +274,9 @@ std::shared_ptr<db::RuntimeFunctionRegistry> db::RuntimeFunctionRegistry::getBui
    auto resTypeIsBool = [](mlir::Type t, mlir::TypeRange) { return t.isInteger(1); };
    auto resTypeIsIndex = [](mlir::Type t, mlir::TypeRange) { return t.isIndex(); };
    auto resTypeIsStr = [](mlir::Type t, mlir::TypeRange) { return mlir::isa<db::StringType>(t); };
+   auto resTypeIsInverval = [](mlir::Type t, mlir::TypeRange) {
+      return mlir::isa<db::IntervalType>(t);
+   };
    builtinRegistry->add("Substring").implementedAs(StringRuntime::substr).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::intLike, RuntimeFunction::intLike}, RuntimeFunction::matchesArgument());
    builtinRegistry->add("StringStrip").implementedAs(StringRuntime::strip).matchesTypes({RuntimeFunction::stringLike}, RuntimeFunction::matchesArgument());
    builtinRegistry->add("StringFind").implementedAs(StringRuntime::findNext).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike, RuntimeFunction::intLike}, resTypeIsI64);
@@ -306,6 +309,7 @@ std::shared_ptr<db::RuntimeFunctionRegistry> db::RuntimeFunctionRegistry::getBui
       return res;
    });
    builtinRegistry->add("RoundInt64").implementedAs(IntegerRuntime::round64).matchesTypes({RuntimeFunction::intLike, RuntimeFunction::intLike}, RuntimeFunction::matchesArgument());
+   builtinRegistry->add("RoundFloat").implementedAs(FloatRuntime::round).matchesTypes({RuntimeFunction::float64, RuntimeFunction::intLike}, RuntimeFunction::matchesArgument());
    builtinRegistry->add("startTiming").hasSideEffects(true).implementedAs(Timing::start).matchesTypes({}, resTypeIsI64);
    builtinRegistry->add("startPerf").hasSideEffects(true).implementedAs(Timing::startPerf).matchesTypes({}, RuntimeFunction::noReturnType);
    builtinRegistry->add("stopPerf").hasSideEffects(true).implementedAs(Timing::stopPerf).matchesTypes({}, RuntimeFunction::noReturnType);
@@ -325,6 +329,7 @@ std::shared_ptr<db::RuntimeFunctionRegistry> db::RuntimeFunctionRegistry::getBui
    builtinRegistry->add("DateDiffHour").matchesTypes({RuntimeFunction::dateLike, RuntimeFunction::dateLike}, resTypeIsI64).implementedAs(DateRuntime::dateDiffHour);
    builtinRegistry->add("DateDiffMinute").matchesTypes({RuntimeFunction::dateLike, RuntimeFunction::dateLike}, resTypeIsI64).implementedAs(DateRuntime::dateDiffMinute);
    builtinRegistry->add("DateDiffSecond").matchesTypes({RuntimeFunction::dateLike, RuntimeFunction::dateLike}, resTypeIsI64).implementedAs(DateRuntime::dateDiffSecond);
+   builtinRegistry->add("DateDiffInterval").matchesTypes({RuntimeFunction::dateLike, RuntimeFunction::dateLike}, resTypeIsInverval).implementedAs(DateRuntime::dateDiffNanoSeconds);
    builtinRegistry->add("ExtractFromDate").matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::dateLike}, resTypeIsI64).needsWrapping();
    builtinRegistry->add("ExtractYearFromDate").matchesTypes({RuntimeFunction::dateLike}, resTypeIsI64).implementedAs(DateRuntime::extractYear);
    builtinRegistry->add("ExtractMonthFromDate").matchesTypes({RuntimeFunction::dateLike}, resTypeIsI64).implementedAs(DateRuntime::extractMonth);
@@ -334,6 +339,7 @@ std::shared_ptr<db::RuntimeFunctionRegistry> db::RuntimeFunctionRegistry::getBui
    builtinRegistry->add("ExtractSecondFromDate").matchesTypes({RuntimeFunction::dateLike}, resTypeIsI64).implementedAs(DateRuntime::extractSecond);
    builtinRegistry->add("DateAdd").handlesInvalid().matchesTypes({RuntimeFunction::dateLike, RuntimeFunction::dateInterval}, RuntimeFunction::matchesArgument()).implementedAs(dateAddImpl).folds(dateAddFoldFn);
    builtinRegistry->add("DateSubtract").handlesInvalid().matchesTypes({RuntimeFunction::dateLike, RuntimeFunction::dateInterval}, RuntimeFunction::matchesArgument()).implementedAs(dateSubImpl).folds(dateSubtractFoldFn);
+   builtinRegistry->add("IntervalGetDay").matchesTypes({RuntimeFunction::dateInterval}, resTypeIsI64).implementedAs(IntervalRuntime::days);
 
    builtinRegistry->add("AbsInt").handlesInvalid().matchesTypes({RuntimeFunction::intLike}, RuntimeFunction::matchesArgument()).implementedAs(absImpl);
    builtinRegistry->add("AbsDecimal").handlesInvalid().matchesTypes({RuntimeFunction::anyDecimal}, RuntimeFunction::matchesArgument()).implementedAs(absImpl);
@@ -343,9 +349,12 @@ std::shared_ptr<db::RuntimeFunctionRegistry> db::RuntimeFunctionRegistry::getBui
    builtinRegistry->add("Ceil").matchesTypes({RuntimeFunction::float64}, resTypeIsI64).implementedAs(FloatRuntime::ceil);
 
    builtinRegistry->add("Exp").matchesTypes({RuntimeFunction::float64}, resTypeIsF64).implementedAs(FloatRuntime::exp);
+   builtinRegistry->add("Pow").matchesTypes({RuntimeFunction::float64, RuntimeFunction::float64}, resTypeIsF64).implementedAs(FloatRuntime::pow);
    builtinRegistry->add("Erf").matchesTypes({RuntimeFunction::float64}, resTypeIsF64).implementedAs(FloatRuntime::erf);
    builtinRegistry->add("Cos").matchesTypes({RuntimeFunction::float64}, resTypeIsF64).implementedAs(FloatRuntime::cos);
    builtinRegistry->add("ASin").matchesTypes({RuntimeFunction::float64}, resTypeIsF64).implementedAs(FloatRuntime::arcsin);
+   builtinRegistry->add("ACos").matchesTypes({RuntimeFunction::float64}, resTypeIsF64).implementedAs(FloatRuntime::arccos);
+   builtinRegistry->add("ATan2").matchesTypes({RuntimeFunction::float64, RuntimeFunction::float64}, resTypeIsF64).implementedAs(FloatRuntime::arctan2);
    builtinRegistry->add("Hash").matchesTypes({RuntimeFunction::anyType}, resTypeIsIndex).needsWrapping().implementedAs([](mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, const mlir::TypeConverter* typeConverter, mlir::Location loc) -> mlir::Value {
       return rewriter.create<lingodb::compiler::dialect::db::Hash>(loc, loweredArguments[0]);
    });
