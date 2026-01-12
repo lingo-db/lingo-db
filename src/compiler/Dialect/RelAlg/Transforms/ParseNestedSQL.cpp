@@ -22,6 +22,7 @@ class ParseNestedSQL : public mlir::PassWrapper<ParseNestedSQL, mlir::OperationP
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(ParseNestedSQL)
    ParseNestedSQL(lingodb::catalog::Catalog& catalog) : catalog(catalog) {}
    void runOnOperation() override {
+      size_t cnt = 0;
       auto moduleOp = mlir::OperationPass<mlir::ModuleOp>::getOperation();
       std::vector<relalg::SQLQueryOp> nestedQueries;
       getOperation().walk([&](relalg::SQLQueryOp op) {
@@ -29,9 +30,10 @@ class ParseNestedSQL : public mlir::PassWrapper<ParseNestedSQL, mlir::OperationP
       });
       for (auto op : nestedQueries) {
          auto sqlString = op.getSql().str();
+         std::string scopePrefix = "nested_sql_" + std::to_string(cnt++) + "_";
          Driver drv;
          if (!drv.parse(sqlString, false)) {
-            auto sqlContext = std::make_shared<lingodb::analyzer::SQLContext>(std::vector<mlir::Value>(op.getParameters().begin(), op.getParameters().end()));
+            auto sqlContext = std::make_shared<lingodb::analyzer::SQLContext>(std::vector<mlir::Value>(op.getParameters().begin(), op.getParameters().end()), scopePrefix);
             sqlContext->catalog = &catalog;
             lingodb::analyzer::SQLQueryAnalyzer analyzer{&catalog};
             drv.result[0] = analyzer.canonicalizeAndAnalyze(drv.result[0], sqlContext);

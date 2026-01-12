@@ -175,3 +175,32 @@ query tsv rowsort 8
 select extractpcode('123');
 ----
 00123
+
+statement ok
+create table hoeren (matrnr integer not null, vorlnr integer not null);
+
+statement ok
+create table studenten (matrnr integer primary key, name varchar(30) not null, semester integer not null);
+
+statement ok
+insert into studenten values (24002,'Xenokrates',18), (25403,'Jonas',12), (26120,'Fichte',10), (26830,'Aristoxenos',8), (27550,'Schopenhauer',6), (28106,'Carnap',3), (29120,'Theophrastos',2), (29555,'Feuerbach',2);
+
+statement ok
+insert into hoeren values (26120,5001), (27550,5001), (27550,4052), (28106,5041), (28106,5052), (28106,5216), (28106,5259), (29120,5001), (29120,5041), (29120,5049), (29555,5022), (25403,5022), (29555,5001);
+
+statement ok
+CREATE OR REPLACE FUNCTION get_num_lectures(b int8)
+RETURNS int8
+AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def get_num_lectures(matrnr):
+    r =sql.execute(sql.nullable(int), "SELECT count(*) FROM hoeren WHERE matrnr = PARAM(1)", matrnr)
+    return r.get_value_or_default(0)
+$$ LANGUAGE hipy;
+
+query tsv rowsort 9
+select count(*) from studenten where get_num_lectures(matrnr)>= 3;
+----
+2
