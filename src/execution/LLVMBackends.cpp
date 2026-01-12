@@ -234,6 +234,12 @@ class LLVMBackend {
          if (!tmBuilderOrError)
             return tmBuilderOrError.takeError();
 
+#if defined(__aarch64__) && defined(__linux__)
+         // AArch64 cannot emit absolute relocations in shared objects.
+         // Enforce PIC so LLVM lowers globals via GOT instead of MOVW_UABS_*.
+         tmBuilderOrError->setRelocationModel(llvm::Reloc::PIC_);
+#endif
+
          auto tmOrError = tmBuilderOrError->createTargetMachine();
          if (!tmOrError)
             return tmOrError.takeError();
@@ -290,6 +296,14 @@ class LLVMBackend {
       // process and dynamically linked libraries.
       auto objectLinkingLayerCreator = [&](llvm::orc::ExecutionSession& session,
                                            const llvm::Triple& tt) {
+#if defined(__aarch64__) && defined(__linux__) && ASAN_ACTIVE
+         // linux + aarch64 + ASAN requires llvm::jitlink::InProcessMemoryManager
+         // as RTDyldObjectLinkingLayer is incompatible with ASAN under linux + aarch64
+         auto objectLayer = std::make_unique<llvm::orc::ObjectLinkingLayer>(
+            session,
+            cantFail(llvm::jitlink::InProcessMemoryManager::Create()));
+#else
+         // llvm::SectionMemoryManager for gdb/perf listener support
          auto objectLayer = std::make_unique<llvm::orc::RTDyldObjectLinkingLayer>(
             session, [sectionMemoryMapper = options.sectionMemoryMapper]() {
                return std::make_unique<llvm::SectionMemoryManager>(sectionMemoryMapper);
@@ -300,6 +314,7 @@ class LLVMBackend {
             objectLayer->registerJITEventListener(*engine->gdbListener);
          if (engine->perfListener)
             objectLayer->registerJITEventListener(*engine->perfListener);
+#endif
 
          // COFF format binaries (Windows) need special handling to deal with
          // exported symbol visibility.
