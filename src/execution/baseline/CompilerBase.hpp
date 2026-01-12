@@ -31,7 +31,7 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
    using IRInstRef = IRAdaptor::IRInstRef;
    using IRValueRef = IRAdaptor::IRValueRef;
    using AsmReg = typename Base::AsmReg;
-   using Assembler = typename Base::Assembler;
+   using Assembler = typename tpde::Assembler;
    using SymRef = tpde::SymRef;
 
    class BuiltinFuncStorage {
@@ -725,7 +725,22 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
             if (auto string_attr = mlir::dyn_cast<mlir::StringAttr>(attr[i]);
                 string_attr && string_attr.getValue() == "llvm.zeroext") { flag = Base::CallArg::Flag::zext; }
          }
-         builder.add_arg(typename Base::CallArg{arg, flag, 0, 0});
+
+         uint8_t byval_align = 0;
+         uint32_t byval_size = 0;
+         if (auto int_type = dyn_cast<mlir::IntegerType>(arg.getType())) {
+            if (int_type.getWidth() == 128) {
+               byval_align = 16;
+               byval_size = 16;
+            }
+         } else if (dyn_cast<dialect::util::VarLen32Type>(arg.getType())) {
+            byval_align = 16;
+            byval_size = 16;
+         } else if (dyn_cast<dialect::util::BufferType>(arg.getType())) {
+            byval_align = 16;
+            byval_size = 16;
+         }
+         builder.add_arg(typename Base::CallArg{arg, flag, byval_align, byval_size});
       }
 
       if (callee_func.isExternal()) {
