@@ -24,10 +24,6 @@
         %year = db.constant ("year") : !db.string
    		%5 = db.runtime_call "ExtractFromDate"( %year, %date_const) : (!db.string,!db.date<day>) -> i64
 		db.runtime_call "DumpValue" (%5) : (i64) -> ()
-
-		%date_const_2 = db.constant ( "2021-08-25") : !db.date<day>
-		%diff = db.runtime_call "DateDiff" (%date_const,%date_const_2) : (!db.date<day>,!db.date<day>) -> !db.interval<daytime>
-
 		return
 	}
  }
