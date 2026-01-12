@@ -1,5 +1,5 @@
-if(NOT (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64"))
-    message(FATAL_ERROR "The TPDE baseline backend can only be built for linux x86_64 targets.")
+if(NOT (CMAKE_SYSTEM_NAME STREQUAL "Linux"))
+    message(FATAL_ERROR "The TPDE baseline backend can only be built for linux targets.")
 endif()
 
 ## Add baseline backend to the runner target
@@ -30,25 +30,39 @@ find_program(CLANG_EXECUTABLE NAMES clang-20 clang-19)
 if (NOT CLANG_EXECUTABLE)
     message(FATAL_ERROR "Neither clang-20 nor clang-19 was found in PATH.")
 endif ()
+
+if(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "x86_64")
+    set(TPDE_TARGET "x86_64-linux")
+    set(TPDE_ARCH "opteron")
+    set(BC_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/snippets_x64.bc")
+    set(HPP_OUTPUT "${SNIPPED_INCLUDE_DIR}/snippet_encoders_x64.hpp")
+elseif(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "aarch64")
+    set(TPDE_TARGET "aarch64-linux")
+    set(TPDE_ARCH "armv8.5-a")
+    set(BC_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/snippets_arm.bc")
+    set(HPP_OUTPUT "${SNIPPED_INCLUDE_DIR}/snippet_encoders_arm.hpp")
+else()
+    message(FATAL_ERROR "Unsupported host architecture: ${CMAKE_HOST_SYSTEM_PROCESSOR}")
+endif()
+
 add_custom_command(
-        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/snippets_x64.bc
-        COMMAND ${CLANG_EXECUTABLE} -c -emit-llvm -ffreestanding -fcf-protection=none -O3 -fomit-frame-pointer -fno-math-errno --target=x86_64-linux -march=opteron -o ${CMAKE_CURRENT_BINARY_DIR}/snippets_x64.bc ${CMAKE_CURRENT_SOURCE_DIR}/snippets_x64.c
-        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/snippets_x64.c
+        OUTPUT ${BC_OUTPUT}
+        COMMAND ${CLANG_EXECUTABLE} -c -emit-llvm -ffreestanding -fcf-protection=none -O3 -fomit-frame-pointer -fno-math-errno --target=${TPDE_TARGET} -march=${TPDE_ARCH} -o ${BC_OUTPUT} ${CMAKE_CURRENT_SOURCE_DIR}/snippets.c
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/snippets.c
         DEPENDS_EXPLICIT_ONLY
-        COMMENT "Generating LLVM bitcode from snippets.c"
+        COMMENT "Generating LLVM bitcode for ${CMAKE_HOST_SYSTEM_PROCESSOR}"
 )
-# Step 2: Use tpde to generate C++ header file from LLVM bitcode
+
 add_custom_command(
-        OUTPUT ${SNIPPED_INCLUDE_DIR}/snippet_encoders_x64.hpp
-        COMMAND $<TARGET_FILE:tpde::tpde_encodegen> -o ${SNIPPED_INCLUDE_DIR}/snippet_encoders_x64.hpp ${CMAKE_CURRENT_BINARY_DIR}/snippets_x64.bc
-        DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/snippets_x64.bc
-        DEPENDS tpde::tpde_encodegen
+        OUTPUT ${HPP_OUTPUT}
+        COMMAND $<TARGET_FILE:tpde::tpde_encodegen> -o ${HPP_OUTPUT} ${BC_OUTPUT}
+        DEPENDS ${BC_OUTPUT} tpde::tpde_encodegen
         DEPENDS_EXPLICIT_ONLY
-        COMMENT "Generating ${SNIPPED_INCLUDE_DIR}/snippet_encoders_x64.hpp from ${CMAKE_CURRENT_BINARY_DIR}/snippets_x64.bc"
+        COMMENT "Generating snippet encoders header for ${CMAKE_HOST_SYSTEM_PROCESSOR}"
 )
-add_custom_target(snippet_encoders ALL
-        DEPENDS ${SNIPPED_INCLUDE_DIR}/snippet_encoders_x64.hpp
-)
+
+add_custom_target(snippet_encoders ALL DEPENDS ${HPP_OUTPUT})
+
 # have snippet encoders built with the runner target which includes the baseline execution backend
 add_dependencies(runner snippet_encoders)
 add_dependencies(build_includes snippet_encoders tpde)
