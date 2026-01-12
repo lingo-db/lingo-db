@@ -79,9 +79,10 @@ class DefineScope {
  */
 class SQLContext {
    public:
-   SQLContext() : definedAttributes(), resolver() {
+   SQLContext(std::vector<mlir::Value> params={}) : params(params), definedAttributes(), resolver() {
       definedAttributes.push({});
    };
+   std::vector<mlir::Value> params;
 
    catalog::Catalog* catalog;
    std::vector<std::shared_ptr<SQLScope>> scopes;

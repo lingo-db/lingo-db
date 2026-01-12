@@ -2914,7 +2914,27 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeFunctionExpressio
       });
       resultType = catalog::Type::index();
       boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, boundArgs);
-
+   } else if (upperCaseFName == "PARAM") {
+      if (function->arguments.size() != 1) {
+         error("PARAM function needs exactly one argument", function->loc);
+      }
+      auto paramIdxExpr = function->arguments[0];
+      if (paramIdxExpr->type != ast::ExpressionType::VALUE_CONSTANT) {
+         error("PARAM function argument must be a constant", paramIdxExpr->loc);
+      }
+      auto paramIdxValue = std::static_pointer_cast<ast::ConstantExpression>(paramIdxExpr);
+      if (paramIdxValue->value->type != ast::ConstantType::INT) {
+         error("PARAM function argument must be an integer constant", paramIdxExpr->loc);
+      }
+      auto paramIdx = static_cast<size_t>(std::static_pointer_cast<ast::IntValue>(paramIdxValue->value)->iVal);
+      if (paramIdx > context->params.size()  || paramIdx < 1) {
+         error("PARAM function argument index out of bounds", paramIdxExpr->loc);
+      }
+      paramIdx = paramIdx - 1;
+      auto value = context->params[paramIdx];
+      catalog::Type rawResType=catalog::Type::int64(); // todo: determine type from value
+      NullableType resType{rawResType, true};
+      return drv.nf.node<ast::BoundParameterExpression>(function->loc, resType, paramIdx);
    } else {
       //UDF
       auto entry = catalog->getTypedEntry<lingodb::catalog::FunctionCatalogEntry>(function->functionName);

@@ -540,5 +540,12 @@ def QueryReturnOp : RelAlg_Op<"query_return",[Terminator]> {
    let assemblyFormat = [{ ($inputs^ `:` type($inputs))? attr-dict-with-keyword }];
 }
 
+def SQLQueryOp : RelAlg_Op<"sql_query"> {
+    let summary = "SQL query";
+    let arguments = (ins StrAttr:$sql, Variadic<AnyType>:$parameters);
+    let results = (outs AnyType:$result);
+    let assemblyFormat = [{ $sql (`,` $parameters^ `:` type($parameters))? `->` type($result) attr-dict}];
+}
+
 
 #endif // LINGODB_DIALECT_RELALG_IR_OPS

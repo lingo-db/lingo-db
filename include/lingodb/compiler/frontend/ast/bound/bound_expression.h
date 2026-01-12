@@ -81,6 +81,13 @@ class BoundFunctionExpression : public BoundExpression {
 
    std::vector<std::shared_ptr<BoundExpression>> arguments;
 };
+class BoundParameterExpression : public BoundExpression {
+   public:
+   static constexpr ExpressionClass cType = ExpressionClass::BOUND_PARAMETER;
+   BoundParameterExpression(NullableType resultType, size_t paramIdx) : BoundExpression(cType, ExpressionType::FUNCTION, resultType, ""), paramIdx(paramIdx) {}
+
+   size_t paramIdx;
+};
 
 class BoundStarExpression : public BoundExpression {
    public:

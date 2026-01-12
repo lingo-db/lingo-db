@@ -30,9 +30,8 @@
 namespace lingodb::translator {
 
 using namespace lingodb::compiler::dialect;
-SQLMlirTranslator::SQLMlirTranslator(mlir::ModuleOp moduleOp, catalog::Catalog* catalog) : moduleOp(moduleOp), catalog(catalog),
-                                                                                           attrManager(moduleOp->getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager()), translationContext(std::make_shared<TranslationContext>()) {
-   moduleOp.getContext()->getLoadedDialect<util::UtilDialect>()->getFunctionHelper().setParentModule(moduleOp);
+SQLMlirTranslator::SQLMlirTranslator(mlir::ModuleOp moduleOp, catalog::Catalog* catalog) : moduleOp(moduleOp), catalog(catalog),attrManager(moduleOp->getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager()), translationContext(std::make_shared<TranslationContext>()) {
+   moduleOp.getContext()->getOrLoadDialect<util::UtilDialect>()->getFunctionHelper().setParentModule(moduleOp);
 }
 std::optional<mlir::Value> SQLMlirTranslator::translateStart(mlir::OpBuilder& builder, std::shared_ptr<ast::AstNode> astNode, std::shared_ptr<analyzer::SQLContext> context) {
    context->definedAttributes = std::stack<std::vector<std::pair<std::string, std::shared_ptr<ast::ColumnReference>>>>();
@@ -997,7 +996,10 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
          }
          return translateWhenChecks(builder, boundCase, caseExprTranslated, boundCase->caseChecks, boundCase->elseExpr, context);
       }
-
+      case ast::ExpressionClass::BOUND_PARAMETER: {
+         auto paramExpr = std::static_pointer_cast<ast::BoundParameterExpression>(expression);
+         return context->params[paramExpr->paramIdx];
+      }
       default: translatorError("Expression not implemented", expression->loc);
    }
 }
