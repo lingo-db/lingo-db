@@ -16,7 +16,7 @@ jobs:
       matrix:
         build_type: [ debug, asan, release ]
     runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:89088a70dfe905e9da42772888ec22af7035d964
+    container: ghcr.io/lingo-db/lingodb-dev:9237b839644c4206405d37635ed3403f66219aa7
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -50,7 +50,7 @@ jobs:
       matrix:
         build_type: [ debug, asan ]
     runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:89088a70dfe905e9da42772888ec22af7035d964
+    container: ghcr.io/lingo-db/lingodb-dev:9237b839644c4206405d37635ed3403f66219aa7
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
@@ -100,7 +100,7 @@ jobs:
         build_type: [ release, asan ]
     needs: build
     runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:89088a70dfe905e9da42772888ec22af7035d964
+    container: ghcr.io/lingo-db/lingodb-dev:9237b839644c4206405d37635ed3403f66219aa7
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
@@ -132,7 +132,7 @@ jobs:
         build_type: [ release, asan ]
     needs: build
     runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:89088a70dfe905e9da42772888ec22af7035d964
+    container: ghcr.io/lingo-db/lingodb-dev:9237b839644c4206405d37635ed3403f66219aa7
     steps:
       - name: Freeing up space
         run: |
@@ -183,11 +183,11 @@ jobs:
           mkdir -p /db/tpcds-1
           cd /datasets/tpcds-1
           $BASE_PATH/build/lingodb-${{ matrix.build_type }}/sql /db/tpcds-1 < $BASE_PATH/resources/sql/tpcds/initialize.sql
-      - name: Test tpcds (llvm)
+      - name: Test tpch (llvm)
         run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpchSf1.test /db/tpch-1
         env:
           LINGODB_EXECUTION_MODE: DEFAULT
-      - name: Test tpcds (baseline)
+      - name: Test tpch (baseline)
         run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpchSf1.test /db/tpch-1
         env:
           LINGODB_EXECUTION_MODE: BASELINE
@@ -259,7 +259,7 @@ jobs:
       matrix:
         build_type: [ debug]
     runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:89088a70dfe905e9da42772888ec22af7035d964
+    container: ghcr.io/lingo-db/lingodb-dev:9237b839644c4206405d37635ed3403f66219aa7
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
