@@ -115,7 +115,8 @@ TEST_CASE("Storage") {
       auto* hashIndex2 = dynamic_cast<lingodb::runtime::LingoDBHashIndex*>(&index2);
       REQUIRE(hashIndex2 != nullptr);
       lingodb::runtime::HashIndexAccess access2(*hashIndex2, {"col1"});
-      auto* iter2 = access2.lookup(0);
+      // TODO add a test to see if it can handle getting the wrong number of arguments
+      auto* iter2 = access2.lookup(26, "z");
       REQUIRE(!iter2->hasNext());
    }));
 
@@ -141,7 +142,7 @@ TEST_CASE("Storage") {
       auto* hashIndex3 = dynamic_cast<lingodb::runtime::LingoDBHashIndex*>(&index3);
       REQUIRE(hashIndex3 != nullptr);
       lingodb::runtime::HashIndexAccess access3(*hashIndex3, {"col1", "col2"});
-      auto* iter3 = access3.lookup(-3797884931935089717);
+      auto* iter3 = access3.lookup(1, "a");
       REQUIRE(iter3->hasNext());
       lingodb::runtime::BatchView batchView;
       iter3->consumeRecordBatch(&batchView);
@@ -193,7 +194,7 @@ TEST_CASE("Storage:RelationHelper") {
       lingodb::scheduler::awaitEntryTask(std::make_unique<MockTaskWithContext>(context.get(), [&]() {
          lingodb::runtime::RelationHelper::setPersist(true);
          auto* access3 = lingodb::runtime::RelationHelper::accessHashIndex(lingodb::runtime::VarLen32::fromString(R"({"type": "hash", "index": "test_table.pk", "relation": "test_table", "mapping": {"x":"col1", "y":"col2"} })"));
-         auto* iter3 = access3->lookup(-3797884931935089717);
+         auto* iter3 = access3->lookup(1, "a");
          REQUIRE(iter3->hasNext());
          lingodb::runtime::BatchView batchView;
          iter3->consumeRecordBatch(&batchView);

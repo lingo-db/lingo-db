@@ -3346,7 +3346,8 @@ class LookupExternalHashIndexLowering : public SubOpTupleStreamConsumerConversio
 
       // Calculate hash value and perform lookup in external index hashmap
       auto hashValue = rewriter.create<db::Hash>(loc, mapping.resolve(lookupOp, lookupOp.getKeys()));
-      mlir::Value list = rt::HashIndexAccess::lookup(rewriter, loc)({adaptor.getState(), hashValue})[0];
+      // FixMe
+      mlir::Value list = nullptr; // rt::HashIndexAccess::lookup(rewriter, loc)({adaptor.getState(), hashValue})[0];
 
       mapping.define(lookupOp.getRef(), list);
       rewriter.replaceTupleStream(lookupOp, mapping);

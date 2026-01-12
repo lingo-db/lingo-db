@@ -15,7 +15,19 @@ namespace lingodb::runtime {
 class HashIndexIteration;
 class HashIndexAccess;
 class LingoDBTable;
-class LingoDBHashIndex : public Index {
+struct GenericHasher {
+   template <typename T>
+   uint64_t hashValue(const T& val) {
+      if constexpr (std::is_convertible_v<T, std::string_view>) {
+         // Special handling for strings/char*
+         return std::hash<std::string_view>{}(val);
+      } else {
+         // Default for numeric types/booleans
+         return std::hash<T>{}(val);
+      }
+   }
+};
+class LingoDBHashIndex : public Index, GenericHasher {
    struct Entry {
       size_t hash;
       Entry* next;
@@ -59,14 +71,23 @@ class LingoDBHashIndex : public Index {
    friend class HashIndexIteration;
    ~LingoDBHashIndex();
 };
-class HashIndexAccess {
+class HashIndexAccess : GenericHasher {
    LingoDBHashIndex& hashIndex;
    std::vector<size_t> colIds;
    std::vector<HashIndexIteration> iteration;
+   HashIndexIteration* lookupContinuation(size_t hash);
 
    public:
    HashIndexAccess(LingoDBHashIndex& hashIndex, std::vector<std::string> cols);
-   HashIndexIteration* lookup(size_t hash);
+
+   template<typename... Args>
+   HashIndexIteration* lookup(Args... args) {
+      uint64_t combinedHash = 0;
+      ((combinedHash = hashCombine(combinedHash, hashValue(args))), ...);
+
+      return lookupContinuation(combinedHash);
+   }
+
    friend class HashIndexIteration;
 };
 class HashIndexIteration {
