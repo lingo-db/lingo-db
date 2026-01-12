@@ -34,6 +34,7 @@ add_mlir_dialect_library(MLIRRelAlg
         MLIRDBOpsIncGen
         MLIRUtilOpsIncGen
         MLIRTupleStreamOpsIncGen
+        build_includes
         LINK_LIBS mlir-support utility PUBLIC
         MLIRIR
         MLIRCompilerHelper
