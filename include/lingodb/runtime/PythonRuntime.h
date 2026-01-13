@@ -41,6 +41,7 @@ class PythonRuntime {
    static PyObjectPtr fromInt64(int64_t value);
    static bool toBool(PyObjectPtr obj);
    static PyObjectPtr fromBool(bool value);
+   static PyObjectPtr fromDate(int64_t value);
    static runtime::VarLen32 toVarLen32(PyObjectPtr obj);
    static PyObjectPtr fromVarLen32(runtime::VarLen32 value);
    static double toDouble(PyObjectPtr obj);

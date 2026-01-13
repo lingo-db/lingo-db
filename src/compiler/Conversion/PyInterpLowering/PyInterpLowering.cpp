@@ -26,6 +26,7 @@
 
 #include "lingodb/compiler/runtime/ExecutionContext.h"
 
+#include <lingodb/compiler/Dialect/DB/IR/DBOpsTypes.h.inc>
 #include <lingodb/compiler/runtime/PythonRuntime.h>
 using namespace mlir;
 namespace py_interp = lingodb::compiler::dialect::py_interp;
@@ -196,16 +197,21 @@ class CastToPyObjectLowering : public OpConversionPattern<py_interp::CastToPyObj
    using OpConversionPattern<py_interp::CastToPyObject>::OpConversionPattern;
    LogicalResult matchAndRewrite(py_interp::CastToPyObject op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto t = op.getFrom().getType();
-      if (auto floatType = mlir::dyn_cast<mlir::FloatType>(t)) {
-         mlir::Value val = adaptor.getFrom();
-         if (floatType.isF32()) {
-            val = rewriter.create<arith::ExtFOp>(op.getLoc(), rewriter.getF64Type(), val);
-         }
-         rewriter.replaceOp(op,  rt::PythonRuntime::fromDouble(rewriter, op.getLoc())({val})[0]);
-      }else if (auto intType = mlir::dyn_cast<mlir::IntegerType>(t)) {
-         if (intType.getWidth()==1) {
-            rewriter.replaceOp(op, rt::PythonRuntime::fromBool(rewriter, op.getLoc())({adaptor.getFrom()})[0]);
+      if (op.getPythonType()=="builtins.float") {
+         if (auto floatType = mlir::dyn_cast<mlir::FloatType>(t)){
+            mlir::Value val = adaptor.getFrom();
+            if (floatType.isF32()) {
+               val = rewriter.create<arith::ExtFOp>(op.getLoc(), rewriter.getF64Type(), val);
+            }
+            rewriter.replaceOp(op,  rt::PythonRuntime::fromDouble(rewriter, op.getLoc())({val})[0]);
          }else {
+            return failure();
+         }
+      }else if (op.getPythonType()=="builtins.bool") {
+         assert(mlir::isa<mlir::IntegerType>(t)&& mlir::cast<mlir::IntegerType>(t).getWidth()==1&&"bool cast source must be integer");
+         rewriter.replaceOp(op, rt::PythonRuntime::fromBool(rewriter, op.getLoc())({adaptor.getFrom()})[0]);
+      }else if (op.getPythonType()=="builtins.int") {
+         if (auto intType = mlir::dyn_cast<mlir::IntegerType>(t)) {
             mlir::Value val = adaptor.getFrom();
             if (intType.getWidth() < 64) {
                val = rewriter.create<arith::ExtSIOp>(op.getLoc(), rewriter.getI64Type(), val);
@@ -213,9 +219,13 @@ class CastToPyObjectLowering : public OpConversionPattern<py_interp::CastToPyObj
                return failure();
             }
             rewriter.replaceOp(op, rt::PythonRuntime::fromInt64(rewriter, op.getLoc())({val})[0]);
+         }else {
+            return failure();
          }
-      } else if (mlir::isa<util::VarLen32Type>(t)) {
+      } else if (mlir::isa<util::VarLen32Type>(t)&&op.getPythonType()=="builtins.str") {
          rewriter.replaceOp(op, rt::PythonRuntime::fromVarLen32(rewriter, op.getLoc())({adaptor.getFrom()})[0]);
+      } else if (mlir::isa<mlir::IntegerType>(t) && op.getPythonType()=="datetime.date"){
+         rewriter.replaceOp(op, rt::PythonRuntime::fromDate(rewriter, op.getLoc())({adaptor.getFrom()})[0]);
       } else {
          return failure();
       }

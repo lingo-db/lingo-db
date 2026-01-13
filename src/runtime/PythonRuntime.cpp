@@ -1,7 +1,10 @@
 #include "lingodb/runtime/PythonRuntime.h"
-
+#include "lingodb/runtime/DateRuntime.h"
 #ifdef USE_CPYTHON_WASM_RUNTIME
 #include "lingodb/runtime/WASM.h"
+#endif
+#ifdef USE_CPYTHON_RUNTIME
+#include "datetime.h"
 #endif
 #include <iostream>
 #include <stdexcept>
@@ -171,6 +174,15 @@ double PythonRuntime::toDouble(PyObject* obj){
 PyObject* PythonRuntime::fromDouble(double value){
    return PyFloat_FromDouble(value);
 }
+
+PyObjectPtr PythonRuntime::fromDate(int64_t value){
+   auto *dateTimeAPI = (PyDateTime_CAPI *)PyCapsule_Import(PyDateTime_CAPSULE_NAME, 0);
+   auto year = DateRuntime::extractYear(value);
+   auto month = DateRuntime::extractMonth(value);
+   auto day = DateRuntime::extractDay(value);
+   return dateTimeAPI->Date_FromDate((year), (month), (day), dateTimeAPI->DateType);
+}
+
 void PythonRuntime::decref(PyObject* obj){
    Py_DECREF(obj);
 }
@@ -437,6 +449,10 @@ PyObjectPtr PythonRuntime::fromDouble(double value) {
    wasm::WASMSession wasmSession = getCurrentExecutionContext()->getWasmSession();
    return wasmSession.callPyFunc<PyObjectPtr>("PyFloat_FromDouble", value).at(0).of.i32;
 }
+PyObjectPtr PythonRuntime::fromDate(int64_t value){
+   throw std::runtime_error("fromDate not implemented in WASM Python runtime");
+}
+
 void PythonRuntime::decref(PyObjectPtr obj) {
 #ifdef ASAN_ACTIVE
    while (!wasm_runtime_thread_env_inited()) {

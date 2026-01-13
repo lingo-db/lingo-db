@@ -41,6 +41,25 @@ class PythonUDFImplementer : public lingodb::catalog::MLIRUDFImplementor {
    std::vector<lingodb::catalog::Type> argumentTypes;
    lingodb::catalog::Type returnType;
 
+   std::string getPythonType(lingodb::catalog::Type type) {
+      using namespace lingodb::catalog;
+      switch (type.getTypeId()){
+         case lingodb::catalog::LogicalTypeId::BOOLEAN:
+            return "builtins.bool";
+         case lingodb::catalog::LogicalTypeId::INT:
+            return "builtins.int";
+         case lingodb::catalog::LogicalTypeId::FLOAT:
+            return "builtins.float";
+         case lingodb::catalog::LogicalTypeId::DOUBLE:
+            return "builtins.float";
+         case lingodb::catalog::LogicalTypeId::STRING:
+            return "builtins.str";
+         case lingodb::catalog::LogicalTypeId::DATE:
+            return "datetime.date";
+         default:
+            throw std::runtime_error("Unsupported type for Python UDF: " + type.toString());
+      }
+   }
    public:
    PythonUDFImplementer(std::string functionName, std::string code, std::vector<lingodb::catalog::Type> argumentTypes, lingodb::catalog::Type returnType) : functionName(std::move(functionName)), code(std::move(code)), argumentTypes(std::move(argumentTypes)), returnType(std::move(returnType)) {}
 
@@ -69,11 +88,11 @@ class PythonUDFImplementer : public lingodb::catalog::MLIRUDFImplementor {
                notNullValues.push_back(mlir::isa<db::NullableType>(v.getType()) ? builder.create<db::NullableGetVal>(loc, mlir::cast<db::NullableType>(v.getType()).getType(), v) : v);
             }
             std::vector<mlir::Value> castedArgs;
-            for (auto arg : notNullValues) {
-               castedArgs.push_back(builder.create<py_interp::CastToPyObject>(loc, py_interp::PyObjectType::get(builder.getContext()), arg));
+            for (auto [arg, argType] : llvm::zip(notNullValues,argumentTypes)) {
+               castedArgs.push_back(builder.create<py_interp::CastToPyObject>(loc, py_interp::PyObjectType::get(builder.getContext()), arg, getPythonType(argType)));
             }
             mlir::Value res = builder.create<py_interp::Call>(loc, py_interp::PyObjectType::get(builder.getContext()), functionVal, mlir::ValueRange(castedArgs),builder.getArrayAttr({}));
-            mlir::Value nativeRes = builder.create<py_interp::CastFromPyObject>(loc, returnType.getMLIRTypeCreator()->createType(builder.getContext()), res);
+            mlir::Value nativeRes = builder.create<py_interp::CastFromPyObject>(loc, returnType.getMLIRTypeCreator()->createType(builder.getContext()), res, getPythonType(returnType));
 
             mlir::Value resNullable = builder.create<db::AsNullableOp>(loc, db::NullableType::get(nativeRes.getType()), nativeRes);
             resType = resNullable.getType();
@@ -96,12 +115,11 @@ class PythonUDFImplementer : public lingodb::catalog::MLIRUDFImplementor {
       }
 
       std::vector<mlir::Value> castedArgs;
-      for (auto arg : args) {
-         castedArgs.push_back(builder.create<py_interp::CastToPyObject>(loc, py_interp::PyObjectType::get(builder.getContext()), arg));
+      for (auto [arg, argType] : llvm::zip(args,argumentTypes)) {
+         castedArgs.push_back(builder.create<py_interp::CastToPyObject>(loc, py_interp::PyObjectType::get(builder.getContext()), arg, getPythonType(argType)));
       }
       mlir::Value res = builder.create<py_interp::Call>(loc, py_interp::PyObjectType::get(builder.getContext()), functionVal, mlir::ValueRange(castedArgs),builder.getArrayAttr({}));
-      mlir::Value nativeRes = builder.create<py_interp::CastFromPyObject>(loc, returnType.getMLIRTypeCreator()->createType(builder.getContext()), res);
-
+      mlir::Value nativeRes = builder.create<py_interp::CastFromPyObject>(loc, returnType.getMLIRTypeCreator()->createType(builder.getContext()), res, getPythonType(returnType));
       return nativeRes;
    }
 };

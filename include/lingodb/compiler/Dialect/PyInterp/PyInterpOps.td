@@ -47,14 +47,14 @@ def ConstStrPyObject : PyInterp_Op<"const_str_pyobject", [ConstantLike,Pure]> {
 
 }
 def CastToPyObject : PyInterp_Op<"cast_to_pyobject"> {
-    let arguments = (ins AnyType:$from);
+    let arguments = (ins AnyType:$from, StrAttr:$pythonType);
     let results = (outs PyObjectType:$to);
-    let assemblyFormat = "$from `:` type($from) attr-dict";
+    let assemblyFormat = "$from `:` type($from) $pythonType attr-dict";
 }
 def CastFromPyObject : PyInterp_Op<"cast_from_pyobject"> {
-    let arguments = (ins PyObjectType:$from);
+    let arguments = (ins PyObjectType:$from, StrAttr:$pythonType);
     let results = (outs AnyType:$to);
-    let assemblyFormat = "$from `->` type($to) attr-dict";
+    let assemblyFormat = "$from $pythonType `->` type($to) attr-dict";
 }
 
 
