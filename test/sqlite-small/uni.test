@@ -146,6 +146,19 @@ Carnap	Der Wiener Kreis
 Carnap	Bioethik
 Feuerbach	Grundzuege
 
+query tsv s
+select s.*, v.titel
+from hoeren h, studenten s,vorlesungen v
+where h.matrnr=s.matrnr and h.vorlnr=v.vorlnr
+order by s.name asc,v.titel desc
+limit 5
+----
+28106	Carnap	3	Wissenschaftstheorie
+28106	Carnap	3	Ethik
+28106	Carnap	3	Der Wiener Kreis
+28106	Carnap	3	Bioethik
+29555	Feuerbach	2	Grundzuege
+
 query tsv rowsort a
 select s.name,v.titel
 from hoeren h, studenten s,vorlesungen v

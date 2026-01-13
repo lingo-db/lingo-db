@@ -2145,10 +2145,12 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
           * Therefore you must elimniate these duplactes for statements like Select * ....
           */
          size_t i = 0;
-         for (auto& [scope, columnReference] : topDefinedColumnsAll) {
-            auto p = topDefinedColumnsWithoutDuplicates.insert({columnReference, i});
-            if (p.second) {
-               i++;
+         for (auto& [columnId, columnReference] : topDefinedColumnsAll) {
+            if (relationName.empty() || columnReference->scope == relationName) {
+               auto p = topDefinedColumnsWithoutDuplicates.insert({columnReference, i});
+               if (p.second) {
+                  i++;
+               }
             }
          }
 
