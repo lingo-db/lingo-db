@@ -521,6 +521,7 @@ PyObject* PythonRuntime::fromDouble(double /*value*/) { throw std::runtime_error
 void PythonRuntime::decref(PyObject* /*obj*/) { throw std::runtime_error("CPython runtime is not enabled"); }
 void PythonRuntime::incref(PyObject* /*obj*/) { throw std::runtime_error("CPython runtime is not enabled"); }
 PyObject* PythonRuntime::import(runtime::VarLen32 /*val*/) { throw std::runtime_error("CPython runtime is not enabled"); }
+PyObject* PythonRuntime::fromDate(int64_t /*val*/) { throw std::runtime_error("CPython runtime is not enabled"); }
 #endif // USE_CPYTHON_WASM_RUNTIME
 #endif // USE_CPYTHON_RUNTIME
 
