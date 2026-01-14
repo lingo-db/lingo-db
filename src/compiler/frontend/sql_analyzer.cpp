@@ -1,4 +1,5 @@
 #include "lingodb/compiler/frontend/sql_analyzer.h"
+#include "lingodb/compiler/Dialect/DB/IR/DBTypes.h"
 
 #include "lingodb/catalog/FunctionCatalogEntry.h"
 #include "lingodb/compiler/frontend/ast/bound/bound_aggregation.h"
@@ -2932,8 +2933,33 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeFunctionExpressio
       }
       paramIdx = paramIdx - 1;
       auto value = context->params[paramIdx];
-      catalog::Type rawResType=catalog::Type::int64(); // todo: determine type from value
-      NullableType resType{rawResType, true};
+      bool nullable = false;
+      mlir::Type baseType = value.getType();
+      using namespace lingodb::compiler::dialect;
+      if (auto nullableType =mlir::dyn_cast_or_null<db::NullableType>(value.getType())) {
+         nullable = true;
+         baseType = nullableType.getType();
+      }
+      catalog::Type rawResType=catalog::Type::int64();
+      if (mlir::isa<db::StringType>(baseType)) {
+         rawResType = catalog::Type::stringType();
+      }else if (mlir::isa<mlir::Float32Type>(baseType)) {
+         rawResType = catalog::Type::f32();
+      } else if (mlir::isa<mlir::Float64Type>(baseType)) {
+         rawResType = catalog::Type::f64();
+      } else if (auto intType = mlir::dyn_cast_or_null<mlir::IntegerType>(baseType)) {
+         switch (intType.getWidth()) {
+            case 1: rawResType = catalog::Type::boolean(); break;
+            case 8: rawResType = catalog::Type::int8(); break;
+            case 16: rawResType = catalog::Type::int16(); break;
+            case 32: rawResType = catalog::Type::int32(); break;
+            case 64: rawResType = catalog::Type::int64(); break;
+            default: error("Unsupported integer width for PARAM function", paramIdxExpr->loc);
+         }
+      } else {
+         error("Unsupported parameter type for PARAM function", paramIdxExpr->loc);
+      }
+      NullableType resType{rawResType, nullable};
       return drv.nf.node<ast::BoundParameterExpression>(function->loc, resType, paramIdx);
    } else {
       //UDF
