@@ -773,7 +773,25 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
       rb.ret();
       return true;
    }
-
+   bool compile_arith_negf_op (const auto op) {
+      mlir::Value src_val = op->getOperand(0);
+      mlir::Value res_val = op->getResult(0);
+      assert(mlir::isa<mlir::FloatType>(src_val.getType()) && mlir::isa<mlir::FloatType>(res_val.getType()) &&
+             "Source and destination value must be a float type for negf operation");
+      unsigned src_width = src_val.getType().getIntOrFloatBitWidth();
+      unsigned dst_width = res_val.getType().getIntOrFloatBitWidth();
+      assert(src_width == dst_width && "For negf operation, source and destination must have the same width");
+      auto [_, src_vpr] = this->val_ref_single(src_val);
+      auto res = this->result_ref(res_val);
+      switch (src_width) {
+         case 32:
+            return derived()->encode_arith_neg_f32(std::move(src_vpr), res.part(0));
+         case 64:
+            return derived()->encode_arith_neg_f64(std::move(src_vpr), res.part(0));
+         default:
+            return false;
+      }
+   }
    // zext and sext operations
    bool compile_arith_exti_op(const auto op, const bool sign) {
       mlir::Value src_val = op->getOperand(0);
@@ -1433,6 +1451,7 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
                mlir::arith::MinUIOp>([&](auto op) {
             return compile_arith_binary_op(op);
          })
+         .template Case<mlir::arith::NegFOp>([&](auto op) { return compile_arith_negf_op(op); })
          .template Case<mlir::arith::CmpIOp>(
             [&](auto op) { return derived()->compile_arith_cmp_int_op(op); })
          .template Case<mlir::arith::CmpFOp>([&](auto op) { return compile_arith_cmp_float_op(op); })

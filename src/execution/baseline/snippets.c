@@ -55,11 +55,18 @@ float arith_mul_f32(float a, float b) { return (a * b); }
 float arith_div_f32(float a, float b) { return (a / b); }
 // 128-bit float remainder operation is not supported by tpde_encoder. We need to call builtins for it.
 
+double arith_neg_f32(float a) { return -a; }
+
+
 double arith_add_f64(double a, double b) { return (a + b); }
 double arith_sub_f64(double a, double b) { return (a - b); }
 double arith_mul_f64(double a, double b) { return (a * b); }
 double arith_div_f64(double a, double b) { return (a / b); }
 // 128-bit float remainder operation is not supported by tpde_encoder. We need to call builtins for it.
+
+double arith_neg_f64(double a) { return -a; }
+
+
 
 // --------------------------
 // load / store
