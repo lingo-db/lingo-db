@@ -5,7 +5,6 @@
 
 #include <iostream>
 
-#include "json.h"
 #include <arrow/record_batch.h>
 namespace {
 std::unique_ptr<lingodb::compiler::support::eval::expr> buildConstant(mlir::Type type, std::variant<int64_t, double, std::string> parseArg) {
@@ -207,74 +206,69 @@ void appendRestrictions(relalg::BaseTableOp baseTableOp, std::vector<std::unique
    for (auto c : baseTableOp.getColumns()) {
       typeMapping[c.getName().str()] = mlir::cast<tuples::ColumnDefAttr>(c.getValue()).getColumn().type;
    }
-   if (baseTableOp->hasAttr("restriction")) {
-      auto restrictionsStr = cast<mlir::StringAttr>(baseTableOp->getAttr("restriction")).getValue();
-      auto restrictions = nlohmann::json::parse(restrictionsStr.str()).get<nlohmann::json::array_t>();
-      for (auto& r : restrictions) {
-         auto cmp = r["cmp"].get<std::string>();
-         auto columnName = r["column"].get<std::string>();
-         if (cmp == "isnotnull") {
-            auto colExpr = support::eval::createAttrRef(columnName);
-            expressions.push_back(support::eval::createNot(support::eval::createIsNull(std::move(colExpr))));
-            continue;
-         }
-         auto type = getBaseType(typeMapping.at(columnName));
-         if (cmp == "in") {
-            std::vector<std::unique_ptr<support::eval::expr>> orExpressions;
-            for (auto value : r["values"]) {
-               std::variant<int64_t, double, std::string> parseArg;
-               if (value.is_string()) {
-                  parseArg = value.get<std::string>();
-               } else if (value.is_number_integer()) {
-                  parseArg = value.get<int64_t>();
-               } else if (value.is_number_float()) {
-                  parseArg = value.get<double>();
-               } else {
-                  assert(false);
-                  continue;
-               }
-               orExpressions.push_back(support::eval::createEq(support::eval::createAttrRef(columnName), buildConstant(type, parseArg)));
-            }
-            expressions.push_back(support::eval::createOr(orExpressions));
-            continue;
-         }
-         auto value = r["value"];
+   // Read from new DatasourceProperty.filterDescription instead of old JSON restriction attribute
+   auto filterDescriptions = baseTableOp.getRestriction().filterDescription;
+   for (const auto& filterDesc : filterDescriptions) {
+      auto type = getBaseType(typeMapping.at(filterDesc.columnName));
 
-         std::variant<int64_t, double, std::string> parseArg;
-         if (value.is_string()) {
-            parseArg = value.get<std::string>();
-         } else if (value.is_number_integer()) {
-            parseArg = value.get<int64_t>();
-         } else if (value.is_number_float()) {
-            parseArg = value.get<double>();
-         } else {
-            assert(false);
-            continue;
-         }
-         auto colExpr = support::eval::createAttrRef(columnName);
-         auto valueExpr = buildConstant(type, parseArg);
-         if (cmp == "=") {
+      if (filterDesc.op == lingodb::runtime::FilterOp::NOTNULL) {
+         auto colExpr = support::eval::createAttrRef(filterDesc.columnName);
+         expressions.push_back(support::eval::createNot(support::eval::createIsNull(std::move(colExpr))));
+         continue;
+      }
+
+      if (filterDesc.op == lingodb::runtime::FilterOp::IN) {
+         std::vector<std::unique_ptr<support::eval::expr>> orExpressions;
+         std::visit([&](const auto& vals) {
+            for (const auto& val : vals) {
+               orExpressions.push_back(support::eval::createEq(
+                  support::eval::createAttrRef(filterDesc.columnName),
+                  buildConstant(type, val)));
+            }
+         },
+                    filterDesc.values);
+         expressions.push_back(support::eval::createOr(orExpressions));
+         continue;
+      }
+
+      auto colExpr = support::eval::createAttrRef(filterDesc.columnName);
+      auto valueExpr = std::visit([&type](const auto& val) {
+         return buildConstant(type, val);
+      },
+                                  filterDesc.value);
+
+      switch (filterDesc.op) {
+         case lingodb::runtime::FilterOp::EQ:
             expressions.push_back(support::eval::createEq(std::move(colExpr), std::move(valueExpr)));
-         } else if (cmp == "!=") {
+            break;
+         case lingodb::runtime::FilterOp::NEQ:
             expressions.push_back(support::eval::createNot(support::eval::createEq(std::move(colExpr), std::move(valueExpr))));
-         } else if (cmp == "<") {
+            break;
+         case lingodb::runtime::FilterOp::LT:
             expressions.push_back(support::eval::createLt(std::move(colExpr), std::move(valueExpr)));
-         } else if (cmp == "<=") {
+            break;
+         case lingodb::runtime::FilterOp::LTE:
             expressions.push_back(support::eval::createLte(std::move(colExpr), std::move(valueExpr)));
-         } else if (cmp == ">") {
+            break;
+         case lingodb::runtime::FilterOp::GT:
             expressions.push_back(support::eval::createGt(std::move(colExpr), std::move(valueExpr)));
-         } else if (cmp == ">=") {
+            break;
+         case lingodb::runtime::FilterOp::GTE:
             expressions.push_back(support::eval::createGte(std::move(colExpr), std::move(valueExpr)));
-         } else {
-            assert(false);
-            continue;
-         }
+            break;
+         default:
+            break;
       }
    }
 }
 std::optional<double> estimateUsingSample(QueryGraph::Node& n) {
    if (!n.op) return {};
-   if (n.additionalPredicates.empty() && !n.op->hasAttr("restriction")) return {};
+   // Check if we have filters (either in datasource property or additional predicates)
+   bool hasFilters = false;
+   if (auto baseTableOp = mlir::dyn_cast_or_null<BaseTableOp>(n.op.getOperation())) {
+      hasFilters = !baseTableOp.getRestriction().filterDescription.empty();
+   }
+   if (n.additionalPredicates.empty() && !hasFilters) return {};
    if (auto baseTableOp = mlir::dyn_cast_or_null<BaseTableOp>(n.op.getOperation())) {
       llvm::DenseMap<const tuples::Column*, std::string> mapping;
       std::unordered_map<std::string, mlir::Type> typeMapping;

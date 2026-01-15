@@ -5,6 +5,7 @@
 #include "lingodb/catalog/MetaData.h"
 #include "lingodb/catalog/TableCatalogEntry.h"
 #include "lingodb/catalog/Types.h"
+#include "lingodb/runtime/ExternalDataSourceProperty.h"
 #include "lingodb/runtime/LingoDBHashIndex.h"
 #include "lingodb/runtime/RelationHelper.h"
 #include "lingodb/runtime/Session.h"
@@ -192,7 +193,8 @@ TEST_CASE("Storage:RelationHelper") {
       REQUIRE(indexEntry != std::nullopt);
       lingodb::scheduler::awaitEntryTask(std::make_unique<MockTaskWithContext>(context.get(), [&]() {
          lingodb::runtime::RelationHelper::setPersist(true);
-         auto* access3 = lingodb::runtime::RelationHelper::accessHashIndex(lingodb::runtime::VarLen32::fromString(R"({"type": "hash", "index": "test_table.pk", "relation": "test_table", "mapping": {"x":"col1", "y":"col2"} })"));
+         lingodb::runtime::ExternalDatasourceProperty externalDatasourceProperty{.tableName = "test_table", .mapping = {{"x", "col1"}, {"y", "col2"}}, .index = "test_table.pk", .indexType = "hash"};
+         auto* access3 = lingodb::runtime::RelationHelper::accessHashIndex(lingodb::runtime::VarLen32::fromString(lingodb::utility::serializeToHexString(externalDatasourceProperty)));
          auto* iter3 = access3->lookup(-3797884931935089717);
          REQUIRE(iter3->hasNext());
          lingodb::runtime::BatchView batchView;

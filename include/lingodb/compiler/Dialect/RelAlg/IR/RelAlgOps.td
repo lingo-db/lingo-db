@@ -120,7 +120,7 @@ def ConstRelationOp : RelAlg_Op<"const_relation", [Pure,Operator]> {
 def BaseTableOp : RelAlg_Op<"basetable",[Pure,Operator]> {
     let summary = "base table operation";
 
-    let arguments = (ins StrAttr: $table_identifier, DictionaryAttr: $columns);
+    let arguments = (ins StrAttr: $table_identifier, DictionaryAttr: $columns, Property<"lingodb::runtime::DatasourceRestrictionProperty"> : $restriction);
     let results = (outs TupleStream:$result);
 
     let extraClassDeclaration = [{

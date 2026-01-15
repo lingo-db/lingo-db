@@ -13,6 +13,7 @@
 #include "lingodb/compiler/Dialect/util/FunctionHelper.h"
 #include "lingodb/compiler/Dialect/util/UtilDialect.h"
 #include "lingodb/compiler/Dialect/util/UtilOps.h"
+#include "lingodb/runtime/ExternalDataSourceProperty.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Async/IR/Async.h"
@@ -101,31 +102,26 @@ class BaseTableLowering : public OpConversionPattern<relalg::BaseTableOp> {
       llvm::SmallVector<subop::DefMappingPairT> defMapping;
 
       std::vector<mlir::Type> types;
-      std::string restrictions = "[]";
-      if (baseTableOp->hasAttr("restriction")) {
-         restrictions = mlir::cast<mlir::StringAttr>(baseTableOp->getAttr("restriction")).getValue().str();
-      }
+
       std::string tableName = mlir::cast<mlir::StringAttr>(baseTableOp->getAttr("table_identifier")).str();
-      std::string scanDescription = R"({ "table": ")" + tableName + R"(", "mapping": { )";
-      bool first = true;
+      lingodb::runtime::ExternalDatasourceProperty externalDatasourceProperty{.tableName = tableName};
+      externalDatasourceProperty.filterDescriptions = baseTableOp.getRestriction().filterDescription;
       for (auto namedAttr : baseTableOp.getColumns().getValue()) {
          auto identifier = namedAttr.getName();
          auto attr = namedAttr.getValue();
          auto attrDef = mlir::dyn_cast_or_null<tuples::ColumnDefAttr>(attr);
-         if (!first) {
-            scanDescription += ",";
-         } else {
-            first = false;
-         }
          auto member = createMember(rewriter.getContext(), identifier.str(), attrDef.getColumn().type);
-         scanDescription += "\"" + memberManager.getName(member) + "\" :\"" + identifier.str() + "\"";
+         externalDatasourceProperty.mapping.emplace_back(memberManager.getName(member), identifier.str());
          members.push_back(member);
          if (required.contains(&attrDef.getColumn())) {
             defMapping.push_back({member, attrDef});
          }
       }
-      scanDescription += "}, \"restrictions\": " + restrictions + "}";
-      auto tableRefType = subop::TableType::get(rewriter.getContext(), createStateMembersAttr(rewriter.getContext(), members), baseTableOp->hasAttr("restriction"));
+
+      std::string scanDescription = lingodb::utility::serializeToHexString(externalDatasourceProperty);
+
+      bool hasFilters = !externalDatasourceProperty.filterDescriptions.empty();
+      auto tableRefType = subop::TableType::get(rewriter.getContext(), createStateMembersAttr(rewriter.getContext(), members), hasFilters);
       mlir::Value tableRef = rewriter.create<subop::GetExternalOp>(baseTableOp->getLoc(), tableRefType, rewriter.getStringAttr(scanDescription));
       rewriter.replaceOpWithNewOp<subop::ScanOp>(baseTableOp, tableRef, createColumnDefMemberMappingAttr(rewriter.getContext(), defMapping));
       return success();
@@ -1121,22 +1117,20 @@ static mlir::Value translateINLJ(mlir::Value left, mlir::Value right, mlir::Arra
    auto valueColumns = columns;
    valueColumns.remove(keyColumns);
 
-   bool first = true;
    MemberCollector keyMembers;
    MemberCollector valMembers;
    DefMappingCollector mapping;
 
    // Create description for external index get operation
-   std::string externalIndexDescription = R"({"type": "hash", "index": ")" + op->getAttrOfType<mlir::StringAttr>("index").str() + R"(", "relation": ")" + tableName + R"(", "mapping": { )";
+   lingodb::runtime::ExternalDatasourceProperty externalDatasourceProperty{.tableName = tableName,
+                                                                           .mapping = {},
+                                                                           .index = op->getAttrOfType<mlir::StringAttr>("index").str(),
+                                                                           .indexType = "hash"};
+
    for (auto mappingEntry : rightScan.getMapping().getMapping()) {
       auto attrDef = mappingEntry.second;
-      if (!first) {
-         externalIndexDescription += ",";
-      } else {
-         first = false;
-      }
       auto member = createMember(ctxt, memberManager.getName(mappingEntry.first), attrDef.getColumn().type);
-      externalIndexDescription += "\"" + memberManager.getName(member) + "\" :\"" + colManager.getName(&attrDef.getColumn()).second + "\"";
+      externalDatasourceProperty.mapping.emplace_back(memberManager.getName(member), colManager.getName(&attrDef.getColumn()).second);
 
       if (keyColumns.contains(&attrDef.getColumn())) {
          keyMembers.push_back(member);
@@ -1147,10 +1141,11 @@ static mlir::Value translateINLJ(mlir::Value left, mlir::Value right, mlir::Arra
          mapping.push_back({member, attrDef});
       }
    }
-   externalIndexDescription += "} }";
 
    auto keyStateMembers = createStateMembersAttr(ctxt, keyMembers);
    auto valueStateMembers = createStateMembersAttr(ctxt, valMembers);
+
+   std::string externalIndexDescription = lingodb::utility::serializeToHexString(externalDatasourceProperty);
 
    auto externalHashIndexType = subop::ExternalHashIndexType::get(rewriter.getContext(), keyStateMembers, valueStateMembers);
    mlir::Value externalHashIndex = rewriter.create<subop::GetExternalOp>(loc, externalHashIndexType, externalIndexDescription);

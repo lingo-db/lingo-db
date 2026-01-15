@@ -13,9 +13,38 @@
 #include <queue>
 
 using namespace mlir;
-
+namespace llvm {
+static hash_code hash_value(const lingodb::runtime::DatasourceRestrictionProperty& datasource) { // NOLINT(readability-identifier-naming, misc-use-anonymous-namespace)
+   return datasource.hash();
+}
+} // namespace llvm
 namespace {
 using namespace lingodb::compiler::dialect;
+
+mlir::Attribute convertToAttribute(MLIRContext* ctx, lingodb::runtime::DatasourceRestrictionProperty datasource) {
+   //TODO
+   assert(ctx && "MLIRContext must not be null");
+
+   std::string s = lingodb::utility::serializeToHexString(datasource);
+   return mlir::StringAttr::get(ctx, s);
+}
+
+mlir::LogicalResult convertFromAttribute(lingodb::runtime::DatasourceRestrictionProperty& datasource, mlir::Attribute attr,
+                                         std::function<mlir::InFlightDiagnostic()> emitError) {
+   if (auto stringAttr = mlir::cast_or_null<mlir::StringAttr>(attr)) {
+      std::string hexStr = stringAttr.getValue().str();
+      datasource = lingodb::utility::deserializeFromHexString<lingodb::runtime::DatasourceRestrictionProperty>(hexStr);
+   }
+   return mlir::failure();
+}
+
+void writeToMlirBytecode(mlir::DialectBytecodeWriter& writer, const lingodb::runtime::DatasourceRestrictionProperty& datasource) {
+   //TODO
+}
+mlir::LogicalResult readFromMlirBytecode(mlir::DialectBytecodeReader& reader, const lingodb::runtime::DatasourceRestrictionProperty& datasource) {
+   //TODO
+   return mlir::failure();
+}
 
 tuples::ColumnManager& getColumnManager(::mlir::OpAsmParser& parser) {
    return parser.getBuilder().getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
@@ -273,6 +302,14 @@ ParseResult relalg::BaseTableOp::parse(OpAsmParser& parser, OperationState& resu
       break;
    }
    result.addAttribute("columns", mlir::DictionaryAttr::get(parser.getBuilder().getContext(), columns));
+   if (parser.parseOptionalKeyword("datasource") || parser.parseColon()) {
+      return parser.addTypeToList(tuples::TupleStreamType::get(parser.getBuilder().getContext()), result.types);
+   }
+   std::string hex;
+   if (parser.parseString(&hex)) { return failure(); }
+   auto dataSource = utility::deserializeFromHexString<runtime::DatasourceRestrictionProperty>(hex);
+   result.getOrAddProperties<Properties>().restriction = dataSource;
+
    return parser.addTypeToList(tuples::TupleStreamType::get(parser.getBuilder().getContext()), result.types);
 }
 void relalg::BaseTableOp::print(OpAsmPrinter& p) {
@@ -293,6 +330,9 @@ void relalg::BaseTableOp::print(OpAsmPrinter& p) {
       printCustDef(p, *this, relationDefAttr);
    }
    p << "}";
+   p << " datasource: \"";
+
+   p << utility::serializeToHexString(getRestriction()) << "\"";
 }
 
 ::mlir::LogicalResult relalg::MapOp::verify() {
