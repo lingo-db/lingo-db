@@ -16,7 +16,7 @@
 #include <sys/mman.h>
 
 #define EXPORT extern "C" __attribute__((visibility("default")))
-#define INLINE __attribute__((always_inline))
+#define INLINE __attribute__((always_inline)) inline
 namespace lingodb::runtime {
 alignas(4096) extern uint16_t bloomMasks[2048];
 
@@ -106,7 +106,7 @@ class VarLen32 {
    }
 
    public:
-   static VarLen32 fromDataAndLen(const char* data, size_t len, StorageClass storageClass) {
+   static INLINE  VarLen32 fromDataAndLen(const char* data, size_t len, StorageClass storageClass) {
       if (len <= shortLen) {
          return VarLen32(reinterpret_cast<const uint8_t*>(data), len, storageClass);
       }
@@ -126,7 +126,7 @@ class VarLen32 {
          return VarLen32();
       }
    }
-   static VarLen32 fromString(std::string_view str, StorageClass storageClass) {
+   static INLINE VarLen32 fromString(std::string_view str, StorageClass storageClass) {
       return fromDataAndLen(str.data(), str.size(), storageClass);
    }
    static uint8_t* allocateForStorageClass(size_t size, StorageClass storageClass) {
@@ -175,7 +175,7 @@ class VarLen32 {
       refCountPtr->fetch_add(1);
    }
    VarLen32() : len(0), first4(0xffffffff), last8(0) {}
-   VarLen32(const uint8_t* ptr, uint32_t len, StorageClass storageClass) : len(len) {
+   INLINE VarLen32(const uint8_t* ptr, uint32_t len, StorageClass storageClass) : len(len) {
       if (len > shortLen) {
          this->first4 = unalignedLoad32(ptr);
          storePtr(ptr, storageClass);
@@ -219,6 +219,7 @@ class VarLen32 {
 
    operator std::string() { return std::string((char*) getPtr(), getLen()); }
    std::string str() { return std::string((char*) getPtr(), getLen()); }
+   std::string_view strView() { return std::string_view((char*) getPtr(), getLen()); }
 };
 
 template <typename T, typename... Args>
