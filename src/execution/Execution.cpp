@@ -8,6 +8,7 @@
 #include "lingodb/compiler/Conversion/RelAlgToSubOp/RelAlgToSubOpPass.h"
 #include "lingodb/compiler/Conversion/SubOpToControlFlow/SubOpToControlFlowPass.h"
 #include "lingodb/compiler/Dialect/RelAlg/Passes.h"
+#include "lingodb/compiler/Dialect/DB/Passes.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/Passes.h"
 #include "lingodb/execution/BaselineBackend.h"
@@ -54,6 +55,7 @@ class DefaultQueryOptimizer : public QueryOptimizer {
       pm.addPass(mlir::createInlinerPass());
       pm.addPass(mlir::createSymbolDCEPass());
       pm.addPass(createDecomposeTuplePass());
+      pm.addPass(db::createOptimizeRuntimeFunctionsPass());
       relalg::createQueryOptPipeline(pm, catalog);
       if (mlir::failed(pm.run(moduleOp))) {
          error.emit() << " Query Optimization failed";

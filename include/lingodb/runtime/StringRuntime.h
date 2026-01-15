@@ -40,6 +40,7 @@ struct StringRuntime {
    static int64_t pyRFind(VarLen32 str, VarLen32 needle, int64_t start, int64_t end);
    static VarLen32 replace(VarLen32 str, VarLen32 oldVal, VarLen32 newVal);
    static VarLen32 concat(VarLen32 a, VarLen32 b);
+   static VarLen32 concatMultiple(VarLen32* strings, size_t numStrings);
    static size_t findMatch(VarLen32 str, VarLen32 needle, size_t start, size_t end);
    static size_t findNext(VarLen32 str, VarLen32 needle, size_t start);
    static List* split(VarLen32 str, VarLen32 needle, size_t maxSplits);

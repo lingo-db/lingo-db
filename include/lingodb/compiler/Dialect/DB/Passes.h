@@ -5,6 +5,7 @@
 
 namespace lingodb::compiler::dialect::db {
 std::unique_ptr<mlir::Pass> createPrepareLoweringPass();
+std::unique_ptr<mlir::Pass> createOptimizeRuntimeFunctionsPass();
 std::unique_ptr<mlir::Pass> createSimplifyToArithPass();
 void addOptimizeRuntimeFunctionPatterns(mlir::RewritePatternSet& patterns);
 } // end namespace lingodb::compiler::dialect::db

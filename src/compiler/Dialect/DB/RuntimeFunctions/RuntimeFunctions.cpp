@@ -265,6 +265,17 @@ mlir::LogicalResult dateSubtractFoldFn(mlir::TypeRange types, ::llvm::ArrayRef<:
    }
    return mlir::failure();
 }
+mlir::Value concatMultipleImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, const mlir::TypeConverter* typeConverter, mlir::Location loc) {
+   size_t numArgs = loweredArguments.size();
+   mlir::Value numVal = rewriter.create<mlir::arith::ConstantIndexOp>(loc, numArgs);
+   mlir::Value ref = rewriter.create<util::AllocOp>(loc, util::RefType::get(typeConverter->convertType(resType)), numVal);
+   for (size_t i = 0; i < numArgs; ++i) {
+      auto idxVal = rewriter.create<mlir::arith::ConstantIndexOp>(loc, i);
+      rewriter.create<util::StoreOp>(loc, loweredArguments[i], ref, idxVal);
+   }
+   return StringRuntime::concatMultiple(rewriter, loc)(mlir::ValueRange{ref, numVal})[0];
+}
+
 } // namespace
 std::shared_ptr<db::RuntimeFunctionRegistry> db::RuntimeFunctionRegistry::getBuiltinRegistry(mlir::MLIRContext* context) {
    auto builtinRegistry = std::make_shared<RuntimeFunctionRegistry>(context);
@@ -283,7 +294,7 @@ std::shared_ptr<db::RuntimeFunctionRegistry> db::RuntimeFunctionRegistry::getBui
    builtinRegistry->add("StringLength").implementedAs(StringRuntime::len).matchesTypes({RuntimeFunction::stringLike}, resTypeIsI64);
    builtinRegistry->add("StringSplit").implementedAs(StringRuntime::split).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike, RuntimeFunction::intLike}, [](mlir::Type t, mlir::TypeRange) { return mlir::isa<db::ListType>(t) && mlir::isa<db::StringType>(mlir::cast<db::ListType>(t).getElementType()); });
    builtinRegistry->add("RegexSearch").implementedAs(StringRuntime::regexSearch).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike}, [](mlir::Type t, mlir::TypeRange) { return mlir::isa<db::ListType>(t); });
-   builtinRegistry->add("RaiseRuntimeError").hasSideEffects(true).implementedAs(DumpRuntime::error).matchesTypes({RuntimeFunction::stringLike}, [](mlir::Type t, mlir::TypeRange) {return true;});
+   builtinRegistry->add("RaiseRuntimeError").hasSideEffects(true).implementedAs(DumpRuntime::error).matchesTypes({RuntimeFunction::stringLike}, [](mlir::Type t, mlir::TypeRange) { return true; });
    builtinRegistry->add("Ord").implementedAs(StringRuntime::ord).matchesTypes({RuntimeFunction::stringLike}, resTypeIsI64);
 
    builtinRegistry->add("ToUpper").implementedAs(StringRuntime::toUpper).matchesTypes({RuntimeFunction::stringLike}, RuntimeFunction::matchesArgument());
@@ -292,6 +303,15 @@ std::shared_ptr<db::RuntimeFunctionRegistry> db::RuntimeFunctionRegistry::getBui
    builtinRegistry->add("ToLower").implementedAs(StringRuntime::toLower).matchesTypes({RuntimeFunction::stringLike}, RuntimeFunction::matchesArgument());
    builtinRegistry->add("Contains").implementedAs(StringRuntime::contains).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike}, resTypeIsBool);
    builtinRegistry->add("Concatenate").implementedAs(StringRuntime::concat).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike}, RuntimeFunction::matchesArgument());
+   builtinRegistry->add("ConcatenateMultiple").implementedAs(concatMultipleImpl).needsWrapping().verifyFn = [](mlir::TypeRange types, mlir::Type resType) {
+      for (auto t : types) {
+         if (!mlir::isa<db::StringType>(t)) {
+            return false;
+         }
+      }
+      return mlir::isa<db::StringType>(resType);
+   };
+
    builtinRegistry->add("PyStringFind").implementedAs(StringRuntime::pyFind).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike, RuntimeFunction::intLike, RuntimeFunction::intLike}, resTypeIsI64);
    builtinRegistry->add("PyStringRFind").implementedAs(StringRuntime::pyRFind).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike, RuntimeFunction::intLike, RuntimeFunction::intLike}, resTypeIsI64);
    builtinRegistry->add("Replace").implementedAs(StringRuntime::replace).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike, RuntimeFunction::stringLike}, RuntimeFunction::matchesArgument());

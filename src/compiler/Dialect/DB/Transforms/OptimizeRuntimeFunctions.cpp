@@ -4,6 +4,7 @@
 #include <iostream>
 
 #include "lingodb/compiler/Dialect/DB/Passes.h"
+#include "lingodb/compiler/helper.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include <optional>
@@ -107,6 +108,50 @@ class ReplaceFnWithFn : public mlir::RewritePattern {
       rewriter.replaceOpWithNewOp<db::RuntimeCall>(op, op->getResultTypes(), newFuncName, mlir::ValueRange{values});
    }
 };
+
+class SimplifyRepeatedStringConcat : public mlir::RewritePattern {
+   static std::vector<mlir::Value> collectConcatArgs(mlir::Value v) {
+      if (auto runtimeCall2 = mlir::dyn_cast_or_null<db::RuntimeCall>(v.getDefiningOp())) {
+         if (runtimeCall2.getFn().str() == "Concatenate") {
+            return std::vector<mlir::Value>{runtimeCall2.getArgs()[0], runtimeCall2.getArgs()[1]};
+         } else if (runtimeCall2.getFn().str() == "ConcatenateMultiple") {
+            return std::vector<mlir::Value>(runtimeCall2.getArgs().begin(), runtimeCall2.getArgs().end());
+         }
+      }
+      return {};
+   }
+
+   public:
+   SimplifyRepeatedStringConcat(mlir::MLIRContext* context)
+      : RewritePattern(db::RuntimeCall::getOperationName(), 1, context) {}
+   mlir::LogicalResult matchAndRewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
+      auto runtimeCall = mlir::cast<db::RuntimeCall>(op);
+      if (runtimeCall.getFn().str() == "Concatenate") {
+         if (runtimeCall.getArgs().size() != 2) {
+            return mlir::failure();
+         }
+         auto args = collectConcatArgs(runtimeCall.getArgs()[0]);
+         if (!args.empty()) {
+            args.push_back(runtimeCall.getArgs()[1]);
+            rewriter.replaceOpWithNewOp<db::RuntimeCall>(op, op->getResultTypes(), "ConcatenateMultiple", mlir::ValueRange{args});
+            return mlir::success();
+         }
+
+      } else if (runtimeCall.getFn().str() == "ConcatenateMultiple") {
+         auto args = collectConcatArgs(runtimeCall.getArgs()[0]);
+         if (!args.empty()) {
+            std::vector<mlir::Value> newArgs;
+            newArgs.insert(newArgs.end(), args.begin(), args.end());
+            for (size_t i = 1; i < runtimeCall.getArgs().size(); ++i) {
+               newArgs.push_back(runtimeCall.getArgs()[i]);
+            }
+            rewriter.replaceOpWithNewOp<db::RuntimeCall>(op, op->getResultTypes(), "ConcatenateMultiple", mlir::ValueRange{newArgs});
+            return mlir::success();
+         }
+      }
+      return mlir::failure();
+   }
+};
 } // end anonymous namespace
 
 namespace lingodb::compiler::dialect::db {
@@ -126,5 +171,27 @@ void addOptimizeRuntimeFunctionPatterns(mlir::RewritePatternSet& patterns) {
    patterns.insert<ReplaceFnWithFn>(ctxt, "DateDiff", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("day"), std::make_shared<AnyMatcher>(), std::make_shared<AnyMatcher>()}, "DateDiffDay");
 
    patterns.insert<ReplaceFnWithFn>(ctxt, "Like", std::vector<std::shared_ptr<Matcher>>{std::make_shared<AnyMatcher>(), std::make_shared<ConstantDeterministicPatternMatcher>()}, "ConstLike");
+   patterns.insert<SimplifyRepeatedStringConcat>(ctxt);
 }
+
 } // end namespace lingodb::compiler::dialect::db
+namespace {
+class OptimizeRuntimeFunctions : public mlir::PassWrapper<OptimizeRuntimeFunctions, mlir::OperationPass<mlir::ModuleOp>> {
+   virtual llvm::StringRef getArgument() const override { return "db-optimize-runtime-functions"; }
+
+   public:
+   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(OptimizeRuntimeFunctions)
+   void runOnOperation() override {
+      //transform "standalone" aggregation functions
+      {
+         mlir::RewritePatternSet patterns(&getContext());
+         lingodb::compiler::dialect::db::addOptimizeRuntimeFunctionPatterns(patterns);
+         if (lingodb::compiler::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
+            assert(false && "should not happen");
+         }
+      }
+   }
+};
+} // end anonymous namespace
+
+std::unique_ptr<mlir::Pass> lingodb::compiler::dialect::db::createOptimizeRuntimeFunctionsPass() { return std::make_unique<OptimizeRuntimeFunctions>(); } // NOLINT(misc-use-internal-linkage)

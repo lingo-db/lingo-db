@@ -147,7 +147,7 @@ bool lingodb::runtime::StringRuntime::startsWith(lingodb::runtime::VarLen32 str1
 //source https://github.com/apache/arrow/blob/41d115071587d68891b219cc137551d3ea9a568b/cpp/src/gandiva/gdv_function_stubs.cc
 //Apache-2.0 License
 #define CAST_NUMERIC_FROM_STRING(OUT_TYPE, ARROW_TYPE, TYPE_NAME)                                                                                 \
-   OUT_TYPE lingodb::runtime::StringRuntime::to## TYPE_NAME(lingodb::runtime::VarLen32 str) { /* NOLINT (clang-diagnostic-return-type-c-linkage)*/ \
+   OUT_TYPE lingodb::runtime::StringRuntime::to##TYPE_NAME(lingodb::runtime::VarLen32 str) { /* NOLINT (clang-diagnostic-return-type-c-linkage)*/ \
       char* data = (str).data();                                                                                                                  \
       int32_t len = (str).getLen();                                                                                                               \
       OUT_TYPE val = 0;                                                                                                                           \
@@ -199,7 +199,7 @@ __int128 lingodb::runtime::StringRuntime::toDecimal(lingodb::runtime::VarLen32 s
    return res;
 }
 #define CAST_NUMERIC_TO_STRING(IN_TYPE, ARROW_TYPE, TYPE_NAME)                                                                                       \
-   lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::from## TYPE_NAME(IN_TYPE value) { /* NOLINT (clang-diagnostic-return-type-c-linkage)*/ \
+   lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::from##TYPE_NAME(IN_TYPE value) { /* NOLINT (clang-diagnostic-return-type-c-linkage)*/ \
       arrow::internal::StringFormatter<ARROW_TYPE> formatter;                                                                                        \
       VarLen32 res;                                                                                                                                  \
                                                                                                                                                      \
@@ -239,7 +239,7 @@ lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::fromChar(uint32_t va
 }
 
 #define STR_CMP(NAME, OP)                                                                                                  \
-   bool lingodb::runtime::StringRuntime::compare## NAME(lingodb::runtime::VarLen32 str1, lingodb::runtime::VarLen32 str2) { \
+   bool lingodb::runtime::StringRuntime::compare##NAME(lingodb::runtime::VarLen32 str1, lingodb::runtime::VarLen32 str2) { \
       return std::string_view(str1.data(), str1.getLen()) OP std::string_view(str2.data(), str2.getLen());                 \
    }
 
@@ -297,7 +297,6 @@ inline bool isAsciiOnly(const char* c, size_t len) {
    return (acc & 0x80) == 0;
 }
 
-
 lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::substr(lingodb::runtime::VarLen32 str, int64_t from, int64_t len) { // NOLINT (clang-diagnostic-return-type-c-linkage)
 
    /*
@@ -326,7 +325,7 @@ lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::substr(lingodb::runt
       size_t byteFrom = legalizedFrom;
       size_t byteTo = std::min(legalizedTo, static_cast<size_t>(str.getLen()));
       return lingodb::runtime::VarLen32::fromString(str.strView().substr(byteFrom, byteTo - byteFrom), StorageClass::REFCOUNTED);
-   }else {
+   } else {
       size_t byteFrom = charIndexToByteIndex(str, legalizedFrom);
       size_t byteTo = charIndexToByteIndex(str, legalizedTo, byteFrom, legalizedFrom);
 
@@ -445,6 +444,29 @@ lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::concat(lingodb::runt
       return lingodb::runtime::VarLen32(copied, totalLength, StorageClass::REFCOUNTED);
    }
 }
+lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::concatMultiple(lingodb::runtime::VarLen32* strings, size_t numStrings) {
+   size_t totalLength = 0;
+   for (size_t i = 0; i < numStrings; i++) {
+      totalLength += strings[i].getLen();
+   }
+   if (totalLength <= lingodb::runtime::VarLen32::shortLen) {
+      uint8_t data[lingodb::runtime::VarLen32::shortLen];
+      size_t offset = 0;
+      for (size_t i = 0; i < numStrings; i++) {
+         memcpy(&data[offset], strings[i].data(), strings[i].getLen());
+         offset += strings[i].getLen();
+      }
+      return lingodb::runtime::VarLen32(data, totalLength, StorageClass::TRANSIENT);
+   } else {
+      auto* copied = VarLen32::allocateForStorageClass(totalLength, StorageClass::REFCOUNTED);
+      size_t offset = 0;
+      for (size_t i = 0; i < numStrings; i++) {
+         memcpy(&copied[offset], strings[i].data(), strings[i].getLen());
+         offset += strings[i].getLen();
+      }
+      return lingodb::runtime::VarLen32(copied, totalLength, StorageClass::REFCOUNTED);
+   }
+}
 
 bool lingodb::runtime::StringRuntime::contains(VarLen32 str, VarLen32 substr) {
    if (str.getLen() < substr.getLen()) return false;
@@ -560,18 +582,18 @@ lingodb::runtime::List* lingodb::runtime::StringRuntime::regexSearch(lingodb::ru
       auto* list = lingodb::runtime::List::create(sizeof(Range));
       std::regex reg(pattern.str());
       std::smatch match;
-      auto strVal=str.str();
+      auto strVal = str.str();
       if (std::regex_search(strVal, match, reg)) {
          int64_t start = match.position(0);
          int64_t end = start + match.length(0);
-         *reinterpret_cast<Range*>(list->append())={start, end};
+         *reinterpret_cast<Range*>(list->append()) = {start, end};
          for (size_t i = 1; i < match.size(); ++i) {
             // If group didn't participate, position() returns string::npos
             auto pos = match.position(i);
             if (pos == std::string::npos) {
                //groups.emplace_back(std::string::npos, std::string::npos);
             } else {
-               *reinterpret_cast<Range*>(list->append())={pos, pos + match.length(i)};
+               *reinterpret_cast<Range*>(list->append()) = {pos, pos + match.length(i)};
             }
          }
          return list;
@@ -584,7 +606,7 @@ lingodb::runtime::List* lingodb::runtime::StringRuntime::regexSearch(lingodb::ru
    return nullptr;
 }
 
-namespace{
+namespace {
 inline std::string_view ltrim(std::string_view str) {
    const auto pos(str.find_first_not_of(" \t\n\r\f\v"));
    str.remove_prefix(std::min(pos, str.length()));
@@ -605,12 +627,12 @@ inline std::string_view trim(std::string_view str) {
 } // namespace
 
 lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::strip(lingodb::runtime::VarLen32 str) {
-        auto trimmed = trim(std::string_view(str.data(), str.getLen()));
-        return VarLen32::fromString(trimmed, StorageClass::REFCOUNTED);
+   auto trimmed = trim(std::string_view(str.data(), str.getLen()));
+   return VarLen32::fromString(trimmed, StorageClass::REFCOUNTED);
 }
-lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::formatInt(VarLen32 format, int64_t value){
+lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::formatInt(VarLen32 format, int64_t value) {
    return VarLen32::fromString(std::vformat(std::string_view(format.data(), format.getLen()), std::make_format_args(value)), StorageClass::REFCOUNTED);
 }
-lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::formatDouble(VarLen32 format, double value){
+lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::formatDouble(VarLen32 format, double value) {
    return VarLen32::fromString(std::vformat(std::string_view(format.data(), format.getLen()), std::make_format_args(value)), StorageClass::REFCOUNTED);
 }
