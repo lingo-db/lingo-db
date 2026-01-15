@@ -267,8 +267,22 @@ mlir::LogicalResult dateSubtractFoldFn(mlir::TypeRange types, ::llvm::ArrayRef<:
 }
 mlir::Value concatMultipleImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, const mlir::TypeConverter* typeConverter, mlir::Location loc) {
    size_t numArgs = loweredArguments.size();
-   mlir::Value numVal = rewriter.create<mlir::arith::ConstantIndexOp>(loc, numArgs);
-   mlir::Value ref = rewriter.create<util::AllocOp>(loc, util::RefType::get(typeConverter->convertType(resType)), numVal);
+   mlir::Value ref;
+   mlir::Value numVal;
+   auto parentOp = rewriter.getBlock()->getParentOp();
+   mlir::func::FuncOp funcOp;
+   if (auto fOp = mlir::dyn_cast_or_null<mlir::func::FuncOp>(parentOp)) {
+      funcOp = fOp;
+   } else {
+      funcOp = parentOp->getParentOfType<mlir::func::FuncOp>();
+   }
+   {
+      mlir::OpBuilder::InsertionGuard guard(rewriter);
+        rewriter.setInsertionPointToStart(&funcOp.getBody().front());
+        numVal = rewriter.create<mlir::arith::ConstantIndexOp>(loc, numArgs);
+        ref = rewriter.create<util::AllocaOp>(loc, util::RefType::get(typeConverter->convertType(resType)), numVal);
+   }
+
    for (size_t i = 0; i < numArgs; ++i) {
       auto idxVal = rewriter.create<mlir::arith::ConstantIndexOp>(loc, i);
       rewriter.create<util::StoreOp>(loc, loweredArguments[i], ref, idxVal);
