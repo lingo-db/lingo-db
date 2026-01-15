@@ -47,7 +47,7 @@ std::shared_ptr<arrow::DataType> createType(std::string name, uint32_t p1, uint3
          case 64: return arrow::float64();
       }
    } else if (name == "string") {
-      return arrow::utf8_view();
+      return arrow::utf8();
    } else if (name == "fixed_sized") {
       return arrow::fixed_size_binary(p1);
    } else if (name == "date") {
@@ -161,7 +161,7 @@ void ArrowColumnBuilder::addFixedSized(bool isValid, uint8_t* value) {
 }
 void ArrowColumnBuilder::addBinary(bool isValid, lingodb::runtime::VarLen32 string) {
    next();
-   auto* typedBuilder = reinterpret_cast<arrow::BinaryViewBuilder*>(builder);
+   auto* typedBuilder = reinterpret_cast<arrow::BinaryBuilder*>(builder);
    if (!isValid) {
       handleStatus(typedBuilder->AppendNull());
    } else {
