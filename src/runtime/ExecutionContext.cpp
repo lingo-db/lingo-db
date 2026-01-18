@@ -55,6 +55,9 @@ void lingodb::runtime::ExecutionContext::setupWasm() {
       env.first = session.execEnv;
       env.second = session.moduleInst;
    } else {
+#if !ASAN_ACTIVE
+      wasm_runtime_set_native_stack_boundary(static_cast<wasm_exec_env_t>(env.first), scheduler::getStackBoundary());
+#endif
    }
 }
 void lingodb::runtime::ExecutionContext::teardownWasm() {
