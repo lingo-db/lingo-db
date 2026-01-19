@@ -3507,11 +3507,12 @@ class ExternalHashIndexRefGatherOpLowering : public SubOpTupleStreamConsumerConv
 
 static bool checkAtomicStore(mlir::Operation* op) {
    //on x86, stores are always atomic (if aligned)
-#ifdef __x86_64__
+// #ifdef __x86_64__
+//    return true;
+// #else
+//    return !op->hasAttr("atomic");
+// #endif
    return true;
-#else
-   return !op->hasAttr("atomic");
-#endif
 }
 class ContinuousRefScatterOpLowering : public SubOpTupleStreamConsumerConversionPattern<subop::ScatterOp, 2> {
    public:
