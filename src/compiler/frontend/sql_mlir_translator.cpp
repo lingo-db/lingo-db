@@ -951,6 +951,12 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
             auto str = translateExpression(builder, function->arguments[0], context);
             return builder.create<db::RuntimeCall>(exprLocation, builder.getI64Type(), "StringLength", str).getRes();
          }
+         if (upperCaseFName == "REPLACE") {
+            auto text = translateExpression(builder, function->arguments[0], context);
+            auto pattern = translateExpression(builder, function->arguments[1], context);
+            auto replace = translateExpression(builder, function->arguments[2], context);
+            return builder.create<db::RuntimeCall>(exprLocation, text.getType(), "Replace", mlir::ValueRange({text, pattern, replace})).getRes();
+         }
          if (upperCaseFName == "REGEXP_REPLACE") {
             auto text = translateExpression(builder, function->arguments[0], context);
             auto pattern = translateExpression(builder, function->arguments[1], context);

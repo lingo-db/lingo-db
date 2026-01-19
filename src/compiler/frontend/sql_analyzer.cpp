@@ -2883,6 +2883,25 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeFunctionExpressio
       auto arg = analyzeExpression(function->arguments[0], context, resolverScope);
       resultType = catalog::Type::int64();
       boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, std::vector{arg});
+   } else if (upperCaseFName == "REPLACE") {
+        if (function->arguments.size() != 3) {
+           error("Function REPLACE needs exactly 3 arguments", function->loc);
+        }
+        auto text = analyzeExpression(function->arguments[0], context, resolverScope);
+        auto search = analyzeExpression(function->arguments[1], context, resolverScope);
+        auto replace = analyzeExpression(function->arguments[2], context, resolverScope);
+        if (text->resultType.value().type.getTypeId() != catalog::LogicalTypeId::STRING) {
+           error("Function REPLACE needs text of type string", text->loc);
+        }
+        if (search->resultType.value().type.getTypeId() != catalog::LogicalTypeId::STRING && search->resultType.value().type.getTypeId() != catalog::LogicalTypeId::CHAR) {
+           error("Function REPLACE needs search of type string or char", text->loc);
+        }
+
+        if (replace->resultType.value().type.getTypeId() != catalog::LogicalTypeId::STRING && replace->resultType.value().type.getTypeId() != catalog::LogicalTypeId::CHAR) {
+           error("Function REPLACE needs replacement of type string or char", text->loc);
+        }
+        resultType = text->resultType.value();
+        boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, std::vector{text, search, replace});
    } else if (upperCaseFName == "REGEXP_REPLACE") {
       if (function->arguments.size() != 3) {
          error("Function REGEXP_REPLACE needs exactly 3 arguments", function->loc);
