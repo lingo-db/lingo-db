@@ -38,46 +38,24 @@ RESULT_TIMEOUT_S = 60.0
 SCENARIOS = {
     "Baseline": ({
         "LINGODB_OPT_PATTERNS_EXTRA_OPT": "true",
-        "LINGODB_OPT_CLEANUP_AFTER_IMPERATIVE": "true",
-        "LINGODB_OPT_CLEANUP_AFTER_SUBOP": "true",
         "LINGODB_OPT_PUSHDOWN_RESTRICTIONS": "false",
         "LINGODB_OPT_ELIMINATE_NULLABLE": "false",
     },BINARY),
     "CheaperPatterns": ({
         "LINGODB_OPT_PATTERNS_EXTRA_OPT": "false",
-        "LINGODB_OPT_CLEANUP_AFTER_IMPERATIVE": "true",
-        "LINGODB_OPT_CLEANUP_AFTER_SUBOP": "true",
         "LINGODB_OPT_PUSHDOWN_RESTRICTIONS": "false",
         "LINGODB_OPT_ELIMINATE_NULLABLE": "false",
     }, BINARY),
-    "LessCleanup" : ({
-     "LINGODB_OPT_PATTERNS_EXTRA_OPT": "false",
-     "LINGODB_OPT_CLEANUP_AFTER_IMPERATIVE": "false",
-     "LINGODB_OPT_CLEANUP_AFTER_SUBOP": "false",
-     "LINGODB_OPT_PUSHDOWN_RESTRICTIONS": "false",
-     "LINGODB_OPT_ELIMINATE_NULLABLE": "false",
-    },BINARY),
     "Restrictions":({
         "LINGODB_OPT_PATTERNS_EXTRA_OPT": "false",
-        "LINGODB_OPT_CLEANUP_AFTER_IMPERATIVE": "false",
-        "LINGODB_OPT_CLEANUP_AFTER_SUBOP": "false",
         "LINGODB_OPT_PUSHDOWN_RESTRICTIONS": "true",
         "LINGODB_OPT_ELIMINATE_NULLABLE": "false",
     }, BINARY),
     "EliminateNulls":({
         "LINGODB_OPT_PATTERNS_EXTRA_OPT": "false",
-        "LINGODB_OPT_CLEANUP_AFTER_IMPERATIVE": "false",
-        "LINGODB_OPT_CLEANUP_AFTER_SUBOP": "false",
         "LINGODB_OPT_PUSHDOWN_RESTRICTIONS": "true",
         "LINGODB_OPT_ELIMINATE_NULLABLE": "true",
-    }, BINARY),
-    "MiMalloc":({
-        "LINGODB_OPT_PATTERNS_EXTRA_OPT": "false",
-        "LINGODB_OPT_CLEANUP_AFTER_IMPERATIVE": "false",
-        "LINGODB_OPT_CLEANUP_AFTER_SUBOP": "false",
-        "LINGODB_OPT_PUSHDOWN_RESTRICTIONS": "true",
-        "LINGODB_OPT_ELIMINATE_NULLABLE": "true",
-    }, Path("./build/lingodb-release-mimalloc/sql")),
+    }, BINARY)
 }
 # ----------------
 

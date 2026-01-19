@@ -21,7 +21,7 @@ DATASET = sys.argv[1]
 BASE_DATASET = DATASET.split("-")[0]
 print("base dataset:", BASE_DATASET)
 QUERIES_DIR = Path(f"resources/sql/{BASE_DATASET}")
-BINARY = Path("./build/lingodb-release-mimalloc/sql")
+BINARY = Path("./build/lingodb-release/sql")
 DB_BASE_DIR = Path("resources/data/")
 ENV = {
     "LINGODB_EXECUTION_MODE": sys.argv[2],
