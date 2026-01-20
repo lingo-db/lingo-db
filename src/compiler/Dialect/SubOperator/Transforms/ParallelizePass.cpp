@@ -18,14 +18,6 @@
 namespace {
 using namespace lingodb::compiler::dialect;
 
-static constexpr bool isX86 =
-#ifdef __x86_64__
-   true
-#else
-   false
-#endif
-   ;
-
 struct ProblematicOp {
    subop::SubOperator op;
    subop::SubOperator stateAccessing;
