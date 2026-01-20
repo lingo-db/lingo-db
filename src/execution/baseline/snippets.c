@@ -117,6 +117,11 @@ double arith_sitofp_i64_f64(int64_t in) { return (double)in; }
 float arith_uitofp_i64_f32(uint64_t in) { return (float)in; }
 double arith_uitofp_i64_f64(uint64_t in) { return (double)in; }
 
+int64_t arith_fptosi_f32_i64(float in) { return (int64_t)in; }
+int64_t arith_fptosi_f64_i64(double in) { return (int64_t)in; }
+uint64_t arith_fptoui_f32_i64(float in) { return (uint64_t)in; }
+uint64_t arith_fptoui_f64_i64(double in) { return (uint64_t)in; }
+
 double arith_extf_f32_f64(float in) { return (double)in; }
 
 // --------------------------

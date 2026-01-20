@@ -41,6 +41,8 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
          udivti3,
          modti3,
          umodti3,
+         fmodf,
+         fmod,
          MAX, // sentinel counter-element
       };
 
@@ -65,6 +67,12 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
                   break;
                case Type::umodti3:
                   name = "__umodti3";
+                  break;
+               case Type::fmodf:
+                  name = "fmodf";
+                  break;
+               case Type::fmod:
+                  name = "fmod";
                   break;
                default: __builtin_unreachable();
             }
@@ -296,6 +304,8 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
          } else if (mlir::isa<mlir::FloatType>(ret_type)) {
             return ValuePartRef(this, 0, ret_type.getIntOrFloatBitWidth() / 8, Config::FP_BANK);
          } else if (mlir::isa<dialect::util::VarLen32Type, dialect::util::BufferType>(ret_type)) {
+            return ValuePartRef(this, 0, 8, Config::GP_BANK);
+         } else if (mlir::isa<dialect::util::RefType>(ret_type)) {
             return ValuePartRef(this, 0, 8, Config::GP_BANK);
          } else {
             assert(0);
@@ -1357,6 +1367,57 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
       }
       return ret;
    }
+   bool compile_arith_fptosi_op(const auto op, const bool sign) {
+      mlir::Value src = op->getOperand(0);
+      mlir::Value res = op->getResult(0);
+      assert(mlir::isa<mlir::FloatType>(src.getType()) && "Source value must be a float type for fptosi");
+      assert(mlir::isa<mlir::IntegerType>(res.getType()) && "Result value must be an integer type for fptosi");
+      unsigned src_width = src.getType().getIntOrFloatBitWidth();
+      unsigned dst_width = res.getType().getIntOrFloatBitWidth();
+      assert((src_width == 32 || src_width == 64) && (dst_width <= 64) &&
+             "Source width must be 32 or 64 bits and destination width must be less than or equal to 64 bits");
+
+      auto [_, src_vpr] = this->val_ref_single(src);
+      auto res_ref = this->result_ref(res);
+      bool ret = false;
+
+      if (sign) {
+         if (src_width == 32) {
+            ret = derived()->encode_arith_fptosi_f32_i64(std::move(src_vpr), res_ref.part(0));
+         } else {
+            ret = derived()->encode_arith_fptosi_f64_i64(std::move(src_vpr), res_ref.part(0));
+         }
+      } else {
+         if (src_width == 32) {
+            ret = derived()->encode_arith_fptoui_f32_i64(std::move(src_vpr), res_ref.part(0));
+         } else {
+            ret = derived()->encode_arith_fptoui_f64_i64(std::move(src_vpr), res_ref.part(0));
+         }
+      }
+      return ret;
+   }
+   bool compile_arith_rem_f_op(mlir::arith::RemFOp op) {
+      mlir::Value lhs = op.getLhs();
+      mlir::Value rhs = op.getRhs();
+      mlir::Value res = op.getResult();
+      assert(lhs.getType() == rhs.getType() && "LHS and RHS must have the same type for float remainder");
+      const mlir::Type rem_type = lhs.getType();
+      assert((rem_type.isF32() || rem_type.isF64()) && "Unsupported float type for remainder");
+
+      if (rem_type.isF32()) {
+         auto res_ref = this->result_ref(res);
+         auto symbol = builtins.get_symbol(derived(), BuiltinFuncStorage::Type::fmodf);
+         std::array args{lhs, rhs};
+         derived()->create_helper_call(args, &res_ref, symbol);
+         return true;
+      } else {
+         auto res_ref = this->result_ref(res);
+         auto symbol = builtins.get_symbol(derived(), BuiltinFuncStorage::Type::fmod);
+         std::array args{lhs, rhs};
+         derived()->create_helper_call(args, &res_ref, symbol);
+         return true;
+      }
+   }
 
    bool compile_util_pack_op(dialect::util::PackOp op) {
       mlir::TypedValue<mlir::Type> res = op.getTuple();
@@ -1452,6 +1513,7 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
             return compile_arith_binary_op(op);
          })
          .template Case<mlir::arith::NegFOp>([&](auto op) { return compile_arith_negf_op(op); })
+         .template Case<mlir::arith::RemFOp>([&](auto op) { return compile_arith_rem_f_op(op); })
          .template Case<mlir::arith::CmpIOp>(
             [&](auto op) { return derived()->compile_arith_cmp_int_op(op); })
          .template Case<mlir::arith::CmpFOp>([&](auto op) { return compile_arith_cmp_float_op(op); })
@@ -1533,6 +1595,12 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
          })
          .template Case<mlir::arith::UIToFPOp>([&](auto op) {
             return compile_arith_sitofp_op(op, false);
+         })
+         .template Case<mlir::arith::FPToSIOp>([&](auto op) {
+            return compile_arith_fptosi_op(op, true);
+         })
+         .template Case<mlir::arith::FPToUIOp>([&](auto op) {
+            return compile_arith_fptosi_op(op, false);
          })
          .template Case<dialect::util::PackOp>([&](auto op) {
             return compile_util_pack_op(op);
