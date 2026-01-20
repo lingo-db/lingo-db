@@ -110,7 +110,11 @@ class VarLen32 {
       if (len <= shortLen) {
          return VarLen32(reinterpret_cast<const uint8_t*>(data), len, storageClass);
       }
+#if ENABLE_REFCOUNT==1
       if (storageClass == StorageClass::GLOBAL) {
+#else
+      if (storageClass == StorageClass::GLOBAL || storageClass == StorageClass::REFCOUNTED) {
+#endif
          auto* ptr = getCurrentExecutionContext()->allocString(len);
          memcpy(ptr, data, len);
          return VarLen32(ptr, len, storageClass);
@@ -130,6 +134,7 @@ class VarLen32 {
       return fromDataAndLen(str.data(), str.size(), storageClass);
    }
    static uint8_t* allocateForStorageClass(size_t size, StorageClass storageClass) {
+#if ENABLE_REFCOUNT==1
       if (storageClass == StorageClass::GLOBAL) {
          return getCurrentExecutionContext()->allocString(size);
       } else if (storageClass == StorageClass::TRANSIENT) {
@@ -224,12 +229,16 @@ class VarLen32 {
 
 template <typename T, typename... Args>
 T* createRefCounted(Args&&... args) {
+#if ENABLE_REFCOUNT==1
    uint8_t* allocated = static_cast<uint8_t*>(malloc(sizeof(T) + 4));
    // initialize refcount to 1
    reinterpret_cast<uint32_t*>(allocated)[0] = 1;
    void* objPtr = allocated + 4;
    T* obj = new (objPtr) T(std::forward<Args>(args)...);
    return obj;
+#else
+   return (T*) getCurrentExecutionContext()->allocStateRaw(sizeof(T));
+#endif
 }
 
 template <class T>

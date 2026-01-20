@@ -36,7 +36,6 @@ utility::GlobalSetting<std::string> executionModeSetting("system.execution_mode"
 utility::GlobalSetting<std::string> subopOptPassesSetting("system.subop.opt", "ReuseLocal,Specialize,PullGatherUp,Compression");
 utility::GlobalSetting<bool> cleanupAfterSubOp("system.opt.cleanup_after_subop", false);
 utility::GlobalSetting<bool> cleanupAfterImperative("system.opt.cleanup_after_imperative", false);
-utility::GlobalSetting<bool> memoryManagement("system.opt.memory_management", true);
 utility::Tracer::Event queryOptimizationEvent("Compilation", "Query Opt.");
 utility::Tracer::Event lowerRelalgEvent("Compilation", "Lower RelAlg");
 utility::Tracer::Event lowerSubOpEvent("Compilation", "Lower SubOp");
@@ -139,9 +138,9 @@ class SubOpLoweringStep : public LoweringStep {
          optSubOpPm.addPass(subop::createSpecializeParallelPass());
       }
       optSubOpPm.addPass(subop::createPrepareLoweringPass());
-      if (memoryManagement.getValue()) {
+#if ENABLE_REFCOUNT == 1
          optSubOpPm.addPass(subop::createMemoryMgmtPass());
-      }
+#endif
       if (mlir::failed(optSubOpPm.run(moduleOp))) {
          error.emit() << "Lowering of Sub-Operators to imperative operations failed";
          return;
