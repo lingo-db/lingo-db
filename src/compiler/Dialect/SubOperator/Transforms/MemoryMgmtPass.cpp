@@ -239,6 +239,9 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
             if (block == mapBlock) {
                for (auto& operand : terminator->getOpOperands()) {
                   if (typeNeedsManagement(operand.get().getType())) {
+                     if ( notCounted.contains(operand.get())) {
+                        continue;
+                     }
                      mlir::OpBuilder builder(block->getTerminator());
                      mlir::Value newVal = builder.create<db::MemoryPromoteToGlobal>(block->getTerminator()->getLoc(), operand.get().getType(),operand.get());
                      operand.set(newVal);
@@ -261,9 +264,27 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
 
       module.walk([&](subop::MapOp mapOp) {
          llvm::DenseSet<mlir::Value> notCounted;
+         for (auto arg:mapOp.getFn().front().getArguments()) {
+            notCounted.insert(arg);
+         }
          mapOp.getFn().walk([&](mlir::Operation* op) {
             if (mlir::isa<db::ConstantOp, py_interp::ConstStrPyObject,db::NullOp>(op)) {
                notCounted.insert(op->getResult(0));
+            }
+            if (auto asNullableOp = mlir::dyn_cast_or_null<db::AsNullableOp>(op)) {
+               if (notCounted.contains(asNullableOp.getVal())) {
+                  notCounted.insert(asNullableOp.getResult());
+               }
+            }
+            if (auto nullableGetOp = mlir::dyn_cast_or_null<db::NullableGetVal>(op)) {
+               if (notCounted.contains(nullableGetOp.getVal())) {
+                  notCounted.insert(nullableGetOp.getResult());
+               }
+            }
+            if (auto castOp = mlir::dyn_cast_or_null<db::CastOp>(op)) {
+               if (notCounted.contains(castOp.getVal())&& mlir::isa<db::CharType>(getBaseType(castOp.getVal().getType())) && mlir::isa<db::StringType>(getBaseType(castOp.getType()))) {
+                  notCounted.insert(castOp.getResult());
+               }
             }
          });
          // Iterate all regions and blocks inside the MapOp.

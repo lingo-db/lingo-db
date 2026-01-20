@@ -136,6 +136,9 @@ class VarLen32 {
    static uint8_t* allocateForStorageClass(size_t size, StorageClass storageClass) {
 #if ENABLE_REFCOUNT==1
       if (storageClass == StorageClass::GLOBAL) {
+#else
+      if (storageClass == StorageClass::GLOBAL || storageClass == StorageClass::REFCOUNTED) {
+#endif
          return getCurrentExecutionContext()->allocString(size);
       } else if (storageClass == StorageClass::TRANSIENT) {
          return nullptr;
@@ -157,9 +160,10 @@ class VarLen32 {
          //memcpy(newPtr, varLen32.getPtr(), varLen32.getLen());
          //varLen32.storePtr(newPtr, StorageClass::GLOBAL);
       } else if (varLen32.getStorageClass() == StorageClass::REFCOUNTED) {
-         VarLen32 newVarLen32(varLen32.getPtr(), varLen32.getLen(), StorageClass::GLOBAL);
-         getCurrentExecutionContext()->registerState({varLen32.getPtr() - 4, [](void* ptr) { free(ptr); }});
-         return newVarLen32;
+         auto *newPtr = allocateForStorageClass(varLen32.getLen(), StorageClass::GLOBAL);
+         memcpy(newPtr, varLen32.getPtr(), varLen32.getLen());
+         decRefCount(varLen32);
+         return VarLen32(newPtr, varLen32.getLen(), StorageClass::GLOBAL);
       }
    }
    static void decRefCount(runtime::VarLen32 varLen32) {
