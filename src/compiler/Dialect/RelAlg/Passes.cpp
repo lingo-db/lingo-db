@@ -44,6 +44,7 @@ void relalg::createQueryOptPipeline(mlir::OpPassManager& pm, lingodb::catalog::C
       pm.addNestedPass<mlir::func::FuncOp>(relalg::createDetachMetaDataPass());
    }
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createCommonSubtreeEliminationPass());
+   pm.addPass(lingodb::compiler::createCanonicalizerPass());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createIntroduceTmpPass());
    pm.addPass(lingodb::compiler::createCanonicalizerPass());
 }
