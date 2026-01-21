@@ -1,4 +1,4 @@
-// RUN: mlir-db-opt %s -split-input-file -mlir-print-debuginfo -mlir-print-local-scope --relalg-cse --canonicalize --relalg-introduce-tmp --canonicalize | FileCheck %s
+// RUN: mlir-db-opt %s -split-input-file -mlir-print-debuginfo -mlir-print-local-scope --relalg-cse --canonicalize --relalg-introduce-tmp | FileCheck %s
 module @querymodule  {
   func.func @query() {
     //CHECK: %0 = relalg.basetable  {table_identifier = "table1"} columns: {col1 => @table1::@col1({type = !db.string}), col2 => @table1::@col2({type = !db.string})}

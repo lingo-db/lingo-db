@@ -46,7 +46,6 @@ void relalg::createQueryOptPipeline(mlir::OpPassManager& pm, lingodb::catalog::C
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createCommonSubtreeEliminationPass());
    pm.addPass(lingodb::compiler::createCanonicalizerPass());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createIntroduceTmpPass());
-   pm.addPass(lingodb::compiler::createCanonicalizerPass());
 }
 void relalg::registerQueryOptimizationPasses() {
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
