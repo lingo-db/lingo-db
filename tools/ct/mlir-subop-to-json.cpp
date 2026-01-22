@@ -22,6 +22,7 @@
 #include "llvm/Support/SourceMgr.h"
 
 #include "json.h"
+#include "lingodb/runtime/ExternalDataSourceProperty.h"
 
 #include <llvm/IR/Type.h>
 
@@ -497,7 +498,61 @@ class ToJson {
          })
          .Case<subop::GetExternalOp>([&](subop::GetExternalOp op) {
             result["subop"] = "get_external";
-            result["meta"] = nlohmann::json::parse(op.getDescr().str());
+            auto convertDatasourceToJson = [&](const lingodb::runtime::ExternalDatasourceProperty& datasource) {
+               nlohmann::json j;
+               j["tableName"] = datasource.tableName;
+
+               j["mapping"] = nlohmann::json::array();
+               for (const auto& m : datasource.mapping) {
+                  nlohmann::json me;
+                  me["memberName"] = m.memberName;
+                  me["identifier"] = m.identifier;
+                  j["mapping"].push_back(me);
+               }
+
+               j["filters"] = nlohmann::json::array();
+               for (const auto& f : datasource.filterDescriptions) {
+                  nlohmann::json fj;
+                  fj["columnName"] = f.columnName;
+                  fj["columnId"] = f.columnId;
+                  switch (f.op) {
+                     case lingodb::runtime::FilterOp::EQ: fj["op"] = "EQ"; break;
+                     case lingodb::runtime::FilterOp::NEQ: fj["op"] = "NEQ"; break;
+                     case lingodb::runtime::FilterOp::LT: fj["op"] = "LT"; break;
+                     case lingodb::runtime::FilterOp::LTE: fj["op"] = "LTE"; break;
+                     case lingodb::runtime::FilterOp::GT: fj["op"] = "GT"; break;
+                     case lingodb::runtime::FilterOp::GTE: fj["op"] = "GTE"; break;
+                     case lingodb::runtime::FilterOp::NOTNULL: fj["op"] = "NOTNULL"; break;
+                     case lingodb::runtime::FilterOp::IN: fj["op"] = "IN"; break;
+                     default: fj["op"] = "UNKNOWN"; break;
+                  }
+
+                  auto size = std::visit([&](auto const& vec) {
+                     return vec.size();
+                  },
+                                         f.values);
+                  if (size == 0) {
+                     std::visit([&](auto const& v) {
+                        fj["value"] = v;
+                     },
+                                f.value);
+                  } else {
+                     std::visit([&](auto const& vec) {
+                        fj["values"] = vec;
+                     },
+                                f.values);
+                  }
+                  j["filters"].push_back(fj);
+               }
+               if (!datasource.index.empty()) {
+                  j["index"] = datasource.index;
+                  j["indexType"] = datasource.indexType;
+               }
+
+               return j;
+            };
+            auto datasource = lingodb::utility::deserializeFromHexString<lingodb::runtime::ExternalDatasourceProperty>(op.getDescr().str());
+            result["meta"] = convertDatasourceToJson(datasource);
             return result;
          })
          .Case<subop::CreateThreadLocalOp>([&](subop::CreateThreadLocalOp createThreadLocalOp) {
