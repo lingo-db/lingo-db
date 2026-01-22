@@ -54,7 +54,7 @@ PyObject* PythonRuntime::createModule(runtime::VarLen32 modname, runtime::VarLen
 
 
    // 2) Create new module
-   mod = PyModule_New(modname.data());
+   mod = PyModule_New(modStr.c_str());
    if (!mod) return NULL;
 
    PyObject *globals = PyModule_GetDict(mod);
