@@ -322,7 +322,7 @@ lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::substr(lingodb::runt
    legalizedTo--;
    if (isAsciiOnly(str.data(), str.getLen())) {
       // fast path for ascii only strings
-      size_t byteFrom = legalizedFrom;
+      size_t byteFrom = std::min(legalizedFrom, static_cast<size_t>(str.getLen()));
       size_t byteTo = std::min(legalizedTo, static_cast<size_t>(str.getLen()));
       return lingodb::runtime::VarLen32::fromString(str.strView().substr(byteFrom, byteTo - byteFrom), StorageClass::REFCOUNTED);
    } else {
