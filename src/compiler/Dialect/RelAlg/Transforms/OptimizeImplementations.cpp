@@ -494,13 +494,15 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                auto right = mlir::cast<Operator>(binOp.rightChild());
                if (hashImplPossible(&predicateOperator.getPredicateBlock(), left.getAvailableColumns(), right.getAvailableColumns())) {
                   // Determine if index nested loop is possible and is beneficial
+                  prepareForHash(predicateOperator);
+                  auto left = mlir::cast<Operator>(binOp.leftChild());
+                  auto right = mlir::cast<Operator>(binOp.rightChild());
                   std::stack<mlir::Operation*> leftPath, rightPath;
                   std::string leftIndexName, rightIndexName;
                   bool leftCanUseIndex = isBaseRelationWithSelects(left, leftPath) && containsExactlyIndexColumns(binOp.getContext(), leftPath.top(), &predicateOperator.getPredicateBlock(), leftIndexName);
                   bool rightCanUseIndex = isBaseRelationWithSelects(right, rightPath) && containsExactlyIndexColumns(binOp.getContext(), rightPath.top(), &predicateOperator.getPredicateBlock(), rightIndexName);
                   bool isInnerJoin = mlir::isa<relalg::InnerJoinOp>(predicateOperator);
                   bool reversed = false;
-                  prepareForHash(predicateOperator);
 
                   // Select possible build side to the left
                   if (isInnerJoin && (leftCanUseIndex || rightCanUseIndex)) {
