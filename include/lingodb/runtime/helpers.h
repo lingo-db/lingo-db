@@ -241,7 +241,9 @@ T* createRefCounted(Args&&... args) {
    T* obj = new (objPtr) T(std::forward<Args>(args)...);
    return obj;
 #else
-   return (T*) getCurrentExecutionContext()->allocStateRaw(sizeof(T));
+   void* objPtr = getCurrentExecutionContext()->allocStateRaw(sizeof(T));
+   T* obj = new (objPtr) T(std::forward<Args>(args)...);
+   return obj;
 #endif
 }
 
