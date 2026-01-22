@@ -31,6 +31,88 @@ bool isNotNullCheckOnColumn(relalg::ColumnSet relevantColumns, relalg::Selection
    }
    return false;
 }
+bool isNullCheckOnColumn(relalg::ColumnSet relevantColumns, relalg::SelectionOp selectionOp) {
+   if (selectionOp.getPredicate().empty()) return false;
+   if (selectionOp.getPredicate().front().empty()) return false;
+   if (auto returnOp = mlir::dyn_cast_or_null<tuples::ReturnOp>(selectionOp.getPredicate().front().getTerminator())) {
+      if (returnOp.getResults().size() != 1) return false;
+      if (auto isNullOp = mlir::dyn_cast_or_null<db::IsNullOp>(returnOp.getResults()[0].getDefiningOp())) {
+         if (auto getColOp = mlir::dyn_cast_or_null<tuples::GetColumnOp>(isNullOp.getVal().getDefiningOp())) {
+            return relevantColumns.contains(&getColOp.getAttr().getColumn());
+         }
+      }
+   }
+   return false;
+}
+class OuterJoinToAntiJoin : public mlir::RewritePattern {
+   public:
+   OuterJoinToAntiJoin(mlir::MLIRContext* context)
+      : RewritePattern(relalg::OuterJoinOp::getOperationName(), 1, context) {}
+   mlir::LogicalResult match(mlir::Operation* op) const override {
+      auto outerJoinOp = mlir::cast<relalg::OuterJoinOp>(op);
+      mlir::Value currStream = outerJoinOp.asRelation();
+
+      while (currStream) {
+         auto users = currStream.getUsers();
+         if (users.begin() == users.end()) break;
+         auto second = users.begin();
+         second++;
+         if (second != users.end()) break;
+         if (auto selectionOp = mlir::dyn_cast_or_null<relalg::SelectionOp>(*users.begin())) {
+            if (isNullCheckOnColumn(outerJoinOp.getCreatedColumns(), selectionOp)) {
+               return mlir::success();
+            }
+            currStream = selectionOp.asRelation();
+         } else {
+            currStream = mlir::Value();
+         }
+      }
+      return mlir::failure();
+   }
+   void rewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
+      auto outerJoinOp = mlir::cast<relalg::OuterJoinOp>(op);
+
+      Operator selectionOpToReplace = nullptr;
+      mlir::Value currStream = outerJoinOp.asRelation();
+      while (currStream) {
+         auto users = currStream.getUsers();
+         if (users.begin() == users.end()) break;
+         auto second = users.begin();
+         second++;
+         if (second != users.end()) break;
+         if (auto selectionOp = mlir::dyn_cast_or_null<relalg::SelectionOp>(*users.begin())) {
+            if (isNullCheckOnColumn(outerJoinOp.getCreatedColumns(), selectionOp)) {
+               selectionOpToReplace = selectionOp;
+            }
+            currStream = selectionOp.asRelation();
+         } else {
+            currStream = mlir::Value();
+         }
+      }
+
+      auto newJoin = rewriter.create<relalg::AntiSemiJoinOp>(op->getLoc(), outerJoinOp.getLeft(), outerJoinOp.getRight());
+      rewriter.inlineRegionBefore(outerJoinOp.getPredicate(), newJoin.getPredicate(), newJoin.getPredicate().end());
+      std::vector<mlir::Attribute> mapColumnDefs;
+      auto* mapBlock = new mlir::Block;
+      {
+         std::vector<mlir::Value> returnValues;
+         auto& colManager = outerJoinOp.getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(mapBlock);
+         for (auto m : outerJoinOp.getMapping()) {
+            auto origDefAttr = mlir::dyn_cast_or_null<tuples::ColumnDefAttr>(m);
+            auto colVal = rewriter.create<db::NullOp>(op->getLoc(), origDefAttr.getColumn().type);
+            auto defAttr = colManager.createDef(&origDefAttr.getColumn());
+            returnValues.push_back(colVal);
+            mapColumnDefs.push_back(defAttr);
+         }
+         rewriter.create<tuples::ReturnOp>(op->getLoc(), returnValues);
+      }
+      auto mapOp = rewriter.replaceOpWithNewOp<relalg::MapOp>(op, newJoin.asRelation(), rewriter.getArrayAttr(mapColumnDefs));
+      mapOp.getPredicate().push_back(mapBlock);
+      rewriter.replaceOp(selectionOpToReplace.getOperation(), mapOp.asRelation());
+   }
+};
 class OuterJoinToInnerJoin : public mlir::RewritePattern {
    public:
    OuterJoinToInnerJoin(mlir::MLIRContext* context)
@@ -615,6 +697,7 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
       }
       mlir::RewritePatternSet patterns(&getContext());
       patterns.insert<OuterJoinToInnerJoin>(&getContext());
+      patterns.insert<OuterJoinToAntiJoin>(&getContext());
       patterns.insert<SingleJoinToInnerJoin>(&getContext());
       if (lingodb::compiler::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
          signalPassFailure();
