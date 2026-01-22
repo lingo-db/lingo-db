@@ -615,6 +615,52 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
             }
          }
       });
+#if ENABLE_NECESSARY_PRECOND==1
+      auto estimateCostOfSelection = [&](relalg::SelectionOp selOp) -> double {
+         // simple heuristic: number of operations in the selection predicate
+         size_t count = 0;
+         selOp->walk([&](mlir::Operation* op) {
+               count++;
+         });
+         return static_cast<double>(count);
+      };
+      getOperation()->walk([&](relalg::SelectionOp sel) {
+         // check if this is the topmost selection in the current fragment:
+         // either multiple users or user is not selection
+         bool isTopmost = countUses(sel) > 1;
+         std::vector<mlir::Operation*> users;
+         for (auto* user : sel->getUsers()) {
+            users.push_back(user);
+            if (!mlir::isa<relalg::SelectionOp>(user)) {
+               isTopmost = true;
+            }
+         }
+         if (!isTopmost) return;
+         // now collect all selection ops in the chain
+         std::vector<std::pair<relalg::SelectionOp, double>> selectionOps;
+         Operator currentOp = sel;
+         while (currentOp && mlir::isa<relalg::SelectionOp>(currentOp.getOperation())) {
+            auto selOp = mlir::cast<relalg::SelectionOp>(currentOp.getOperation());
+            auto cost = estimateCostOfSelection(selOp);
+            selectionOps.push_back({selOp, cost});
+            if (countUses(currentOp) != 1) break;
+            currentOp = selOp.getChildren()[0];
+         }
+         // sort by cost (lowest first)
+         std::sort(selectionOps.begin(), selectionOps.end(), [](const auto& a, const auto& b) { return a.second < b.second; });
+         // rebuild the chain
+         Operator child = currentOp;
+         for (auto& selOpPair : selectionOps) {
+            auto selOp = selOpPair.first;
+            selOp->moveAfter(child.getOperation());
+            selOp.setChildren({child});
+            child = selOp;
+         }
+         sel.asRelation().replaceUsesWithIf(child.asRelation(), [&](mlir::OpOperand& operand) {
+            return llvm::is_contained(users, operand.getOwner());
+         });
+      });
+#endif
 
       for (auto* op : toErase) {
          op->erase();

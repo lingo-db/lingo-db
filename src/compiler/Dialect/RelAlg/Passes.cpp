@@ -55,7 +55,7 @@ void relalg::registerQueryOptimizationPasses() {
       return relalg::createExtractNestedOperatorsPass();
    });
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
-      return relalg::createDecomposeLambdasPass();
+      return relalg::createDecomposeLambdasPass(true);
    });
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return relalg::createImplicitToExplicitJoinsPass();
