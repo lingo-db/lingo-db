@@ -1412,6 +1412,23 @@ class MapLowering : public SubOpTupleStreamConsumerConversionPattern<subop::MapO
       rewriter.replaceTupleStream(mapOp, mapping);
    }
 };
+class CombineTupleWithValuesLowering : public SubOpTupleStreamConsumerConversionPattern<subop::CombineTupleWithValues> {
+   public:
+   using SubOpTupleStreamConsumerConversionPattern<subop::CombineTupleWithValues>::SubOpTupleStreamConsumerConversionPattern;
+
+   LogicalResult match(subop::CombineTupleWithValues combineOp) const override {
+      return success();
+   }
+
+   void rewrite(subop::CombineTupleWithValues combineOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+      std::vector<mlir::Value> values(combineOp.getValues().begin(), combineOp.getValues().end());
+      for (auto& v : values) {
+         v = rewriter.getMapped(v);
+      }
+      mapping.define(combineOp.getColumns(), values);
+      rewriter.replaceTupleStream(combineOp, mapping);
+   }
+};
 class InFlightLowering : public SubOpConversionPattern<subop::InFlightOp> {
    public:
    using SubOpConversionPattern<subop::InFlightOp>::SubOpConversionPattern;
@@ -4406,6 +4423,7 @@ void handleExecutionStepCPU(subop::ExecutionStepOp step, subop::ExecutionGroupOp
    rewriter.insertPattern<GetEndLowering>(typeConverter, ctxt);
    rewriter.insertPattern<EntriesBetweenLowering>(typeConverter, ctxt);
    rewriter.insertPattern<InFlightLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<CombineTupleWithValuesLowering>(typeConverter, ctxt);
    rewriter.insertPattern<GenerateLowering>(typeConverter, ctxt);
    rewriter.insertPattern<LoopLowering>(typeConverter, ctxt);
    rewriter.insertPattern<NestedExecutionGroupLowering>(typeConverter, ctxt);
