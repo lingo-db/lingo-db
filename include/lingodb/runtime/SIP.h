@@ -16,7 +16,7 @@ class SIP {
    static std::unordered_map<std::string,  lingodb::runtime::HashIndexedView*> filters;
    static std::shared_mutex filtersMutex;
    static lingodb::runtime::HashIndexedView* getFilter(const std::string& sipName);
-   static VarLen32 createSIP(lingodb::runtime::HashIndexedView* hashView, VarLen32  sipName);
+   static lingodb::runtime::HashIndexedView* createSIP(lingodb::runtime::HashIndexedView* hashView, VarLen32  sipName);
    //static DataSource* getFromTable(ArrowTable* arrowTable, runtime::VarLen32 mappingVal,runtime::VarLen32 columnArray);
 };
 

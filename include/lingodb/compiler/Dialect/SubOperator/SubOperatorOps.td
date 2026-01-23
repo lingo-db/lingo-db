@@ -1014,14 +1014,11 @@ def NestedExecutionGroupReturnOp : SubOperator_Op<"nested_execution_group_return
         let arguments = (ins TupleStream : $stream, BloomFilter: $filter, ArrayAttr : $columns);
        let assemblyFormat = [{ $stream `,` $filter `:` type($filter) `on` custom<CustRefArr>($columns) attr-dict-with-keyword }];
  }
-def SipId : SubOperator_Type<"SipId", "sip_id"> {
-  let summary = "string identifier for SIP filtering";
-  let assemblyFormat = "";
-}
+
 def CreateSIPFilterOp : SubOperator_Op<"create_sip_filter", [SubOperator]> {
     let summary = "Creates a id which can be used for SIP filtering.";
     let arguments = (ins HashIndexedView:$hashView, StrAttr:$sip_name);
-    let results = (outs SipId:$res);
+    let results = (outs HashIndexedView:$res);
 
     let assemblyFormat = [{  $hashView `:` type($hashView) `->` type($res)  attr-dict }];
 
