@@ -47,7 +47,7 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
 
    // Generic helper to identify build/probe sides of a hash join
    struct HashJoinInfo {
-      mlir::Value buildSideRoot; // Root scan/table operation for build side
+      subop::ScanOp buildSideScan; // Root scan/table operation for build side
       mlir::Value probeSideRoot; // Root scan/table operation for probe side
       subop::CreateHashIndexedView hashView; // The hash indexed view
       subop::LookupOp lookupOp; // The lookup operation
@@ -289,7 +289,7 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
          return std::nullopt;
       }
 
-      return HashJoinInfo{.buildSideRoot = buildScan->getResult(0),
+      return HashJoinInfo{.buildSideScan = mlir::dyn_cast_or_null<subop::ScanOp>(buildScan),
                           .probeSideRoot = probeScan->getResult(0),
                           .hashView = createHashView,
                           .lookupOp = lookupOp,
@@ -324,7 +324,7 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
          if (joinInfo) {
 #if 0
             llvm::dbgs() << "Hash Join Found:\n";
-            llvm::dbgs() << "  Build Side Root: " << joinInfo->buildSideRoot << "\n";
+            llvm::dbgs() << "  Build Side Root: " << joinInfo->buildSideScan << "\n";
             llvm::dbgs() << "  Build Side get external" << joinInfo->externalProbeOp << "\n";
             llvm::dbgs() << "  Probe Side Root: " << joinInfo->probeSideRoot << "\n";
             llvm::dbgs() << "  Hash View: " << joinInfo->probeKeyColumns.size() << "\n";
@@ -372,6 +372,8 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
                   }
 
 
+
+
                   std::cerr << "\n\nProbeSide: \n";
                   for (auto& in : joinInfo->probeKeyColumnsNames) {
                      std::cerr << " - " << in;
@@ -387,13 +389,15 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
             //descr to string
             std::string updatedDescr = lingodb::utility::serializeToHexString(externalDataSourceProp);
 
-            if (auto tableType = mlir::dyn_cast<subop::TableType>(joinInfo->externalProbeOp.getResult().getType()) ) {
+            if (auto tableType = mlir::dyn_cast<subop::TableType>(joinInfo->externalProbeOp.getResult().getType())) {
                auto filteredTableType = subop::TableType::get(tableType.getContext(), tableType.getMembers(), true);
                joinInfo->externalProbeOp.getResult().setType(filteredTableType);
                joinInfo->externalProbeOp.setDescr(b.getStringAttr(updatedDescr));
             }
 
-            b.create<subop::CreateSIPFilterOp>(loc, joinInfo->hashView.getResult(), b.getStringAttr(sipName));
+            auto sipFilter = b.create<subop::CreateSIPFilterOp>(loc, joinInfo->hashView.getResult().getType(), joinInfo->hashView.getResult(), b.getStringAttr(sipName));
+            // Update lookup to use the SIP-filtered view, ensuring the filter is built before lookup execution
+            joinInfo->lookupOp.setOperand(1, sipFilter.getResult());
          }
       });
    }
