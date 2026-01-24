@@ -331,7 +331,7 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
    }
 
    // [ptr + idx * size_of(elem_t)]
-   std::optional<GenericValuePart> create_idx_offset_expr(ValuePartRef base, IRValueRef idx,
+   std::optional<GenericValuePart> create_idx_offset_expr(ValuePartRef& base, IRValueRef idx,
                                                           const mlir::Type elem_t) {
       const auto elem_size = get_size(elem_t);
       if (!elem_size) {
@@ -608,8 +608,8 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
       assert(val_parts(buf).count() == 2);
       assert(val_parts(dst).count() == 1);
       auto buf_vr = this->val_ref(buf);
-
-      auto offset_expr = create_idx_offset_expr(std::move(buf_vr.part(1)), idx, elem_type);
+      auto buf_vr_part1 = buf_vr.part(1);
+      auto offset_expr = create_idx_offset_expr(buf_vr_part1, idx, elem_type);
       if (!offset_expr) {
          return false;
       }
@@ -631,7 +631,7 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
       const mlir::Type stored_type = in.getType();
 
       auto [_, ptr_ref] = this->val_ref_single(ptr);
-      auto offset_expr = create_idx_offset_expr(std::move(ptr_ref), idx, stored_type);
+      auto offset_expr = create_idx_offset_expr(ptr_ref, idx, stored_type);
       if (!offset_expr) {
          return false;
       }
@@ -680,7 +680,7 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
       const mlir::Type loaded_type = op.getVal().getType();
 
       auto [_, ptr_ref] = this->val_ref_single(ptr);
-      auto offset_expr = create_idx_offset_expr(std::move(ptr_ref), idx, loaded_type);
+      auto offset_expr = create_idx_offset_expr(ptr_ref, idx, loaded_type);
       if (!offset_expr) {
          return false;
       }
@@ -1071,7 +1071,7 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
          error.emit() << "Unsupported type for store operation.";
          return false;
       }
-      auto offset_expr = create_idx_offset_expr(std::move(array_ptr_pr), idx, elem_type);
+      auto offset_expr = create_idx_offset_expr(array_ptr_pr, idx, elem_type);
       if (!offset_expr) {
          return false;
       }
