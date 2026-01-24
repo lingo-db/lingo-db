@@ -60,7 +60,7 @@ class ImportLowering : public OpConversionPattern<py_interp::ImportOp> {
    using OpConversionPattern<py_interp::ImportOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(py_interp::ImportOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto nameVal = rewriter.create<util::CreateConstVarLen>(op.getLoc(), util::VarLen32Type::get(rewriter.getContext()),op.getName());
-      auto val = rt::PythonRuntime::import(rewriter, op.getLoc())({})[0];
+      auto val = rt::PythonRuntime::import(rewriter, op.getLoc())({nameVal})[0];
       rewriter.replaceOp(op, val);
 
       return success();
