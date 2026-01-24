@@ -124,6 +124,39 @@ uint64_t arith_fptoui_f64_i64(double in) { return (uint64_t)in; }
 
 double arith_extf_f32_f64(float in) { return (double)in; }
 
+int32_t arith_bitcast_f32_i32(float in) {
+    union {
+        float f;
+        int32_t i;
+    } u;
+    u.f = in;
+    return u.i;
+}
+float arith_bitcast_i32_f32(int32_t in) {
+    union {
+        float f;
+        int32_t i;
+    } u;
+    u.i = in;
+    return u.f;
+}
+uint64_t arith_bitcast_f64_i64(double in) {
+    union {
+        double f;
+        uint64_t i;
+    } u;
+    u.f = in;
+    return u.i;
+}
+double arith_bitcast_i64_f64(uint64_t in) {
+        union {
+        double f;
+        uint64_t i;
+    } u;
+    u.i = in;
+    return u.f;
+}
+
 // --------------------------
 // float comparisons
 // --------------------------
