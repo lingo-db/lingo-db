@@ -1,4 +1,5 @@
 #include "lingodb/runtime/ListRuntime.h"
+#include <algorithm>
 using namespace lingodb::runtime;
 
 List* List::create(size_t sizeOfType) {
@@ -46,5 +47,14 @@ void List::addUse(List* list) {
 }
 
 void List::sort(bool (*compareFn)(const void*, const void*)) {
-
+        std::vector<uint8_t*> toSort;
+        for (size_t i = 0; i < len; i++) {
+        toSort.push_back(values.data() + i * sizeOfType);
+        }
+        std::sort(toSort.begin(), toSort.end(), compareFn);
+        std::vector<uint8_t> sorted(values.size());
+        for (size_t i = 0; i < len; i++) {
+        memcpy(sorted.data() + i * sizeOfType, toSort[i], sizeOfType);
+        }
+        values = std::move(sorted);
 }

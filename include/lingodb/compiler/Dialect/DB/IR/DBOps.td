@@ -179,6 +179,12 @@ def DB_ListSetOp : DB_Op<"list_set", [MemoryEffects<[MemWrite<ListMemory>]>]> {
     let arguments = (ins ListType:$list, Index:$index, AnyType:$element);
     let assemblyFormat = "$list `:` type($list) `[` $index `]` `=` $element `:` type($element) attr-dict";
 }
+def DB_ListSortOp : DB_Op<"list_sort", [MemoryEffects<[MemWrite<ListMemory>]>]> {
+    let summary = "Sort list";
+
+    let arguments = (ins ListType:$list, SymbolRefAttr:$cmpFn);
+    let assemblyFormat = "$list `:` type($list) `,` $cmpFn attr-dict";
+}
 
 def DB_ListAppendOp : DB_Op<"list_append",[MemoryEffects<[MemWrite<ListMemory>]>]> {
     let summary = "Append element to list";

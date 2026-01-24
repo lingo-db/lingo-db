@@ -1,5 +1,9 @@
 // RUN: run-mlir %s | FileCheck %s
 module {
+    func.func @compare_i32 ( %a: i32, %b: i32) -> i1 {
+        %cmp = arith.cmpi slt, %a, %b : i32
+        return %cmp : i1
+    }
     func.func @main ()  {
         %list = db.create_list !db.list<i32>
         %len_empty = db.list_length %list : !db.list<i32>
@@ -29,7 +33,28 @@ module {
         %elem2_updated = db.list_get %list: !db.list<i32> [%c1i]  : i32
         db.runtime_call "DumpValue" (%elem2_updated) : (i32) -> ()
         db.memory.cleanup_use %list : !db.list<i32>
-
+        
+        
+        // sorting
+        %list2 = db.create_list !db.list<i32>
+        db.list_append %list2 : !db.list<i32>, %c2 : i32
+        db.list_append %list2 : !db.list<i32>, %c1 : i32
+        db.list_append %list2 : !db.list<i32>, %c42 : i32
+        db.list_sort %list2 : !db.list<i32> , @compare_i32
+        %len_sorted = db.list_length %list2 : !db.list<i32>
+        //CHECK: index(3)
+        db.runtime_call "DumpValue" (%len_sorted) : (index) -> ()
+        //CHECK: int(1)
+        %elem0 = db.list_get %list2: !db.list<i32> [%c0i]  : i32
+        db.runtime_call "DumpValue" (%elem0) : (i32) -> ()
+        //CHECK: int(2)
+        %elem1_sorted = db.list_get %list2: !db.list<i32> [%c1i]  : i32
+        db.runtime_call "DumpValue" (%elem1_sorted) : (i32) -> ()
+        //CHECK: int(42)
+        %c2i = arith.constant 2 : index
+        %elem2_sorted = db.list_get %list2: !db.list<i32> [%c2i]  : i32
+        db.runtime_call "DumpValue" (%elem2_sorted) : (i32) -> ()
+        db.memory.cleanup_use %list2 : !db.list<i32>
 
         return
     }

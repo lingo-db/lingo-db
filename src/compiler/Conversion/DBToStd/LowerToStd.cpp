@@ -1335,6 +1335,42 @@ class DictIterGetValueLowering : public OpConversionPattern<db::DictIterGetValue
       return success();
    }
 };
+class ListSortLowering : public OpConversionPattern<db::ListSortOp> {
+   public:
+   using OpConversionPattern<db::ListSortOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(db::ListSortOp listSortOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = listSortOp.getLoc();
+      // first create wrapper function that takes two ref<i8>, loads the actual values, and calls the supplied compare function, then return the result
+      auto suppliedSymbol = listSortOp.getCmpFn();
+      mlir::func::FuncOp suppliedCmpFn = mlir::cast<mlir::func::FuncOp>(listSortOp->getParentOfType<ModuleOp>().lookupSymbol(suppliedSymbol));
+      auto refType = util::RefType::get(rewriter.getContext(), rewriter.getI8Type());
+      auto fnType = FunctionType::get(rewriter.getContext(), {refType, refType}, rewriter.getI1Type());
+      auto elementType = typeConverter->convertType(listSortOp.getList().getType().getElementType());
+      auto elementPtrType = util::RefType::get(rewriter.getContext(), elementType);
+        mlir::func::FuncOp cmpFn;
+        {
+           mlir::OpBuilder::InsertionGuard guard(rewriter);
+           rewriter.setInsertionPointToStart(listSortOp->getParentOfType<ModuleOp>().getBody());
+
+           cmpFn = rewriter.create<mlir::func::FuncOp>(listSortOp.getLoc(), suppliedCmpFn.getName().str() + "_wrapper", fnType);
+           rewriter.setInsertionPointToStart(cmpFn.addEntryBlock());
+           mlir::Value leftPtr = cmpFn.getArgument(0);
+           mlir::Value rightPtr = cmpFn.getArgument(1);
+           leftPtr = rewriter.create<util::GenericMemrefCastOp>(listSortOp.getLoc(), elementPtrType, leftPtr);
+           rightPtr = rewriter.create<util::GenericMemrefCastOp>(listSortOp.getLoc(), elementPtrType, rightPtr);
+           mlir::Value left = rewriter.create<util::LoadOp>(listSortOp.getLoc(), leftPtr).getVal();
+           mlir::Value right = rewriter.create<util::LoadOp>(listSortOp.getLoc(), rightPtr).getVal();
+           // call the supplied compare function
+           mlir::Value cmpResult = rewriter.create<func::CallOp>(listSortOp.getLoc(), suppliedCmpFn, mlir::ValueRange{left, right}).getResult(0);
+           rewriter.create<mlir::func::ReturnOp>(listSortOp.getLoc(), cmpResult);
+        }
+        auto cmpFnPtr = rewriter.create<func::ConstantOp>(listSortOp.getLoc(), fnType, cmpFn.getSymName());
+        rt::List::sort(rewriter, listSortOp.getLoc())({adaptor.getList(), cmpFnPtr});
+
+      rewriter.eraseOp(listSortOp);
+      return success();
+   }
+};
 class MemoryCleanupUseLowering : public OpConversionPattern<db::MemoryCleanupUse> {
    public:
    using OpConversionPattern<db::MemoryCleanupUse>::OpConversionPattern;
@@ -1713,6 +1749,7 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<MemoryAddUseLowering>(typeConverter, ctxt);
    patterns.insert<TryExceptLowering>(typeConverter, ctxt);
    patterns.insert<MemoryPromoteToGlobalLowering>(typeConverter, ctxt);
+   patterns.insert<ListSortLowering>(typeConverter, ctxt);
 
    if (failed(applyFullConversion(module, target, std::move(patterns))))
       signalPassFailure();
