@@ -322,6 +322,31 @@ class HashViewFilter : public lingodb::runtime::Filter {
          return m1 ^ __builtin_bswap64(m1);
 
       } else if constexpr (std::is_same_v<V, std::string_view>) {
+         const uint32_t len = static_cast<uint32_t>(val.size());
+
+         // Match util::VarLenTryCheapHash for short strings and runtime hashVarLenData for long ones.
+         if (len <= lingodb::runtime::VarLen32::shortLen) {
+            uint8_t buf[16] = {0};
+            std::memcpy(buf, &len, sizeof(len));
+            std::memcpy(buf + sizeof(len), val.data(), val.size());
+
+            uint64_t first64;
+            uint64_t last64;
+            std::memcpy(&first64, buf, sizeof(first64));
+            std::memcpy(&last64, buf + 8, sizeof(last64));
+
+            auto hash64 = [](uint64_t v) {
+               const uint64_t p1 = 11400714819323198549ull;
+               uint64_t m1 = v * p1;
+               return m1 ^ __builtin_bswap64(m1);
+            };
+            auto hashCombine = [](uint64_t h1, uint64_t h2) { return __builtin_bswap64(h1) ^ h2; };
+
+            uint64_t h1 = hash64(first64);
+            uint64_t h2 = hash64(last64);
+            return hashCombine(h1, h2);
+         }
+
          llvm::ArrayRef<uint8_t> data(reinterpret_cast<const uint8_t*>(val.data()), val.size());
          return llvm::xxHash64(data);
       }
@@ -349,7 +374,6 @@ class HashViewFilter : public lingodb::runtime::Filter {
             int32_t nextOffset0 = offsets[index0 + 1];
             std::string_view strView0(reinterpret_cast<const char*>(data + offset0), nextOffset0 - offset0);
             auto hashed = hashValue<std::string_view>(strView0);
-
             lingodb::runtime::HashIndexedView::Entry* current(view->ht[hashed & view->getHtMask()]);
             bool matches = lingodb::runtime::matchesTag(current, hashed);
             //Keep value (NOT IN filter logic - keep if not found in hash table)
