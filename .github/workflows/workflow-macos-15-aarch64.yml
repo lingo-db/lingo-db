@@ -42,8 +42,8 @@ jobs:
       - name: Install dependencies with Homebrew
         run: |
           brew update
-          brew install ccache cmake ninja llvm@20 catch2 lit bzip2 libffi libedit libxml2 brotli zlib apache-arrow boost flex bison
-          brew link --force ccache cmake ninja llvm@20 catch2 lit bzip2 libffi libedit libxml2 brotli zlib apache-arrow boost flex bison
+          brew install ccache cmake ninja llvm@20 catch2 lit bzip2 libffi libedit libxml2 brotli zlib apache-arrow@22 boost flex bison
+          brew link --force ccache cmake ninja llvm@20 catch2 lit bzip2 libffi libedit libxml2 brotli zlib apache-arrow@22 boost flex bison
 
       - name: Build
         env:
