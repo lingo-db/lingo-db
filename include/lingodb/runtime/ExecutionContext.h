@@ -70,17 +70,11 @@ class ExecutionContext {
 
    std::vector<Arena> stringArenas;
    Session& session;
-#ifdef USE_CPYTHON_WASM_RUNTIME
-   std::vector<std::pair<void*, void*>> wasmEnvironments;
-#endif
+
    public:
    ExecutionContext(Session& session) : session(session) {
       allocators.resize(lingodb::scheduler::getNumWorkers());
       stringArenas.resize(lingodb::scheduler::getNumWorkers());
-
-#ifdef USE_CPYTHON_WASM_RUNTIME
-      wasmEnvironments.resize(lingodb::scheduler::getNumWorkers(), {nullptr, nullptr});
-#endif
       perWorkerStates.resize(lingodb::scheduler::getNumWorkers());
    }
    Session& getSession() {
@@ -125,7 +119,7 @@ class ExecutionContext {
 #ifdef USE_CPYTHON_WASM_RUNTIME
    void setupWasm();
    void teardownWasm();
-   wasm::WASMSession getWasmSession();
+   wasm::WASMSession* getWasmSession();
 #endif
    ~ExecutionContext();
 };

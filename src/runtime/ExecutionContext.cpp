@@ -49,25 +49,22 @@ uint8_t* lingodb::runtime::ExecutionContext::allocStateRaw(size_t size) {
 
 void lingodb::runtime::ExecutionContext::setupWasm() {
    auto workerId = scheduler::currentWorkerId();
-   auto& env = session.wasmEnvironments[workerId];
-   if (env.first == nullptr) {
-      wasm::WASMSession session = wasm::WASM::initializeWASM();
-      env.first = session.execEnv;
-      env.second = session.moduleInst;
+   auto wasmSession = session.wasmEnvironments[workerId];
+   if (wasmSession == nullptr) {
+      session.wasmEnvironments[workerId]=
+         wasm::WASM::initializeWASM();
    } else {
 #if !ASAN_ACTIVE
-      wasm_runtime_set_native_stack_boundary(static_cast<wasm_exec_env_t>(env.first), scheduler::getStackBoundary());
+      wasm_runtime_set_native_stack_boundary(static_cast<wasm_exec_env_t>(session.wasmEnvironments[workerId]->execEnv), scheduler::getStackBoundary());
 #endif
    }
 }
 void lingodb::runtime::ExecutionContext::teardownWasm() {
    //TODO teardown
 }
-lingodb::wasm::WASMSession lingodb::runtime::ExecutionContext::getWasmSession() {
+lingodb::wasm::WASMSession* lingodb::runtime::ExecutionContext::getWasmSession() {
    auto workerId = scheduler::currentWorkerId();
-   auto& env = session.wasmEnvironments[workerId];
-   assert(env.first && env.second);
-   return wasm::WASMSession(static_cast<wasm_exec_env_t>(env.first), static_cast<wasm_module_inst_t>(env.second));
+   return session.wasmEnvironments[workerId];
 }
 #endif
 

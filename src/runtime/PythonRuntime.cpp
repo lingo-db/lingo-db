@@ -213,72 +213,68 @@ PyObjectPtr PythonRuntime::createModule(runtime::VarLen32 modname, runtime::VarL
       wasm_runtime_init_thread_env();
    }
 #endif
-   auto modStr = modname.str();
-   wasm::WASMSession wasmSession = getCurrentExecutionContext()->getWasmSession();
-   auto modWasmStr = wasmSession.createWasmStringBuffer(modStr);
-   PyObjectPtr sys_modules = wasmSession.callPyFunc<PyObjectPtr>("PyImport_GetModuleDict").at(0).of.i32;
+   wasm::WASMSession& wasmSession = *getCurrentExecutionContext()->getWasmSession();
+   auto tmpScope = wasmSession.createTmpScope();
+
+   auto modWasmStr = tmpScope.allocateString(modname.strView());
+   PyObjectPtr sys_modules = wasmSession.callPyFunc<PyObjectPtr>(wasm::PyImport_GetModuleDict).at(0).of.i32;
    assert(sys_modules);
    // 1) Check if module already exists
-   PyObjectPtr mod = wasmSession.callPyFunc<PyObjectPtr>("PyDict_GetItemString", sys_modules, modWasmStr).at(0).of.i32;
+   PyObjectPtr mod = wasmSession.callPyFunc<PyObjectPtr>(wasm::PyDict_GetItemString, sys_modules, modWasmStr.getAddr()).at(0).of.i32;
    if (mod) {
-      wasmSession.callPyFunc<void>("Py_IncRef", mod); // convert borrowed → owned
-      wasmSession.freeWasmBuffer(modWasmStr);
+      wasmSession.callPyFunc<void>(wasm::Py_IncRef, mod); // convert borrowed → owned
       return mod;
    }
-   auto sourceStr = source.str();
-   auto sourceWasmStr = wasmSession.createWasmStringBuffer(sourceStr);
+   auto sourceWasmStr = tmpScope.allocateString(source.strView());
 
    // 2) Create new module
-   mod = wasmSession.callPyFunc<PyObjectPtr>("PyModule_New", modWasmStr).at(0).of.i32;
+   mod = wasmSession.callPyFunc<PyObjectPtr>(wasm::PyModule_New, modWasmStr.getAddr()).at(0).of.i32;
    if (!mod) {
       std::cerr << "Error creating module" << std::endl;
       return 0;
    }
 
 
-   PyObjectPtr globals = wasmSession.callPyFunc<PyObjectPtr>("PyModule_GetDict", mod).at(0).of.i32;
+   PyObjectPtr globals = wasmSession.callPyFunc<PyObjectPtr>(wasm::PyModule_GetDict, mod).at(0).of.i32;
    assert(globals);
    // Ensure __builtins__
-   auto builtinsWasmStr = wasmSession.createWasmStringBuffer("__builtins__");
-   if (!wasmSession.callPyFunc<int>("PyDict_GetItemString", globals, builtinsWasmStr).at(0).of.i32) {
-      PyObjectPtr builtins = wasmSession.callPyFunc<PyObjectPtr>("PyEval_GetBuiltins").at(0).of.i32;
-      if (wasmSession.callPyFunc<int>("PyDict_SetItemString", globals, builtinsWasmStr, builtins).at(0).of.i32 < 0) {
+   auto builtinsWasmStr = tmpScope.allocateString("__builtins__");
+   if (!wasmSession.callPyFunc<int>(wasm::PyDict_GetItemString, globals, builtinsWasmStr.getAddr()).at(0).of.i32) {
+      PyObjectPtr builtins = wasmSession.callPyFunc<PyObjectPtr>(wasm::PyEval_GetBuiltins).at(0).of.i32;
+      if (wasmSession.callPyFunc<int>(wasm::PyDict_SetItemString, globals, builtinsWasmStr.getAddr(), builtins).at(0).of.i32 < 0) {
          std::cerr << "Error " << std::endl;
          return 0;
       }
    }
    // Py_file_input = 257; //from Python.h
-   auto res = wasmSession.callPyFunc<PyObjectPtr>("PyRun_String", sourceWasmStr, 257, globals, globals).at(0).of.i32;
+   auto res = wasmSession.callPyFunc<PyObjectPtr>(wasm::PyRun_String, sourceWasmStr.getAddr(), 257, globals, globals).at(0).of.i32;
    if (!res) {
       throw_python_error(wasmSession);
       assert(false);
    }
 
    // 3) Insert into sys.modules
-   if (wasmSession.callPyFunc<int>("PyDict_SetItemString", sys_modules, modWasmStr, mod).at(0).of.i32 < 0) {
-      wasmSession.callPyFunc<void>("Py_DECREF", mod);
+   if (wasmSession.callPyFunc<int>(wasm::PyDict_SetItemString, sys_modules, modWasmStr.getAddr(), mod).at(0).of.i32 < 0) {
+      wasmSession.callPyFunc<void>(wasm::Py_DECREF, mod);
       return 0;
    }
-   wasmSession.freeWasmBuffer(modWasmStr);
-   wasmSession.freeWasmBuffer(sourceWasmStr);
-   wasmSession.freeWasmBuffer(builtinsWasmStr);
 
    return mod;
 }
 PyObjectPtr PythonRuntime::getAttr(PyObjectPtr obj, runtime::VarLen32 attr) {
-   wasm::WASMSession wasmSession = getCurrentExecutionContext()->getWasmSession();
-   auto wasmAttrStr = wasmSession.createWasmStringBuffer(attr.str());
-   assert(wasmAttrStr && obj);
-   uint32_t pyAttr = wasmSession.callPyFunc<PyObjectPtr>("PyObject_GetAttrString", obj, wasmAttrStr).at(0).of.i32;
+   wasm::WASMSession& wasmSession = *getCurrentExecutionContext()->getWasmSession();
+   auto tmpScope = wasmSession.createTmpScope();
+   auto wasmAttrStr = tmpScope.allocateString(attr.strView());
+   assert(obj);
+   uint32_t pyAttr = wasmSession.callPyFunc<PyObjectPtr>(wasm::PyObject_GetAttrString, obj, wasmAttrStr.getAddr()).at(0).of.i32;
    if (!pyAttr) {
-      wasmSession.callPyFunc<void>("PyErr_Print");
+      wasmSession.callPyFunc<void>(wasm::PyErr_Print);
    }
-   wasmSession.freeWasmBuffer(wasmAttrStr);
    return pyAttr;
 }
 PyObjectPtr PythonRuntime::getAttr2(PyObjectPtr obj, PyObjectPtr attr) {
-   wasm::WASMSession wasmSession = getCurrentExecutionContext()->getWasmSession();
-   return wasmSession.callPyFunc<PyObjectPtr>("PyObject_GetAttr", obj, attr).at(0).of.i32;
+   wasm::WASMSession& wasmSession = *getCurrentExecutionContext()->getWasmSession();
+   return wasmSession.callPyFunc<PyObjectPtr>(wasm::PyObject_GetAttr, obj, attr).at(0).of.i32;
 }
 
 void PythonRuntime::setAttr(PyObjectPtr obj, runtime::VarLen32 attr, PyObjectPtr value) {
@@ -287,11 +283,11 @@ void PythonRuntime::setAttr(PyObjectPtr obj, runtime::VarLen32 attr, PyObjectPtr
       wasm_runtime_init_thread_env();
    }
 #endif
-        wasm::WASMSession wasmSession = getCurrentExecutionContext()->getWasmSession();
-        auto wasmAttrStr = wasmSession.createWasmStringBuffer(attr.str());
-        assert(wasmAttrStr && obj);
-        wasmSession.callPyFunc<void>("PyObject_SetAttrString", obj, wasmAttrStr, value);
-        wasmSession.freeWasmBuffer(wasmAttrStr);
+        wasm::WASMSession& wasmSession = *getCurrentExecutionContext()->getWasmSession();
+        auto tmpScope = wasmSession.createTmpScope();
+        auto wasmAttrStr = tmpScope.allocateString(attr.strView());
+        assert(obj);
+        wasmSession.callPyFunc<void>(wasm::PyObject_SetAttrString, obj, wasmAttrStr.getAddr(), value);
 }
 
 template <typename... Args>
@@ -301,20 +297,15 @@ static uint32_t callPythonWASMUDF(PyObjectPtr callable, Args&&... args) {
       wasm_runtime_init_thread_env();
    }
 #endif
-   wasm::WASMSession wasmSession = getCurrentExecutionContext()->getWasmSession();
+   wasm::WASMSession& wasmSession = *getCurrentExecutionContext()->getWasmSession();
+   auto tmpScope = wasmSession.createTmpScope();
    size_t numArgs = sizeof...(Args);
-   void* nativeBufAddr = nullptr;
-
-   uint32_t instBufAddr = wasm_runtime_module_malloc_internal(wasmSession.moduleInst, wasmSession.execEnv, numArgs*sizeof(uint32_t), &nativeBufAddr);
-   if (!nativeBufAddr) {
-      throw std::runtime_error(wasm_runtime_get_exception(wasmSession.moduleInst));
-   }
-   uint32_t* argsBuf = static_cast<uint32_t*>(nativeBufAddr);
+   auto raw = tmpScope.allocateRaw(numArgs*sizeof(uint32_t));
+   uint32_t* argsBuf = reinterpret_cast<uint32_t*>(raw.getNativeAddr());
         size_t idx = 0;
         ((argsBuf[idx++] = args), ...);
-   auto result = wasmSession.callPyFunc<PyObjectPtr>("PyObject_Vectorcall", callable, instBufAddr, numArgs, 0).at(0).of.i32;
+   auto result = wasmSession.callPyFunc<PyObjectPtr>(wasm::PyObject_Vectorcall, callable, raw.getAddr(), numArgs, 0).at(0).of.i32;
    assert(callable);
-   wasmSession.freeWasmBuffer(instBufAddr);
    return result;
 }
 
@@ -368,8 +359,8 @@ int64_t PythonRuntime::toInt64(PyObjectPtr pyObj) {
       wasm_runtime_init_thread_env();
    }
 #endif
-   wasm::WASMSession wasmSession = getCurrentExecutionContext()->getWasmSession();
-   return wasmSession.callPyFunc<uint64_t>("PyLong_AsLongLong", pyObj).at(0).of.i64;
+   wasm::WASMSession& wasmSession = *getCurrentExecutionContext()->getWasmSession();
+   return wasmSession.callPyFunc<uint64_t>(wasm::PyLong_AsLongLong, pyObj).at(0).of.i64;
 }
 
 PyObjectPtr PythonRuntime::fromInt64(int64_t obj) {
@@ -378,8 +369,8 @@ PyObjectPtr PythonRuntime::fromInt64(int64_t obj) {
       wasm_runtime_init_thread_env();
    }
 #endif
-   wasm::WASMSession wasmSession = getCurrentExecutionContext()->getWasmSession();
-   return wasmSession.callPyFunc<PyObjectPtr>("PyLong_FromLongLong", obj).at(0).of.i32;
+   wasm::WASMSession& wasmSession = *getCurrentExecutionContext()->getWasmSession();
+   return wasmSession.callPyFunc<PyObjectPtr>(wasm::PyLong_FromLongLong, obj).at(0).of.i32;
 }
 bool PythonRuntime::toBool(PyObjectPtr obj) {
 #ifdef ASAN_ACTIVE
@@ -387,8 +378,8 @@ bool PythonRuntime::toBool(PyObjectPtr obj) {
       wasm_runtime_init_thread_env();
    }
 #endif
-   wasm::WASMSession wasmSession = getCurrentExecutionContext()->getWasmSession();
-   return wasmSession.callPyFunc<int>("PyObject_IsTrue", obj).at(0).of.i32; //todo
+   wasm::WASMSession& wasmSession = *getCurrentExecutionContext()->getWasmSession();
+   return wasmSession.callPyFunc<int>(wasm::PyObject_IsTrue, obj).at(0).of.i32; //todo
 }
 PyObjectPtr PythonRuntime::fromBool(bool value) {
 #ifdef ASAN_ACTIVE
@@ -396,8 +387,8 @@ PyObjectPtr PythonRuntime::fromBool(bool value) {
       wasm_runtime_init_thread_env();
    }
 #endif
-   wasm::WASMSession wasmSession = getCurrentExecutionContext()->getWasmSession();
-   return wasmSession.callPyFunc<PyObjectPtr>("PyBool_FromLong", value ? 1 : 0).at(0).of.i32;
+   wasm::WASMSession& wasmSession = *getCurrentExecutionContext()->getWasmSession();
+   return wasmSession.callPyFunc<PyObjectPtr>(wasm::PyBool_FromLong, value ? 1 : 0).at(0).of.i32;
 }
 runtime::VarLen32 PythonRuntime::toVarLen32(PyObjectPtr obj) {
 #ifdef ASAN_ACTIVE
@@ -405,12 +396,12 @@ runtime::VarLen32 PythonRuntime::toVarLen32(PyObjectPtr obj) {
       wasm_runtime_init_thread_env();
    }
 #endif
-    wasm::WASMSession wasmSession = getCurrentExecutionContext()->getWasmSession();
-   auto wasmStrObj = wasmSession.callPyFunc<PyObjectPtr>("PyUnicode_AsUTF8", obj).at(0).of.i32;
+    wasm::WASMSession& wasmSession = *getCurrentExecutionContext()->getWasmSession();
+   auto wasmStrObj = wasmSession.callPyFunc<PyObjectPtr>(wasm::PyUnicode_AsUTF8, obj).at(0).of.i32;
    if (!wasmStrObj) {
       throw std::runtime_error("Object is not a string");
    }
-   auto size = wasmSession.callPyFunc<int32_t>("PyUnicode_GetLength", obj).at(0).of.i32;
+   auto size = wasmSession.callPyFunc<int32_t>(wasm::PyUnicode_GetLength, obj).at(0).of.i32;
    // Copy string from WASM memory to host memory
    char* data = static_cast<char*>(wasm_runtime_addr_app_to_native(wasmSession.moduleInst, wasmStrObj));
    if (!data) {
@@ -424,11 +415,10 @@ PyObjectPtr PythonRuntime::fromVarLen32(runtime::VarLen32 value) {
       wasm_runtime_init_thread_env();
    }
 #endif
-   wasm::WASMSession wasmSession = getCurrentExecutionContext()->getWasmSession();
-        auto str = value.str();
-        auto wasmStr = wasmSession.createWasmStringBuffer(str);
-        auto res= wasmSession.callPyFunc<PyObjectPtr>("PyUnicode_FromStringAndSize", wasmStr, str.size()).at(0).of.i32;
-        wasmSession.freeWasmBuffer(wasmStr);
+   wasm::WASMSession& wasmSession = *getCurrentExecutionContext()->getWasmSession();
+        auto tmpScope = wasmSession.createTmpScope();
+        auto wasmStr = tmpScope.allocateString(value.strView());
+        auto res= wasmSession.callPyFunc<PyObjectPtr>(wasm::PyUnicode_FromStringAndSize, wasmStr.getAddr(), value.getLen()).at(0).of.i32;
         return res;
 }
 double PythonRuntime::toDouble(PyObjectPtr obj) {
@@ -437,8 +427,8 @@ double PythonRuntime::toDouble(PyObjectPtr obj) {
       wasm_runtime_init_thread_env();
    }
 #endif
-   wasm::WASMSession wasmSession = getCurrentExecutionContext()->getWasmSession();
-   return wasmSession.callPyFunc<double>("PyFloat_AsDouble", obj).at(0).of.f64;
+   wasm::WASMSession& wasmSession = *getCurrentExecutionContext()->getWasmSession();
+   return wasmSession.callPyFunc<double>(wasm::PyFloat_AsDouble, obj).at(0).of.f64;
 }
 PyObjectPtr PythonRuntime::fromDouble(double value) {
 #ifdef ASAN_ACTIVE
@@ -446,11 +436,36 @@ PyObjectPtr PythonRuntime::fromDouble(double value) {
       wasm_runtime_init_thread_env();
    }
 #endif
-   wasm::WASMSession wasmSession = getCurrentExecutionContext()->getWasmSession();
-   return wasmSession.callPyFunc<PyObjectPtr>("PyFloat_FromDouble", value).at(0).of.i32;
+   wasm::WASMSession& wasmSession = *getCurrentExecutionContext()->getWasmSession();
+   return wasmSession.callPyFunc<PyObjectPtr>(wasm::PyFloat_FromDouble, value).at(0).of.i32;
 }
 PyObjectPtr PythonRuntime::fromDate(int64_t value){
-   throw std::runtime_error("fromDate not implemented in WASM Python runtime");
+#ifdef ASAN_ACTIVE
+   while (!wasm_runtime_thread_env_inited()) {
+      wasm_runtime_init_thread_env();
+   }
+#endif
+   wasm::WASMSession& wasmSession = *getCurrentExecutionContext()->getWasmSession();
+   auto tmpScope = wasmSession.createTmpScope();
+   auto dateTimeStr = tmpScope.allocateString("datetime");
+   auto dateStr = tmpScope.allocateString("date");
+   auto datetimeModule= wasmSession.callPyFunc<PyObjectPtr>(wasm::PyImport_ImportModule, dateTimeStr.getAddr()).at(0).of.i32;
+   auto dateClass = wasmSession.callPyFunc<PyObjectPtr>(wasm::PyObject_GetAttrString, datetimeModule, dateStr.getAddr()).at(0).of.i32;
+   uint32_t year = DateRuntime::extractYear(value);
+   uint32_t month = DateRuntime::extractMonth(value);
+   uint32_t day = DateRuntime::extractDay(value);
+   auto pyYear = fromInt64(year);
+        auto pyMonth = fromInt64(month);
+   auto pyDay = fromInt64(day);
+   auto res = call3(dateClass, pyYear,  pyMonth, pyDay);
+   wasmSession.callPyFunc<void>(wasm::Py_DECREF, pyYear);
+        wasmSession.callPyFunc<void>(wasm::Py_DECREF, pyMonth);
+   wasmSession.callPyFunc<void>(wasm::Py_DECREF, pyDay);
+   wasmSession.callPyFunc<void>(wasm::Py_DECREF, pyYear);
+        wasmSession.callPyFunc<void>(wasm::Py_DECREF, datetimeModule);
+   wasmSession.callPyFunc<void>(wasm::Py_DECREF, dateClass);
+   return res;
+
 }
 
 void PythonRuntime::decref(PyObjectPtr obj) {
@@ -459,8 +474,8 @@ void PythonRuntime::decref(PyObjectPtr obj) {
       wasm_runtime_init_thread_env();
    }
 #endif
-   wasm::WASMSession wasmSession = getCurrentExecutionContext()->getWasmSession();
-   wasmSession.callPyFunc<void>("Py_DecRef", obj);
+   wasm::WASMSession& wasmSession = *getCurrentExecutionContext()->getWasmSession();
+   wasmSession.callPyFunc<void>(wasm::Py_DECREF, obj);
 }
 void PythonRuntime::incref(PyObjectPtr obj) {
 #ifdef ASAN_ACTIVE
@@ -468,8 +483,8 @@ void PythonRuntime::incref(PyObjectPtr obj) {
       wasm_runtime_init_thread_env();
    }
 #endif
-   wasm::WASMSession wasmSession = getCurrentExecutionContext()->getWasmSession();
-   wasmSession.callPyFunc<void>("Py_IncRef", obj);
+   wasm::WASMSession& wasmSession = *getCurrentExecutionContext()->getWasmSession();
+   wasmSession.callPyFunc<void>(wasm::Py_IncRef, obj);
 }
 PyObjectPtr PythonRuntime::import(runtime::VarLen32 val) {
 #ifdef ASAN_ACTIVE
@@ -477,10 +492,10 @@ PyObjectPtr PythonRuntime::import(runtime::VarLen32 val) {
       wasm_runtime_init_thread_env();
    }
 #endif
-   wasm::WASMSession wasmSession = getCurrentExecutionContext()->getWasmSession();
-   auto wasmStr = wasmSession.createWasmStringBuffer(val.str());
-   auto res= wasmSession.callPyFunc<PyObjectPtr>("PyImport_ImportModule", wasmStr).at(0).of.i32;
-   wasmSession.freeWasmBuffer(wasmStr);
+   wasm::WASMSession& wasmSession = *getCurrentExecutionContext()->getWasmSession();
+   auto tmpScope = wasmSession.createTmpScope();
+   auto wasmStr = tmpScope.allocateString(val.strView());
+   auto res= wasmSession.callPyFunc<PyObjectPtr>(wasm::PyImport_ImportModule, wasmStr.getAddr()).at(0).of.i32;
    return res;
 }
 

@@ -20,7 +20,7 @@ class Session {
    std::vector<void*> pythonThreadStates;
 #endif
 #ifdef USE_CPYTHON_WASM_RUNTIME
-   std::vector<std::pair<void*, void*>> wasmEnvironments;
+   std::vector<lingodb::wasm::WASMSession*> wasmEnvironments;
 #endif
    public:
    Session(std::shared_ptr<catalog::Catalog> catalog) : catalog(catalog) {
@@ -29,7 +29,7 @@ class Session {
 #endif
 #ifdef USE_CPYTHON_WASM_RUNTIME
 
-      wasmEnvironments.resize(lingodb::scheduler::getNumWorkers(), {nullptr, nullptr});
+      wasmEnvironments.resize(lingodb::scheduler::getNumWorkers(), nullptr);
 #endif
    }
    static std::shared_ptr<Session> createSession();

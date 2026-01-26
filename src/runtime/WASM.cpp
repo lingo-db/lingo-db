@@ -21,7 +21,7 @@
 #endif
 namespace lingodb::wasm {
 
-WASMSession WASM::initializeWASM() {
+WASMSession* WASM::initializeWASM() {
    while (!wasm_runtime_thread_env_inited()) {
       wasm_runtime_init_thread_env();
    }
@@ -75,11 +75,12 @@ WASMSession WASM::initializeWASM() {
 #ifdef ASAN_ACTIVE
 
 #endif
-   WASMSession wasmSession{execEnv, moduleInst};
 #if !ASAN_ACTIVE
    wasm_runtime_set_native_stack_boundary(execEnv, scheduler::getStackBoundary());
 #endif
-   wasmSession.callPyFunc<void>("Py_Initialize");
+   auto wasmSession  = new WASMSession{execEnv, moduleInst};
+
+   wasmSession->callPyFunc<void>(CommonPyFunc::Py_Initialize);
    return wasmSession;
 }
 } // namespace lingodb::wasm
