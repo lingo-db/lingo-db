@@ -27,9 +27,12 @@ where s.name like 'F%' and s.matrnr=h.matrnr and h.vorlnr=v.vorlnr
 print(con.sql("select 1").to_pandas())
 
 df = pd.DataFrame(data={'col1': [1, 2, 3, 4], 'col2': ["foo", "foo", "bar", "bar"]})
-
+schema = pa.schema([
+    ("col1", pa.int64()),
+    ("col2", pa.string()),  # force utf8 (non-large) string
+])
 con2 = lingodb.create_in_memory()
-con2.add_table("df", pa.Table.from_pandas(df))
+con2.add_table("df", pa.Table.from_pandas(df, schema=schema))
 print(con2.mlir("""module {
   func.func @main() {
     %result = relalg.query (){
