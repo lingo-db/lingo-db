@@ -1,8 +1,15 @@
 #include "lingodb/runtime/storage/Restrictions.h"
+
+#include "lingodb/compiler/Dialect/SubOperator/MemberManager.h"
 #include "lingodb/runtime/ArrowView.h"
+#include "lingodb/runtime/LazyJoinHashtable.h"
+#include "lingodb/runtime/SIP.h"
+
+#include <llvm/Support/xxhash.h>
 
 #include <cstddef>
 #include <cstring>
+#include <iostream>
 #include <regex>
 
 #include <arrow/table.h>
@@ -280,6 +287,138 @@ class VarLen32Filter : public lingodb::runtime::Filter {
    }
 };
 template <class T>
+class BitMapFilter : public lingodb::runtime::Filter {
+   size_t* bitMap;
+
+   public:
+   BitMapFilter(size_t* bitMap) {}
+   size_t filter(size_t len, uint16_t* currSelVec, uint16_t* nextSelVec, const lingodb::runtime::ArrayView* arrayView, size_t offset) override {
+      const T* data = reinterpret_cast<const T*>(arrayView->buffers[1]) + offset + arrayView->offset;
+      auto* writer = nextSelVec;
+      for (size_t i = 0; i < len; i++) {
+         size_t index0 = currSelVec[i];
+         auto index = std::hash<T>{}(data[index0]) % 64;
+         //Check if bit at index in bitMap is set 0000000000000010
+         auto toCheck = *bitMap;
+         toCheck >> index;
+         toCheck << (64 - index);
+         if (toCheck >= 0) {
+            *writer = index0;
+            writer++;
+         }
+      }
+      return writer - nextSelVec;
+   }
+};
+
+template <class T>
+class HashViewFilter : public lingodb::runtime::Filter {
+   std::string sipId;
+   template <class V>
+   inline uint64_t hashValue(V val) {
+      if constexpr (std::is_integral_v<V>) {
+         size_t p1 = 11400714819323198549ull;
+         size_t m1 = static_cast<size_t>(val) * p1;
+         return m1 ^ __builtin_bswap64(m1);
+
+      } else if constexpr (std::is_same_v<V, std::string_view>) {
+         const uint32_t len = static_cast<uint32_t>(val.size());
+
+         // Match util::VarLenTryCheapHash for short strings and runtime hashVarLenData for long ones.
+         if (len <= lingodb::runtime::VarLen32::shortLen) {
+            uint8_t buf[16] = {0};
+            std::memcpy(buf, &len, sizeof(len));
+            std::memcpy(buf + sizeof(len), val.data(), val.size());
+
+            uint64_t first64;
+            uint64_t last64;
+            std::memcpy(&first64, buf, sizeof(first64));
+            std::memcpy(&last64, buf + 8, sizeof(last64));
+
+            auto hash64 = [](uint64_t v) {
+               const uint64_t p1 = 11400714819323198549ull;
+               uint64_t m1 = v * p1;
+               return m1 ^ __builtin_bswap64(m1);
+            };
+            auto hashCombine = [](uint64_t h1, uint64_t h2) { return __builtin_bswap64(h1) ^ h2; };
+
+            uint64_t h1 = hash64(first64);
+            uint64_t h2 = hash64(last64);
+            return hashCombine(h1, h2);
+         }
+
+         llvm::ArrayRef<uint8_t> data(reinterpret_cast<const uint8_t*>(val.data()), val.size());
+         return llvm::xxHash64(data);
+      }
+      return 0;
+   }
+
+   public:
+   HashViewFilter(std::string sipId) : sipId(sipId) {
+   }
+   size_t filter(size_t len, uint16_t* currSelVec, uint16_t* nextSelVec, const lingodb::runtime::ArrayView* arrayView, size_t offset) override {
+      auto* view = lingodb::runtime::SIP::getFilter(sipId);
+      assert(view);
+      /*if (!view) {
+         std::memcpy(nextSelVec, currSelVec, len * sizeof(uint16_t));
+         return len;
+      }*/
+      auto* writer = nextSelVec;
+      if (std::is_same_v<T, std::string>) {
+         const uint8_t* data = reinterpret_cast<const uint8_t*>(arrayView->buffers[2]);
+         const int32_t* offsets = reinterpret_cast<const int32_t*>(arrayView->buffers[1]) + offset + arrayView->offset;
+         for (size_t i = 0; i < len; i++) {
+            size_t index0 = currSelVec[i];
+            int32_t offset0 = offsets[index0];
+            int32_t nextOffset0 = offsets[index0 + 1];
+            std::string_view strView0(reinterpret_cast<const char*>(data + offset0), nextOffset0 - offset0);
+            auto hashed = hashValue<std::string_view>(strView0);
+            lingodb::runtime::HashIndexedView::Entry* current(view->ht[hashed & view->getHtMask()]);
+            bool matches = lingodb::runtime::matchesTag(current, hashed);
+            //Keep value (NOT IN filter logic - keep if not found in hash table)
+            *writer = index0;
+            writer += matches;
+         }
+
+      } else {
+         size_t len4 = len & ~3;
+         const T* data = reinterpret_cast<const T*>(arrayView->buffers[1]) + offset + arrayView->offset;
+         for (size_t i = 0; i < len4; i += 4) {
+            size_t index0 = currSelVec[i];
+            size_t index1 = currSelVec[i + 1];
+            size_t index2 = currSelVec[i + 2];
+            size_t index3 = currSelVec[i + 3];
+            auto hashed0 = hashValue<T>(data[index0]);
+            auto hashed1 = hashValue<T>(data[index1]);
+            auto hashed2 = hashValue<T>(data[index2]);
+            auto hashed3 = hashValue<T>(data[index3]);
+            lingodb::runtime::HashIndexedView::Entry* entry0(view->ht[hashed0 & view->getHtMask()]);
+            *writer = index0;
+            writer += lingodb::runtime::matchesTag(entry0, hashed0);
+            lingodb::runtime::HashIndexedView::Entry* entry1(view->ht[hashed1 & view->getHtMask()]);
+            *writer = index1;
+            writer += lingodb::runtime::matchesTag(entry1, hashed1);
+            lingodb::runtime::HashIndexedView::Entry* entry2(view->ht[hashed2 & view->getHtMask()]);
+            *writer = index2;
+            writer += lingodb::runtime::matchesTag(entry2, hashed2);
+            lingodb::runtime::HashIndexedView::Entry* entry3(view->ht[hashed3 & view->getHtMask()]);
+            *writer = index3;
+            writer += lingodb::runtime::matchesTag(entry3, hashed3);
+         }
+
+         for (size_t i = len4; i < len; i++) {
+            size_t index0 = currSelVec[i];
+            auto hashed = hashValue<T>(data[index0]);
+            lingodb::runtime::HashIndexedView::Entry* current(view->ht[hashed & view->getHtMask()]);
+            *writer = index0;
+            writer += lingodb::runtime::matchesTag(current, hashed);
+         }
+      }
+      return writer - nextSelVec;
+   }
+};
+
+template <class T>
 std::unique_ptr<lingodb::runtime::Filter> createSimpleTypeSimpleFilters(lingodb::runtime::FilterOp op, T value) {
    switch (op) {
       case lingodb::runtime::FilterOp::LT:
@@ -316,6 +455,9 @@ std::unique_ptr<lingodb::runtime::Filter> createSimpleTypeFilter(lingodb::runtim
          for (auto v : valuesPt) values.push_back(v);
          return std::make_unique<SimpleTypeInFilter<T>>(values);
       }
+      case lingodb::runtime::FilterOp::SIP: {
+         return std::make_unique<HashViewFilter<T>>(std::get<std::string>(filterDesc.value));
+      }
       default:
          throw std::runtime_error("unsupported filter op");
    }
@@ -345,10 +487,10 @@ std::unique_ptr<lingodb::runtime::Restrictions> lingodb::runtime::Restrictions::
    for (auto& filterDesc : filterDescs) {
       size_t colId = schema.GetFieldIndex(filterDesc.columnName);
       if (colId == static_cast<size_t>(-1)) {
-         throw std::runtime_error("unknown column in filter");
+         throw std::runtime_error("unknown column in filter: " + filterDesc.columnName + " table");
       }
       if (filterDesc.op == FilterOp::NOTNULL) {
-         if (restrictions->filters.empty()) { //todo: this can go wrong if data is already prefiltered
+         if (restrictions->filters.empty()) {
             restrictions->filters.push_back({std::make_unique<FirstNotNullFilter>(), colId});
          } else {
             restrictions->filters.push_back({std::make_unique<NotNullFilter>(), colId});
@@ -382,7 +524,6 @@ std::unique_ptr<lingodb::runtime::Restrictions> lingodb::runtime::Restrictions::
 
          case arrow::Type::INT32: {
             restrictions->filters.push_back({createSimpleTypeFilter<int32_t, int64_t>(filterDesc.op, filterDesc), colId});
-
             break;
          }
          case arrow::Type::INT64: {
@@ -390,7 +531,10 @@ std::unique_ptr<lingodb::runtime::Restrictions> lingodb::runtime::Restrictions::
             break;
          }
          case arrow::Type::DATE32: {
-            if (filterDesc.op == FilterOp::IN) {
+            if (filterDesc.op == FilterOp::SIP) {
+               std::cerr << "SIP for Date32 not yet supported" << std::endl;
+               // restrictions->filters.push_back({std::make_unique<HashViewFilter<int32_t>>(std::get<std::string>(filterDesc.value)), colId});
+            } else if (filterDesc.op == FilterOp::IN) {
                std::vector<int32_t> values;
                for (auto strVal : std::get<std::vector<std::string>>(filterDesc.values)) {
                   values.push_back(parseDate32(strVal));
@@ -459,6 +603,11 @@ std::unique_ptr<lingodb::runtime::Restrictions> lingodb::runtime::Restrictions::
                   restrictions->filters.push_back({std::make_unique<VarLen32FilterIn>(values), colId});
                   break;
                }
+               case lingodb::runtime::FilterOp::SIP:
+                  restrictions->filters.push_back({std::make_unique<HashViewFilter<std::string>>(std::get<std::string>(filterDesc.value)), colId});
+
+                  break;
+
                default:
                   throw std::runtime_error("unsupported filter op for string");
             }

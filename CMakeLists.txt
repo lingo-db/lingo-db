@@ -128,6 +128,7 @@ gen_rt_def(st-rt-defs "SimpleState.h")
 gen_rt_def(paht-rt-defs "PreAggregationHashtable.h")
 gen_rt_def(lock-rt-defs "EntryLock.h")
 gen_rt_def(tracing-rt-defs "Tracing.h")
+gen_rt_def(sip-defs "SIP.h")
 message("cpp files ${runtime_funcs_ptr_libs}")
 string(REPLACE " " ";" runtime_funcs_ptr_libs "${runtime_funcs_ptr_libs}")
 

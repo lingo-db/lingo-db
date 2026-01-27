@@ -497,7 +497,7 @@ class ToJson {
          })
          .Case<subop::GetExternalOp>([&](subop::GetExternalOp op) {
             result["subop"] = "get_external";
-            result["meta"] = nlohmann::json::parse(op.getDescr().str());
+            result["meta"] = op.getDescr().str();
             return result;
          })
          .Case<subop::CreateThreadLocalOp>([&](subop::CreateThreadLocalOp createThreadLocalOp) {
