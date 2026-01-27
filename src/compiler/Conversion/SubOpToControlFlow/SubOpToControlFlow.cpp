@@ -16,7 +16,6 @@
 #include "lingodb/compiler/runtime/ArrowTable.h"
 #include "lingodb/compiler/runtime/Buffer.h"
 #include "lingodb/compiler/runtime/DataSourceIteration.h"
-#include "lingodb/compiler/runtime/SIP.h"
 #include "lingodb/compiler/runtime/EntryLock.h"
 #include "lingodb/compiler/runtime/ExecutionContext.h"
 #include "lingodb/compiler/runtime/GrowingBuffer.h"
@@ -27,6 +26,7 @@
 #include "lingodb/compiler/runtime/LingoDBHashIndex.h"
 #include "lingodb/compiler/runtime/PreAggregationHashtable.h"
 #include "lingodb/compiler/runtime/RelationHelper.h"
+#include "lingodb/compiler/runtime/SIP.h"
 #include "lingodb/compiler/runtime/SegmentTreeView.h"
 #include "lingodb/compiler/runtime/SimpleState.h"
 #include "lingodb/compiler/runtime/ThreadLocal.h"
@@ -3833,16 +3833,16 @@ class CreateHashIndexedViewLowering : public SubOpConversionPattern<subop::Creat
       return success();
    }
 };
-      class CreateSIPFilterLowering : public SubOpConversionPattern<subop::CreateSIPFilterOp> {
-      using SubOpConversionPattern<subop::CreateSIPFilterOp>::SubOpConversionPattern;
-      LogicalResult matchAndRewrite(subop::CreateSIPFilterOp op, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
-         // Convert the SIP name attribute (string) into a VarLen32 runtime value
-         mlir::Value sipNameVal = rewriter.create<util::CreateConstVarLen>(op->getLoc(), util::VarLen32Type::get(rewriter.getContext()), op.getSipNameAttr());
-         auto result = rt::SIP::createSIP(rewriter, op->getLoc())(mlir::ValueRange{adaptor.getHashView(), sipNameVal})[0];
-         rewriter.replaceOp(op, result);
-          return success();
-      }
-      };
+class CreateSIPFilterLowering : public SubOpConversionPattern<subop::CreateSIPFilterOp> {
+   using SubOpConversionPattern<subop::CreateSIPFilterOp>::SubOpConversionPattern;
+   LogicalResult matchAndRewrite(subop::CreateSIPFilterOp op, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
+      // Convert the SIP name attribute (string) into a VarLen32 runtime value
+      mlir::Value sipNameVal = rewriter.create<util::CreateConstVarLen>(op->getLoc(), util::VarLen32Type::get(rewriter.getContext()), op.getSipNameAttr());
+      auto result = rt::SIP::createSIP(rewriter, op->getLoc())(mlir::ValueRange{adaptor.getHashView(), sipNameVal})[0];
+      rewriter.replaceOp(op, result);
+      return success();
+   }
+};
 class CreateContinuousViewLowering : public SubOpConversionPattern<subop::CreateContinuousView> {
    using SubOpConversionPattern<subop::CreateContinuousView>::SubOpConversionPattern;
    LogicalResult matchAndRewrite(subop::CreateContinuousView createOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
@@ -4371,7 +4371,7 @@ void handleExecutionStepCPU(subop::ExecutionStepOp step, subop::ExecutionGroupOp
    rewriter.insertPattern<ScanRefsSortedViewLowering>(typeConverter, ctxt);
    //HashIndexedView
    rewriter.insertPattern<CreateHashIndexedViewLowering>(typeConverter, ctxt);
-      rewriter.insertPattern<CreateSIPFilterLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<CreateSIPFilterLowering>(typeConverter, ctxt);
    rewriter.insertPattern<LookupHashIndexedViewLowering>(typeConverter, ctxt);
    rewriter.insertPattern<ScanListLowering>(typeConverter, ctxt);
    //ContinuousView
