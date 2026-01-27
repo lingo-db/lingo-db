@@ -350,15 +350,14 @@ class HashViewFilter : public lingodb::runtime::Filter {
          llvm::ArrayRef<uint8_t> data(reinterpret_cast<const uint8_t*>(val.data()), val.size());
          return llvm::xxHash64(data);
       }
+      return 0;
    }
-
-
 
    public:
    HashViewFilter(std::string sipId) : sipId(sipId) {
    }
    size_t filter(size_t len, uint16_t* currSelVec, uint16_t* nextSelVec, const lingodb::runtime::ArrayView* arrayView, size_t offset) override {
-      auto view = lingodb::runtime::SIP::getFilter(sipId);
+      auto* view = lingodb::runtime::SIP::getFilter(sipId);
       assert(view);
       /*if (!view) {
          std::memcpy(nextSelVec, currSelVec, len * sizeof(uint16_t));
@@ -384,11 +383,11 @@ class HashViewFilter : public lingodb::runtime::Filter {
       } else {
          size_t len4 = len & ~3;
          const T* data = reinterpret_cast<const T*>(arrayView->buffers[1]) + offset + arrayView->offset;
-         for (size_t i = 0; i < len4; i+=4) {
+         for (size_t i = 0; i < len4; i += 4) {
             size_t index0 = currSelVec[i];
-            size_t index1 = currSelVec[i+1];
-            size_t index2 = currSelVec[i+2];
-            size_t index3 = currSelVec[i+3];
+            size_t index1 = currSelVec[i + 1];
+            size_t index2 = currSelVec[i + 2];
+            size_t index3 = currSelVec[i + 3];
             auto hashed0 = hashValue<T>(data[index0]);
             auto hashed1 = hashValue<T>(data[index1]);
             auto hashed2 = hashValue<T>(data[index2]);
@@ -405,7 +404,6 @@ class HashViewFilter : public lingodb::runtime::Filter {
             lingodb::runtime::HashIndexedView::Entry* entry3(view->ht[hashed3 & view->getHtMask()]);
             *writer = index3;
             writer += lingodb::runtime::matchesTag(entry3, hashed3);
-
          }
 
          for (size_t i = len4; i < len; i++) {
@@ -535,7 +533,7 @@ std::unique_ptr<lingodb::runtime::Restrictions> lingodb::runtime::Restrictions::
          case arrow::Type::DATE32: {
             if (filterDesc.op == FilterOp::SIP) {
                std::cerr << "SIP for Date32 not yet supported" << std::endl;
-              // restrictions->filters.push_back({std::make_unique<HashViewFilter<int32_t>>(std::get<std::string>(filterDesc.value)), colId});
+               // restrictions->filters.push_back({std::make_unique<HashViewFilter<int32_t>>(std::get<std::string>(filterDesc.value)), colId});
             } else if (filterDesc.op == FilterOp::IN) {
                std::vector<int32_t> values;
                for (auto strVal : std::get<std::vector<std::string>>(filterDesc.values)) {

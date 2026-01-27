@@ -1,44 +1,28 @@
 #include "json.h"
 #include "lingodb/compiler/Dialect/DB/IR/DBDialect.h"
 #include "lingodb/compiler/Dialect/DB/IR/DBOps.h"
-#include "lingodb/compiler/Dialect/SubOperator/SubOperatorDialect.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/ColumnCreationAnalysis.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/ColumnUsageAnalysis.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/Passes.h"
-#include "lingodb/compiler/Dialect/SubOperator/Transforms/StateUsageTransformer.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/SubOpDependencyAnalysis.h"
 #include "lingodb/compiler/Dialect/SubOperator/Utils.h"
-#include "lingodb/compiler/Dialect/TupleStream/TupleStreamDialect.h"
-#include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
-#include "lingodb/compiler/Dialect/util/UtilDialect.h"
-#include "lingodb/compiler/Dialect/util/UtilOps.h"
 #include "lingodb/compiler/helper.h"
 #include "lingodb/runtime/ExternalDataSourceProperty.h"
 #include "lingodb/utility/Serialization.h"
 
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/Support/raw_ostream.h"
-#include "mlir/IR/BuiltinOps.h"
-#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "llvm/Support/Debug.h"
 
-#include <llvm/Support/Debug.h>
-#include <algorithm>
-#include <lingodb/compiler/Dialect/DB/IR/DBOps.h.inc>
+#include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/IR/BuiltinOps.h"
+
 #include <queue>
 #include <string>
-#include <mlir/Dialect/Arith/IR/Arith.h>
 
 #define DEBUG_TYPE "subop-sip"
 namespace {
 using namespace lingodb::compiler::dialect;
-
-static inline std::string trim(const std::string& s) {
-   size_t a = s.find_first_not_of(" \t\n\r");
-   if (a == std::string::npos) return "";
-   size_t b = s.find_last_not_of(" \t\n\r");
-   return s.substr(a, b - a + 1);
-}
 
 class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::ModuleOp>> {
    public:
@@ -95,7 +79,7 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
       std::queue<mlir::Operation*> queue;
       queue.push(op);
       while (!queue.empty()) {
-         auto current = queue.front();
+         auto* current = queue.front();
          queue.pop();
          if (debug) {
             std::cerr << "Current " << std::endl;
@@ -104,13 +88,11 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
          if (auto scan = mlir::dyn_cast_or_null<subop::ScanOp>(current)) {
             std::vector<subop::Member> members;
             members.reserve(keys.size());
-            bool found = false;
             // For ScanOp, check if any of the keys match the columns defined by the scan, to decide if we have the correct scan operator
             for (auto mappingAttr : scan.getMapping().getMappingList()) {
                auto defAttr = mlir::dyn_cast_or_null<tuples::ColumnDefAttr>(mappingAttr.second);
                if (defAttr) {
                   // Check if this column definition matches any of the keys
-                  //TODO is this correct
                   for (const auto& key : keys) {
                      if (&defAttr.getColumn() == &key.getColumn()) {
                         members.push_back(mappingAttr.first);
@@ -164,7 +146,6 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
                      m = mapOp;
                   }
                });
-
 
                // Extract the input columns attribute from the map operation
                auto inputAttr = mapOp.getInputColsAttr();
@@ -341,28 +322,25 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
          .externalProbeOp = externalOp,
       };
    }
-   std::string gen_random(const int len) {
+   std::string genRandom(const int len) {
       static const char alphanum[] =
          "0123456789"
          "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
          "abcdefghijklmnopqrstuvwxyz";
-      std::string tmp_s;
-      tmp_s.reserve(len);
+      std::string tmpS;
+      tmpS.reserve(len);
 
       for (int i = 0; i < len; ++i) {
-         tmp_s += alphanum[rand() % (sizeof(alphanum) - 1)];
+         tmpS += alphanum[rand() % (sizeof(alphanum) - 1)];
       }
 
-      return tmp_s;
+      return tmpS;
    }
+
+   protected:
    void runOnOperation() override {
-      auto& created = getAnalysis<subop::ColumnCreationAnalysis>();
-      auto& used = getAnalysis<subop::ColumnUsageAnalysis>();
       std::optional<HashJoinInfo> joinInfo;
       getOperation()->walk([&](subop::LookupOp lookupOp) {
-         static int count = 0;
-         count++;
-
          joinInfo = identifyHashJoinTables(lookupOp, std::getenv("LINGODB_SIP_DEBUG"));
          if (joinInfo) {
 #if 0
@@ -391,7 +369,6 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
             }
 
             //Do SIP
-            auto module = getOperation();
             mlir::Location loc = joinInfo->hashView->getLoc();
             mlir::OpBuilder b(joinInfo->hashView);
             b.setInsertionPointAfter(joinInfo->hashView);
@@ -399,7 +376,7 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
 
             std::string descrRaw = joinInfo->externalProbeOp.getDescr().str();
             auto externalDataSourceProp = lingodb::utility::deserializeFromHexString<lingodb::runtime::ExternalDatasourceProperty>(descrRaw);
-            std::string sipName = gen_random(10);
+            std::string sipName = genRandom(10);
             auto probeColRef = joinInfo->probeKeyColumnsNames[0];
             auto buildColRef = joinInfo->buildKeyColumnNames[0];
 

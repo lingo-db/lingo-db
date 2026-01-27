@@ -12,7 +12,6 @@ lingodb::runtime::HashIndexedView* SIP::createSIP(lingodb::runtime::HashIndexedV
    // Create a hash based on the DataSource pointer so we get a stable identifier
    // for this DataSource instance. Use uintptr_t to avoid narrowing.
 
-
    {
       std::unique_lock lock(filtersMutex);
       filters.emplace(sipName.str(), hash);
@@ -23,7 +22,7 @@ lingodb::runtime::HashIndexedView* SIP::createSIP(lingodb::runtime::HashIndexedV
 }
 
 lingodb::runtime::HashIndexedView* SIP::getFilter(const std::string& sipName) {
-
+   std::shared_lock lock(filtersMutex);
    auto it = filters.find(sipName);
    if (it == filters.end()) return nullptr;
    return it->second;
