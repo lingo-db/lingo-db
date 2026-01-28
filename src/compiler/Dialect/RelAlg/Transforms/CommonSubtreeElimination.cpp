@@ -220,6 +220,14 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
                return false;
             }
          }
+         if (mlir::isa<relalg::BaseTableOp>(leader)) {
+            auto leaderBaseTableOp = mlir::dyn_cast<relalg::BaseTableOp>(leader);
+            auto candidateBaseTableOp = mlir::dyn_cast<relalg::BaseTableOp>(candidate);
+            if (leaderBaseTableOp.getRestriction() != candidateBaseTableOp.getRestriction()) {
+               return false;
+            }
+         }
+
          return true;
       }
 
@@ -585,7 +593,7 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
          llvm::sort(newLeaderCols, [](const mlir::NamedAttribute& a, const mlir::NamedAttribute& b) {
             return a.getName().strref() < b.getName().strref();
          });
-         leaderBase->setAttr("columns", mlir::DictionaryAttr::get(leader->getContext(), newLeaderCols));
+         leaderBase.setColumnsAttr(mlir::DictionaryAttr::get(leader->getContext(), newLeaderCols));
       }
 
       if (duplicate->getNumResults() > 0 && leader->getNumResults() > 0) {
@@ -671,7 +679,7 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
                if (!exists) {
                   newCols.emplace_back(physName, dDef);
                   llvm::sort(newCols, [](const auto& a, const auto& b) { return a.getName().strref() < b.getName().strref(); });
-                  lBase->setAttr("columns", mlir::DictionaryAttr::get(lBase.getContext(), newCols));
+                  lBase.setColumnsAttr(mlir::DictionaryAttr::get(lBase.getContext(), newCols));
                   lCol = dDef.getColumnPtr();
                   lName = dDef.getName();
                } else {
