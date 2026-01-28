@@ -233,7 +233,6 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
    class EquivalenceChecker {
       llvm::DenseMap<mlir::Value, mlir::Value> candidateToLeaderVal;
       const CommonSubtreeElimination& pass;
-      int recursionDepth = 0;
 
       public:
       explicit EquivalenceChecker(const CommonSubtreeElimination& pass) : pass(pass) {}
@@ -321,12 +320,9 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
             auto opIt1 = b1.begin();
             auto opIt2 = b2.begin();
             while (opIt1 != b1.end() && opIt2 != b2.end()) {
-               recursionDepth++;
                if (!checkOps(&*opIt1, &*opIt2)) {
-                  recursionDepth--;
                   return false;
                }
-               recursionDepth--;
                ++opIt1;
                ++opIt2;
             }
