@@ -104,7 +104,22 @@ struct WASMSession {
    }
 
    public:
-
+   std::vector<uint32_t> cachedObjects;
+   uint32_t get(size_t idx) {
+      if (idx >= cachedObjects.size()) {
+         cachedObjects.resize(idx + 1, 0);
+      }
+      return cachedObjects[idx];
+   }
+   void set(size_t idx, uint32_t obj) {
+      if (idx >= cachedObjects.size()) {
+         cachedObjects.resize(idx + 1, 0);
+      }
+      cachedObjects[idx] = obj;
+   }
+   void clearCache() {
+      cachedObjects.clear();
+   }
    class WASMTmpString {
       WASMSession& session;
       uint32_t addr;
@@ -175,12 +190,13 @@ struct WASMSession {
    // - Outs... must be supplied explicitly
    // - Ins... are deduced from the provided inputs.
    template <typename... Out, typename... Ins>
-   std::vector<wasm_val_t> callPyFunc(CommonPyFunc funcId, Ins&&... ins) {
+   auto callPyFunc(CommonPyFunc funcId, Ins&&... ins) {
       wasm_function_inst_t func = funcs[funcId];
-      std::vector<wasm_val_t> args(sizeof...(Ins));
-      uint32_t numArgs = 0, num_results = 0;
-      serializeArgs<Out...>(args.data(), numArgs, num_results, ins...);
-      std::vector<wasm_val_t> results(num_results);
+      std::array<wasm_val_t,sizeof...(Ins)> args;
+      uint32_t numArgs = 0;
+      constexpr size_t num_results = countResults<Out...>();
+      serializeArgs(args.data(), numArgs, ins...);
+      std::array<wasm_val_t, num_results> results;
       assert(numArgs == sizeof...(Ins));
       bool success = wasm_runtime_call_wasm_a(execEnv, func, num_results, results.data(), numArgs, args.data());
       if (!success) {
@@ -254,7 +270,7 @@ template<class T>
    }
 
    template <typename T, typename... Rest>
-   int countResults() {
+   constexpr int countResults() {
       int count = 0;
       if constexpr (!std::is_same_v<T, void>) count = 1;
       if constexpr (sizeof...(Rest) == 0)
@@ -263,10 +279,9 @@ template<class T>
          return count + countResults<Rest...>();
    }
 
-   template <typename... Outs, typename... Ins>
-   void serializeArgs(wasm_val_t* args, uint32_t& numArgs, uint32_t& numResults, Ins&&... ins) {
+   template <typename... Ins>
+   void serializeArgs(wasm_val_t* args, uint32_t& numArgs, Ins&&... ins) {
       numArgs = 0;
-      numResults = countResults<Outs...>();
       // Use fold expression to pack each input in order
       (packVal(static_cast<void*>(args), numArgs, std::forward<Ins>(ins)), ...);
    }

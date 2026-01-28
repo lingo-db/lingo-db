@@ -63,9 +63,6 @@ class ExecutionContext {
    std::unordered_map<uint32_t, uint8_t*> results;
    std::unordered_map<uint32_t, int64_t> tupleCounts;
    std::vector<std::unordered_map<size_t, State>> allocators;
-#ifdef USE_CPYTHON_RUNTIME
-   std::vector<void*> pythonThreadStates;
-#endif
    std::vector<std::vector<State>> perWorkerStates;
 
    std::vector<Arena> stringArenas;
@@ -76,10 +73,13 @@ class ExecutionContext {
       allocators.resize(lingodb::scheduler::getNumWorkers());
       stringArenas.resize(lingodb::scheduler::getNumWorkers());
       perWorkerStates.resize(lingodb::scheduler::getNumWorkers());
+      resetPythonSessionCache();
    }
    Session& getSession() {
       return session;
    }
+
+   void resetPythonSessionCache();
    template <class T>
    std::optional<T*> getResultOfType(uint32_t id) {
       if (results.contains(id)) {

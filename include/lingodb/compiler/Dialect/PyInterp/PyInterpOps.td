@@ -13,6 +13,10 @@ def PyInterp_Dialect : Dialect {
         void registerTypes();
 
         public:
+        size_t getConstObjId(){
+            static size_t id = 0;
+            return id++;
+        }
     }];
     let useDefaultTypePrinterParser=1;
     let hasConstantMaterializer = 1;

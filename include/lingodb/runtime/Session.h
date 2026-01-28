@@ -10,6 +10,11 @@ namespace lingodb::wasm {
 struct WASMSession;
 } // namespace lingodb::wasm
 #endif
+#ifdef USE_CPYTHON_RUNTIME
+namespace lingodb::runtime {
+struct PythonExtState;
+}
+#endif
 
 namespace lingodb::runtime {
 class ExecutionContext;
@@ -18,6 +23,7 @@ class Session {
    public:
 #ifdef USE_CPYTHON_RUNTIME
    std::vector<void*> pythonThreadStates;
+   std::vector<PythonExtState*> pythonExtStates;
 #endif
 #ifdef USE_CPYTHON_WASM_RUNTIME
    std::vector<lingodb::wasm::WASMSession*> wasmEnvironments;
@@ -26,6 +32,7 @@ class Session {
    Session(std::shared_ptr<catalog::Catalog> catalog) : catalog(catalog) {
 #ifdef USE_CPYTHON_RUNTIME
       pythonThreadStates.resize(lingodb::scheduler::getNumWorkers(), nullptr);
+      pythonExtStates.resize(lingodb::scheduler::getNumWorkers());
 #endif
 #ifdef USE_CPYTHON_WASM_RUNTIME
 

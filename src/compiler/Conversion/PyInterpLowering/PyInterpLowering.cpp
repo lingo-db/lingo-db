@@ -60,7 +60,8 @@ class ImportLowering : public OpConversionPattern<py_interp::ImportOp> {
    using OpConversionPattern<py_interp::ImportOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(py_interp::ImportOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto nameVal = rewriter.create<util::CreateConstVarLen>(op.getLoc(), util::VarLen32Type::get(rewriter.getContext()),op.getName());
-      auto val = rt::PythonRuntime::import(rewriter, op.getLoc())({nameVal})[0];
+      auto constId = rewriter.create<arith::ConstantIndexOp>(op.getLoc(), getContext()->getLoadedDialect<py_interp::PyInterpDialect>()->getConstObjId());
+      auto val = rt::PythonRuntime::import(rewriter, op.getLoc())({constId, nameVal})[0];
       rewriter.replaceOp(op, val);
 
       return success();
@@ -73,7 +74,8 @@ class CreateModuleLowering : public OpConversionPattern<py_interp::CreateModule>
       auto loc = op.getLoc();
       mlir::Value moduleNameVal = rewriter.create<util::CreateConstVarLen>(loc, util::VarLen32Type::get(rewriter.getContext()),op.getName());
       mlir::Value codeVal = rewriter.create<util::CreateConstVarLen>(loc, util::VarLen32Type::get(rewriter.getContext()),op.getCode());
-      auto val = rt::PythonRuntime::createModule(rewriter, op.getLoc())({moduleNameVal, codeVal})[0];
+      auto constId = rewriter.create<arith::ConstantIndexOp>(op.getLoc(), getContext()->getLoadedDialect<py_interp::PyInterpDialect>()->getConstObjId());
+      auto val = rt::PythonRuntime::createModule(rewriter, op.getLoc())({constId, moduleNameVal, codeVal})[0];
       rewriter.replaceOp(op, val);
       return success();
    }
@@ -84,7 +86,9 @@ class GetAttrLowering : public OpConversionPattern<py_interp::GetAttr> {
    LogicalResult matchAndRewrite(py_interp::GetAttr op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto loc = op.getLoc();
       mlir::Value attrNameVal = rewriter.create<util::CreateConstVarLen>(loc, util::VarLen32Type::get(rewriter.getContext()),op.getName());
-      auto val = rt::PythonRuntime::getAttr(rewriter, op.getLoc())({adaptor.getOn(), attrNameVal})[0];
+      auto constId = rewriter.create<arith::ConstantIndexOp>(op.getLoc(), getContext()->getLoadedDialect<py_interp::PyInterpDialect>()->getConstObjId());
+      auto constObj = rt::PythonRuntime::constStr(rewriter, op.getLoc())({constId, attrNameVal})[0];
+      auto val = rt::PythonRuntime::getAttr2(rewriter, op.getLoc())({adaptor.getOn(), constObj})[0];
       rewriter.replaceOp(op, val);
       return success();
    }
@@ -188,7 +192,8 @@ class ConstStrLowering : public OpConversionPattern<py_interp::ConstStrPyObject>
    using OpConversionPattern<py_interp::ConstStrPyObject>::OpConversionPattern;
    LogicalResult matchAndRewrite(py_interp::ConstStrPyObject op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto strConst = rewriter.create<util::CreateConstVarLen>(op.getLoc(), util::VarLen32Type::get(rewriter.getContext()),mlir::cast<mlir::StringAttr>(op.getValue()));
-      rewriter.replaceOp(op, rt::PythonRuntime::fromVarLen32(rewriter, op.getLoc())({strConst})[0]);
+      auto constId = rewriter.create<arith::ConstantIndexOp>(op.getLoc(), getContext()->getLoadedDialect<py_interp::PyInterpDialect>()->getConstObjId());
+      rewriter.replaceOp(op, rt::PythonRuntime::constStr(rewriter, op.getLoc())({constId, strConst})[0]);
       return success();
    }
 };

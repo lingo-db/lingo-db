@@ -1,4 +1,5 @@
 #include "lingodb/runtime/ExecutionContext.h"
+#include "lingodb/runtime/PythonRuntime.h"
 #ifdef USE_CPYTHON_RUNTIME
 #include "Python.h"
 #endif
@@ -38,6 +39,23 @@ lingodb::runtime::ExecutionContext::~ExecutionContext() {
    perWorkerStates.clear();
 }
 
+void lingodb::runtime::ExecutionContext::resetPythonSessionCache(){
+#ifdef USE_CPYTHON_WASM_RUNTIME
+   for (auto *x: session.wasmEnvironments) {
+      if (x) {
+         x->clearCache();
+      }
+   }
+#endif
+#ifdef USE_CPYTHON_RUNTIME
+   for (size_t i = 0; i < session.pythonExtStates.size(); ++i) {
+      if (session.pythonExtStates[i]) {
+         session.pythonExtStates[i]->clearCache();
+      }
+   }
+#endif
+}
+
 uint8_t* lingodb::runtime::ExecutionContext::allocStateRaw(size_t size) {
    auto* context = getCurrentExecutionContext();
    assert(context);
@@ -53,11 +71,13 @@ void lingodb::runtime::ExecutionContext::setupWasm() {
    if (wasmSession == nullptr) {
       session.wasmEnvironments[workerId]=
          wasm::WASM::initializeWASM();
+      wasmSession = session.wasmEnvironments[workerId];
    } else {
 #if !ASAN_ACTIVE
       wasm_runtime_set_native_stack_boundary(static_cast<wasm_exec_env_t>(session.wasmEnvironments[workerId]->execEnv), scheduler::getStackBoundary());
 #endif
    }
+   PythonRuntime::setWasmSession(wasmSession);
 }
 void lingodb::runtime::ExecutionContext::teardownWasm() {
    //TODO teardown
@@ -98,6 +118,7 @@ void lingodb::runtime::ExecutionContext::setupPython() {
       if (PyStatus_Exception(status)) {
          Py_ExitStatusException(status);
       }
+      session.pythonExtStates[workerId] = PythonRuntime::createPythonExtState();
       //auto x = PyThreadState_Swap(mainState);
       //PyGILState_Release(gs);
       //PyThreadState_Swap(x);

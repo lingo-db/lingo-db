@@ -18,11 +18,37 @@ using PyObjectPtr = PyObject*;
 
 #include "helpers.h"
 #include <cstdint>
+namespace lingodb::wasm {
+struct WASMSession;
+}
 
 namespace lingodb::runtime {
+#ifdef USE_CPYTHON_RUNTIME
+struct PythonExtState {
+   std::vector<PyObjectPtr> cachedObjects;
+   PyObjectPtr get(size_t idx) {
+      if (idx >= cachedObjects.size()) {
+         cachedObjects.resize(idx + 1, nullptr);
+      }
+      return cachedObjects[idx];
+   }
+   void set(size_t idx, PyObjectPtr obj) {
+      if (idx >= cachedObjects.size()) {
+         cachedObjects.resize(idx + 1, nullptr);
+      }
+      cachedObjects[idx] = obj;
+   }
+   void clearCache() {
+      cachedObjects.clear();
+   }
+};
+#else
+struct PythonExtState;
+#endif
 class PythonRuntime {
    public:
-   static PyObjectPtr createModule(runtime::VarLen32 modname, runtime::VarLen32 source);
+   static PyObjectPtr constStr(size_t x, runtime::VarLen32 str);
+   static PyObjectPtr createModule(size_t x, runtime::VarLen32 modname, runtime::VarLen32 source);
    static PyObjectPtr getAttr(PyObjectPtr obj, runtime::VarLen32 attr);
    static PyObjectPtr getAttr2(PyObjectPtr obj, PyObjectPtr attr);
    static void setAttr(PyObjectPtr obj, runtime::VarLen32 attr, PyObjectPtr value);
@@ -48,7 +74,12 @@ class PythonRuntime {
    static PyObjectPtr fromDouble(double value);
    static void decref(PyObjectPtr obj);
    static void incref(PyObjectPtr obj);
-   static PyObjectPtr import(runtime::VarLen32 val);
+   static PyObjectPtr import(size_t x, runtime::VarLen32 val);
+   //CPython specific
+   static PythonExtState* createPythonExtState();
+   //WASM CPython specific
+   static void setWasmSession(wasm::WASMSession* session);
+
 };
 }
 

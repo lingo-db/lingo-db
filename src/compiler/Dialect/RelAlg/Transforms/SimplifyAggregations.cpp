@@ -229,7 +229,7 @@ class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir
          patterns.insert<WrapAggrFuncPattern>(&getContext());
          patterns.insert<WrapCountRowsPattern>(&getContext());
          patterns.insert<RewriteComplexAggrFuncs>(&getContext());
-         //patterns.insert<PyInterpConstantPattern>(&getContext());
+         patterns.insert<PyInterpConstantPattern>(&getContext());
          //patterns.insert<RewriteGetAttrPattern>(&getContext());
 
          if (lingodb::compiler::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {

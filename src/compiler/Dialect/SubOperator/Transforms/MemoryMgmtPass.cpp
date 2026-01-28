@@ -268,7 +268,7 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
             notCounted.insert(arg);
          }
          mapOp.getFn().walk([&](mlir::Operation* op) {
-            if (mlir::isa<db::ConstantOp, py_interp::ConstStrPyObject,db::NullOp>(op)) {
+            if (mlir::isa<db::ConstantOp, py_interp::ConstStrPyObject,db::NullOp,py_interp::ImportOp,py_interp::CreateModule>(op)) {
                notCounted.insert(op->getResult(0));
             }
             if (auto asNullableOp = mlir::dyn_cast_or_null<db::AsNullableOp>(op)) {
@@ -301,7 +301,7 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
             return;
          }
          funcOp.getBody().walk([&](mlir::Operation* op) {
-            if (mlir::isa<db::ConstantOp, py_interp::ConstStrPyObject,db::NullOp>(op)) {
+            if (mlir::isa<db::ConstantOp, py_interp::ConstStrPyObject,db::NullOp,py_interp::ImportOp,py_interp::CreateModule>(op)) {
                notCounted.insert(op->getResult(0));
             }
          });
