@@ -382,7 +382,7 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
          traverseRegion(region);
       }
 
-      if ((CSE_DEBUG | 1) && (successfulPhysicalMerges > 0 || successfulVirtualMerges > 0 || failedPhysicalMerges > 0)) {
+      if ((CSE_DEBUG) && (successfulPhysicalMerges > 0 || successfulVirtualMerges > 0 || failedPhysicalMerges > 0)) {
          llvm::errs() << "=========================================================\n";
          llvm::errs() << "CSE Pass Summary\n";
          llvm::errs() << "  Successful Physical Merges: " << successfulPhysicalMerges << "\n";
@@ -513,7 +513,6 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
                      llvm::function_ref<void(mlir::Region&)> traverseRegion) {
       for (auto& op : llvm::make_early_inc_range(*block)) {
          if (op.getDialect()->getNamespace() != "relalg") continue;
-         if (mlir::isa<relalg::AggrFuncOp>(op)) continue;
 
          auto hash = computeHash(&op);
          LLVM_DEBUG({
@@ -531,15 +530,11 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
 
                   if (mlir::isa<relalg::BaseTableOp>(leader)) {
                      mapVirtualBaseTableOpMerge(leader, &op);
-                     merged = true;
-                     break;
-                  } else if (mlir::isa<relalg::RenamingOp>(leader)) {
+                  } else if (mlir::isa<relalg::RenamingOp>(leader) || mlir::isa<relalg::AggrFuncOp>(leader)) {
                      mapVirtualMerge(leader, &op);
-                     merged = true;
-                     break;
+                  } else {
+                     physicallyMergeOps(leader, &op);
                   }
-
-                  mergeNonBaseTableOp(leader, &op);
                   merged = true;
                }
             }
@@ -639,7 +634,7 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
       successfulVirtualMerges++;
    }
 
-   void mergeNonBaseTableOp(mlir::Operation* leader, mlir::Operation* duplicate) {
+   void physicallyMergeOps(mlir::Operation* leader, mlir::Operation* duplicate) {
       llvm::SmallVector<std::pair<std::string, tuples::ColumnDefAttr>> lDefs, dDefs;
       collectSortedLocalDefs(leader, lDefs);
       collectSortedLocalDefs(duplicate, dDefs);
