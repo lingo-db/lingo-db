@@ -21,6 +21,7 @@ class Frontend {
    void setCatalog(catalog::Catalog* catalog) {
       Frontend::catalog = catalog;
    }
+   virtual void setContext(mlir::MLIRContext* context) = 0;
    const std::unordered_map<std::string, double>& getTiming() const {
       return timing;
    }
@@ -33,7 +34,7 @@ class Frontend {
 };
 std::unique_ptr<Frontend> createMLIRFrontend();
 std::unique_ptr<Frontend> createSQLFrontend();
-void initializeContext(mlir::MLIRContext& context);
+void initializeContext(mlir::MLIRContext& context, bool includeLLVM = true);
 
 } //namespace lingodb::execution
 

@@ -342,6 +342,7 @@ class Scheduler {
    void enqueueTask(std::unique_ptr<Task>&& task) {
       auto wrapper = std::make_shared<TaskWrapper>();
       wrapper->task = std::move(task);
+      wrapper->onFinalize = []() {};
       enqueueTask(wrapper);
    }
 
@@ -731,7 +732,9 @@ void awaitEntryTask(std::unique_ptr<Task> task) {
 void awaitChildTask(std::unique_ptr<Task> task) {
    currentWorker->awaitChildTask(std::move(task));
 }
-
+void enqueueTask(std::unique_ptr<Task> task) {
+   scheduler->enqueueTask(std::move(task));
+}
 std::unique_ptr<SchedulerHandle> startScheduler(size_t numWorkers) {
 #if defined(__APPLE__) && defined(__arm64__)
    // on apple silicon: set QOS_CLASS_USER_INTERACTIVE for main thread on scheduler startup

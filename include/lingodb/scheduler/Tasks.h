@@ -27,6 +27,23 @@ class TaskWithImplicitContext : public Task {
       runtime::setCurrentExecutionContext(nullptr);
    }
 };
+class SimpleTask : public lingodb::scheduler::Task {
+   std::function<void()> func;
+
+   public:
+   SimpleTask(std::function<void()> func) : func(func) {}
+
+   virtual bool allocateWork() override {
+      if (workExhausted.exchange(true)) {
+         return false;
+      }
+      return true;
+   }
+   virtual void performWork() override {
+      func();
+   }
+};
+
 } // namespace lingodb::scheduler
 
 #endif //LINGODB_SCHEDULER_TASKS_H

@@ -20,6 +20,8 @@ std::unique_ptr<SchedulerHandle> startScheduler(size_t numWorkers = 0);
 void awaitEntryTask(std::unique_ptr<Task> task);
 //waits for the scheduler to finish the current task (this will yield the current worker thread, only use from a worker thread)
 void awaitChildTask(std::unique_ptr<Task> task);
+// just enqueues a task, without waiting for it to finish
+void enqueueTask(std::unique_ptr<Task> task);
 
 //returns the number of workers in the scheduler
 size_t getNumWorkers();

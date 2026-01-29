@@ -114,6 +114,7 @@ class QueryExecuter {
    std::optional<std::string> file;
    bool exitOnError = true;
    std::shared_ptr<Error> error{};
+   mlir::MLIRContext* context = nullptr;
 
    public:
    QueryExecuter(std::unique_ptr<QueryExecutionConfig> queryExecutionConfig, std::unique_ptr<runtime::ExecutionContext> executionContext) : queryExecutionConfig(std::move(queryExecutionConfig)), executionContext(std::move(executionContext)), data(), file(), error(std::make_shared<Error>()) {}

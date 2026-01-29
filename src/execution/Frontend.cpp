@@ -34,7 +34,7 @@
 #include <llvm/Support/SourceMgr.h>
 
 #include <iostream>
-void lingodb::execution::initializeContext(mlir::MLIRContext& context) {
+void lingodb::execution::initializeContext(mlir::MLIRContext& context, bool includeLLVM) {
    using namespace lingodb::compiler::dialect;
    mlir::DialectRegistry registry;
    registry.insert<mlir::BuiltinDialect>();
@@ -51,17 +51,18 @@ void lingodb::execution::initializeContext(mlir::MLIRContext& context) {
    registry.insert<mlir::memref::MemRefDialect>();
    registry.insert<util::UtilDialect>();
    registry.insert<mlir::scf::SCFDialect>();
-   // TODO: should we make this optional? Would require a cmake flag that deactivates the LLVM backend.
-   registry.insert<mlir::LLVM::LLVMDialect>();
-
+   if (includeLLVM) {
+      registry.insert<mlir::LLVM::LLVMDialect>();
+   }
 #if GPU_ENABLED == 1
    registry.insert<mlir::async::AsyncDialect>();
    registry.insert<mlir::gpu::GPUDialect>();
    mlir::NVVM::registerNVVMTargetInterfaceExternalModels(registry);
 #endif
-   mlir::registerAllExtensions(registry);
-   // TODO: same as above, should we make this optional?
-   mlir::registerAllToLLVMIRTranslations(registry);
+   if (includeLLVM) {
+      mlir::registerAllExtensions(registry);
+      mlir::registerAllToLLVMIRTranslations(registry);
+   }
    context.appendDialectRegistry(registry);
    context.loadAllAvailableDialects();
    context.loadDialect<relalg::RelAlgDialect>();
@@ -70,10 +71,12 @@ void lingodb::execution::initializeContext(mlir::MLIRContext& context) {
 namespace {
 
 class MLIRFrontend : public lingodb::execution::Frontend {
-   mlir::MLIRContext context;
+   mlir::MLIRContext* context;
    mlir::OwningOpRef<mlir::ModuleOp> module;
+   void setContext(mlir::MLIRContext* ctx) override {
+      context = ctx;
+   }
    void loadFromFile(std::string fileName) override {
-      lingodb::execution::initializeContext(context);
       llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> fileOrErr =
          llvm::MemoryBuffer::getFileOrSTDIN(fileName);
       if (std::error_code ec = fileOrErr.getError()) {
@@ -82,15 +85,14 @@ class MLIRFrontend : public lingodb::execution::Frontend {
       }
       llvm::SourceMgr sourceMgr;
       sourceMgr.AddNewSourceBuffer(std::move(*fileOrErr), llvm::SMLoc());
-      module = mlir::parseSourceFile<mlir::ModuleOp>(sourceMgr, &context);
+      module = mlir::parseSourceFile<mlir::ModuleOp>(sourceMgr, context);
       if (!module) {
          error.emit() << "Error can't load file " << fileName << "\n";
          return;
       }
    }
    void loadFromString(std::string data) override {
-      lingodb::execution::initializeContext(context);
-      module = mlir::parseSourceString<mlir::ModuleOp>(data, &context);
+      module = mlir::parseSourceString<mlir::ModuleOp>(data, context);
       if (!module) {
          error.emit() << "Error can't load module\n";
       }
@@ -102,11 +104,13 @@ class MLIRFrontend : public lingodb::execution::Frontend {
 };
 
 class SQLFrontend : public lingodb::execution::Frontend {
-   mlir::MLIRContext context;
+   mlir::MLIRContext* context;
    mlir::OwningOpRef<mlir::ModuleOp> module;
    bool isFile = false;
+   void setContext(mlir::MLIRContext* ctx) override {
+      context = ctx;
+   }
    void load(std::string fileOrDirect) {
-      lingodb::execution::initializeContext(context);
       Driver drv;
       try {
          if (!drv.parse(fileOrDirect, isFile)) {
@@ -121,7 +125,7 @@ class SQLFrontend : public lingodb::execution::Frontend {
             lingodb::analyzer::SQLQueryAnalyzer analyzer{catalog};
             drv.result[0] = analyzer.canonicalizeAndAnalyze(drv.result[0], sqlContext);
 
-            mlir::OpBuilder builder(&context);
+            mlir::OpBuilder builder(context);
 
             mlir::ModuleOp moduleOp = builder.create<mlir::ModuleOp>(builder.getUnknownLoc());
             lingodb::translator::SQLMlirTranslator translator{moduleOp, catalog};
