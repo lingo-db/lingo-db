@@ -15,6 +15,7 @@
 #include "lingodb/execution/LLVMBackends.h"
 #include "lingodb/runtime/ExternalDataSourceProperty.h"
 #include "lingodb/runtime/storage/TableStorage.h"
+#include "lingodb/scheduler/Tasks.h"
 #include "lingodb/utility/Setting.h"
 #include "lingodb/utility/Tracer.h"
 
@@ -23,8 +24,8 @@
 
 #include <chrono>
 #include <sstream>
+#include <stack>
 #include <unordered_set>
-
 namespace {
 namespace utility = lingodb::utility;
 utility::GlobalSetting<std::string> executionModeSetting("system.execution_mode", "DEFAULT");
@@ -146,8 +147,8 @@ class SubOpLoweringStep : public LoweringStep {
 
       subop::setCompressionEnabled(enabledPasses.contains("Compression"));
       lowerSubOpPm.addPass(subop::createLowerSubOpPass());
+      lowerSubOpPm.addPass(lingodb::compiler::createCanonicalizerPass());
       if (cleanupAfterSubOp.getValue()) {
-         lowerSubOpPm.addPass(lingodb::compiler::createCanonicalizerPass());
          lowerSubOpPm.addPass(mlir::createCSEPass());
       }
       if (mlir::failed(lowerSubOpPm.run(moduleOp))) {
@@ -242,6 +243,7 @@ ExecutionMode getExecutionMode() {
 }
 
 class DefaultQueryExecuter : public QueryExecuter {
+   mlir::MLIRContext* context = nullptr;
    template <Error::ErrorPhase P>
    bool handleError(Error& e) {
       error->setErrorPhase(P);
@@ -275,15 +277,47 @@ class DefaultQueryExecuter : public QueryExecuter {
          std::cerr << "Execution Context is missing" << std::endl;
          exit(1);
       }
+      auto& session = executionContext->getSession();
       auto* catalog = executionContext->getSession().getCatalog().get();
 
       if (!queryExecutionConfig->frontend) {
          std::cerr << "Frontend is missing" << std::endl;
          exit(1);
       }
+      auto start = std::chrono::high_resolution_clock::now();
       auto& frontend = *queryExecutionConfig->frontend;
-      frontend.setNeedsLLVM(queryExecutionConfig->executionBackend && queryExecutionConfig->executionBackend->isLLVMBased());
+      bool useLLVM = queryExecutionConfig->executionBackend && queryExecutionConfig->executionBackend->isLLVMBased();
+
+      {
+         std::lock_guard<std::mutex> lock(session.contextStackMutex);
+         if (useLLVM) {
+            if (!session.llvmContextStack.empty()) {
+               context = session.llvmContextStack.top();
+               session.llvmContextStack.pop();
+            }
+         } else {
+            if (!session.noLlvmContextStack.empty()) {
+               context = session.noLlvmContextStack.top();
+               session.noLlvmContextStack.pop();
+            }
+         }
+      }
+      if (!context) {
+         context = new mlir::MLIRContext();
+         execution::initializeContext(*context, useLLVM);
+      }
+      frontend.setContext(context);
       frontend.setCatalog(catalog);
+      scheduler::enqueueTask(std::make_unique<scheduler::SimpleTask>([useLLVM, &session]() {
+         mlir::MLIRContext* context = new mlir::MLIRContext();
+         execution::initializeContext(*context, useLLVM);
+         std::lock_guard<std::mutex> lock(session.contextStackMutex);
+         if (useLLVM) {
+            session.llvmContextStack.push(context);
+         } else {
+            session.noLlvmContextStack.push(context);
+         }
+      }));
       if (data) {
          frontend.loadFromString(data.value());
       } else if (file) {
@@ -292,7 +326,10 @@ class DefaultQueryExecuter : public QueryExecuter {
          std::cerr << "Must provide file or string!" << std::endl;
          exit(1);
       }
-      handleTiming(frontend.getTiming());
+      auto end = std::chrono::high_resolution_clock::now();
+      auto frontendTime = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000.0;
+
+      handleTiming({{"frontend", frontendTime}});
 
       auto serializationState = std::make_shared<SnapshotState>();
       serializationState->serialize = true;
@@ -348,6 +385,12 @@ class DefaultQueryExecuter : public QueryExecuter {
       }
       if (queryExecutionConfig->timingProcessor) {
          queryExecutionConfig->timingProcessor->process();
+      }
+   }
+   virtual ~DefaultQueryExecuter() {
+      queryExecutionConfig.reset();
+      if (context) {
+         delete context;
       }
    }
 };

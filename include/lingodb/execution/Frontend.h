@@ -11,7 +11,6 @@ class Frontend {
    protected:
    catalog::Catalog* catalog;
    Error error;
-   bool needsLLVM = true;
 
    std::unordered_map<std::string, double> timing;
 
@@ -19,12 +18,10 @@ class Frontend {
    catalog::Catalog* getCatalog() const {
       return catalog;
    }
-   void setNeedsLLVM(bool needsLLVM) {
-      Frontend::needsLLVM = needsLLVM;
-   }
    void setCatalog(catalog::Catalog* catalog) {
       Frontend::catalog = catalog;
    }
+   virtual void setContext(mlir::MLIRContext* context) = 0;
    const std::unordered_map<std::string, double>& getTiming() const {
       return timing;
    }

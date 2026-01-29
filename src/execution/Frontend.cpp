@@ -71,10 +71,12 @@ void lingodb::execution::initializeContext(mlir::MLIRContext& context, bool incl
 namespace {
 
 class MLIRFrontend : public lingodb::execution::Frontend {
-   mlir::MLIRContext context;
+   mlir::MLIRContext* context;
    mlir::OwningOpRef<mlir::ModuleOp> module;
+   void setContext(mlir::MLIRContext* ctx) override {
+      context = ctx;
+   }
    void loadFromFile(std::string fileName) override {
-      lingodb::execution::initializeContext(context);
       llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> fileOrErr =
          llvm::MemoryBuffer::getFileOrSTDIN(fileName);
       if (std::error_code ec = fileOrErr.getError()) {
@@ -83,15 +85,14 @@ class MLIRFrontend : public lingodb::execution::Frontend {
       }
       llvm::SourceMgr sourceMgr;
       sourceMgr.AddNewSourceBuffer(std::move(*fileOrErr), llvm::SMLoc());
-      module = mlir::parseSourceFile<mlir::ModuleOp>(sourceMgr, &context);
+      module = mlir::parseSourceFile<mlir::ModuleOp>(sourceMgr, context);
       if (!module) {
          error.emit() << "Error can't load file " << fileName << "\n";
          return;
       }
    }
    void loadFromString(std::string data) override {
-      lingodb::execution::initializeContext(context);
-      module = mlir::parseSourceString<mlir::ModuleOp>(data, &context);
+      module = mlir::parseSourceString<mlir::ModuleOp>(data, context);
       if (!module) {
          error.emit() << "Error can't load module\n";
       }
@@ -103,12 +104,13 @@ class MLIRFrontend : public lingodb::execution::Frontend {
 };
 
 class SQLFrontend : public lingodb::execution::Frontend {
-   mlir::MLIRContext context;
+   mlir::MLIRContext* context;
    mlir::OwningOpRef<mlir::ModuleOp> module;
    bool isFile = false;
+   void setContext(mlir::MLIRContext* ctx) override {
+      context = ctx;
+   }
    void load(std::string fileOrDirect) {
-      auto start = std::chrono::high_resolution_clock::now();
-      lingodb::execution::initializeContext(context, needsLLVM);
       Driver drv;
       try {
          if (!drv.parse(fileOrDirect, isFile)) {
@@ -123,7 +125,7 @@ class SQLFrontend : public lingodb::execution::Frontend {
             lingodb::analyzer::SQLQueryAnalyzer analyzer{catalog};
             drv.result[0] = analyzer.canonicalizeAndAnalyze(drv.result[0], sqlContext);
 
-            mlir::OpBuilder builder(&context);
+            mlir::OpBuilder builder(context);
 
             mlir::ModuleOp moduleOp = builder.create<mlir::ModuleOp>(builder.getUnknownLoc());
             lingodb::translator::SQLMlirTranslator translator{moduleOp, catalog};
@@ -148,8 +150,6 @@ class SQLFrontend : public lingodb::execution::Frontend {
       } catch (lingodb::FrontendError& e) {
          error.emit() << e.what();
       }
-      auto end = std::chrono::high_resolution_clock::now();
-      timing["frontend"] = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000.0;
    }
 
    void loadFromString(std::string sql) override {
