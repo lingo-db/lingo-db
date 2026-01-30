@@ -1,5 +1,6 @@
 #include "lingodb/execution/Execution.h"
 
+
 #include "lingodb/catalog/IndexCatalogEntry.h"
 #include "lingodb/catalog/TableCatalogEntry.h"
 #include "lingodb/compiler/Conversion/ArrowToStd/ArrowToStd.h"
