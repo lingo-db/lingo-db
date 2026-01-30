@@ -271,13 +271,14 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
          toErase.push_back(op.getOperation());
       });
       getOperation().walk([&](relalg::OuterJoinOp op) {
+         relalg::AvailabilityCache cache;
          auto* terminator = op.getRegion().front().getTerminator();
          if (terminator->getNumOperands() == 0) {
             return;
          }
          auto retval = terminator->getOperand(0);
-         auto availableLeft = op.getChildren()[0].getAvailableColumns();
-         auto availableRight = op.getChildren()[1].getAvailableColumns();
+         auto availableLeft = op.getChildren()[0].getAvailableColumns(cache);
+         auto availableRight = op.getChildren()[1].getAvailableColumns(cache);
          auto mapped = analyze(&op.getPredicateBlock(), availableLeft, availableRight);
          auto val = decomposeOuterJoin(retval, availableLeft, availableRight, mapped);
          mlir::OpBuilder builder(terminator);

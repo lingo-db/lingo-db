@@ -10,7 +10,6 @@ class QueryGraphBuilder {
    size_t numNodes;
    QueryGraph qg;
    llvm::DenseMap<const tuples::Column*, size_t> attrToNodes;
-
    size_t addNode(Operator op) {
       QueryGraph::Node n(op);
       n.id = qg.nodes.size();
