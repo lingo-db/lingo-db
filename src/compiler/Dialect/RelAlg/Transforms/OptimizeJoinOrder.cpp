@@ -29,7 +29,8 @@ class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::Oper
                Operator asOperator = mlir::cast<Operator>(op);
                auto subOps = asOperator.getAllSubOperators();
                auto used = asOperator.getUsedColumns();
-               return !(used.intersects(subOps[0].getAvailableColumns()) && used.intersects(subOps[1].getAvailableColumns()));
+               relalg::AvailabilityCache cache;
+               return !(used.intersects(subOps[0].getAvailableColumns(cache)) && used.intersects(subOps[1].getAvailableColumns(cache)));
             } else {
                return true;
             }

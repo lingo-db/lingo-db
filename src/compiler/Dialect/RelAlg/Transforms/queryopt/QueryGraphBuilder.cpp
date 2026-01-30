@@ -34,7 +34,7 @@ void relalg::QueryGraphBuilder::populateQueryGraph(Operator op) {
    auto created = op.getCreatedColumns();
    if (alreadyOptimized.count(op.getOperation())) {
       size_t newNode = addNode(op);
-      for (const auto* attr : op.getAvailableColumns()) {
+      for (const auto* attr : op.getAvailableColumns(qg.availabilityCache)) {
          attrToNodes[attr] = newNode;
       }
       return;
