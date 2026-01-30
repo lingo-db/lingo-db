@@ -20,6 +20,7 @@ class SubOpStateUsageTransformer {
    public:
    SubOpStateUsageTransformer(const ColumnUsageAnalysis& columnUsageAnalysis, mlir::MLIRContext* context, const std::function<mlir::Type(mlir::Operation* op, mlir::Type oldRefType)>& getNewRefTypeFn) : columnManager(context->getLoadedDialect<dialect::tuples::TupleStreamDialect>()->getColumnManager()), columnUsageAnalysis(columnUsageAnalysis), getNewRefTypeFn(getNewRefTypeFn) {}
    void updateValue(mlir::Value oldValue, mlir::Type newType);
+   void updateUse(mlir::OpOperand& opOperand, mlir::Type newType);
    void replaceColumn(dialect::tuples::Column* oldColumn, dialect::tuples::Column* newColumn);
    mlir::Type getNewRefType(mlir::Operation* op, mlir::Type oldRefType);
    subop::ColumnRefMemberMappingAttr updateMapping(subop::ColumnRefMemberMappingAttr currentMapping);

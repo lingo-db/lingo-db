@@ -35,4 +35,7 @@ void subop::registerSubOpTransformations() {
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return subop::createSplitIntoExecutionStepsPass();
    });
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+      return subop::createCommonPiplineEliminationPass();
+   });
 }
