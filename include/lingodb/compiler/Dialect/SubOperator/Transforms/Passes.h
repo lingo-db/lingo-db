@@ -17,6 +17,7 @@ std::unique_ptr<mlir::Pass> createSplitIntoExecutionStepsPass();
 std::unique_ptr<mlir::Pass> createInlineNestedMapPass();
 std::unique_ptr<mlir::Pass> createFinalizePass();
 std::unique_ptr<mlir::Pass> createPrepareLoweringPass();
+std::unique_ptr<mlir::Pass> createCommonPiplineEliminationPass();
 void registerSubOpTransformations();
 } // end namespace subop
 } // end namespace lingodb::compiler::dialect

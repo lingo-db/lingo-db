@@ -120,6 +120,7 @@ class SubOpLoweringStep : public LoweringStep {
          enabledPasses.insert(optPass);
       }
       optSubOpPm.addPass(subop::createFoldColumnsPass());
+      optSubOpPm.addPass(subop::createCommonPiplineEliminationPass());
       if (enabledPasses.contains("ReuseLocal"))
          optSubOpPm.addPass(subop::createReuseLocalPass());
       optSubOpPm.addPass(subop::createSpecializeSubOpPass(enabledPasses.contains("Specialize")));
