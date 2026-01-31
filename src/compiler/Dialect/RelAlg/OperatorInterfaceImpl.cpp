@@ -132,6 +132,10 @@ ColumnSet relalg::detail::getFreeColumns(mlir::Operation* op, AvailabilityCache&
    collectedFree.remove(available);
    return collectedFree;
 }
+ColumnSet relalg::detail::getFreeColumns(mlir::Operation* op) {
+   AvailabilityCache cache;
+   return getFreeColumns(op, cache);
+}
 
 bool relalg::detail::isDependentJoin(mlir::Operation* op, AvailabilityCache& cache) {
    if (auto join = mlir::dyn_cast_or_null<BinaryOperator>(op)) {
