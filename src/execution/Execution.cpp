@@ -278,7 +278,6 @@ class DefaultQueryExecuter : public QueryExecuter {
          std::cerr << "Execution Context is missing" << std::endl;
          exit(1);
       }
-      auto& session = executionContext->getSession();
       auto* catalog = executionContext->getSession().getCatalog().get();
 
       if (!queryExecutionConfig->frontend) {
@@ -288,18 +287,18 @@ class DefaultQueryExecuter : public QueryExecuter {
       auto start = std::chrono::high_resolution_clock::now();
       auto& frontend = *queryExecutionConfig->frontend;
       bool useLLVM = queryExecutionConfig->executionBackend && queryExecutionConfig->executionBackend->isLLVMBased();
-
+      auto& systemContext = scheduler::getSystemContext();
       {
-         std::lock_guard<std::mutex> lock(session.contextStackMutex);
+         std::lock_guard<std::mutex> lock(systemContext.contextStackMutex);
          if (useLLVM) {
-            if (!session.llvmContextStack.empty()) {
-               context = session.llvmContextStack.top();
-               session.llvmContextStack.pop();
+            if (!systemContext.llvmContextStack.empty()) {
+               context = systemContext.llvmContextStack.top();
+               systemContext.llvmContextStack.pop();
             }
          } else {
-            if (!session.noLlvmContextStack.empty()) {
-               context = session.noLlvmContextStack.top();
-               session.noLlvmContextStack.pop();
+            if (!systemContext.noLlvmContextStack.empty()) {
+               context = systemContext.noLlvmContextStack.top();
+               systemContext.noLlvmContextStack.pop();
             }
          }
       }
@@ -309,14 +308,15 @@ class DefaultQueryExecuter : public QueryExecuter {
       }
       frontend.setContext(context);
       frontend.setCatalog(catalog);
-      scheduler::enqueueTask(std::make_unique<scheduler::SimpleTask>([useLLVM, &session]() {
+      scheduler::enqueueTask(std::make_unique<scheduler::SimpleTask>([useLLVM]() {
+         auto& systemContext = scheduler::getSystemContext();
          mlir::MLIRContext* context = new mlir::MLIRContext();
          execution::initializeContext(*context, useLLVM);
-         std::lock_guard<std::mutex> lock(session.contextStackMutex);
+         std::lock_guard<std::mutex> lock(systemContext.contextStackMutex);
          if (useLLVM) {
-            session.llvmContextStack.push(context);
+            systemContext.llvmContextStack.push(context);
          } else {
-            session.noLlvmContextStack.push(context);
+            systemContext.noLlvmContextStack.push(context);
          }
       }));
       if (data) {

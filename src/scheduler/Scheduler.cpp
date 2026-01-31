@@ -10,7 +10,7 @@
 
 #include "lingodb/scheduler/Scheduler.h"
 #include "lingodb/scheduler/Task.h"
-
+#include "mlir/IR/MLIRContext.h"
 namespace lingodb::scheduler {
 class Worker;
 namespace {
@@ -310,6 +310,8 @@ class Scheduler {
 
    std::atomic<size_t> stoppedWorkers = 0;
 
+   SystemContext systemContext;
+
    public:
    Scheduler(size_t numWorkers = std::thread::hardware_concurrency()) : numWorkers(numWorkers) {
    }
@@ -414,6 +416,9 @@ class Scheduler {
             task->onFinalize();
          }
       }
+   }
+   SystemContext& getSystemContext() {
+      return systemContext;
    }
 };
 
@@ -777,6 +782,24 @@ size_t currentWorkerId() {
    }
    assert(false);
    return std::numeric_limits<size_t>::max();
+}
+SystemContext& getSystemContext() {
+   return scheduler->getSystemContext();
+}
+SystemContext::~SystemContext() {
+#ifndef MLIR_DISABLED
+   std::lock_guard<std::mutex> lock(contextStackMutex);
+   while (!llvmContextStack.empty()) {
+      auto* ctx = llvmContextStack.top();
+      llvmContextStack.pop();
+      delete ctx;
+   }
+   while (!noLlvmContextStack.empty()) {
+      auto* ctx = noLlvmContextStack.top();
+      noLlvmContextStack.pop();
+      delete ctx;
+   }
+#endif
 }
 } // namespace lingodb::scheduler
 

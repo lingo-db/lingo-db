@@ -2,7 +2,18 @@
 #define LINGODB_SCHEDULER_SCHEDULER_H
 #include "lingodb/scheduler/Task.h"
 #include <memory>
+#include <stack>
+namespace mlir {
+class MLIRContext;
+} //end namespace mlir
 namespace lingodb::scheduler {
+
+struct SystemContext {
+   std::mutex contextStackMutex;
+   std::stack<mlir::MLIRContext*> llvmContextStack;
+   std::stack<mlir::MLIRContext*> noLlvmContextStack;
+   ~SystemContext();
+};
 
 //handle to a scheduler. When the last handle is destroyed, the scheduler is stopped (waited for) and deleted.
 class SchedulerHandle {
@@ -27,6 +38,8 @@ void enqueueTask(std::unique_ptr<Task> task);
 size_t getNumWorkers();
 //returns the id of the current worker thread
 size_t currentWorkerId();
+
+SystemContext& getSystemContext();
 
 } // namespace lingodb::scheduler
 

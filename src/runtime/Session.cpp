@@ -15,20 +15,3 @@ std::shared_ptr<lingodb::runtime::Session> lingodb::runtime::Session::createSess
 std::shared_ptr<lingodb::runtime::Session> lingodb::runtime::Session::createSession(std::string dbDir, bool eagerLoading) {
    return std::make_shared<Session>(catalog::Catalog::create(dbDir, eagerLoading));
 }
-
-lingodb::runtime::Session::~Session() {
-#ifndef MLIR_DISABLED
-
-   std::lock_guard<std::mutex> lock(contextStackMutex);
-   while (!llvmContextStack.empty()) {
-      auto* ctx = llvmContextStack.top();
-      llvmContextStack.pop();
-      delete ctx;
-   }
-   while (!noLlvmContextStack.empty()) {
-      auto* ctx = noLlvmContextStack.top();
-      noLlvmContextStack.pop();
-      delete ctx;
-   }
-#endif
-}
