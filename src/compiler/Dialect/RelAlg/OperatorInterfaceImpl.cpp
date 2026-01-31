@@ -34,6 +34,14 @@ relalg::ColumnSet collectColumns(operator_list operators, std::function<relalg::
    }
    return collected;
 }
+relalg::ColumnSet collectColumnsWithCache(operator_list operators, relalg::AvailabilityCache& cache) {
+   relalg::ColumnSet collected;
+   for (auto op : operators) {
+      auto res = cache.getAvailableColumnsFor(op);
+      collected.insert(res);
+   }
+   return collected;
+}
 void addRequirements(mlir::Operation* op, mlir::Operation* includeChildren, mlir::Block* excludeChildren, llvm::SmallVector<mlir::Operation*, 8>& extracted, llvm::SmallPtrSet<mlir::Operation*, 8>& alreadyPresent, mlir::IRMapping& mapping) {
    if (!op)
       return;
@@ -102,9 +110,9 @@ ColumnSet relalg::detail::getUsedColumns(mlir::Operation* op) {
    }
    return creations;
 }
-ColumnSet relalg::detail::getAvailableColumns(mlir::Operation* op) {
+ColumnSet relalg::detail::getAvailableColumns(mlir::Operation* op, AvailabilityCache& cache) {
    Operator asOperator = mlir::dyn_cast_or_null<Operator>(op);
-   auto collected = collectColumns(getChildOperators(op), [](Operator op) { return op.getAvailableColumns(); });
+   auto collected = collectColumnsWithCache(getChildOperators(op), cache);
    auto selfCreated = asOperator.getCreatedColumns();
    collected.insert(selfCreated);
    return collected;
@@ -116,22 +124,26 @@ FunctionalDependencies relalg::detail::getFDs(mlir::Operation* op) {
    }
    return dependencies;
 }
-ColumnSet relalg::detail::getFreeColumns(mlir::Operation* op) {
-   auto available = collectColumns(getChildOperators(op), [](Operator op) { return op.getAvailableColumns(); });
+ColumnSet relalg::detail::getFreeColumns(mlir::Operation* op, AvailabilityCache& cache) {
+   auto available = collectColumnsWithCache(getChildOperators(op), cache);
    auto collectedFree = collectColumns(getChildOperators(op), [](Operator op) { return op.getFreeColumns(); });
    auto used = mlir::cast<Operator>(op).getUsedColumns();
    collectedFree.insert(used);
    collectedFree.remove(available);
    return collectedFree;
 }
+ColumnSet relalg::detail::getFreeColumns(mlir::Operation* op) {
+   AvailabilityCache cache;
+   return getFreeColumns(op, cache);
+}
 
-bool relalg::detail::isDependentJoin(mlir::Operation* op) {
+bool relalg::detail::isDependentJoin(mlir::Operation* op, AvailabilityCache& cache) {
    if (auto join = mlir::dyn_cast_or_null<BinaryOperator>(op)) {
       if (isJoin(op)) {
          auto left = mlir::dyn_cast_or_null<Operator>(join.leftChild());
          auto right = mlir::dyn_cast_or_null<Operator>(join.rightChild());
-         auto availableLeft = left.getAvailableColumns();
-         auto availableRight = right.getAvailableColumns();
+         auto availableLeft = left.getAvailableColumns(cache);
+         auto availableRight = right.getAvailableColumns(cache);
          return left.getFreeColumns().intersects(availableRight) || right.getFreeColumns().intersects(availableLeft);
       }
    }
@@ -191,14 +203,15 @@ ColumnSet GroupJoinOp::getUsedColumns() {
    });
    return used;
 }
-ColumnSet GroupJoinOp::getAvailableColumns() {
+ColumnSet GroupJoinOp::getAvailableColumns(AvailabilityCache&) {
    ColumnSet available = getCreatedColumns();
    available.insert(ColumnSet::fromArrayAttr(getLeftCols()));
    available.insert(ColumnSet::fromArrayAttr(getRightCols()));
    return available;
 }
 bool GroupJoinOp::canColumnReach(Operator source, Operator target, const tuples::Column* col) {
-   ColumnSet available = getAvailableColumns();
+   AvailabilityCache cache;
+   ColumnSet available = getAvailableColumns(cache);
    if (available.contains(col)) {
       return relalg::detail::canColumnReach(this->getOperation(), source, target, col);
    }
@@ -236,8 +249,8 @@ ColumnSet TopKOp::getUsedColumns() {
 ColumnSet ConstRelationOp::getCreatedColumns() {
    return ColumnSet::fromArrayAttr(getColumns());
 }
-ColumnSet AntiSemiJoinOp::getAvailableColumns() {
-   return relalg::detail::getAvailableColumns(leftChild());
+ColumnSet AntiSemiJoinOp::getAvailableColumns(AvailabilityCache& cache) {
+   return cache.getAvailableColumnsFor(mlir::cast<Operator>(leftChild()));
 }
 bool AntiSemiJoinOp::canColumnReach(Operator source, Operator target, const tuples::Column* col) {
    if (getRight().getDefiningOp() == source) {
@@ -245,8 +258,8 @@ bool AntiSemiJoinOp::canColumnReach(Operator source, Operator target, const tupl
    }
    return relalg::detail::canColumnReach(this->getOperation(), source, target, col);
 }
-ColumnSet SemiJoinOp::getAvailableColumns() {
-   return relalg::detail::getAvailableColumns(leftChild());
+ColumnSet SemiJoinOp::getAvailableColumns(AvailabilityCache& cache) {
+   return cache.getAvailableColumnsFor(mlir::cast<Operator>(leftChild()));
 }
 bool SemiJoinOp::canColumnReach(Operator source, Operator target, const tuples::Column* col) {
    if (getRight().getDefiningOp() == source) {
@@ -254,8 +267,8 @@ bool SemiJoinOp::canColumnReach(Operator source, Operator target, const tuples::
    }
    return relalg::detail::canColumnReach(this->getOperation(), source, target, col);
 }
-ColumnSet MarkJoinOp::getAvailableColumns() {
-   auto available = relalg::detail::getAvailableColumns(leftChild());
+ColumnSet MarkJoinOp::getAvailableColumns(AvailabilityCache& cache) {
+   auto available = cache.getAvailableColumnsFor(mlir::cast<Operator>(leftChild()));
    available.insert(&getMarkattr().getColumn());
    return available;
 }
@@ -284,8 +297,8 @@ ColumnSet RenamingOp::getUsedColumns() {
    }
    return used;
 }
-ColumnSet RenamingOp::getAvailableColumns() {
-   auto availablePreviously = collectColumns(getChildOperators(*this), [](Operator op) { return op.getAvailableColumns(); });
+ColumnSet RenamingOp::getAvailableColumns(AvailabilityCache& cache) {
+   auto availablePreviously = collectColumnsWithCache(getChildOperators(*this), cache);
    availablePreviously.remove(getUsedColumns());
    auto created = getCreatedColumns();
    availablePreviously.insert(created);
@@ -336,7 +349,7 @@ ColumnSet OuterJoinOp::getUsedColumns() {
    }
    return used;
 }
-ColumnSet OuterJoinOp::getAvailableColumns() {
+ColumnSet OuterJoinOp::getAvailableColumns(AvailabilityCache& cache) {
    ColumnSet renamed;
 
    for (mlir::Attribute attr : getMapping()) {
@@ -344,7 +357,7 @@ ColumnSet OuterJoinOp::getAvailableColumns() {
       auto fromExisting = mlir::cast<mlir::ArrayAttr>(relationDefAttr.getFromExisting());
       renamed.insert(ColumnSet::fromArrayAttr(fromExisting));
    }
-   auto availablePreviously = mlir::cast<Operator>(getLeft().getDefiningOp()).getAvailableColumns();
+   auto availablePreviously = cache.getAvailableColumnsFor(mlir::cast<Operator>(getLeft().getDefiningOp()));
    auto created = getCreatedColumns();
    availablePreviously.insert(created);
    return availablePreviously;
@@ -373,7 +386,7 @@ ColumnSet FullOuterJoinOp::getUsedColumns() {
    }
    return used;
 }
-ColumnSet FullOuterJoinOp::getAvailableColumns() {
+ColumnSet FullOuterJoinOp::getAvailableColumns(AvailabilityCache&) {
    return getCreatedColumns();
 }
 bool FullOuterJoinOp::canColumnReach(Operator source, Operator target, const tuples::Column* col) {
@@ -401,7 +414,7 @@ ColumnSet SingleJoinOp::getUsedColumns() {
    }
    return used;
 }
-ColumnSet SingleJoinOp::getAvailableColumns() {
+ColumnSet SingleJoinOp::getAvailableColumns(AvailabilityCache& cache) {
    ColumnSet renamed;
 
    for (mlir::Attribute attr : getMapping()) {
@@ -409,7 +422,7 @@ ColumnSet SingleJoinOp::getAvailableColumns() {
       auto fromExisting = mlir::cast<mlir::ArrayAttr>(relationDefAttr.getFromExisting());
       renamed.insert(ColumnSet::fromArrayAttr(fromExisting));
    }
-   auto availablePreviously = mlir::cast<Operator>(getLeft().getDefiningOp()).getAvailableColumns();
+   auto availablePreviously = cache.getAvailableColumnsFor(mlir::cast<Operator>(getLeft().getDefiningOp()));
    auto created = getCreatedColumns();
    availablePreviously.insert(created);
    return availablePreviously;
@@ -428,8 +441,8 @@ ColumnSet CollectionJoinOp::getCreatedColumns() {
 ColumnSet CollectionJoinOp::getUsedColumns() {
    return relalg::detail::getUsedColumns(getOperation());
 }
-ColumnSet CollectionJoinOp::getAvailableColumns() {
-   auto availablePreviously = collectColumns(getChildOperators(*this), [](Operator op) { return op.getAvailableColumns(); });
+ColumnSet CollectionJoinOp::getAvailableColumns(AvailabilityCache& cache) {
+   auto availablePreviously = collectColumnsWithCache(getChildOperators(*this), cache);
    auto created = getCreatedColumns();
    availablePreviously.insert(created);
    return availablePreviously;
@@ -460,7 +473,8 @@ relalg::FunctionalDependencies BaseTableOp::getFDs() {
    auto metaData = mlir::dyn_cast_or_null<relalg::TableMetaDataAttr>(getOperation()->getAttr("meta"));
    if (!metaData) return dependencies;
    if (metaData.getMeta()->getPrimaryKey().empty()) return dependencies;
-   auto right = getAvailableColumns();
+   AvailabilityCache cache;
+   auto right = getAvailableColumns(cache);
    auto primaryKey = metaData.getMeta()->getPrimaryKey();
    std::unordered_set<std::string> pks(primaryKey.begin(), primaryKey.end());
    ColumnSet pk;
@@ -566,7 +580,7 @@ relalg::FunctionalDependencies relalg::InnerJoinOp::getFDs() {
    }
    return newFds;
 }
-ColumnSet relalg::AggregationOp::getAvailableColumns() {
+ColumnSet relalg::AggregationOp::getAvailableColumns(AvailabilityCache&) {
    ColumnSet available = getCreatedColumns();
    available.insert(ColumnSet::fromArrayAttr(getGroupByCols()));
    return available;
@@ -581,7 +595,7 @@ bool AggregationOp::canColumnReach(Operator source, Operator target, const tuple
    return false;
 }
 
-ColumnSet relalg::ProjectionOp::getAvailableColumns() {
+ColumnSet relalg::ProjectionOp::getAvailableColumns(AvailabilityCache&) {
    return ColumnSet::fromArrayAttr(getCols());
 }
 ColumnSet relalg::ProjectionOp::getUsedColumns() {
@@ -925,20 +939,34 @@ mlir::LogicalResult relalg::AntiSemiJoinOp::foldColumns(relalg::ColumnFoldInfo& 
    return mlir::success();
 }
 ColumnSet relalg::NestedOp::getCreatedColumns() {
-   return getAvailableColumns(); //todo: fix
+   AvailabilityCache cache;
+   return getAvailableColumns(cache); //todo: fix
 }
 
 ColumnSet relalg::NestedOp::getUsedColumns() {
    return relalg::ColumnSet::fromArrayAttr(getUsedCols());
 }
-ColumnSet relalg::NestedOp::getAvailableColumns() {
+ColumnSet relalg::NestedOp::getAvailableColumns(AvailabilityCache&) {
    return relalg::ColumnSet::fromArrayAttr(getAvailableCols());
 }
 bool relalg::NestedOp::canColumnReach(Operator source, Operator target, const tuples::Column* col) {
-   ColumnSet available = getAvailableColumns();
+   AvailabilityCache cache;
+   ColumnSet available = getAvailableColumns(cache);
    if (available.contains(col)) {
       return relalg::detail::canColumnReach(this->getOperation(), source, target, col);
    }
    return false;
 }
+
+ColumnSet AvailabilityCache::getAvailableColumnsFor(Operator op) {
+   auto* operation = op.getOperation();
+   auto it = cache.find(operation);
+   if (it != cache.end()) {
+      return it->second;
+   }
+   auto result = op.getAvailableColumns(*this);
+   cache[operation] = result;
+   return result;
+}
+
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOpsInterfaces.cpp.inc"

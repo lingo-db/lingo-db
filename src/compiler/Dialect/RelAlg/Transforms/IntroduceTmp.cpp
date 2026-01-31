@@ -24,6 +24,7 @@ class IntroduceTmp : public mlir::PassWrapper<IntroduceTmp, mlir::OperationPass<
       return {};
    }
    void runOnOperation() override {
+      relalg::AvailabilityCache availabilityCache;
       getOperation().walk([&](Operator op) {
          if (!op->getParentOfType<Operator>() && !op->use_empty() && !op->hasOneUse()) {
             mlir::OpBuilder builder(&getContext());
@@ -32,7 +33,7 @@ class IntroduceTmp : public mlir::PassWrapper<IntroduceTmp, mlir::OperationPass<
             for (auto& use : op->getUses()) {
                usedAttributes.insert(getUsed(use.getOwner()));
             }
-            usedAttributes = usedAttributes.intersect(op.getAvailableColumns());
+            usedAttributes = usedAttributes.intersect(op.getAvailableColumns(availabilityCache));
             mlir::Type tupleStreamType = op.asRelation().getType();
             std::vector<mlir::Type> resultingTypes;
             for (auto it = op->getUses().begin(); it != op->getUses().end(); it++)

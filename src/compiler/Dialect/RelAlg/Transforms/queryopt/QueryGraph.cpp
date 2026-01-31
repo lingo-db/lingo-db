@@ -365,7 +365,7 @@ void QueryGraph::estimate() {
       node.selectivity = 1;
       if (node.op) {
          node.rows = getRows(node);
-         auto availableLeft = node.op.getAvailableColumns();
+         auto availableLeft = node.op.getAvailableColumns(availabilityCache);
          ColumnSet availableRight;
          std::vector<Predicate> predicates;
          for (auto pred : node.additionalPredicates) {

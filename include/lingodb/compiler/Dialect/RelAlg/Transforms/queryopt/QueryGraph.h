@@ -14,6 +14,7 @@ class QueryGraph {
    size_t numNodes;
    size_t pseudoNodes = 0;
    NodeSet normalNodesMask;
+   relalg::AvailabilityCache availabilityCache;
 
    struct SelectionEdge {
       size_t id;
@@ -339,7 +340,7 @@ class QueryGraph {
    ColumnSet getAttributesForNodeSet(NodeSet& nodeSet) {
       ColumnSet a;
       iterateNodes(nodeSet, [&](Node& n) {
-         a.insert(n.op.getAvailableColumns());
+         a.insert(n.op.getAvailableColumns(availabilityCache));
       });
       return a;
    }
