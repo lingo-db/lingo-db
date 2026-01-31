@@ -133,8 +133,7 @@ return this->getOperation()->getResult(0);
 InterfaceMethod<
         "get all 'free' columns",
         "lingodb::compiler::dialect::relalg::ColumnSet", "getFreeColumns",(ins ),"", /*defaultImplementation=*/[{
-        lingodb::compiler::dialect::relalg::AvailabilityCache cache;
-return lingodb::compiler::dialect::relalg::detail::getFreeColumns(this->getOperation(), cache);
+return lingodb::compiler::dialect::relalg::detail::getFreeColumns(this->getOperation());
 }]
 >,
 InterfaceMethod<

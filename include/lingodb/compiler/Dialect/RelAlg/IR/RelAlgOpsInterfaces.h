@@ -26,6 +26,7 @@ ColumnSet getUsedColumns(mlir::Operation* op);
 bool canColumnReach(mlir::Operation* currentOp, mlir::Operation* sourceOp, mlir::Operation* targetOp, const lingodb::compiler::dialect::tuples::Column* column);
 ColumnSet getAvailableColumns(mlir::Operation* op, AvailabilityCache& cache);
 ColumnSet getFreeColumns(mlir::Operation* op, AvailabilityCache& cache);
+ColumnSet getFreeColumns(mlir::Operation* op);
 ColumnSet getSetOpCreatedColumns(mlir::Operation* op);
 ColumnSet getSetOpUsedColumns(mlir::Operation* op);
 FunctionalDependencies getFDs(mlir::Operation* op);
