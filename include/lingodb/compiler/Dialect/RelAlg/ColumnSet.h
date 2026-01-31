@@ -41,9 +41,6 @@ class ColumnSet {
          attributes.erase(elem);
       }
    }
-   void remove(const lingodb::compiler::dialect::tuples::Column* attr) {
-      attributes.erase(attr);
-   }
    bool intersects(const ColumnSet& others) const {
       for (const auto* x : attributes) {
          if (others.attributes.contains(x)) {

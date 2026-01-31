@@ -12,35 +12,34 @@ class EliminateNullableTypes : public mlir::PassWrapper<EliminateNullableTypes, 
    public:
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(EliminateNullableTypes)
    virtual llvm::StringRef getArgument() const override { return "relalg-eliminate-nullable-types"; }
-   static void getRequired(mlir::Operation* op, relalg::ColumnSet& reallyRequired, relalg::ColumnSet& candidates) {
-      if (candidates.empty()) {
-         return;
+   static relalg::ColumnSet getRequired(Operator op, llvm::DenseMap<Operator, relalg::ColumnSet>& cache) {
+      if (cache.contains(op)) {
+         return cache[op];
       }
-      if (auto oper = mlir::dyn_cast_or_null<Operator>(op)) {
-         for (auto* x : oper.getUsedColumns().intersect(candidates)) {
-            candidates.remove(x);
-            reallyRequired.insert(x);
+      relalg::ColumnSet required;
+      for (auto* user : op->getUsers()) {
+         if (auto consumingOp = mlir::dyn_cast_or_null<Operator>(user)) {
+            required.insert(getRequired(consumingOp,cache));
+            required.insert(consumingOp.getUsedColumns());
          }
-         for (auto* user : oper->getUsers()) {
-            getRequired(user, reallyRequired, candidates);
-         }
-      } else if (auto materializeOp = mlir::dyn_cast_or_null<relalg::MaterializeOp>(op)) {
-         for (auto* x : relalg::ColumnSet::fromArrayAttr(materializeOp.getCols()).intersect(candidates)) {
-            candidates.remove(x);
-            reallyRequired.insert(x);
+         if (auto materializeOp = mlir::dyn_cast_or_null<relalg::MaterializeOp>(user)) {
+            required.insert(relalg::ColumnSet::fromArrayAttr(materializeOp.getCols()));
          }
       }
+      cache[op] = required;
+      return required;
    }
-   void materialize(mlir::Operation* op, size_t idx, lingodb::compiler::dialect::relalg::ColumnNullableChangeInfo& info) {
+   void materialize(mlir::Operation* op, size_t idx, lingodb::compiler::dialect::relalg::ColumnNullableChangeInfo& info,llvm::DenseMap<Operator, relalg::ColumnSet>& cache) {
       auto& colManager = getContext().getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
       mlir::OpBuilder builder(op->getContext());
       builder.setInsertionPoint(op);
-      relalg::ColumnSet reallyRequired;
-      relalg::ColumnSet candidates;
-      for (auto [nullable, nonnullable] : info.directMappings) {
-         candidates.insert(nullable);
+      relalg::ColumnSet required;
+      if (auto materializeOp = mlir::dyn_cast_or_null<relalg::MaterializeOp>(op)) {
+         required = relalg::ColumnSet::fromArrayAttr(materializeOp.getCols());
+      } else {
+         required = getRequired(mlir::cast<Operator>(op), cache);
+         required.insert(mlir::cast<Operator>(op).getUsedColumns());
       }
-      getRequired(op, reallyRequired, candidates);
 
       std::vector<mlir::Attribute>
          newColDefs;
@@ -53,7 +52,7 @@ class EliminateNullableTypes : public mlir::PassWrapper<EliminateNullableTypes, 
          builder.setInsertionPointToStart(block);
          for (auto [nullable, nonnullable] : info.directMappings) {
             auto colRef = colManager.createRef(nonnullable);
-            if (reallyRequired.contains(nullable)) {
+            if (required.contains(nullable)) {
                mlir::Value val = builder.create<tuples::GetColumnOp>(loc, nonnullable->type, colRef, tuple);
                toReturn.push_back(builder.create<db::AsNullableOp>(loc, nullable->type, val));
                auto colDef = colManager.createDef(nullable);
@@ -89,7 +88,7 @@ class EliminateNullableTypes : public mlir::PassWrapper<EliminateNullableTypes, 
       }
       return nullptr;
    }
-   void handleRec(mlir::Value val, lingodb::compiler::dialect::relalg::ColumnNullableChangeInfo info) {
+   void handleRec(mlir::Value val, lingodb::compiler::dialect::relalg::ColumnNullableChangeInfo info,llvm::DenseMap<Operator, relalg::ColumnSet>& cache) {
       if (!mlir::isa<tuples::TupleStreamType>(val.getType())) return;
       std::vector<std::pair<mlir::Operation*, uint32_t>> uses;
       for (auto& use : val.getUses()) {
@@ -99,20 +98,22 @@ class EliminateNullableTypes : public mlir::PassWrapper<EliminateNullableTypes, 
          if (auto nullCollumnTypeChangeable = mlir::dyn_cast<NullColumnTypeChangeable>(useOwner)) {
             if (nullCollumnTypeChangeable.changeForColumns(info).succeeded()) {
                if (auto op = mlir::dyn_cast<Operator>(useOwner)) {
-                  handleRec(op.asRelation(), info);
+                  handleRec(op.asRelation(), info, cache);
                }
             } else {
-               materialize(useOwner, useIdx, info);
+               materialize(useOwner, useIdx, info, cache);
             }
          } else {
-            materialize(useOwner, useIdx, info);
+            materialize(useOwner, useIdx, info, cache);
          }
       }
    }
    void runOnOperation() override {
+      llvm::DenseMap<Operator, relalg::ColumnSet> cache;
       auto& colManager = getContext().getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
       mlir::OpBuilder builder(&getContext());
       getOperation().walk([&](relalg::BaseTableOp baseTableOp) {
+         auto required = getRequired(baseTableOp, cache);
          if (!baseTableOp.getRestriction().filterDescription.empty()) {
             auto usedColumns = baseTableOp.getUsedColumns();
             auto restrictions = baseTableOp.getRestriction().filterDescription;
@@ -128,18 +129,19 @@ class EliminateNullableTypes : public mlir::PassWrapper<EliminateNullableTypes, 
             for (auto x : baseTableOp.getColumnsAttr()) {
                if (notNullColumns.contains(x.getName().str())) {
                   auto colDef = mlir::cast<tuples::ColumnDefAttr>(x.getValue());
-                  auto [scope, name] = colManager.getName(&colDef.getColumn());
-                  auto newColDef = colManager.createDef(scope, name + "__notnull");
-                  newColDef.getColumn().type = getBaseType(colDef.getColumn().type);
-                  info.directMappings[&colDef.getColumn()] = &newColDef.getColumn();
-                  mapping.push_back(builder.getNamedAttr(x.getName(), newColDef));
-
+                  if (required.contains(&colDef.getColumn())) {
+                     auto [scope, name] = colManager.getName(&colDef.getColumn());
+                     auto newColDef = colManager.createDef(scope, name + "__notnull");
+                     newColDef.getColumn().type = getBaseType(colDef.getColumn().type);
+                     info.directMappings[&colDef.getColumn()] = &newColDef.getColumn();
+                     mapping.push_back(builder.getNamedAttr(x.getName(), newColDef));
+                  }
                } else {
                   mapping.push_back(x);
                }
             }
             baseTableOp.setColumnsAttr(builder.getDictionaryAttr(mapping));
-            handleRec(baseTableOp.asRelation(), info);
+            handleRec(baseTableOp.asRelation(), info, cache);
          }
       });
       getOperation().walk([&](relalg::SelectionOp selection) {
@@ -150,7 +152,7 @@ class EliminateNullableTypes : public mlir::PassWrapper<EliminateNullableTypes, 
             auto newColDef = colManager.createDef(scope, name + "__notnullsel");
             newColDef.getColumn().type = getBaseType(notNullCheckedCol->type);
             info.directMappings[notNullCheckedCol] = &newColDef.getColumn();
-            handleRec(selection.asRelation(), info);
+            handleRec(selection.asRelation(), info, cache);
             mlir::OpBuilder builder(selection->getContext());
             builder.setInsertionPointAfter(selection);
             auto* block = new mlir::Block;
@@ -167,7 +169,7 @@ class EliminateNullableTypes : public mlir::PassWrapper<EliminateNullableTypes, 
             auto mapOp = builder.create<relalg::MapOp>(selection->getLoc(), tuples::TupleStreamType::get(&getContext()), selection.asRelation(), builder.getArrayAttr({newColDef}));
             mapOp.getPredicate().push_back(block);
             selection.asRelation().replaceAllUsesExcept(mapOp.asRelation(), mapOp);
-            handleRec(mapOp.asRelation(), info);
+            handleRec(mapOp.asRelation(), info, cache);
          }
       });
    }
