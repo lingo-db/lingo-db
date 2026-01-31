@@ -74,7 +74,7 @@ struct SubOpToControlFlowLoweringPass
    void runOnOperation() final;
 };
 
-static std::vector<mlir::Value> inlineBlock(mlir::Block* b, mlir::OpBuilder& rewriter, mlir::ValueRange arguments) {
+static llvm::SmallVector<mlir::Value> inlineBlock(mlir::Block* b, mlir::OpBuilder& rewriter, mlir::ValueRange arguments) {
    auto* terminator = b->getTerminator();
    auto returnOp = mlir::cast<tuples::ReturnOp>(terminator);
    mlir::IRMapping mapper;
@@ -87,15 +87,15 @@ static std::vector<mlir::Value> inlineBlock(mlir::Block* b, mlir::OpBuilder& rew
          rewriter.clone(x, mapper);
       }
    }
-   std::vector<mlir::Value> res;
+   llvm::SmallVector<mlir::Value> res;
    for (auto val : returnOp.getResults()) {
       res.push_back(mapper.lookup(val));
    }
    return res;
 }
-static std::vector<Type> unpackTypes(subop::StateMembersAttr membersAttr) {
+static llvm::SmallVector<Type> unpackTypes(subop::StateMembersAttr membersAttr) {
    auto& memberManager = membersAttr.getContext()->getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager();
-   std::vector<Type> res;
+   llvm::SmallVector<Type> res;
    for (auto x : membersAttr.getMembers()) {
       res.push_back(memberManager.getType(x));
    }
@@ -153,16 +153,16 @@ class ColumnMapping {
       assert(r);
       return r;
    }
-   std::vector<mlir::Value> resolve(mlir::Operation* op, mlir::ArrayAttr arr) {
-      std::vector<mlir::Value> res;
+   llvm::SmallVector<mlir::Value> resolve(mlir::Operation* op, mlir::ArrayAttr arr) {
+      llvm::SmallVector<mlir::Value> res;
       for (auto attr : arr) {
          res.push_back(resolve(op, mlir::cast<tuples::ColumnRefAttr>(attr)));
       }
       return res;
    }
    mlir::Value createInFlight(mlir::OpBuilder& builder) {
-      std::vector<mlir::Value> values;
-      std::vector<mlir::Attribute> columns;
+      llvm::SmallVector<mlir::Value> values;
+      llvm::SmallVector<mlir::Attribute> columns;
 
       for (auto m : mapping) {
          columns.push_back(builder.getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager().createDef(m.first));
@@ -196,13 +196,13 @@ class EntryStorageHelper {
       mlir::Type stored;
       size_t offset;
    };
-   llvm::DenseMap<Member, MemberInfo> memberInfos;
+   llvm::SmallDenseMap<Member, MemberInfo, 16> memberInfos;
 
    public:
    static bool compressionEnabled;
    EntryStorageHelper(mlir::Operation* op, subop::StateMembersAttr members, bool withLock, mlir::TypeConverter* typeConverter) : op(op), members(members), withLock(withLock) {
       auto& memberManager = members.getContext()->getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager();
-      std::vector<mlir::Type> types;
+      llvm::SmallVector<mlir::Type> types;
       size_t nullBitOffset = 0;
       for (auto m : members.getMembers()) {
          auto type = memberManager.getType(m);
@@ -270,9 +270,9 @@ class EntryStorageHelper {
    }
 
    class LazyValueMap {
-      llvm::DenseMap<Member, mlir::Value> values;
+      llvm::SmallDenseMap<Member, mlir::Value> values;
       // name -> (isNull: i1) mapping
-      llvm::DenseMap<Member, mlir::Value> nullBitCache;
+      llvm::SmallDenseMap<Member, mlir::Value> nullBitCache;
       std::optional<mlir::Value> nullBitSet;
       std::optional<mlir::Value> nullBitSetRef;
       mlir::Value ref;
@@ -440,8 +440,8 @@ class EntryStorageHelper {
       }
       return ref;
    }
-   std::vector<mlir::Value> resolve(mlir::Operation* op, subop::ColumnRefMemberMappingAttr mapping, ColumnMapping columnMapping) {
-      std::vector<mlir::Value> result;
+   llvm::SmallVector<mlir::Value> resolve(mlir::Operation* op, subop::ColumnRefMemberMappingAttr mapping, ColumnMapping columnMapping) {
+      llvm::SmallVector<mlir::Value> result;
       for (auto m : members.getMembers()) {
          result.push_back(columnMapping.resolve(op, mapping.getColumnRef(m)));
       }
@@ -513,14 +513,23 @@ struct InFlightTupleStream {
    subop::InFlightOp inFlightOp;
    ColumnMapping columnMapping;
 };
-class SubOpRewriter {
-   mlir::OpBuilder builder;
-   std::vector<mlir::IRMapping> valueMapping;
+
+struct PatternList {
    llvm::DenseMap<OperationName, llvm::SmallVector<std::unique_ptr<AbstractSubOpConversionPattern>>> patterns;
+   template <class PatternT, typename... Args>
+   void insertPattern(Args&&... args) {
+      auto uniquePtr = std::make_unique<PatternT>(std::forward<Args>(args)...);
+      patterns[uniquePtr->getOperationName()].push_back(std::move(uniquePtr));
+   }
+};
+class SubOpRewriter {
+   PatternList& patternList;
+   mlir::OpBuilder builder;
+   llvm::SmallVector<mlir::IRMapping> valueMapping;
    llvm::DenseMap<mlir::Value, InFlightTupleStream> inFlightTupleStreams;
-   std::vector<mlir::Operation*> toErase;
+   llvm::SmallVector<mlir::Operation*> toErase;
    llvm::DenseSet<mlir::Operation*> isErased;
-   std::vector<mlir::Operation*> toRewrite;
+   llvm::SmallVector<mlir::Operation*> toRewrite;
    mlir::Operation* currentStreamLoc = nullptr;
    struct ExecutionStepContext {
       subop::ExecutionStepOp executionStep;
@@ -528,10 +537,13 @@ class SubOpRewriter {
    };
    std::stack<ExecutionStepContext> executionStepContexts;
 
+   util::RefType barePtrType;
+
    public:
-   SubOpRewriter(subop::ExecutionStepOp executionStep, mlir::IRMapping& outerMapping) : builder(executionStep), executionStepContexts{} {
+   SubOpRewriter(PatternList& patternList, subop::ExecutionStepOp executionStep, mlir::IRMapping& outerMapping) : patternList(patternList), builder(executionStep), executionStepContexts{} {
       valueMapping.push_back(mlir::IRMapping());
       executionStepContexts.push({executionStep, outerMapping});
+      barePtrType = util::RefType::get(getContext(), builder.getI8Type());
    }
    auto getIndexType() { return builder.getIndexType(); }
    auto setInsertionPointAfter(mlir::Operation* op) { return builder.setInsertionPointAfter(op); }
@@ -543,10 +555,11 @@ class SubOpRewriter {
    auto getI1Type() { return builder.getI1Type(); }
    auto getI64Type() { return builder.getI64Type(); }
    auto getStringAttr(const Twine& bytes) { return builder.getStringAttr(bytes); }
+   auto getPtrType() { return barePtrType; }
    mlir::Value storeStepRequirements(mlir::Value exclude = {}) {
       auto outerMapping = executionStepContexts.top().outerMapping;
       auto executionStep = executionStepContexts.top().executionStep;
-      std::vector<mlir::Type> types;
+      llvm::SmallVector<mlir::Type> types;
       for (auto [param, arg, isThreadLocal] : llvm::zip(executionStep.getInputs(), executionStep.getSubOps().front().getArguments(), executionStep.getIsThreadLocal())) {
          if (exclude && arg == exclude && arg.hasOneUse()) continue;
          mlir::Value input = outerMapping.lookup(param);
@@ -561,7 +574,7 @@ class SubOpRewriter {
          auto memberRef = create<util::TupleElementPtrOp>(builder.getUnknownLoc(), util::RefType::get(getContext(), input.getType()), contextPtr, offset++);
          create<util::StoreOp>(builder.getUnknownLoc(), input, memberRef, mlir::Value());
       }
-      contextPtr = create<util::GenericMemrefCastOp>(builder.getUnknownLoc(), util::RefType::get(getContext(), getI8Type()), contextPtr);
+      contextPtr = create<util::GenericMemrefCastOp>(builder.getUnknownLoc(), barePtrType, contextPtr);
       return contextPtr;
    }
    void cleanup() {
@@ -587,7 +600,7 @@ class SubOpRewriter {
    Guard loadStepRequirements(mlir::Value contextPtr, mlir::TypeConverter* typeConverter, mlir::Value exclude = {}) {
       auto outerMapping = executionStepContexts.top().outerMapping;
       auto executionStep = executionStepContexts.top().executionStep;
-      std::vector<mlir::Type> types;
+      llvm::SmallVector<mlir::Type> types;
       for (auto [param, arg, isThreadLocal] : llvm::zip(executionStep.getInputs(), executionStep.getSubOps().front().getArguments(), executionStep.getIsThreadLocal())) {
          if (exclude && arg == exclude && arg.hasOneUse()) continue;
          mlir::Value input = outerMapping.lookup(param);
@@ -743,7 +756,7 @@ class SubOpRewriter {
       for (auto z : llvm::zip(block->getArguments(), values)) {
          std::get<0>(z).replaceAllUsesWith(std::get<1>(z));
       }
-      std::vector<mlir::Operation*> toInsert;
+      llvm::SmallVector<mlir::Operation*> toInsert;
       mlir::Operation* terminator;
       for (auto& op : block->getOperations()) {
          if (&op != block->getTerminator()) {
@@ -758,7 +771,7 @@ class SubOpRewriter {
          builder.insert(op);
          registerOpInserted(op);
       }
-      std::vector<mlir::Value> adaptorVals;
+      llvm::SmallVector<mlir::Value> adaptorVals;
       for (auto operand : terminator->getOperands()) {
          adaptorVals.push_back(getMapped(operand));
       }
@@ -773,11 +786,6 @@ class SubOpRewriter {
    }
    operator mlir::OpBuilder&() { return builder; }
 
-   template <class PatternT, typename... Args>
-   void insertPattern(Args&&... args) {
-      auto uniquePtr = std::make_unique<PatternT>(std::forward<Args>(args)...);
-      patterns[uniquePtr->getOperationName()].push_back(std::move(uniquePtr));
-   }
    void rewrite(mlir::Operation* op, mlir::Operation* before = nullptr) {
       if (isErased.contains(op)) return;
       if (before) {
@@ -785,9 +793,9 @@ class SubOpRewriter {
       } else {
          builder.setInsertionPoint(op);
       }
-      for (auto& p : patterns[op->getName()]) { //todo: ordering
+      for (auto& p : patternList.patterns[op->getName()]) { //todo: ordering
          if (p->matchAndRewrite(op, *this).succeeded()) {
-            std::vector<mlir::Operation*> localRewrite = std::move(toRewrite);
+            llvm::SmallVector<mlir::Operation*> localRewrite = std::move(toRewrite);
             for (auto* r : localRewrite) {
                if (shouldRewrite(r)) {
                   rewrite(r);
@@ -872,7 +880,7 @@ class SubOpConversionPattern : public AbstractSubOpConversionPattern {
       : AbstractSubOpConversionPattern(&typeConverter, OperationName(OpT::getOperationName(), context), benefit,
                                        context) {}
    LogicalResult matchAndRewrite(mlir::Operation* op, SubOpRewriter& rewriter) override {
-      std::vector<mlir::Value> newOperands;
+      llvm::SmallVector<mlir::Value> newOperands;
       for (auto operand : op->getOperands()) {
          newOperands.push_back(rewriter.getMapped(operand));
       }
@@ -901,7 +909,7 @@ class SubOpTupleStreamConsumerConversionPattern : public AbstractSubOpConversion
 
       auto stream = castedOp.getStream();
       return rewriter.implementStreamConsumer(stream, [&](SubOpRewriter& rewriter, ColumnMapping& mapping) {
-         std::vector<mlir::Value> newOperands;
+         llvm::SmallVector<mlir::Value> newOperands;
          for (auto operand : op->getOperands()) {
             newOperands.push_back(rewriter.getMapped(operand));
          }
@@ -954,7 +962,7 @@ static mlir::TupleType getHashMultiMapValueType(subop::HashMultiMapType t, mlir:
 }
 
 static TupleType convertTuple(TupleType tupleType, TypeConverter& typeConverter) {
-   std::vector<Type> types;
+   llvm::SmallVector<Type> types;
    for (auto t : tupleType.getTypes()) {
       Type converted = typeConverter.convertType(t);
       converted = converted ? converted : t;
@@ -1027,7 +1035,7 @@ class CreateThreadLocalLowering : public SubOpConversionPattern<subop::CreateThr
       ModuleOp parentModule = createThreadLocal->getParentOfType<ModuleOp>();
       mlir::func::FuncOp funcOp;
       auto loc = createThreadLocal->getLoc();
-      auto i8PtrType = util::RefType::get(rewriter.getI8Type());
+      auto i8PtrType = rewriter.getPtrType();
       rewriter.atStartOf(parentModule.getBody(), [&](SubOpRewriter& rewriter) {
          funcOp = rewriter.create<mlir::func::FuncOp>(parentModule.getLoc(), "thread_local_init" + std::to_string(id++), mlir::FunctionType::get(getContext(), TypeRange({i8PtrType}), TypeRange(i8PtrType)));
       });
@@ -1036,10 +1044,10 @@ class CreateThreadLocalLowering : public SubOpConversionPattern<subop::CreateThr
       funcOp.getBody().push_back(funcBody);
       mlir::Block* newBlock = new Block;
       mlir::OpBuilder builder(rewriter.getContext());
-      std::vector<mlir::Operation*> toInsert;
+      llvm::SmallVector<mlir::Operation*> toInsert;
       builder.setInsertionPointToStart(newBlock);
       mlir::Value argRef = newBlock->addArgument(util::RefType::get(rewriter.getI8Type()), createThreadLocal.getLoc());
-      argRef = builder.create<util::GenericMemrefCastOp>(createThreadLocal->getLoc(), util::RefType::get(rewriter.getContext(), util::RefType::get(rewriter.getContext(), rewriter.getI8Type())), argRef);
+      argRef = builder.create<util::GenericMemrefCastOp>(createThreadLocal->getLoc(), util::RefType::get(rewriter.getContext(), i8PtrType), argRef);
       for (auto& op : createThreadLocal.getInitFn().front().getOperations()) {
          toInsert.push_back(&op);
       }
@@ -1047,8 +1055,8 @@ class CreateThreadLocalLowering : public SubOpConversionPattern<subop::CreateThr
          op->remove();
          builder.insert(op);
       }
-      std::vector<mlir::Value> toStore;
-      std::vector<mlir::Operation*> toDelete;
+      llvm::SmallVector<mlir::Value> toStore;
+      llvm::SmallVector<mlir::Operation*> toDelete;
       newBlock->walk([&](tuples::GetParamVal op) {
          builder.setInsertionPointAfter(op);
          auto idx = toStore.size();
@@ -1065,7 +1073,7 @@ class CreateThreadLocalLowering : public SubOpConversionPattern<subop::CreateThr
       rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
          rewriter.inlineBlock<tuples::ReturnOpAdaptor>(newBlock, mlir::ValueRange{funcArg}, [&](tuples::ReturnOpAdaptor adaptor) {
             mlir::Value unrealized = rewriter.create<mlir::UnrealizedConversionCastOp>(createThreadLocal->getLoc(), createThreadLocal.getType().getWrapped(), adaptor.getResults()[0]).getOutputs()[0];
-            mlir::Value casted = rewriter.create<util::GenericMemrefCastOp>(createThreadLocal->getLoc(), util::RefType::get(rewriter.getI8Type()), unrealized);
+            mlir::Value casted = rewriter.create<util::GenericMemrefCastOp>(createThreadLocal->getLoc(), i8PtrType, unrealized);
             rewriter.create<mlir::func::ReturnOp>(loc, casted);
          });
          delete newBlock;
@@ -1146,7 +1154,7 @@ class ScanRefsTableLowering : public SubOpConversionPattern<subop::ScanRefsOp> {
       auto loc = scanOp->getLoc();
       auto refType = mlir::cast<subop::TableEntryRefType>(scanOp.getRef().getColumn().type);
       std::string memberMapping = "[";
-      std::vector<mlir::Type> accessedColumnTypes;
+      llvm::SmallVector<mlir::Type> accessedColumnTypes;
       auto members = refType.getMembers();
       for (auto m : members.getMembers()) {
          auto type = memberManager.getType(m);
@@ -1188,7 +1196,7 @@ class ScanRefsTableLowering : public SubOpConversionPattern<subop::ScanRefsOp> {
          }
          mlir::Value ptrRef = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(util::RefType::get(arrow::ArrayType::get(ctxt))), recordBatchPointer, 3);
          mlir::Value ptrToColumns = rewriter.create<util::LoadOp>(loc, ptrRef);
-         std::vector<mlir::Value> arrays;
+         llvm::SmallVector<mlir::Value> arrays;
          for (size_t i = 0; i < accessedColumnTypes.size(); i++) {
             auto ci = rewriter.create<mlir::arith::ConstantIndexOp>(loc, i);
             auto array = rewriter.create<util::LoadOp>(loc, ptrToColumns, ci);
@@ -1250,7 +1258,7 @@ class MergeThreadLocalResultTable : public SubOpConversionPattern<subop::MergeOp
             auto rightLoaded = rewriter.create<util::LoadOp>(loc, rightPtr);
             auto leftBuilders = rewriter.create<util::UnPackOp>(loc, leftLoaded);
             auto rightBuilders = rewriter.create<util::UnPackOp>(loc, rightLoaded);
-            std::vector<mlir::Value> results;
+            llvm::SmallVector<mlir::Value> results;
             for (size_t i = 0; i < leftBuilders.getNumResults(); i++) {
                rt::ArrowColumnBuilder::merge(rewriter, loc)({leftBuilders.getResults()[i], rightBuilders.getResults()[i]});
                results.push_back(leftBuilders.getResults()[i]);
@@ -1328,7 +1336,7 @@ class CreateTableLowering : public SubOpConversionPattern<subop::GenericCreateOp
       auto& memberManager = getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
       auto tableType = mlir::cast<subop::ResultTableType>(createOp.getType());
       std::string descr;
-      std::vector<mlir::Value> columnBuilders;
+      llvm::SmallVector<mlir::Value> columnBuilders;
       auto loc = createOp->getLoc();
       auto members = tableType.getMembers().getMembers();
       for (auto m : members) {
@@ -1365,11 +1373,11 @@ class GenerateLowering : public SubOpConversionPattern<subop::GenerateOp> {
 
    LogicalResult matchAndRewrite(subop::GenerateOp generateOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
       ColumnMapping mapping;
-      std::vector<subop::GenerateEmitOp> emitOps;
+      llvm::SmallVector<subop::GenerateEmitOp> emitOps;
       generateOp.getRegion().walk([&](subop::GenerateEmitOp emitOp) {
          emitOps.push_back(emitOp);
       });
-      std::vector<mlir::Value> streams;
+      llvm::SmallVector<mlir::Value> streams;
       for (auto emitOp : emitOps) {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPointAfter(emitOp);
@@ -1399,7 +1407,7 @@ class MapLowering : public SubOpTupleStreamConsumerConversionPattern<subop::MapO
 
    void rewrite(subop::MapOp mapOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
       auto args = mapping.resolve(mapOp, mapOp.getInputCols());
-      std::vector<Value> res;
+      llvm::SmallVector<Value> res;
 
       rewriter.inlineBlock<tuples::ReturnOpAdaptor>(&mapOp.getFn().front(), args, [&](tuples::ReturnOpAdaptor adaptor) {
          res.insert(res.end(), adaptor.getResults().begin(), adaptor.getResults().end());
@@ -1614,7 +1622,7 @@ class CreateSegmentTreeViewLowering : public SubOpConversionPattern<subop::Creat
             Value dest = funcBody->getArgument(0);
             Value src = funcBody->getArgument(1);
             auto sourceValues = sourceStorageHelper.getValueMap(src, rewriter, loc);
-            std::vector<mlir::Value> args;
+            llvm::SmallVector<mlir::Value> args;
             for (auto relevantMember : createOp.getRelevantMembers()) {
                args.push_back(sourceValues.get(mlir::cast<subop::MemberAttr>(relevantMember).getMember()));
             }
@@ -1634,7 +1642,7 @@ class CreateSegmentTreeViewLowering : public SubOpConversionPattern<subop::Creat
          rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
             auto leftValues = viewStorageHelper.getValueMap(left, rewriter, loc);
             auto rightValues = viewStorageHelper.getValueMap(right, rewriter, loc);
-            std::vector<mlir::Value> args;
+            llvm::SmallVector<mlir::Value> args;
             args.insert(args.end(), leftValues.begin(), leftValues.end());
             args.insert(args.end(), rightValues.begin(), rightValues.end());
             Block* sortLambda = &createOp.getCombineFn().front();
@@ -1679,7 +1687,7 @@ class CreateHeapLowering : public SubOpConversionPattern<subop::CreateHeapOp> {
       rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
          auto leftVals = storageHelper.getValueMap(left, rewriter, loc, heapOp.getSortBy());
          auto rightVals = storageHelper.getValueMap(right, rewriter, loc, heapOp.getSortBy());
-         std::vector<mlir::Value> args;
+         llvm::SmallVector<mlir::Value> args;
          args.insert(args.end(), leftVals.begin(), leftVals.end());
          args.insert(args.end(), rightVals.begin(), rightVals.end());
          Block* sortLambda = &heapOp.getRegion().front();
@@ -1744,7 +1752,7 @@ class MergeThreadLocalSimpleState : public SubOpConversionPattern<subop::MergeOp
          rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
             auto leftValues = storageHelper.getValueMap(left, rewriter, loc);
             auto rightValues = storageHelper.getValueMap(right, rewriter, loc);
-            std::vector<mlir::Value> args;
+            llvm::SmallVector<mlir::Value> args;
             args.insert(args.end(), leftValues.begin(), leftValues.end());
             args.insert(args.end(), rightValues.begin(), rightValues.end());
             for (size_t i = 0; i < args.size(); i++) {
@@ -1805,7 +1813,7 @@ class MergeThreadLocalHashMap : public SubOpConversionPattern<subop::MergeOp> {
                Value dest = left;
                auto leftValues = valStorageHelper.getValueMap(left, rewriter, loc);
                auto rightValues = valStorageHelper.getValueMap(right, rewriter, loc);
-               std::vector<mlir::Value> args;
+               llvm::SmallVector<mlir::Value> args;
                args.insert(args.end(), leftValues.begin(), leftValues.end());
                args.insert(args.end(), rightValues.begin(), rightValues.end());
                for (size_t i = 0; i < args.size(); i++) {
@@ -1830,7 +1838,7 @@ class MergeThreadLocalHashMap : public SubOpConversionPattern<subop::MergeOp> {
          rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
             auto leftKeys = keyStorageHelper.getValueMap(left, rewriter, loc);
             auto rightKeys = keyStorageHelper.getValueMap(right, rewriter, loc);
-            std::vector<mlir::Value> args;
+            llvm::SmallVector<mlir::Value> args;
             args.insert(args.end(), leftKeys.begin(), leftKeys.end());
             args.insert(args.end(), rightKeys.begin(), rightKeys.end());
             auto res = inlineBlock(&mergeOp.getEqFn().front(), rewriter, args)[0];
@@ -1883,7 +1891,7 @@ class MergePreAggrHashMap : public SubOpConversionPattern<subop::MergeOp> {
                Value dest = left;
                auto leftValues = valStorageHelper.getValueMap(left, rewriter, loc);
                auto rightValues = valStorageHelper.getValueMap(right, rewriter, loc);
-               std::vector<mlir::Value> args;
+               llvm::SmallVector<mlir::Value> args;
                args.insert(args.end(), leftValues.begin(), leftValues.end());
                args.insert(args.end(), rightValues.begin(), rightValues.end());
                assert(!mergeOp.getCombineFn().empty());
@@ -1910,7 +1918,7 @@ class MergePreAggrHashMap : public SubOpConversionPattern<subop::MergeOp> {
          rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
             auto leftKeys = keyStorageHelper.getValueMap(left, rewriter, loc);
             auto rightKeys = keyStorageHelper.getValueMap(right, rewriter, loc);
-            std::vector<mlir::Value> args;
+            llvm::SmallVector<mlir::Value> args;
             args.insert(args.end(), leftKeys.begin(), leftKeys.end());
             args.insert(args.end(), rightKeys.begin(), rightKeys.end());
             auto res = inlineBlock(&mergeOp.getEqFn().front(), rewriter, args)[0];
@@ -1932,7 +1940,7 @@ class SortLowering : public SubOpConversionPattern<subop::CreateSortedViewOp> {
    LogicalResult matchAndRewrite(subop::CreateSortedViewOp sortOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
       static size_t id = 0;
       auto bufferType = mlir::cast<subop::BufferType>(sortOp.getToSort().getType());
-      auto ptrType = util::RefType::get(getContext(), IntegerType::get(getContext(), 8));
+      auto ptrType = rewriter.getPtrType();
       EntryStorageHelper storageHelper(sortOp, bufferType.getMembers(), bufferType.hasLock(), typeConverter);
       ModuleOp parentModule = sortOp->getParentOfType<ModuleOp>();
       mlir::func::FuncOp funcOp;
@@ -1946,7 +1954,7 @@ class SortLowering : public SubOpConversionPattern<subop::CreateSortedViewOp> {
       rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
          auto leftVals = storageHelper.getValueMap(funcBody->getArgument(0), rewriter, sortOp->getLoc(), sortOp.getSortBy());
          auto rightVals = storageHelper.getValueMap(funcBody->getArgument(1), rewriter, sortOp->getLoc(), sortOp.getSortBy());
-         std::vector<mlir::Value> args;
+         llvm::SmallVector<mlir::Value> args;
          args.insert(args.end(), leftVals.begin(), leftVals.end());
          args.insert(args.end(), rightVals.begin(), rightVals.end());
          Block* sortLambda = &sortOp.getRegion().front();
@@ -2127,7 +2135,7 @@ class ScanHashMultiMap : public SubOpConversionPattern<subop::ScanRefsOp> {
       auto it = rt::Hashtable::createIterator(rewriter, loc)({adaptor.getState()})[0];
       EntryStorageHelper valStorageHelper(scanRefsOp, hashMultiMapType.getValueMembers(), false, typeConverter);
       EntryStorageHelper keyStorageHelper(scanRefsOp, hashMultiMapType.getKeyMembers(), hashMultiMapType.hasLock(), typeConverter);
-      auto i8PtrType = util::RefType::get(getContext(), rewriter.getI8Type());
+      auto i8PtrType = rewriter.getPtrType();
       auto i8PtrPtrType = util::RefType::get(getContext(), i8PtrType);
 
       implementBufferIteration(scanRefsOp->hasAttr("parallel"), it, getHashMultiMapEntryType(hashMultiMapType, *typeConverter), loc, rewriter, *typeConverter, scanRefsOp.getOperation(), [&](SubOpRewriter& rewriter, mlir::Value ptr) {
@@ -2272,7 +2280,7 @@ class ScanListLowering : public SubOpConversionPattern<subop::ScanListOp> {
             mlir::Value afterPtr = after->addArgument(iteratorType, loc);
             rewriter.atStartOf(before, [&](SubOpRewriter& rewriter) {
                auto tupleType = mlir::TupleType::get(getContext(), unpackTypes(referenceType.getMembers()));
-               auto i8PtrType = util::RefType::get(getContext(), rewriter.getI8Type());
+               auto i8PtrType = rewriter.getPtrType();
                Value castedPtr = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(getContext(), mlir::TupleType::get(getContext(), {i8PtrType, rewriter.getIndexType(), tupleType})), beforePtr);
                Value valuePtr = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(getContext(), tupleType), castedPtr, 2);
                if (hashIndexedViewType.getCompareHashForLookup()) {
@@ -2362,7 +2370,7 @@ class ScanExternalHashIndexListLowering : public SubOpConversionPattern<subop::S
          mlir::Value offsetRef = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(rewriter.getIndexType()), recordBatchPointer, 1);
          mlir::Value ptrRef = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(util::RefType::get(arrow::ArrayType::get(ctxt))), recordBatchPointer, 3);
          mlir::Value ptrToColumns = rewriter.create<util::LoadOp>(loc, ptrRef);
-         std::vector<mlir::Value> arrays;
+         llvm::SmallVector<mlir::Value> arrays;
          for (size_t i = 0; i < externalHashIndexType.getMembers().getMembers().size(); i++) {
             auto ci = rewriter.create<mlir::arith::ConstantIndexOp>(loc, i);
             auto array = rewriter.create<util::LoadOp>(loc, ptrToColumns, ci);
@@ -2408,7 +2416,7 @@ class ScanMultiMapListLowering : public SubOpConversionPattern<subop::ScanListOp
       auto ptr = adaptor.getList();
       EntryStorageHelper keyStorageHelper(scanOp, hashMultiMapType.getKeyMembers(), false, typeConverter);
       EntryStorageHelper valStorageHelper(scanOp, hashMultiMapType.getValueMembers(), hashMultiMapType.hasLock(), typeConverter);
-      auto i8PtrType = util::RefType::get(getContext(), rewriter.getI8Type());
+      auto i8PtrType = rewriter.getPtrType();
       auto i8PtrPtrType = util::RefType::get(getContext(), i8PtrType);
       Value ptrValid = rewriter.create<util::IsRefValidOp>(loc, rewriter.getI1Type(), ptr);
       mlir::Value valuePtr = rewriter.create<scf::IfOp>(
@@ -2434,7 +2442,6 @@ class ScanMultiMapListLowering : public SubOpConversionPattern<subop::ScanListOp
          rewriter.create<mlir::scf::ConditionOp>(loc, cond, beforePtr);
       });
       rewriter.atStartOf(after, [&](SubOpRewriter& rewriter) {
-         auto i8PtrType = util::RefType::get(getContext(), rewriter.getI8Type());
          Value castedPtr = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(getContext(), mlir::TupleType::get(getContext(), {i8PtrType, valStorageHelper.getStorageType()})), afterPtr);
          Value valuePtr = rewriter.create<util::TupleElementPtrOp>(loc, valStorageHelper.getRefType(), castedPtr, 1);
          if (onlyValues) {
@@ -2570,7 +2577,7 @@ class LookupHashIndexedViewLowering : public SubOpTupleStreamConsumerConversionP
       mlir::Value hash = mapping.resolve(lookupOp, lookupOp.getKeys())[0];
       auto* context = getContext();
       auto indexType = rewriter.getIndexType();
-      auto htType = util::RefType::get(context, util::RefType::get(context, rewriter.getI8Type()));
+      auto htType = util::RefType::get(context, rewriter.getPtrType());
 
       Value castedPointer = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(context, TupleType::get(context, {htType, indexType})), adaptor.getState());
 
@@ -2579,7 +2586,7 @@ class LookupHashIndexedViewLowering : public SubOpTupleStreamConsumerConversionP
       Value ht = unpacked.getResult(0);
       Value htMask = unpacked.getResult(1);
       Value buckedPos = rewriter.create<arith::AndIOp>(loc, htMask, hash);
-      Value ptr = rewriter.create<util::LoadOp>(loc, util::RefType::get(getContext(), rewriter.getI8Type()), ht, buckedPos);
+      Value ptr = rewriter.create<util::LoadOp>(loc, rewriter.getPtrType(), ht, buckedPos);
       //optimization
       Value refValid = rewriter.create<util::PtrTagMatches>(loc, rewriter.getI1Type(), ptr, hash);
       ptr = rewriter.create<util::UnTagPtr>(loc, ptr.getType(), ptr);
@@ -2618,7 +2625,7 @@ class LookupSegmentTreeViewLowering : public SubOpTupleStreamConsumerConversionP
       rewriter.replaceTupleStream(lookupOp, mapping);
    }
 };
-mlir::Value hashKeys(std::vector<mlir::Value> keys, OpBuilder& rewriter, Location loc) {
+mlir::Value hashKeys(llvm::SmallVector<mlir::Value> keys, OpBuilder& rewriter, Location loc) {
    return rewriter.create<db::Hash>(loc, keys);
 }
 class PureLookupHashMapLowering : public SubOpTupleStreamConsumerConversionPattern<subop::LookupOp> {
@@ -2635,8 +2642,8 @@ class PureLookupHashMapLowering : public SubOpTupleStreamConsumerConversionPatte
       EntryStorageHelper valStorageHelper(lookupOp, htStateType.getValueMembers(), htStateType.hasLock(), typeConverter);
       auto lookupKey = mapping.resolve(lookupOp, lookupOp.getKeys());
       mlir::Value hash = hashKeys(lookupKey, rewriter, lookupOp->getLoc());
-      auto equalFnBuilder = [&lookupOp](mlir::OpBuilder& rewriter, EntryStorageHelper::LazyValueMap left, std::vector<Value> right) -> Value {
-         std::vector<mlir::Value> arguments;
+      auto equalFnBuilder = [&lookupOp](mlir::OpBuilder& rewriter, EntryStorageHelper::LazyValueMap left, llvm::SmallVector<Value> right) -> Value {
+         llvm::SmallVector<mlir::Value> arguments;
          arguments.insert(arguments.end(), left.begin(), left.end());
          arguments.insert(arguments.end(), right.begin(), right.end());
          auto res = inlineBlock(&lookupOp.getEqFn().front(), rewriter, arguments);
@@ -2733,7 +2740,7 @@ class PureLookupHashMapLowering : public SubOpTupleStreamConsumerConversionPatte
          });
 
       Value currEntryPtr = ifOpOuter.getResult(0);
-      currEntryPtr = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(getContext(), rewriter.getI8Type()), currEntryPtr);
+      currEntryPtr = rewriter.create<util::GenericMemrefCastOp>(loc, rewriter.getPtrType(), currEntryPtr);
       mapping.define(lookupOp.getRef(), currEntryPtr);
       rewriter.replaceTupleStream(lookupOp, mapping);
    }
@@ -2755,8 +2762,8 @@ class PureLookupPreAggregationHtLowering : public SubOpTupleStreamConsumerConver
 
       mlir::Value hash = hashKeys(lookupKey, rewriter, lookupOp->getLoc());
       ASSERT_WITH_OP(!lookupOp.getEqFn().empty(), lookupOp, "LookupOp must have an equality function");
-      auto equalFnBuilder = [&lookupOp](mlir::OpBuilder& rewriter, EntryStorageHelper::LazyValueMap left, std::vector<Value> right) -> Value {
-         std::vector<mlir::Value> arguments;
+      auto equalFnBuilder = [&lookupOp](mlir::OpBuilder& rewriter, EntryStorageHelper::LazyValueMap left, llvm::SmallVector<Value> right) -> Value {
+         llvm::SmallVector<mlir::Value> arguments;
          arguments.insert(arguments.end(), left.begin(), left.end());
          arguments.insert(arguments.end(), right.begin(), right.end());
          auto res = inlineBlock(&lookupOp.getEqFn().front(), rewriter, arguments);
@@ -2849,7 +2856,7 @@ class PureLookupPreAggregationHtLowering : public SubOpTupleStreamConsumerConver
          });
 
       Value currEntryPtr = ifOpOuter.getResult(0);
-      currEntryPtr = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(getContext(), rewriter.getI8Type()), currEntryPtr);
+      currEntryPtr = rewriter.create<util::GenericMemrefCastOp>(loc, rewriter.getPtrType(), currEntryPtr);
       mapping.define(lookupOp.getRef(), currEntryPtr);
       rewriter.replaceTupleStream(lookupOp, mapping);
    }
@@ -2871,8 +2878,8 @@ class LookupHashMultiMapLowering : public SubOpTupleStreamConsumerConversionPatt
       auto lookupKey = mapping.resolve(lookupOp, lookupOp.getKeys());
 
       mlir::Value hash = hashKeys(lookupKey, rewriter, lookupOp->getLoc());
-      auto equalFnBuilder = [&lookupOp](mlir::OpBuilder& rewriter, EntryStorageHelper::LazyValueMap left, std::vector<Value> right) -> Value {
-         std::vector<mlir::Value> arguments;
+      auto equalFnBuilder = [&lookupOp](mlir::OpBuilder& rewriter, EntryStorageHelper::LazyValueMap left, llvm::SmallVector<Value> right) -> Value {
+         llvm::SmallVector<mlir::Value> arguments;
          arguments.insert(arguments.end(), left.begin(), left.end());
          arguments.insert(arguments.end(), right.begin(), right.end());
          auto res = inlineBlock(&lookupOp.getEqFn().front(), rewriter, arguments);
@@ -2984,12 +2991,12 @@ class InsertMultiMapLowering : public SubOpTupleStreamConsumerConversionPattern<
       EntryStorageHelper keyStorageHelper(insertOp, htStateType.getKeyMembers(), false, typeConverter);
       EntryStorageHelper valStorageHelper(insertOp, htStateType.getValueMembers(), htStateType.hasLock(), typeConverter);
       auto loc = insertOp->getLoc();
-      std::vector<mlir::Value> lookupKey = keyStorageHelper.resolve(insertOp, insertOp.getMapping(), mapping);
+      llvm::SmallVector<mlir::Value> lookupKey = keyStorageHelper.resolve(insertOp, insertOp.getMapping(), mapping);
 
       mlir::Value hash = hashKeys(lookupKey, rewriter, loc);
       mlir::Value hashTable = adaptor.getState();
-      auto equalFnBuilder = [&insertOp](mlir::OpBuilder& rewriter, EntryStorageHelper::LazyValueMap left, std::vector<Value> right) -> Value {
-         std::vector<mlir::Value> arguments;
+      auto equalFnBuilder = [&insertOp](mlir::OpBuilder& rewriter, EntryStorageHelper::LazyValueMap left, llvm::SmallVector<Value> right) -> Value {
+         llvm::SmallVector<mlir::Value> arguments;
          arguments.insert(arguments.end(), left.begin(), left.end());
          arguments.insert(arguments.end(), right.begin(), right.end());
          auto res = inlineBlock(&insertOp.getEqFn().front(), rewriter, arguments);
@@ -3109,17 +3116,17 @@ class LookupPreAggrHtFragment : public SubOpTupleStreamConsumerConversionPattern
       EntryStorageHelper valStorageHelper(lookupOp, fragmentType.getValueMembers(), fragmentType.hasLock(), typeConverter);
       auto lookupKey = mapping.resolve(lookupOp, lookupOp.getKeys());
       mlir::Value hash = hashKeys(lookupKey, rewriter, lookupOp->getLoc());
-      auto equalFnBuilder = [&lookupOp](mlir::OpBuilder& rewriter, EntryStorageHelper::LazyValueMap left, std::vector<Value> right) -> Value {
-         std::vector<mlir::Value> arguments;
+      auto equalFnBuilder = [&lookupOp](mlir::OpBuilder& rewriter, EntryStorageHelper::LazyValueMap left, llvm::SmallVector<Value> right) -> Value {
+         llvm::SmallVector<mlir::Value> arguments;
          arguments.insert(arguments.end(), left.begin(), left.end());
          arguments.insert(arguments.end(), right.begin(), right.end());
          auto res = inlineBlock(&lookupOp.getEqFn().front(), rewriter, arguments);
          return res[0];
       };
-      auto initValBuilder = [&lookupOp, this](SubOpRewriter& rewriter) -> std::vector<mlir::Value> {
-         std::vector<mlir::Value> res;
+      auto initValBuilder = [&lookupOp, this](SubOpRewriter& rewriter) -> llvm::SmallVector<mlir::Value> {
+         llvm::SmallVector<mlir::Value> res;
          rewriter.inlineBlock<tuples::ReturnOpAdaptor>(&lookupOp.getInitFn().front(), {}, [&](tuples::ReturnOpAdaptor adaptor) {
-            res = std::vector<mlir::Value>{adaptor.getResults().begin(), adaptor.getResults().end()};
+            res = llvm::SmallVector<mlir::Value>{adaptor.getResults().begin(), adaptor.getResults().end()};
          });
          for (size_t i = 0; i < res.size(); i++) {
             auto convertedType = typeConverter->convertType(res[i].getType());
@@ -3207,17 +3214,17 @@ class LookupHashMapLowering : public SubOpTupleStreamConsumerConversionPattern<s
 
       mlir::Value hash = hashKeys(lookupKey, rewriter, lookupOp->getLoc());
       mlir::Value hashTable = adaptor.getState();
-      auto equalFnBuilder = [&lookupOp](mlir::OpBuilder& rewriter, EntryStorageHelper::LazyValueMap left, std::vector<Value> right) -> Value {
-         std::vector<mlir::Value> arguments;
+      auto equalFnBuilder = [&lookupOp](mlir::OpBuilder& rewriter, EntryStorageHelper::LazyValueMap left, llvm::SmallVector<Value> right) -> Value {
+         llvm::SmallVector<mlir::Value> arguments;
          arguments.insert(arguments.end(), left.begin(), left.end());
          arguments.insert(arguments.end(), right.begin(), right.end());
          auto res = inlineBlock(&lookupOp.getEqFn().front(), rewriter, arguments);
          return res[0];
       };
-      auto initValBuilder = [&lookupOp, this](SubOpRewriter& rewriter) -> std::vector<mlir::Value> {
-         std::vector<mlir::Value> res;
+      auto initValBuilder = [&lookupOp, this](SubOpRewriter& rewriter) -> llvm::SmallVector<mlir::Value> {
+         llvm::SmallVector<mlir::Value> res;
          rewriter.inlineBlock<tuples::ReturnOpAdaptor>(&lookupOp.getInitFn().front(), {}, [&](tuples::ReturnOpAdaptor adaptor) {
-            res = std::vector<mlir::Value>{adaptor.getResults().begin(), adaptor.getResults().end()};
+            res = llvm::SmallVector<mlir::Value>{adaptor.getResults().begin(), adaptor.getResults().end()};
          });
          for (size_t i = 0; i < res.size(); i++) {
             auto convertedType = typeConverter->convertType(res[i].getType());
@@ -3611,7 +3618,7 @@ class ReduceContinuousRefLowering : public SubOpTupleStreamConsumerConversionPat
       auto baseRef = rewriter.create<util::BufferGetRef>(reduceOp->getLoc(), ptrType, unpackedReference[1]);
       auto elementRef = rewriter.create<util::ArrayElementPtrOp>(reduceOp->getLoc(), ptrType, baseRef, unpackedReference[0]);
       auto values = storageHelper.getValueMap(elementRef, rewriter, reduceOp->getLoc());
-      std::vector<mlir::Value> arguments;
+      llvm::SmallVector<mlir::Value> arguments;
       for (auto attr : reduceOp.getColumns()) {
          mlir::Value arg = mapping.resolve(reduceOp, mlir::cast<tuples::ColumnRefAttr>(attr));
          if (arg.getType() != mlir::cast<tuples::ColumnRefAttr>(attr).getColumn().type) {
@@ -3690,7 +3697,7 @@ static void implementAtomicReduce(subop::ReduceOp reduceOp, SubOpRewriter& rewri
    }
 
    if (atomicOperand) {
-      std::vector<mlir::Value> arguments;
+      llvm::SmallVector<mlir::Value> arguments;
       for (auto attr : reduceOp.getColumns()) {
          mlir::Value arg = mapping.resolve(reduceOp, mlir::cast<tuples::ColumnRefAttr>(attr));
          if (arg.getType() != mlir::cast<tuples::ColumnRefAttr>(attr).getColumn().type) {
@@ -3719,7 +3726,7 @@ static void implementAtomicReduce(subop::ReduceOp reduceOp, SubOpRewriter& rewri
       rewriter.eraseOp(reduceOp);
    } else {
       auto genericOp = rewriter.create<memref::GenericAtomicRMWOp>(loc, memRef, mlir::ValueRange{});
-      std::vector<mlir::Value> arguments;
+      llvm::SmallVector<mlir::Value> arguments;
       for (auto attr : reduceOp.getColumns()) {
          mlir::Value arg = mapping.resolve(reduceOp, mlir::cast<tuples::ColumnRefAttr>(attr));
          if (arg.getType() != mlir::cast<tuples::ColumnRefAttr>(attr).getColumn().type) {
@@ -3786,7 +3793,7 @@ class ReduceOpLowering : public SubOpTupleStreamConsumerConversionPattern<subop:
          implementAtomicReduce(reduceOp, rewriter, valueRef, mapping);
       } else {
          auto values = storageHelper.getValueMap(ref, rewriter, reduceOp->getLoc());
-         std::vector<mlir::Value> arguments;
+         llvm::SmallVector<mlir::Value> arguments;
          for (auto attr : reduceOp.getColumns()) {
             mlir::Value arg = mapping.resolve(reduceOp, mlir::cast<tuples::ColumnRefAttr>(attr));
             if (arg.getType() != mlir::cast<tuples::ColumnRefAttr>(attr).getColumn().type) {
@@ -4080,9 +4087,10 @@ class NestedMapLowering : public SubOpTupleStreamConsumerConversionPattern<subop
                mlir::Value input = outerMapping.lookup(param);
                rewriter.map(arg, input);
             }
-            std::vector<mlir::Operation*> ops;
+            llvm::SmallVector<mlir::Operation*> ops;
+            auto returnOp = mlir::cast<subop::ExecutionStepReturnOp>(step.getSubOps().front().getTerminator());
             for (auto& op : step.getSubOps().front()) {
-               if (&op == step.getSubOps().front().getTerminator())
+               if (&op == returnOp)
                   break;
                ops.push_back(&op);
             }
@@ -4090,7 +4098,6 @@ class NestedMapLowering : public SubOpTupleStreamConsumerConversionPattern<subop
                op->remove();
                rewriter.insertAndRewrite(op);
             }
-            auto returnOp = mlir::cast<subop::ExecutionStepReturnOp>(step.getSubOps().front().getTerminator());
             for (auto [i, o] : llvm::zip(returnOp.getInputs(), step.getResults())) {
                auto mapped = rewriter.getMapped(i);
                outerMapping.map(o, mapped);
@@ -4101,8 +4108,8 @@ class NestedMapLowering : public SubOpTupleStreamConsumerConversionPattern<subop
    }
 };
 template <class T>
-static std::vector<T> repeat(T val, size_t times) {
-   std::vector<T> res{};
+static llvm::SmallVector<T> repeat(T val, size_t times) {
+   llvm::SmallVector<T> res{};
    for (auto i = 0ul; i < times; i++) res.push_back(val);
    return res;
 }
@@ -4117,8 +4124,8 @@ class LoopLowering : public SubOpConversionPattern<subop::LoopOp> {
       auto* terminator = b->getTerminator();
       auto continueOp = mlir::cast<subop::LoopContinueOp>(terminator);
       mlir::Value trueValue = rewriter.create<mlir::arith::ConstantIntOp>(loc, 1, rewriter.getI1Type());
-      std::vector<mlir::Type> iterTypes;
-      std::vector<mlir::Value> iterArgs;
+      llvm::SmallVector<mlir::Type> iterTypes;
+      llvm::SmallVector<mlir::Value> iterArgs;
 
       iterTypes.push_back(rewriter.getI1Type());
       for (auto argumentType : loopOp.getBody()->getArgumentTypes()) {
@@ -4144,7 +4151,7 @@ class LoopLowering : public SubOpConversionPattern<subop::LoopOp> {
       after->addArguments(iterTypes, repeat(loc, iterTypes.size()));
       whileOp.getAfter().push_back(after);
       rewriter.atStartOf(after, [&](SubOpRewriter& rewriter) {
-         std::vector<mlir::Value> args;
+         llvm::SmallVector<mlir::Value> args;
          for (size_t i = 0; i < loopOp.getBody()->getNumArguments(); i++) {
             mlir::Value whileArg = after->getArguments()[i + 1];
             rewriter.map(loopOp.getBody()->getArgument(i), whileArg);
@@ -4162,7 +4169,7 @@ class LoopLowering : public SubOpConversionPattern<subop::LoopOp> {
                   mlir::Value input = outerMapping.lookup(param);
                   rewriter.map(arg, input);
                }
-               std::vector<mlir::Operation*> ops;
+               llvm::SmallVector<mlir::Operation*> ops;
                for (auto& op : step.getSubOps().front()) {
                   if (&op == step.getSubOps().front().getTerminator())
                      break;
@@ -4185,7 +4192,7 @@ class LoopLowering : public SubOpConversionPattern<subop::LoopOp> {
             }
          }
          rewriter.operator mlir::OpBuilder&().setInsertionPointToEnd(after);
-         std::vector<mlir::Value> res;
+         llvm::SmallVector<mlir::Value> res;
          auto simpleStateType = mlir::cast<subop::SimpleStateType>(continueOp.getOperandTypes()[0]);
          EntryStorageHelper storageHelper(loopOp, simpleStateType.getMembers(), simpleStateType.hasLock(), typeConverter);
          auto shouldContinueBool = storageHelper.getValueMap(nestedGroupResultMapping.lookup(continueOp.getOperand(0)), rewriter, loc).get(continueOp.getCondMember().getMember());
@@ -4214,7 +4221,7 @@ class NestedExecutionGroupLowering : public SubOpConversionPattern<subop::Nested
       for (auto [i, b] : llvm::zip(adaptor.getInputs(), nestedExecutionGroup.getRegion().front().getArguments())) {
          outerMapping.map(b, i);
       }
-      std::vector<mlir::Value> toReplaceWith;
+      llvm::SmallVector<mlir::Value> toReplaceWith;
       for (auto& op : nestedExecutionGroup.getRegion().front().getOperations()) {
          if (auto step = mlir::dyn_cast_or_null<subop::ExecutionStepOp>(&op)) {
             auto guard = rewriter.nest(outerMapping, step);
@@ -4222,7 +4229,7 @@ class NestedExecutionGroupLowering : public SubOpConversionPattern<subop::Nested
                mlir::Value input = outerMapping.lookup(param);
                rewriter.map(arg, input);
             }
-            std::vector<mlir::Operation*> ops;
+            llvm::SmallVector<mlir::Operation*> ops;
             for (auto& op : step.getSubOps().front()) {
                if (&op == step.getSubOps().front().getTerminator())
                   break;
@@ -4303,115 +4310,117 @@ class LockLowering : public SubOpTupleStreamConsumerConversionPattern<subop::Loc
 };
 }; // namespace
 namespace {
-
-void handleExecutionStepCPU(subop::ExecutionStepOp step, subop::ExecutionGroupOp executionGroup, mlir::IRMapping& mapping, mlir::TypeConverter& typeConverter) {
-   // llvm::dbgs() << "[CPU] HANDLING STEP " << step << "\n";
-   auto* ctxt = step->getContext();
-   SubOpRewriter rewriter(step, mapping);
-   rewriter.insertPattern<MapLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<FilterLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<RenameLowering>(typeConverter, ctxt);
+PatternList getCPUPatternList(TypeConverter& typeConverter, mlir::MLIRContext* ctxt) {
+   PatternList patterns;
+   patterns.insertPattern<MapLowering>(typeConverter, ctxt);
+   patterns.insertPattern<FilterLowering>(typeConverter, ctxt);
+   patterns.insertPattern<RenameLowering>(typeConverter, ctxt);
    //external
-   rewriter.insertPattern<GetExternalTableLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<GetExternalHashIndexLowering>(typeConverter, ctxt);
+   patterns.insertPattern<GetExternalTableLowering>(typeConverter, ctxt);
+   patterns.insertPattern<GetExternalHashIndexLowering>(typeConverter, ctxt);
    //ResultTable
-   rewriter.insertPattern<CreateTableLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<MaterializeTableLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<CreateFromResultTableLowering>(typeConverter, ctxt);
+   patterns.insertPattern<CreateTableLowering>(typeConverter, ctxt);
+   patterns.insertPattern<MaterializeTableLowering>(typeConverter, ctxt);
+   patterns.insertPattern<CreateFromResultTableLowering>(typeConverter, ctxt);
    //SimpleState
-   rewriter.insertPattern<CreateSimpleStateLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<ScanRefsSimpleStateLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<LookupSimpleStateLowering>(typeConverter, ctxt);
+   patterns.insertPattern<CreateSimpleStateLowering>(typeConverter, ctxt);
+   patterns.insertPattern<ScanRefsSimpleStateLowering>(typeConverter, ctxt);
+   patterns.insertPattern<LookupSimpleStateLowering>(typeConverter, ctxt);
    //Table
-   rewriter.insertPattern<ScanRefsTableLowering>(typeConverter, ctxt);
+   patterns.insertPattern<ScanRefsTableLowering>(typeConverter, ctxt);
    //rewriter.insertPattern<ScanRefsLocalTableLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<TableRefGatherOpLowering>(typeConverter, ctxt);
+   patterns.insertPattern<TableRefGatherOpLowering>(typeConverter, ctxt);
    //Buffer
-   rewriter.insertPattern<CreateBufferLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<ScanRefsVectorLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<MaterializeVectorLowering>(typeConverter, ctxt);
+   patterns.insertPattern<CreateBufferLowering>(typeConverter, ctxt);
+   patterns.insertPattern<ScanRefsVectorLowering>(typeConverter, ctxt);
+   patterns.insertPattern<MaterializeVectorLowering>(typeConverter, ctxt);
 
    //Hashmap
-   rewriter.insertPattern<CreateHashMapLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<ScanHashMapLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<LookupHashMapLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<PureLookupHashMapLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<HashMapRefGatherOpLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<ScanHashMapListLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<LockLowering>(typeConverter, ctxt);
+   patterns.insertPattern<CreateHashMapLowering>(typeConverter, ctxt);
+   patterns.insertPattern<ScanHashMapLowering>(typeConverter, ctxt);
+   patterns.insertPattern<LookupHashMapLowering>(typeConverter, ctxt);
+   patterns.insertPattern<PureLookupHashMapLowering>(typeConverter, ctxt);
+   patterns.insertPattern<HashMapRefGatherOpLowering>(typeConverter, ctxt);
+   patterns.insertPattern<ScanHashMapListLowering>(typeConverter, ctxt);
+   patterns.insertPattern<LockLowering>(typeConverter, ctxt);
 
    //HashMultiMap
-   rewriter.insertPattern<CreateHashMultiMapLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<InsertMultiMapLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<LookupHashMultiMapLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<ScanMultiMapListLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<ScanHashMultiMap>(typeConverter, ctxt);
-   rewriter.insertPattern<HashMultiMapRefGatherOpLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<HashMultiMapScatterOp>(typeConverter, ctxt);
+   patterns.insertPattern<CreateHashMultiMapLowering>(typeConverter, ctxt);
+   patterns.insertPattern<InsertMultiMapLowering>(typeConverter, ctxt);
+   patterns.insertPattern<LookupHashMultiMapLowering>(typeConverter, ctxt);
+   patterns.insertPattern<ScanMultiMapListLowering>(typeConverter, ctxt);
+   patterns.insertPattern<ScanHashMultiMap>(typeConverter, ctxt);
+   patterns.insertPattern<HashMultiMapRefGatherOpLowering>(typeConverter, ctxt);
+   patterns.insertPattern<HashMultiMapScatterOp>(typeConverter, ctxt);
 
    // ExternalHashIndex
-   rewriter.insertPattern<ScanExternalHashIndexListLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<LookupExternalHashIndexLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<ExternalHashIndexRefGatherOpLowering>(typeConverter, ctxt);
+   patterns.insertPattern<ScanExternalHashIndexListLowering>(typeConverter, ctxt);
+   patterns.insertPattern<LookupExternalHashIndexLowering>(typeConverter, ctxt);
+   patterns.insertPattern<ExternalHashIndexRefGatherOpLowering>(typeConverter, ctxt);
 
    //SortedView
-   rewriter.insertPattern<SortLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<ScanRefsSortedViewLowering>(typeConverter, ctxt);
+   patterns.insertPattern<SortLowering>(typeConverter, ctxt);
+   patterns.insertPattern<ScanRefsSortedViewLowering>(typeConverter, ctxt);
    //HashIndexedView
-   rewriter.insertPattern<CreateHashIndexedViewLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<LookupHashIndexedViewLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<ScanListLowering>(typeConverter, ctxt);
+   patterns.insertPattern<CreateHashIndexedViewLowering>(typeConverter, ctxt);
+   patterns.insertPattern<LookupHashIndexedViewLowering>(typeConverter, ctxt);
+   patterns.insertPattern<ScanListLowering>(typeConverter, ctxt);
    //ContinuousView
-   rewriter.insertPattern<CreateContinuousViewLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<ScanRefsContinuousViewLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<ContinuousRefGatherOpLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<ContinuousRefScatterOpLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<ReduceContinuousRefLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<ReduceContinuousRefAtomicLowering>(typeConverter, ctxt);
+   patterns.insertPattern<CreateContinuousViewLowering>(typeConverter, ctxt);
+   patterns.insertPattern<ScanRefsContinuousViewLowering>(typeConverter, ctxt);
+   patterns.insertPattern<ContinuousRefGatherOpLowering>(typeConverter, ctxt);
+   patterns.insertPattern<ContinuousRefScatterOpLowering>(typeConverter, ctxt);
+   patterns.insertPattern<ReduceContinuousRefLowering>(typeConverter, ctxt);
+   patterns.insertPattern<ReduceContinuousRefAtomicLowering>(typeConverter, ctxt);
 
    //Heap
-   rewriter.insertPattern<CreateHeapLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<ScanRefsHeapLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<MaterializeHeapLowering>(typeConverter, ctxt);
+   patterns.insertPattern<CreateHeapLowering>(typeConverter, ctxt);
+   patterns.insertPattern<ScanRefsHeapLowering>(typeConverter, ctxt);
+   patterns.insertPattern<MaterializeHeapLowering>(typeConverter, ctxt);
    //SegmentTreeView
-   rewriter.insertPattern<CreateSegmentTreeViewLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<LookupSegmentTreeViewLowering>(typeConverter, ctxt);
+   patterns.insertPattern<CreateSegmentTreeViewLowering>(typeConverter, ctxt);
+   patterns.insertPattern<LookupSegmentTreeViewLowering>(typeConverter, ctxt);
    //Array
-   rewriter.insertPattern<CreateArrayLowering>(typeConverter, ctxt);
+   patterns.insertPattern<CreateArrayLowering>(typeConverter, ctxt);
    //ThreadLocal
-   rewriter.insertPattern<CreateThreadLocalLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<CreateThreadLocalBufferLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<MergeThreadLocalResultTable>(typeConverter, ctxt);
-   rewriter.insertPattern<MergeThreadLocalBuffer>(typeConverter, ctxt);
-   rewriter.insertPattern<MergeThreadLocalHeap>(typeConverter, ctxt);
-   rewriter.insertPattern<MergeThreadLocalSimpleState>(typeConverter, ctxt);
-   rewriter.insertPattern<MergeThreadLocalHashMap>(typeConverter, ctxt);
-   rewriter.insertPattern<CreateOpenHtFragmentLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<LookupPreAggrHtFragment>(typeConverter, ctxt);
-   rewriter.insertPattern<MergePreAggrHashMap>(typeConverter, ctxt);
-   rewriter.insertPattern<ScanPreAggrHtLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<PreAggrHtRefGatherOpLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<PureLookupPreAggregationHtLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<UnwrapOptionalPreAggregationHtRefLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<ScanPreAggregationHtListLowering>(typeConverter, ctxt);
+   patterns.insertPattern<CreateThreadLocalLowering>(typeConverter, ctxt);
+   patterns.insertPattern<CreateThreadLocalBufferLowering>(typeConverter, ctxt);
+   patterns.insertPattern<MergeThreadLocalResultTable>(typeConverter, ctxt);
+   patterns.insertPattern<MergeThreadLocalBuffer>(typeConverter, ctxt);
+   patterns.insertPattern<MergeThreadLocalHeap>(typeConverter, ctxt);
+   patterns.insertPattern<MergeThreadLocalSimpleState>(typeConverter, ctxt);
+   patterns.insertPattern<MergeThreadLocalHashMap>(typeConverter, ctxt);
+   patterns.insertPattern<CreateOpenHtFragmentLowering>(typeConverter, ctxt);
+   patterns.insertPattern<LookupPreAggrHtFragment>(typeConverter, ctxt);
+   patterns.insertPattern<MergePreAggrHashMap>(typeConverter, ctxt);
+   patterns.insertPattern<ScanPreAggrHtLowering>(typeConverter, ctxt);
+   patterns.insertPattern<PreAggrHtRefGatherOpLowering>(typeConverter, ctxt);
+   patterns.insertPattern<PureLookupPreAggregationHtLowering>(typeConverter, ctxt);
+   patterns.insertPattern<UnwrapOptionalPreAggregationHtRefLowering>(typeConverter, ctxt);
+   patterns.insertPattern<ScanPreAggregationHtListLowering>(typeConverter, ctxt);
 
-   rewriter.insertPattern<DefaultGatherOpLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<ScatterOpLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<ReduceOpLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<NestedMapLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<UnrealizedConversionCastLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<UnwrapOptionalHashmapRefLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<OffsetReferenceByLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<GetBeginLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<GetEndLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<EntriesBetweenLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<InFlightLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<GenerateLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<LoopLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<NestedExecutionGroupLowering>(typeConverter, ctxt);
+   patterns.insertPattern<DefaultGatherOpLowering>(typeConverter, ctxt);
+   patterns.insertPattern<ScatterOpLowering>(typeConverter, ctxt);
+   patterns.insertPattern<ReduceOpLowering>(typeConverter, ctxt);
+   patterns.insertPattern<NestedMapLowering>(typeConverter, ctxt);
+   patterns.insertPattern<UnrealizedConversionCastLowering>(typeConverter, ctxt);
+   patterns.insertPattern<UnwrapOptionalHashmapRefLowering>(typeConverter, ctxt);
+   patterns.insertPattern<OffsetReferenceByLowering>(typeConverter, ctxt);
+   patterns.insertPattern<GetBeginLowering>(typeConverter, ctxt);
+   patterns.insertPattern<GetEndLowering>(typeConverter, ctxt);
+   patterns.insertPattern<EntriesBetweenLowering>(typeConverter, ctxt);
+   patterns.insertPattern<InFlightLowering>(typeConverter, ctxt);
+   patterns.insertPattern<GenerateLowering>(typeConverter, ctxt);
+   patterns.insertPattern<LoopLowering>(typeConverter, ctxt);
+   patterns.insertPattern<NestedExecutionGroupLowering>(typeConverter, ctxt);
    //rewriter.insertPattern<GetSingleValLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<SetTrackedCountLowering>(typeConverter, ctxt);
+   patterns.insertPattern<SetTrackedCountLowering>(typeConverter, ctxt);
    //rewriter.insertPattern<SimpleStateGetScalarLowering>(typeConverter, ctxt);
+   return patterns;
+}
+void handleExecutionStepCPU(PatternList& patternList, subop::ExecutionStepOp step, subop::ExecutionGroupOp executionGroup, mlir::IRMapping& mapping, mlir::TypeConverter& typeConverter) {
+   // llvm::dbgs() << "[CPU] HANDLING STEP " << step << "\n";
+   SubOpRewriter rewriter(patternList, step, mapping);
 
    for (auto [param, arg, isThreadLocal] : llvm::zip(step.getInputs(), step.getSubOps().front().getArguments(), step.getIsThreadLocal())) {
       mlir::Value input = mapping.lookup(param);
@@ -4424,7 +4433,7 @@ void handleExecutionStepCPU(subop::ExecutionStepOp step, subop::ExecutionGroupOp
          rewriter.map(arg, threadLocal);
       }
    }
-   std::vector<mlir::Operation*> ops;
+   llvm::SmallVector<mlir::Operation*> ops;
    for (auto& op : step.getSubOps().front()) {
       if (&op == step.getSubOps().front().getTerminator()) {
          break;
@@ -4460,7 +4469,7 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
       return util::RefType::get(t.getContext(), mlir::IntegerType::get(ctxt, 8));
    });
    typeConverter.addConversion([&](subop::ResultTableType t) -> Type {
-      std::vector<mlir::Type> types;
+      llvm::SmallVector<mlir::Type> types;
       for (size_t i = 0; i < t.getMembers().getMembers().size(); i++) {
          types.push_back(util::RefType::get(mlir::IntegerType::get(t.getContext(), 8)));
       }
@@ -4556,7 +4565,8 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
    //basic tuple stream manipulation
 
    //rewriter.rewrite(module.getBody());
-   std::vector<mlir::Operation*> toRemove;
+   auto cpuPatternList = getCPUPatternList(typeConverter, ctxt);
+   llvm::SmallVector<mlir::Operation*> toRemove;
    module->walk([&](subop::ExecutionGroupOp executionGroup) { // walk over "queries"
       mlir::IRMapping mapping;
       //todo: handle arguments of executionGroup
@@ -4585,7 +4595,7 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
                tracingStep = rt::ExecutionStepTracing::start(builder, op.getLoc())({stepLoc})[0];
             }
 #endif
-            handleExecutionStepCPU(step, executionGroup, mapping, typeConverter);
+            handleExecutionStepCPU(cpuPatternList, step, executionGroup, mapping, typeConverter);
 #if TRACER
             {
                mlir::OpBuilder builder(executionGroup);
@@ -4595,12 +4605,13 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
          }
       }
       auto returnOp = mlir::cast<subop::ExecutionGroupReturnOp>(executionGroup.getRegion().front().getTerminator());
-      std::vector<mlir::Value> results;
+      llvm::SmallVector<mlir::Value> results;
       for (auto i : returnOp.getInputs()) {
          results.push_back(mapping.lookup(i));
       }
       executionGroup.replaceAllUsesWith(results);
       toRemove.push_back(executionGroup);
+      return mlir::WalkResult::skip();
    });
    getOperation()->walk([&](subop::SetResultOp setResultOp) {
       mlir::OpBuilder builder(setResultOp);
@@ -4614,7 +4625,7 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
       op->dropAllDefinedValueUses();
       op->erase();
    }
-   std::vector<mlir::Operation*> defs;
+   llvm::SmallVector<mlir::Operation*> defs;
    for (auto& op : module.getBody()->getOperations()) {
       if (auto funcOp = mlir::dyn_cast_or_null<mlir::func::FuncOp>(&op)) {
          if (funcOp.getBody().empty()) {
