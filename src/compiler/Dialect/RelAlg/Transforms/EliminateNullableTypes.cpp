@@ -12,20 +12,25 @@ class EliminateNullableTypes : public mlir::PassWrapper<EliminateNullableTypes, 
    public:
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(EliminateNullableTypes)
    virtual llvm::StringRef getArgument() const override { return "relalg-eliminate-nullable-types"; }
-   static relalg::ColumnSet getRequired(Operator op) {
+   static relalg::ColumnSet getRequired(Operator op, llvm::DenseMap<Operator, relalg::ColumnSet>& cache) {
+      if (cache.contains(op)) {
+         return cache[op];
+      }
       relalg::ColumnSet required;
       for (auto* user : op->getUsers()) {
          if (auto consumingOp = mlir::dyn_cast_or_null<Operator>(user)) {
-            required.insert(getRequired(consumingOp));
+            required.insert(getRequired(consumingOp, cache));
             required.insert(consumingOp.getUsedColumns());
          }
          if (auto materializeOp = mlir::dyn_cast_or_null<relalg::MaterializeOp>(user)) {
             required.insert(relalg::ColumnSet::fromArrayAttr(materializeOp.getCols()));
          }
       }
+      cache[op] = required;
       return required;
    }
    void materialize(mlir::Operation* op, size_t idx, lingodb::compiler::dialect::relalg::ColumnNullableChangeInfo& info) {
+      llvm::DenseMap<Operator, relalg::ColumnSet> cache;
       auto& colManager = getContext().getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
       mlir::OpBuilder builder(op->getContext());
       builder.setInsertionPoint(op);
@@ -33,7 +38,7 @@ class EliminateNullableTypes : public mlir::PassWrapper<EliminateNullableTypes, 
       if (auto materializeOp = mlir::dyn_cast_or_null<relalg::MaterializeOp>(op)) {
          required = relalg::ColumnSet::fromArrayAttr(materializeOp.getCols());
       } else {
-         required = getRequired(mlir::cast<Operator>(op));
+         required = getRequired(mlir::cast<Operator>(op), cache);
          required.insert(mlir::cast<Operator>(op).getUsedColumns());
       }
 
@@ -105,10 +110,11 @@ class EliminateNullableTypes : public mlir::PassWrapper<EliminateNullableTypes, 
       }
    }
    void runOnOperation() override {
+      llvm::DenseMap<Operator, relalg::ColumnSet> cache;
       auto& colManager = getContext().getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
       mlir::OpBuilder builder(&getContext());
       getOperation().walk([&](relalg::BaseTableOp baseTableOp) {
-         auto required = getRequired(baseTableOp);
+         auto required = getRequired(baseTableOp, cache);
          if (!baseTableOp.getRestriction().filterDescription.empty()) {
             auto usedColumns = baseTableOp.getUsedColumns();
             auto restrictions = baseTableOp.getRestriction().filterDescription;

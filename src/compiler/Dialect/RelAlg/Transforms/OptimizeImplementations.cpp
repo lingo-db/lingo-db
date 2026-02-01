@@ -243,7 +243,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
          });
    }
 
-   void prepareForHash(PredicateOperator predicateOperator) {
+   void prepareForHash(PredicateOperator predicateOperator, relalg::AvailabilityCache& cache) {
       auto binOp = mlir::cast<BinaryOperator>(predicateOperator.getOperation());
       auto left = mlir::cast<Operator>(binOp.leftChild());
       auto right = mlir::cast<Operator>(binOp.rightChild());
@@ -253,7 +253,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
          HashJoinUtils::MapBlockInfo mapBlockInfo;
          mapBlockInfo.block = new mlir::Block;
          mapBlockInfo.block->addArgument(tuples::TupleType::get(builder.getContext()), builder.getUnknownLoc());
-         auto [keys, nullsEqual] = HashJoinUtils::extractKeys(&predicateOperator.getPredicateBlock(), left.getAvailableColumns(), right.getAvailableColumns(), mapBlockInfo);
+         auto [keys, nullsEqual] = HashJoinUtils::extractKeys(&predicateOperator.getPredicateBlock(), left.getAvailableColumns(cache), right.getAvailableColumns(cache), mapBlockInfo);
          if (!mapBlockInfo.createdColumns.empty()) {
             builder.setInsertionPoint(predicateOperator);
             auto mapOp = builder.create<relalg::MapOp>(builder.getUnknownLoc(), tuples::TupleStreamType::get(builder.getContext()), left.asRelation(), builder.getArrayAttr(mapBlockInfo.createdColumns));
@@ -275,7 +275,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
          HashJoinUtils::MapBlockInfo mapBlockInfo;
          mapBlockInfo.block = new mlir::Block;
          mapBlockInfo.block->addArgument(tuples::TupleType::get(builder.getContext()), builder.getUnknownLoc());
-         auto [keys, nullEquals] = HashJoinUtils::extractKeys(&predicateOperator.getPredicateBlock(), right.getAvailableColumns(), left.getAvailableColumns(), mapBlockInfo);
+         auto [keys, nullEquals] = HashJoinUtils::extractKeys(&predicateOperator.getPredicateBlock(), right.getAvailableColumns(cache), left.getAvailableColumns(cache), mapBlockInfo);
          if (!mapBlockInfo.createdColumns.empty()) {
             builder.setInsertionPoint(predicateOperator);
             auto mapOp = builder.create<relalg::MapOp>(builder.getUnknownLoc(), tuples::TupleStreamType::get(builder.getContext()), right.asRelation(), builder.getArrayAttr(mapBlockInfo.createdColumns));
@@ -382,13 +382,13 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
          return 10000;
       }
    }
-   static relalg::ColumnSet getRequired(Operator op) {
-      auto available = op.getAvailableColumns();
+   static relalg::ColumnSet getRequired(Operator op, relalg::AvailabilityCache& cache) {
+      auto available = op.getAvailableColumns(cache);
 
       relalg::ColumnSet required;
       for (auto* user : op->getUsers()) {
          if (auto consumingOp = mlir::dyn_cast_or_null<Operator>(user)) {
-            required.insert(getRequired(consumingOp));
+            required.insert(getRequired(consumingOp, cache));
             required.insert(consumingOp.getUsedColumns());
          }
          if (auto materializeOp = mlir::dyn_cast_or_null<relalg::MaterializeOp>(user)) {
@@ -399,6 +399,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
    }
 
    void runOnOperation() override {
+      relalg::AvailabilityCache cache;
       std::vector<mlir::Operation*> toErase;
       getOperation().walk([&](Operator op) {
          ::llvm::TypeSwitch<mlir::Operation*, void>(op.getOperation())
@@ -492,7 +493,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                auto binOp = mlir::cast<BinaryOperator>(predicateOperator.getOperation());
                auto left = mlir::cast<Operator>(binOp.leftChild());
                auto right = mlir::cast<Operator>(binOp.rightChild());
-               if (hashImplPossible(&predicateOperator.getPredicateBlock(), left.getAvailableColumns(), right.getAvailableColumns())) {
+               if (hashImplPossible(&predicateOperator.getPredicateBlock(), left.getAvailableColumns(cache), right.getAvailableColumns(cache))) {
                   // Determine if index nested loop is possible and is beneficial
                   std::stack<mlir::Operation*> leftPath, rightPath;
                   std::string leftIndexName, rightIndexName;
@@ -500,7 +501,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                   bool rightCanUseIndex = isBaseRelationWithSelects(right, rightPath) && containsExactlyIndexColumns(binOp.getContext(), rightPath.top(), &predicateOperator.getPredicateBlock(), rightIndexName);
                   bool isInnerJoin = mlir::isa<relalg::InnerJoinOp>(predicateOperator);
                   bool reversed = false;
-                  prepareForHash(predicateOperator);
+                  prepareForHash(predicateOperator, cache);
 
                   // Select possible build side to the left
                   if (isInnerJoin && (leftCanUseIndex || rightCanUseIndex)) {
@@ -590,7 +591,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                   } else {
                      op->setAttr("impl", mlir::StringAttr::get(op.getContext(), "hash"));
                      op->setAttr("useHashJoin", mlir::UnitAttr::get(op.getContext()));
-                     prepareForHash(predicateOperator);
+                     prepareForHash(predicateOperator, cache);
                   }
                }
             })
@@ -615,9 +616,9 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                      op->setAttr("reverseSides", mlir::UnitAttr::get(op.getContext()));
                   }
                }
-               if (hashImplPossible(&predicateOperator.getPredicateBlock(), left.getAvailableColumns(), right.getAvailableColumns())) {
+               if (hashImplPossible(&predicateOperator.getPredicateBlock(), left.getAvailableColumns(cache), right.getAvailableColumns(cache))) {
                   op->setAttr("useHashJoin", mlir::UnitAttr::get(op.getContext()));
-                  prepareForHash(predicateOperator);
+                  prepareForHash(predicateOperator, cache);
                   if (left->hasAttr("rows") && right->hasAttr("rows")) {
                      double rowsLeft = 0;
                      double rowsRight = 0;
@@ -650,8 +651,8 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                }
                auto left = mlir::cast<Operator>(op.leftChild());
                auto right = mlir::cast<Operator>(op.rightChild());
-               if (hashImplPossible(&op.getPredicateBlock(), left.getAvailableColumns(), right.getAvailableColumns())) {
-                  prepareForHash(op);
+               if (hashImplPossible(&op.getPredicateBlock(), left.getAvailableColumns(cache), right.getAvailableColumns(cache))) {
+                  prepareForHash(op, cache);
                   op->setAttr("useHashJoin", mlir::UnitAttr::get(op.getContext()));
                   op->setAttr("impl", mlir::StringAttr::get(op.getContext(), "hash"));
                }
@@ -698,7 +699,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                   if (users.size() != 1) {
                      return;
                   }
-                  auto required = getRequired(op);
+                  auto required = getRequired(op, cache);
                   mlir::Operation* moveBefore = users[0];
                   for (auto* o : otherOps) {
                      o->moveBefore(moveBefore);
@@ -723,7 +724,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                      op.getPredicate().push_back(newJoinPred);
                      required.insert(sel.getUsedColumns());
                   }
-                  auto available = mlir::cast<Operator>(topRightVal.getDefiningOp()).getAvailableColumns();
+                  auto available = mlir::cast<Operator>(topRightVal.getDefiningOp()).getAvailableColumns(cache);
                   required.remove(available);
                   //llvm::dbgs() << "still required:";
                   //required.dump(&getContext());

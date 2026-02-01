@@ -16,16 +16,21 @@
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/SymbolTable.h"
 
+namespace lingodb::compiler::dialect::relalg {
+class AvailabilityCache;
+} // namespace lingodb::compiler::dialect::relalg
+
 namespace lingodb::compiler::dialect::relalg::detail {
 void replaceUsages(mlir::Operation* op, std::function<lingodb::compiler::dialect::tuples::ColumnRefAttr(dialect::tuples::ColumnRefAttr)> fn);
 ColumnSet getUsedColumns(mlir::Operation* op);
 bool canColumnReach(mlir::Operation* currentOp, mlir::Operation* sourceOp, mlir::Operation* targetOp, const lingodb::compiler::dialect::tuples::Column* column);
-ColumnSet getAvailableColumns(mlir::Operation* op);
+ColumnSet getAvailableColumns(mlir::Operation* op, AvailabilityCache& cache);
+ColumnSet getFreeColumns(mlir::Operation* op, AvailabilityCache& cache);
 ColumnSet getFreeColumns(mlir::Operation* op);
 ColumnSet getSetOpCreatedColumns(mlir::Operation* op);
 ColumnSet getSetOpUsedColumns(mlir::Operation* op);
 FunctionalDependencies getFDs(mlir::Operation* op);
-bool isDependentJoin(mlir::Operation* op);
+bool isDependentJoin(mlir::Operation* op, AvailabilityCache& cache);
 void moveSubTreeBefore(mlir::Operation* tree, mlir::Operation* before);
 
 enum class BinaryOperatorType : unsigned char {
@@ -221,5 +226,7 @@ void inlineOpIntoBlock(mlir::Operation* vop, mlir::Operation* includeChildren, m
 class Operator;
 #define GET_OP_CLASSES
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOpsInterfaces.h.inc"
+
+#include "lingodb/compiler/Dialect/RelAlg/AvailabilityCache.h"
 
 #endif //LINGODB_COMPILER_DIALECT_RELALG_IR_RELALGOPSINTERFACES_H

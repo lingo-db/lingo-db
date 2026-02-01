@@ -162,7 +162,7 @@ class ExpandTransitiveEqualities : public mlir::PassWrapper<ExpandTransitiveEqua
    public:
    void runOnOperation() override {
       llvm::DenseMap<mlir::Operation*, llvm::EquivalenceClasses<const tuples::Column*>> equalities;
-
+      relalg::AvailabilityCache cache;
       getOperation().walk([&](Operator op) {
          llvm::EquivalenceClasses<const tuples::Column*> localEqualities;
          std::vector<std::pair<const tuples::Column*, const tuples::Column*>> additionalPredicates;
@@ -192,7 +192,7 @@ class ExpandTransitiveEqualities : public mlir::PassWrapper<ExpandTransitiveEqua
          mlir::OpBuilder builder(&getContext());
          builder.setInsertionPointAfter(op.getOperation());
          auto& colManager = getContext().getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
-         auto availableColumns = op.getAvailableColumns();
+         auto availableColumns = op.getAvailableColumns(cache);
          for (auto pred : additionalPredicates) {
             if (availableColumns.contains(pred.first) && availableColumns.contains(pred.second)) {
                auto loc = builder.getUnknownLoc();
