@@ -11,191 +11,34 @@
 #include "mlir/IR/Dominance.h"
 #include "mlir/Pass/Pass.h"
 
+namespace {
 using namespace lingodb::compiler::dialect;
 
-namespace {
-// Helper to manage column equivalence mapping
-struct ColumnMappingContext {
-   struct LeaderInfo {
-      std::shared_ptr<tuples::Column> col;
-      mlir::SymbolRefAttr name;
+class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeElimination, mlir::OperationPass<mlir::func::FuncOp>> {
+   // Helper to manage column equivalence mapping
+   struct ColumnMappingContext {
+      struct LeaderInfo {
+         std::shared_ptr<tuples::Column> col;
+         mlir::SymbolRefAttr name;
+      };
+
+      llvm::DenseMap<const tuples::Column*, LeaderInfo> colMapping;
+      llvm::DenseMap<const tuples::Column*, llvm::SmallVector<LeaderInfo, 1>> inverseColMapping;
+
+      void clear() {
+         colMapping.clear();
+         inverseColMapping.clear();
+      }
+
+      void addMapping(const tuples::Column* dupCol, const std::shared_ptr<tuples::Column>& leaderCol, mlir::SymbolRefAttr leaderName) {
+         if (dupCol && leaderCol && dupCol != leaderCol.get()) {
+            colMapping[dupCol] = {leaderCol, leaderName};
+            inverseColMapping[leaderCol.get()].push_back({leaderCol, leaderName});
+         }
+      }
    };
 
-   llvm::DenseMap<const tuples::Column*, LeaderInfo> colMapping;
-   llvm::DenseMap<const tuples::Column*, llvm::SmallVector<LeaderInfo, 1>> inverseColMapping;
-
-   void clear() {
-      colMapping.clear();
-      inverseColMapping.clear();
-   }
-
-   void addMapping(const tuples::Column* dupCol, const std::shared_ptr<tuples::Column>& leaderCol, mlir::SymbolRefAttr leaderName) {
-      if (dupCol && leaderCol && dupCol != leaderCol.get()) {
-         colMapping[dupCol] = {leaderCol, leaderName};
-         inverseColMapping[leaderCol.get()].push_back({leaderCol, leaderName});
-      }
-   }
-};
-
-static void collectDefs(mlir::Attribute attr, llvm::SmallVectorImpl<std::pair<std::string, tuples::ColumnDefAttr>>& defs) {
-   if (auto def = mlir::dyn_cast<tuples::ColumnDefAttr>(attr)) {
-      if (def.getName()) {
-         defs.emplace_back(def.getName().getLeafReference().getValue().str(), def);
-      }
-   } else if (auto arr = mlir::dyn_cast<mlir::ArrayAttr>(attr)) {
-      for (auto e : arr) collectDefs(e, defs);
-   } else if (auto dict = mlir::dyn_cast<mlir::DictionaryAttr>(attr)) {
-      for (auto e : dict) collectDefs(e.getValue(), defs);
-   }
-}
-
-static void collectSortedLocalDefs(mlir::Operation* op, llvm::SmallVectorImpl<std::pair<std::string, tuples::ColumnDefAttr>>& defs) {
-   llvm::SmallSetVector<mlir::StringAttr, 4> names;
-   if (auto info = op->getRegisteredInfo())
-      for (auto n : info->getAttributeNames()) names.insert(n);
-   for (auto n : op->getAttrs()) names.insert(n.getName());
-
-   llvm::SmallVector<mlir::StringAttr, 4> sortedNames(names.begin(), names.end());
-   llvm::sort(sortedNames, [](mlir::StringAttr a, mlir::StringAttr b) { return a.strref() < b.strref(); });
-
-   for (auto n : sortedNames) {
-      if (auto val = op->getAttr(n)) collectDefs(val, defs);
-   }
-}
-
-static llvm::DenseMap<const tuples::Column*, std::string> getLocalDefsMap(mlir::Operation* op) {
-   llvm::DenseMap<const tuples::Column*, std::string> localDefs;
-   llvm::SmallVector<std::pair<std::string, tuples::ColumnDefAttr>> defs;
-   collectSortedLocalDefs(op, defs);
-
-   for (const auto& p : defs) {
-      if (auto ptr = p.second.getColumnPtr()) {
-         localDefs[ptr.get()] = p.first;
-      }
-   }
-   return localDefs;
-}
-
-static void getAvailableColumns(mlir::Operation* op, llvm::DenseSet<const tuples::Column*>& out, llvm::SmallPtrSet<mlir::Operation*, 4>& visited) {
-   if (!visited.insert(op).second) return;
-
-   llvm::SmallVector<std::pair<std::string, tuples::ColumnDefAttr>> localDefs;
-   collectSortedLocalDefs(op, localDefs);
-
-   for (auto& p : localDefs) {
-      if (auto ptr = p.second.getColumnPtr()) out.insert(ptr.get());
-   }
-
-   if (mlir::isa<relalg::BaseTableOp>(op)) return;
-
-   if (auto renameOp = mlir::dyn_cast<relalg::RenamingOp>(op)) {
-      llvm::DenseSet<const tuples::Column*> overwritten;
-      if (auto colsAttr = renameOp.getColumns()) {
-         for (auto attr : colsAttr) {
-            if (auto def = mlir::dyn_cast<tuples::ColumnDefAttr>(attr)) {
-               if (auto from = def.getFromExisting()) {
-                  if (auto arr = mlir::dyn_cast<mlir::ArrayAttr>(from)) {
-                     for (auto ref : arr) {
-                        if (auto colRef = mlir::dyn_cast<tuples::ColumnRefAttr>(ref))
-                           if (auto ptr = colRef.getColumnPtr()) overwritten.insert(ptr.get());
-                     }
-                  }
-               }
-            }
-         }
-      }
-
-      if (op->getNumOperands() > 0) {
-         if (auto* defOp = op->getOperand(0).getDefiningOp()) {
-            if (defOp->getDialect()->getNamespace() == "relalg") {
-               llvm::DenseSet<const tuples::Column*> childCols;
-               getAvailableColumns(defOp, childCols, visited);
-               for (auto* c : childCols) {
-                  if (!overwritten.count(c)) out.insert(c);
-               }
-            }
-         }
-      }
-      return;
-   }
-
-   if (auto agg = mlir::dyn_cast<relalg::AggregationOp>(op)) {
-      for (auto attr : agg.getGroupByCols()) {
-         if (auto colRef = mlir::dyn_cast<tuples::ColumnRefAttr>(attr)) {
-            if (auto ptr = colRef.getColumnPtr()) out.insert(ptr.get());
-         }
-      }
-      return;
-   }
-
-   if (mlir::isa<relalg::SemiJoinOp, relalg::AntiSemiJoinOp, relalg::MarkJoinOp,
-                 relalg::IntersectOp, relalg::ExceptOp, relalg::GroupJoinOp>(op)) {
-      if (op->getNumOperands() > 0) {
-         if (auto* defOp = op->getOperand(0).getDefiningOp()) {
-            if (defOp->getDialect()->getNamespace() == "relalg")
-               getAvailableColumns(defOp, out, visited);
-         }
-      }
-      return;
-   }
-
-   for (auto operand : op->getOperands()) {
-      if (auto* defOp = operand.getDefiningOp()) {
-         if (defOp->getDialect()->getNamespace() == "relalg") {
-            getAvailableColumns(defOp, out, visited);
-         }
-      }
-   }
-}
-
-static void collectRecursiveDefs(mlir::Operation* op, llvm::SmallVectorImpl<std::pair<std::string, tuples::ColumnDefAttr>>& defs, llvm::SmallPtrSetImpl<mlir::Operation*>& visited) {
-   if (!visited.insert(op).second) return;
-
-   collectSortedLocalDefs(op, defs);
-
-   for (auto operand : op->getOperands()) {
-      if (auto* definingOp = operand.getDefiningOp()) {
-         if (definingOp->getDialect()->getNamespace() == "relalg") {
-            collectRecursiveDefs(definingOp, defs, visited);
-         }
-      }
-   }
-}
-
-static std::pair<mlir::Operation*, std::vector<unsigned>> findDefiningOp(mlir::Operation* root, const tuples::Column* col) {
-   auto localDefs = getLocalDefsMap(root);
-   if (localDefs.count(col)) return {root, {}};
-
-   for (unsigned i = 0; i < root->getNumOperands(); ++i) {
-      auto opd = root->getOperand(i);
-      if (auto* defOp = opd.getDefiningOp()) {
-         if (defOp->getDialect()->getNamespace() == "relalg") {
-            auto res = findDefiningOp(defOp, col);
-            if (res.first) {
-               res.second.push_back(i);
-               return res;
-            }
-         }
-      }
-   }
-   return {nullptr, {}};
-}
-
-static mlir::Operation* followPath(mlir::Operation* root, const std::vector<unsigned>& path) {
-   mlir::Operation* curr = root;
-   for (auto it = path.rbegin(); it != path.rend(); ++it) {
-      if (*it >= curr->getNumOperands()) return nullptr;
-      auto opd = curr->getOperand(*it);
-      curr = opd.getDefiningOp();
-      if (!curr) return nullptr;
-   }
-   return curr;
-}
-
-class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeElimination, mlir::OperationPass<mlir::func::FuncOp>> {
-   ColumnMappingContext colContext;
-   llvm::DenseMap<mlir::Value, mlir::Value> valueEquivalenceMap;
-
+   // Helper to check if two ops are equivalent
    class EquivalenceChecker {
       llvm::DenseMap<mlir::Value, mlir::Value> candidateToLeaderVal;
       const CommonSubtreeElimination& pass;
@@ -298,6 +141,9 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
       }
    };
 
+   ColumnMappingContext colContext;
+   llvm::DenseMap<mlir::Value, mlir::Value> valueEquivalenceMap;
+
    public:
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(CommonSubtreeElimination)
    llvm::StringRef getArgument() const override { return "relalg-cse"; }
@@ -313,29 +159,14 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
       mlir::DominanceInfo domInfo(funcOp);
       llvm::DenseMap<llvm::hash_code, llvm::SmallVector<mlir::Operation*, 2>> candidates;
 
-      std::function<void(mlir::Region&)> traverseRegion;
-
-      std::function<void(llvm::DomTreeNodeBase<mlir::Block>*)> walkDomTree =
-         [&](llvm::DomTreeNodeBase<mlir::Block>* node) {
-            if (!node) return;
-            processBlock(node->getBlock(), domInfo, candidates, traverseRegion);
-            for (auto* child : node->children()) {
-               walkDomTree(child);
-            }
-         };
-
-      traverseRegion = [&](mlir::Region& region) {
+      std::function<void(mlir::Region&)> traverseRegion = [&](mlir::Region& region) {
          if (region.empty()) return;
-         if (region.hasOneBlock()) {
-            processBlock(&region.front(), domInfo, candidates, traverseRegion);
-         } else {
-            if (auto* root = domInfo.getRootNode(&region)) {
-               walkDomTree(root);
-            } else {
-               for (auto& block : region)
-                  processBlock(&block, domInfo, candidates, traverseRegion);
-            }
-         }
+
+         // Assert that we are in Structured Control Flow (Single-Block Regions)
+         // as supporting multi-block regions (CFGs) can make this pass significant more complex
+         assert(region.hasOneBlock() && "Unexpected multi-block (CFG) region found!");
+
+         processBlock(&region.front(), domInfo, candidates, traverseRegion);
       };
 
       for (auto& region : funcOp->getRegions()) {
@@ -456,8 +287,6 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
          if (auto it = candidates.find(hash); it != candidates.end()) {
             for (auto* leader : it->second) {
                if (domInfo.properlyDominates(leader, &op) && areEquivalent(leader, &op)) {
-                  // if (!isSafeCrossRegionMerge(leader, &op)) continue;
-
                   if (mlir::isa<relalg::BaseTableOp>(leader)) {
                      mapVirtualBaseTableOpMerge(leader, &op);
                   } else if (mlir::isa<relalg::RenamingOp>(leader) || mlir::isa<relalg::AggrFuncOp>(leader)) {
@@ -739,8 +568,162 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
          }
       }
    }
-};
 
+   static void collectDefs(mlir::Attribute attr, llvm::SmallVectorImpl<std::pair<std::string, tuples::ColumnDefAttr>>& defs) {
+      if (auto def = mlir::dyn_cast<tuples::ColumnDefAttr>(attr)) {
+         if (def.getName()) {
+            defs.emplace_back(def.getName().getLeafReference().getValue().str(), def);
+         }
+      } else if (auto arr = mlir::dyn_cast<mlir::ArrayAttr>(attr)) {
+         for (auto e : arr) collectDefs(e, defs);
+      } else if (auto dict = mlir::dyn_cast<mlir::DictionaryAttr>(attr)) {
+         for (auto e : dict) collectDefs(e.getValue(), defs);
+      }
+   }
+
+   static void collectSortedLocalDefs(mlir::Operation* op, llvm::SmallVectorImpl<std::pair<std::string, tuples::ColumnDefAttr>>& defs) {
+      llvm::SmallSetVector<mlir::StringAttr, 4> names;
+      if (auto info = op->getRegisteredInfo())
+         for (auto n : info->getAttributeNames()) names.insert(n);
+      for (auto n : op->getAttrs()) names.insert(n.getName());
+
+      llvm::SmallVector<mlir::StringAttr, 4> sortedNames(names.begin(), names.end());
+      llvm::sort(sortedNames, [](mlir::StringAttr a, mlir::StringAttr b) { return a.strref() < b.strref(); });
+
+      for (auto n : sortedNames) {
+         if (auto val = op->getAttr(n)) collectDefs(val, defs);
+      }
+   }
+
+   static llvm::DenseMap<const tuples::Column*, std::string> getLocalDefsMap(mlir::Operation* op) {
+      llvm::DenseMap<const tuples::Column*, std::string> localDefs;
+      llvm::SmallVector<std::pair<std::string, tuples::ColumnDefAttr>> defs;
+      collectSortedLocalDefs(op, defs);
+
+      for (const auto& p : defs) {
+         if (auto ptr = p.second.getColumnPtr()) {
+            localDefs[ptr.get()] = p.first;
+         }
+      }
+      return localDefs;
+   }
+
+   static void getAvailableColumns(mlir::Operation* op, llvm::DenseSet<const tuples::Column*>& out, llvm::SmallPtrSet<mlir::Operation*, 4>& visited) {
+      if (!visited.insert(op).second) return;
+
+      llvm::SmallVector<std::pair<std::string, tuples::ColumnDefAttr>> localDefs;
+      collectSortedLocalDefs(op, localDefs);
+
+      for (auto& p : localDefs) {
+         if (auto ptr = p.second.getColumnPtr()) out.insert(ptr.get());
+      }
+
+      if (mlir::isa<relalg::BaseTableOp>(op)) return;
+
+      if (auto renameOp = mlir::dyn_cast<relalg::RenamingOp>(op)) {
+         llvm::DenseSet<const tuples::Column*> overwritten;
+         if (auto colsAttr = renameOp.getColumns()) {
+            for (auto attr : colsAttr) {
+               if (auto def = mlir::dyn_cast<tuples::ColumnDefAttr>(attr)) {
+                  if (auto from = def.getFromExisting()) {
+                     if (auto arr = mlir::dyn_cast<mlir::ArrayAttr>(from)) {
+                        for (auto ref : arr) {
+                           if (auto colRef = mlir::dyn_cast<tuples::ColumnRefAttr>(ref))
+                              if (auto ptr = colRef.getColumnPtr()) overwritten.insert(ptr.get());
+                        }
+                     }
+                  }
+               }
+            }
+         }
+
+         if (op->getNumOperands() > 0) {
+            if (auto* defOp = op->getOperand(0).getDefiningOp()) {
+               if (defOp->getDialect()->getNamespace() == "relalg") {
+                  llvm::DenseSet<const tuples::Column*> childCols;
+                  getAvailableColumns(defOp, childCols, visited);
+                  for (auto* c : childCols) {
+                     if (!overwritten.count(c)) out.insert(c);
+                  }
+               }
+            }
+         }
+         return;
+      }
+
+      if (auto agg = mlir::dyn_cast<relalg::AggregationOp>(op)) {
+         for (auto attr : agg.getGroupByCols()) {
+            if (auto colRef = mlir::dyn_cast<tuples::ColumnRefAttr>(attr)) {
+               if (auto ptr = colRef.getColumnPtr()) out.insert(ptr.get());
+            }
+         }
+         return;
+      }
+
+      if (mlir::isa<relalg::SemiJoinOp, relalg::AntiSemiJoinOp, relalg::MarkJoinOp,
+                    relalg::IntersectOp, relalg::ExceptOp, relalg::GroupJoinOp>(op)) {
+         if (op->getNumOperands() > 0) {
+            if (auto* defOp = op->getOperand(0).getDefiningOp()) {
+               if (defOp->getDialect()->getNamespace() == "relalg")
+                  getAvailableColumns(defOp, out, visited);
+            }
+         }
+         return;
+      }
+
+      for (auto operand : op->getOperands()) {
+         if (auto* defOp = operand.getDefiningOp()) {
+            if (defOp->getDialect()->getNamespace() == "relalg") {
+               getAvailableColumns(defOp, out, visited);
+            }
+         }
+      }
+   }
+
+   static void collectRecursiveDefs(mlir::Operation* op, llvm::SmallVectorImpl<std::pair<std::string, tuples::ColumnDefAttr>>& defs, llvm::SmallPtrSetImpl<mlir::Operation*>& visited) {
+      if (!visited.insert(op).second) return;
+
+      collectSortedLocalDefs(op, defs);
+
+      for (auto operand : op->getOperands()) {
+         if (auto* definingOp = operand.getDefiningOp()) {
+            if (definingOp->getDialect()->getNamespace() == "relalg") {
+               collectRecursiveDefs(definingOp, defs, visited);
+            }
+         }
+      }
+   }
+
+   static std::pair<mlir::Operation*, std::vector<unsigned>> findDefiningOp(mlir::Operation* root, const tuples::Column* col) {
+      auto localDefs = getLocalDefsMap(root);
+      if (localDefs.count(col)) return {root, {}};
+
+      for (unsigned i = 0; i < root->getNumOperands(); ++i) {
+         auto opd = root->getOperand(i);
+         if (auto* defOp = opd.getDefiningOp()) {
+            if (defOp->getDialect()->getNamespace() == "relalg") {
+               auto res = findDefiningOp(defOp, col);
+               if (res.first) {
+                  res.second.push_back(i);
+                  return res;
+               }
+            }
+         }
+      }
+      return {nullptr, {}};
+   }
+
+   static mlir::Operation* followPath(mlir::Operation* root, const std::vector<unsigned>& path) {
+      mlir::Operation* curr = root;
+      for (auto it = path.rbegin(); it != path.rend(); ++it) {
+         if (*it >= curr->getNumOperands()) return nullptr;
+         auto opd = curr->getOperand(*it);
+         curr = opd.getDefiningOp();
+         if (!curr) return nullptr;
+      }
+      return curr;
+   }
+};
 } // namespace
 
 std::unique_ptr<mlir::Pass> relalg::createCommonSubtreeEliminationPass() {
