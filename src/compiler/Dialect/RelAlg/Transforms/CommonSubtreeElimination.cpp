@@ -6,20 +6,14 @@
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
-#include "llvm/Support/Debug.h"
-#include "llvm/Support/raw_ostream.h"
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Dominance.h"
 #include "mlir/Pass/Pass.h"
 
-#define CSE_DEBUG 0
-#define DEBUG_TYPE "relalg-cse"
-
 using namespace lingodb::compiler::dialect;
 
 namespace {
-
 // Helper to manage column equivalence mapping
 struct ColumnMappingContext {
    struct LeaderInfo {
@@ -202,9 +196,6 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
    ColumnMappingContext colContext;
    llvm::DenseMap<mlir::Value, mlir::Value> valueEquivalenceMap;
 
-   size_t successfulPhysicalMerges = 0;
-   size_t successfulVirtualMerges = 0;
-
    class EquivalenceChecker {
       llvm::DenseMap<mlir::Value, mlir::Value> candidateToLeaderVal;
       const CommonSubtreeElimination& pass;
@@ -311,12 +302,11 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(CommonSubtreeElimination)
    llvm::StringRef getArgument() const override { return "relalg-cse"; }
 
+   protected:
    void runOnOperation() override {
       auto funcOp = getOperation();
       colContext.clear();
       valueEquivalenceMap.clear();
-      successfulPhysicalMerges = 0;
-      successfulVirtualMerges = 0;
 
       if (funcOp.getBody().empty()) return;
 
@@ -350,14 +340,6 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
 
       for (auto& region : funcOp->getRegions()) {
          traverseRegion(region);
-      }
-
-      if ((CSE_DEBUG | 1) && (successfulPhysicalMerges > 0 || successfulVirtualMerges > 0)) {
-         llvm::errs() << "=========================================================\n";
-         llvm::errs() << "CSE Pass Summary\n";
-         llvm::errs() << "  Successful Physical Merges: " << successfulPhysicalMerges << "\n";
-         llvm::errs() << "  Successful Virtual Merges: " << successfulVirtualMerges << "\n";
-         llvm::errs() << "=========================================================\n";
       }
    }
 
@@ -417,12 +399,9 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
    llvm::hash_code computeHash(mlir::Operation* op) const {
       auto hash = llvm::hash_value(op->getName().getAsOpaquePointer());
 
-      LLVM_DEBUG(llvm::dbgs() << " Hashing " << op->getName() << ":\n");
-
       for (auto opd : op->getOperands()) {
          auto resolved = resolveValue(opd);
          hash = llvm::hash_combine(hash, resolved);
-         LLVM_DEBUG(llvm::dbgs() << "    Operand: " << resolved << "\n");
       }
       hash = llvm::hash_combine(hash, op->getNumRegions());
 
@@ -445,7 +424,6 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
       llvm::sort(sortedAttrs, [](const auto& a, const auto& b) { return a.getName().strref() < b.getName().strref(); });
 
       for (const auto& attr : sortedAttrs) {
-         LLVM_DEBUG(llvm::dbgs() << "    Attr " << attr.getName().strref() << ": " << attr.getValue() << "\n");
          hash = llvm::hash_combine(hash, attr.getName(), attr.getValue());
       }
 
@@ -472,16 +450,10 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
          if (op.getDialect()->getNamespace() != "relalg") continue;
 
          auto hash = computeHash(&op);
-         LLVM_DEBUG({
-            llvm::dbgs() << "Visiting: " << op.getName() << " (" << &op << ") Hash: " << hash << "\n";
-            if (mlir::isa<relalg::BaseTableOp>(op)) op.dump();
-         });
 
          bool merged = false;
          if (auto it = candidates.find(hash); it != candidates.end()) {
             for (auto* leader : it->second) {
-               LLVM_DEBUG(llvm::dbgs() << "  Comparing with leader: " << leader->getName() << " (" << leader << ")\n");
-
                if (domInfo.properlyDominates(leader, &op) && areEquivalent(leader, &op)) {
                   // if (!isSafeCrossRegionMerge(leader, &op)) continue;
 
@@ -552,13 +524,6 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
       if (duplicate->getNumResults() > 0 && leader->getNumResults() > 0) {
          valueEquivalenceMap[duplicate->getResult(0)] = leader->getResult(0);
       }
-
-      successfulVirtualMerges++;
-      LLVM_DEBUG({
-         llvm::dbgs() << "[CSE virtual REPLACE] " << duplicate->getName() << " -> " << leader->getName() << "\n";
-         leader->dump();
-         duplicate->dump();
-      });
    }
 
    void mapVirtualMerge(mlir::Operation* leader, mlir::Operation* duplicate) {
@@ -582,13 +547,6 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
       if (duplicate->getNumResults() > 0 && leader->getNumResults() > 0) {
          valueEquivalenceMap[duplicate->getResult(0)] = leader->getResult(0);
       }
-
-      LLVM_DEBUG({
-         llvm::dbgs() << "[CSE VIRTUAL] " << duplicate->getName() << " -> " << leader->getName() << "\n";
-         leader->dump();
-         duplicate->dump();
-      });
-      successfulVirtualMerges++;
    }
 
    void physicallyMergeOps(mlir::Operation* leader, mlir::Operation* duplicate) {
@@ -697,15 +655,6 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
       }
 
       duplicate->getResult(0).replaceAllUsesWith(replacement);
-
-      LLVM_DEBUG({
-         llvm::dbgs() << "[CSE REPLACE] " << duplicate->getName() << " -> " << leader->getName() << "\n";
-         leader->dump();
-         duplicate->dump();
-         if (auto* r = replacement.getDefiningOp()) r->dump();
-      });
-      duplicate->erase();
-      successfulPhysicalMerges++;
    }
 
    void resolveLeaderColumn(mlir::Operation* leader, mlir::Operation* duplicate,
