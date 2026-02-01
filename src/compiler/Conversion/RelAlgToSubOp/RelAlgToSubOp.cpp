@@ -87,7 +87,7 @@ static relalg::ColumnSet getRequired(Operator op, llvm::DenseMap<Operator, relal
    relalg::ColumnSet required;
    for (auto* user : op->getUsers()) {
       if (auto consumingOp = mlir::dyn_cast_or_null<Operator>(user)) {
-         required.insert(getRequired(consumingOp,requiredCols, cache));
+         required.insert(getRequired(consumingOp, requiredCols, cache));
          required.insert(consumingOp.getUsedColumns());
       }
       if (auto materializeOp = mlir::dyn_cast_or_null<relalg::MaterializeOp>(user)) {
@@ -3034,14 +3034,13 @@ class QueryReturnOpLowering : public OpConversionPattern<relalg::QueryReturnOp> 
 void RelalgToSubOpLoweringPass::runOnOperation() {
    auto module = getOperation();
    getContext().getLoadedDialect<util::UtilDialect>()->getFunctionHelper().setParentModule(module);
-   
+
    llvm::DenseMap<Operator, relalg::ColumnSet> requiredColumns;
 
    relalg::AvailabilityCache availabilityCache;
    getOperation().walk([&](Operator op) {
-      requiredColumns[op]= getRequired(op,requiredColumns, availabilityCache);
+      requiredColumns[op] = getRequired(op, requiredColumns, availabilityCache);
    });
-
 
    // Define Conversion Target
    ConversionTarget target(getContext());

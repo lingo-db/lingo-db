@@ -18,7 +18,7 @@
 
 namespace lingodb::compiler::dialect::relalg {
 class AvailabilityCache;
-}
+} // namespace lingodb::compiler::dialect::relalg
 
 namespace lingodb::compiler::dialect::relalg::detail {
 void replaceUsages(mlir::Operation* op, std::function<lingodb::compiler::dialect::tuples::ColumnRefAttr(dialect::tuples::ColumnRefAttr)> fn);

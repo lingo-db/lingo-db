@@ -388,7 +388,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
       relalg::ColumnSet required;
       for (auto* user : op->getUsers()) {
          if (auto consumingOp = mlir::dyn_cast_or_null<Operator>(user)) {
-            required.insert(getRequired(consumingOp,cache));
+            required.insert(getRequired(consumingOp, cache));
             required.insert(consumingOp.getUsedColumns());
          }
          if (auto materializeOp = mlir::dyn_cast_or_null<relalg::MaterializeOp>(user)) {
@@ -501,7 +501,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                   bool rightCanUseIndex = isBaseRelationWithSelects(right, rightPath) && containsExactlyIndexColumns(binOp.getContext(), rightPath.top(), &predicateOperator.getPredicateBlock(), rightIndexName);
                   bool isInnerJoin = mlir::isa<relalg::InnerJoinOp>(predicateOperator);
                   bool reversed = false;
-                  prepareForHash(predicateOperator,cache);
+                  prepareForHash(predicateOperator, cache);
 
                   // Select possible build side to the left
                   if (isInnerJoin && (leftCanUseIndex || rightCanUseIndex)) {
@@ -591,7 +591,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                   } else {
                      op->setAttr("impl", mlir::StringAttr::get(op.getContext(), "hash"));
                      op->setAttr("useHashJoin", mlir::UnitAttr::get(op.getContext()));
-                     prepareForHash(predicateOperator,cache);
+                     prepareForHash(predicateOperator, cache);
                   }
                }
             })
@@ -618,7 +618,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                }
                if (hashImplPossible(&predicateOperator.getPredicateBlock(), left.getAvailableColumns(cache), right.getAvailableColumns(cache))) {
                   op->setAttr("useHashJoin", mlir::UnitAttr::get(op.getContext()));
-                  prepareForHash(predicateOperator,cache);
+                  prepareForHash(predicateOperator, cache);
                   if (left->hasAttr("rows") && right->hasAttr("rows")) {
                      double rowsLeft = 0;
                      double rowsRight = 0;
@@ -652,7 +652,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                auto left = mlir::cast<Operator>(op.leftChild());
                auto right = mlir::cast<Operator>(op.rightChild());
                if (hashImplPossible(&op.getPredicateBlock(), left.getAvailableColumns(cache), right.getAvailableColumns(cache))) {
-                  prepareForHash(op,cache);
+                  prepareForHash(op, cache);
                   op->setAttr("useHashJoin", mlir::UnitAttr::get(op.getContext()));
                   op->setAttr("impl", mlir::StringAttr::get(op.getContext(), "hash"));
                }
@@ -699,7 +699,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                   if (users.size() != 1) {
                      return;
                   }
-                  auto required = getRequired(op,cache);
+                  auto required = getRequired(op, cache);
                   mlir::Operation* moveBefore = users[0];
                   for (auto* o : otherOps) {
                      o->moveBefore(moveBefore);

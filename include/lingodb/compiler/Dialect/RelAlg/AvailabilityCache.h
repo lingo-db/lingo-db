@@ -2,8 +2,10 @@
 #define LINGODB_COMPILER_DIALECT_RELALG_AVAILABILITYCACHE_H
 
 #include "lingodb/compiler/Dialect/RelAlg/ColumnSet.h"
-#include "llvm/ADT/DenseMap.h"
+
 #include "mlir/IR/Operation.h"
+
+#include "llvm/ADT/DenseMap.h"
 
 namespace lingodb::compiler::dialect::relalg {
 
