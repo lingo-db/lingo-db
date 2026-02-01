@@ -343,6 +343,7 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
       }
    }
 
+   private:
    mlir::Value resolveValue(mlir::Value val) const {
       auto it = valueEquivalenceMap.find(val);
       while (it != valueEquivalenceMap.end()) {
