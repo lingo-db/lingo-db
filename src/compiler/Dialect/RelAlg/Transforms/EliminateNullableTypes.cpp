@@ -19,7 +19,7 @@ class EliminateNullableTypes : public mlir::PassWrapper<EliminateNullableTypes, 
       relalg::ColumnSet required;
       for (auto* user : op->getUsers()) {
          if (auto consumingOp = mlir::dyn_cast_or_null<Operator>(user)) {
-            required.insert(getRequired(consumingOp,cache));
+            required.insert(getRequired(consumingOp, cache));
             required.insert(consumingOp.getUsedColumns());
          }
          if (auto materializeOp = mlir::dyn_cast_or_null<relalg::MaterializeOp>(user)) {
@@ -29,7 +29,8 @@ class EliminateNullableTypes : public mlir::PassWrapper<EliminateNullableTypes, 
       cache[op] = required;
       return required;
    }
-   void materialize(mlir::Operation* op, size_t idx, lingodb::compiler::dialect::relalg::ColumnNullableChangeInfo& info,llvm::DenseMap<Operator, relalg::ColumnSet>& cache) {
+   void materialize(mlir::Operation* op, size_t idx, lingodb::compiler::dialect::relalg::ColumnNullableChangeInfo& info) {
+      llvm::DenseMap<Operator, relalg::ColumnSet> cache;
       auto& colManager = getContext().getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
       mlir::OpBuilder builder(op->getContext());
       builder.setInsertionPoint(op);
@@ -88,7 +89,7 @@ class EliminateNullableTypes : public mlir::PassWrapper<EliminateNullableTypes, 
       }
       return nullptr;
    }
-   void handleRec(mlir::Value val, lingodb::compiler::dialect::relalg::ColumnNullableChangeInfo info,llvm::DenseMap<Operator, relalg::ColumnSet>& cache) {
+   void handleRec(mlir::Value val, lingodb::compiler::dialect::relalg::ColumnNullableChangeInfo info) {
       if (!mlir::isa<tuples::TupleStreamType>(val.getType())) return;
       std::vector<std::pair<mlir::Operation*, uint32_t>> uses;
       for (auto& use : val.getUses()) {
@@ -98,13 +99,13 @@ class EliminateNullableTypes : public mlir::PassWrapper<EliminateNullableTypes, 
          if (auto nullCollumnTypeChangeable = mlir::dyn_cast<NullColumnTypeChangeable>(useOwner)) {
             if (nullCollumnTypeChangeable.changeForColumns(info).succeeded()) {
                if (auto op = mlir::dyn_cast<Operator>(useOwner)) {
-                  handleRec(op.asRelation(), info, cache);
+                  handleRec(op.asRelation(), info);
                }
             } else {
-               materialize(useOwner, useIdx, info, cache);
+               materialize(useOwner, useIdx, info);
             }
          } else {
-            materialize(useOwner, useIdx, info, cache);
+            materialize(useOwner, useIdx, info);
          }
       }
    }
@@ -141,7 +142,7 @@ class EliminateNullableTypes : public mlir::PassWrapper<EliminateNullableTypes, 
                }
             }
             baseTableOp.setColumnsAttr(builder.getDictionaryAttr(mapping));
-            handleRec(baseTableOp.asRelation(), info, cache);
+            handleRec(baseTableOp.asRelation(), info);
          }
       });
       getOperation().walk([&](relalg::SelectionOp selection) {
@@ -152,7 +153,7 @@ class EliminateNullableTypes : public mlir::PassWrapper<EliminateNullableTypes, 
             auto newColDef = colManager.createDef(scope, name + "__notnullsel");
             newColDef.getColumn().type = getBaseType(notNullCheckedCol->type);
             info.directMappings[notNullCheckedCol] = &newColDef.getColumn();
-            handleRec(selection.asRelation(), info, cache);
+            handleRec(selection.asRelation(), info);
             mlir::OpBuilder builder(selection->getContext());
             builder.setInsertionPointAfter(selection);
             auto* block = new mlir::Block;
@@ -169,7 +170,7 @@ class EliminateNullableTypes : public mlir::PassWrapper<EliminateNullableTypes, 
             auto mapOp = builder.create<relalg::MapOp>(selection->getLoc(), tuples::TupleStreamType::get(&getContext()), selection.asRelation(), builder.getArrayAttr({newColDef}));
             mapOp.getPredicate().push_back(block);
             selection.asRelation().replaceAllUsesExcept(mapOp.asRelation(), mapOp);
-            handleRec(mapOp.asRelation(), info, cache);
+            handleRec(mapOp.asRelation(), info);
          }
       });
    }

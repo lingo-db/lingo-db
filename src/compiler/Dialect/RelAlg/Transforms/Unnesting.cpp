@@ -175,7 +175,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
          })
          .Case<relalg::CrossProductOp>([&](Operator cp) {
             auto subOps = cp.getAllSubOperators();
-            return collectSimpleDependencies(subOps[0], attributes, selectionOps,cache) && collectSimpleDependencies(subOps[1], attributes, selectionOps,cache);
+            return collectSimpleDependencies(subOps[0], attributes, selectionOps, cache) && collectSimpleDependencies(subOps[1], attributes, selectionOps, cache);
          })
          .Case<relalg::SelectionOp>([&](relalg::SelectionOp sel) {
             auto x = sel.getUsedColumns();
@@ -183,14 +183,14 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
             if (x.isSubsetOf(attributes)) {
                selectionOps.push_back(sel);
             }
-            return collectSimpleDependencies(sel.getChildren()[0], attributes, selectionOps,cache);
+            return collectSimpleDependencies(sel.getChildren()[0], attributes, selectionOps, cache);
          })
          .Case<relalg::AggregationOp>([&](relalg::AggregationOp aggregationOp) {
             if (aggregationOp.getUsedColumns().intersects(attributes)) {
                return false;
             }
             std::vector<relalg::SelectionOp> extractedSelections;
-            if (!collectSimpleDependencies(aggregationOp.getChildren()[0], attributes, extractedSelections,cache)) {
+            if (!collectSimpleDependencies(aggregationOp.getChildren()[0], attributes, extractedSelections, cache)) {
                return false;
             }
 
@@ -219,6 +219,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
             }
             selectionOps.insert(selectionOps.end(), extractedSelections.begin(), extractedSelections.end());
             aggregationOp.setGroupByColsAttr(groupByColumns.asRefArrayAttr(&getContext()));
+            cache.clear();
             return true;
          })
          .Case<BinaryOperator>([&](BinaryOperator join) {
@@ -228,7 +229,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
             if (mapOp.getUsedColumns().intersects(attributes)) {
                return false;
             }
-            return collectSimpleDependencies(mapOp.getChildren()[0], attributes, selectionOps,cache);
+            return collectSimpleDependencies(mapOp.getChildren()[0], attributes, selectionOps, cache);
          })
          .Default([&](mlir::Operation* others) {
             return false;
@@ -292,8 +293,8 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
    }
    void runOnOperation() override {
       using namespace mlir;
+      relalg::AvailabilityCache cache;
       getOperation()->walk([&](BinaryOperator binaryOperator) {
-         relalg::AvailabilityCache cache;
          if (!relalg::detail::isJoin(binaryOperator.getOperation())) return;
          if (!relalg::detail::isDependentJoin(binaryOperator.getOperation(), cache)) return;
          auto left = mlir::dyn_cast_or_null<Operator>(binaryOperator.leftChild());
@@ -303,9 +304,11 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
          if (!dependentLeft.empty() && !dependentRight.empty()) {
             return;
          }
-         if (trySimpleUnnesting(mlir::cast<BinaryOperator>(binaryOperator.getOperation()),cache)) {
-            cache.clear();
-            if (!relalg::detail::isDependentJoin(binaryOperator.getOperation(), cache)) return;
+         if (trySimpleUnnesting(mlir::cast<BinaryOperator>(binaryOperator.getOperation()), cache)) {
+            if (!relalg::detail::isDependentJoin(binaryOperator.getOperation(), cache)) {
+               cache.clear();
+               return;
+            }
          }
          relalg::ColumnSet dependentAttributes = dependentLeft;
          dependentAttributes.insert(dependentRight);
@@ -321,6 +324,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
          Operator newLeft = leftProvides ? providerChild : unnestedChild;
          Operator newRight = leftProvides ? unnestedChild : providerChild;
          handleJoin(binaryOperator->getLoc(), binaryOperator, newLeft, newRight, true, leftProvides, dependentAttributes);
+         cache.clear();
       });
    }
 };
