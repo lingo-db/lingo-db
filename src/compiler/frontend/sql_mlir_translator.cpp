@@ -1126,28 +1126,31 @@ mlir::Value SQLMlirTranslator::translateWhenChecks(mlir::OpBuilder& builder, std
 
 mlir::Value SQLMlirTranslator::translateCoalesceExpression(mlir::OpBuilder& builder, NullableType resultType, std::vector<std::shared_ptr<ast::BoundExpression>> expressions, std::shared_ptr<analyzer::SQLContext> context) {
    auto* mlirContext = builder.getContext();
-
-   if (expressions.empty()) {
-      auto value = builder.create<db::NullOp>(builder.getUnknownLoc(), db::NullableType::get(mlirContext, builder.getNoneType()));
-      return resultType.castValueToThisType(builder, value, true);
+   if (expressions.size() == 1) {
+      auto value = translateExpression(builder, expressions[0], context);
+      return resultType.castValueToThisType(builder, value, mlir::isa<db::NullableType>(value.getType()));
    }
+
    auto currentExpression = expressions[0];
    auto location = getLocationFromBison(currentExpression->loc, mlirContext);
    mlir::Value value = translateExpression(builder, currentExpression, context);
-   mlir::Value isNull = currentExpression->resultType->isNullable ? (mlir::Value) builder.create<db::IsNullOp>(location, value) : (mlir::Value) builder.create<mlir::arith::ConstantIntOp>(location, 0, builder.getI1Type());
+   auto valIsNullable = mlir::isa<db::NullableType>(value.getType());
+   mlir::Value isNull = valIsNullable ? (mlir::Value) builder.create<db::IsNullOp>(location, value) : (mlir::Value) builder.create<mlir::arith::ConstantIntOp>(location, 0, builder.getI1Type());
    mlir::Value isNotNull = builder.create<db::NotOp>(location, isNull);
-
-   value = resultType.castValueToThisType(builder, value, currentExpression->resultType->isNullable);
 
    auto* whenBlock = new mlir::Block;
    auto* elseBlock = new mlir::Block;
    mlir::OpBuilder whenBuilder(mlirContext);
    whenBuilder.setInsertionPointToStart(whenBlock);
+   if (valIsNullable) {
+      value = whenBuilder.create<db::NullableGetVal>(location, getBaseType(value.getType()), value);
+   }
+   value = resultType.castValueToThisType(whenBuilder, value, mlir::isa<db::NullableType>(value.getType()));
+   whenBuilder.create<mlir::scf::YieldOp>(location, value);
    mlir::OpBuilder elseBuilder(mlirContext);
    elseBuilder.setInsertionPointToStart(elseBlock);
    auto elseResl = translateCoalesceExpression(elseBuilder, resultType, std::vector<std::shared_ptr<ast::BoundExpression>>{expressions.begin() + 1, expressions.end()}, context);
 
-   whenBuilder.create<mlir::scf::YieldOp>(location, value);
    elseBuilder.create<mlir::scf::YieldOp>(location, elseResl);
    auto ifOp = builder.create<mlir::scf::IfOp>(location, resultType.toMlirType(mlirContext), isNotNull, true);
    ifOp.getThenRegion().getBlocks().clear();

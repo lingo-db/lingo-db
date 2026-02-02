@@ -129,23 +129,15 @@ select x, case when x=1 then 10 when x=2 then 20 else 0 end from (values (1)) t(
 --//CHECK: }
 select x, case x when 1 then 10 when 2 then 20 end from (values (1)) t(x);
 --//CHECK: module
---//CHECK: %{{.*}} = db.null : <i32>
---//CHECK: %{{.*}} = db.isnull %{{.*}} : <i32>
+--//CHECK: %{{.*}} = db.null
+--//CHECK: %{{.*}} = db.isnull %{{.*}}
 --//CHECK: %{{.*}} = db.not %{{.*}} : i1
---//CHECK: %{{.*}} = scf.if %{{.*}} -> (!db.nullable<i32>) {
---//CHECK:   scf.yield %{{.*}} : !db.nullable<i32>
+--//CHECK: %{{.*}} = scf.if %{{.*}} -> (i32) {
+--//CHECK:   %{{.*}} = db.nullable_get_val %{{.*}}
+--//CHECK:   scf.yield %{{.*}} : i32
 --//CHECK: } else {
 --//CHECK:   %{{.*}} = db.constant(1 : i32) : i32
---//CHECK:   %false = arith.constant false
---//CHECK:   %{{.*}} = db.not %false : i1
---//CHECK:   %{{.*}} = db.as_nullable %{{.*}} : i32 -> <i32>
---//CHECK:   %{{.*}} = scf.if %{{.*}} -> (!db.nullable<i32>) {
---//CHECK:     scf.yield %{{.*}} : !db.nullable<i32>
---//CHECK:   } else {
---//CHECK:     %{{.*}} = db.null : <i32>
---//CHECK:     scf.yield %{{.*}} : !db.nullable<i32>
---//CHECK:   }
---//CHECK:   scf.yield %{{.*}} : !db.nullable<i32>
+--//CHECK:   scf.yield %{{.*}} : i32
 --//CHECK: }
 select coalesce(null,1);
 --//CHECK: module
