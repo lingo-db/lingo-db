@@ -2852,7 +2852,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeFunctionExpressio
       });
 
       resultType = SQLTypeUtils::getCommonBaseType(types);
-      resultType.isNullable = true;
+      resultType.isNullable = types[types.size() - 1].isNullable;
 
       boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, boundArgs);
 
