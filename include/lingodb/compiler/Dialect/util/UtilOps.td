@@ -163,6 +163,16 @@ let arguments = (ins AnyType:$val,RefType:$ref,Optional<Index>:$idx);
 let assemblyFormat = "$val `:` type($val) `,` $ref `[` $idx `]` `:`type($ref) attr-dict";
 let hasCanonicalizeMethod = 1;
 }
+def LoadElementOp : Util_Op<"loadelement",[DeclareOpInterfaceMethods<MemoryEffectsOpInterface>]> {
+    let arguments = (ins RefType:$ref,I32Attr:$idx);
+    let results=(outs AnyType:$val);
+    let assemblyFormat = "$ref `[` $idx `]` `:`type($ref) `->` type($val) attr-dict";
+}
+def StoreElementOp : Util_Op<"storeelement"> {
+    let arguments = (ins AnyType:$val,RefType:$ref,I32Attr:$idx);
+    let assemblyFormat = "$val `:` type($val) `,` $ref `[` $idx `]` `:`type($ref) attr-dict";
+    let hasCanonicalizeMethod = 1;
+}
 def LoadOp  : Util_Op<"load",[DeclareOpInterfaceMethods<MemoryEffectsOpInterface>]> {
 let arguments = (ins RefType:$ref,Optional<Index>:$idx);
 let results=(outs AnyType:$val);

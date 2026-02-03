@@ -572,6 +572,108 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
       res_vr.part(0).set_value(std::move(res_scratch));
       return true;
    }
+   bool compile_util_load_element_op(dialect::util::LoadElementOp op) {
+      const mlir::TypedValue<dialect::util::RefType> base_ref = op.getRef();
+      const mlir::TupleType tuple_type = mlir::cast<mlir::TupleType>(base_ref.getType().getElementType());
+
+      // calc the byte-offset of the element in the tuple (same address layout as C++ structs for target)
+      unsigned elementOffset = TupleHelper::getElementOffset(tuple_type, op.getIdx());
+
+      const auto dst = op->getResult(0);
+      assert(val_parts(base_ref).count() == 1);
+      auto [_, base_vr] = this->val_ref_single(base_ref);
+
+      auto res = this->result_ref(dst);
+
+      // create a base + offset expression
+      AsmReg base_reg = base_vr.load_to_reg();
+      GenericValuePart offset_expr = typename GenericValuePart::Expr{std::move(base_reg), elementOffset};
+      return mlir::TypeSwitch<mlir::Type, bool>(op.getType())
+         .Case([&](const mlir::IntegerType t) {
+            switch (t.getIntOrFloatBitWidth()) {
+               case 1: return derived()->encode_util_load_i1(std::move(offset_expr), res.part(0));
+               case 8: return derived()->encode_util_load_i8(std::move(offset_expr), res.part(0));
+               case 16: return derived()->encode_util_load_i16(std::move(offset_expr), res.part(0));
+               case 32: return derived()->encode_util_load_i32(std::move(offset_expr), res.part(0));
+               case 64: return derived()->encode_util_load_i64(std::move(offset_expr), res.part(0));
+               case 128: return derived()->encode_load_i128(std::move(offset_expr), res.part(0), res.part(1));
+               default:
+                  assert(false && "Unsupported integer type width for load operation");
+                  return false;
+            }
+         })
+         .Case([&](const mlir::FloatType t) {
+            switch (t.getIntOrFloatBitWidth()) {
+               case 32: return derived()->encode_util_load_f32(std::move(offset_expr), res.part(0));
+               case 64: return derived()->encode_util_load_f64(std::move(offset_expr), res.part(0));
+               default:
+                  assert(false && "Unsupported float type width for load operation");
+                  return false;
+            }
+         })
+         .template Case<dialect::util::RefType, mlir::IndexType>([&](auto) {
+            return derived()->encode_util_load_i64(std::move(offset_expr), res.part(0));
+         })
+         .template Case<dialect::util::VarLen32Type, dialect::util::BufferType>([&](auto) {
+            return derived()->encode_load_i128(std::move(offset_expr), res.part(0), res.part(1));
+         })
+         .Default([](const mlir::Type t) {
+            t.dump();
+            assert(false && "Unsupported load type");
+            return false;
+         });
+      return true;
+   }
+   bool compile_util_store_element_op(dialect::util::StoreElementOp op) {
+      const mlir::Value in = op.getVal();
+      const mlir::TypedValue<dialect::util::RefType> base_ref = op.getRef();
+      const mlir::TupleType tuple_type = mlir::cast<mlir::TupleType>(base_ref.getType().getElementType());
+
+      // calc the byte-offset of the element in the tuple (same address layout as C++ structs for target)
+      unsigned elementOffset = TupleHelper::getElementOffset(tuple_type, op.getIdx());
+
+      assert(val_parts(base_ref).count() == 1);
+      auto [_, base_vr] = this->val_ref_single(base_ref);
+      // create a base + offset expression
+      AsmReg base_reg = base_vr.load_to_reg();
+      GenericValuePart offset_expr = typename GenericValuePart::Expr{std::move(base_reg), elementOffset};
+      auto in_vr = this->val_ref(in);
+      return mlir::TypeSwitch<mlir::Type, bool>(in.getType())
+         .Case([&](const mlir::IntegerType t) {
+            switch (t.getIntOrFloatBitWidth()) {
+               case 1: return derived()->encode_util_store_i1(std::move(offset_expr), in_vr.part(0));
+               case 8: return derived()->encode_util_store_i8(std::move(offset_expr), in_vr.part(0));
+               case 16: return derived()->encode_util_store_i16(std::move(offset_expr), in_vr.part(0));
+               case 32: return derived()->encode_util_store_i32(std::move(offset_expr), in_vr.part(0));
+               case 64: return derived()->encode_util_store_i64(std::move(offset_expr), in_vr.part(0));
+               case 128: return derived()->encode_store_i128(
+                  std::move(offset_expr), in_vr.part(0), in_vr.part(1));
+               default:
+                  assert(0 && "Unsupported integer type width for store operation");
+                  return false;
+            }
+         })
+         .Case([&](const mlir::FloatType t) {
+            switch (t.getIntOrFloatBitWidth()) {
+               case 32: return derived()->encode_util_store_f32(std::move(offset_expr), in_vr.part(0));
+               case 64: return derived()->encode_util_store_f64(std::move(offset_expr), in_vr.part(0));
+               default:
+                  assert(0 && "Unsupported float type width for store operation");
+                  return false;
+            }
+         })
+         .template Case<dialect::util::RefType, mlir::IndexType>([&](auto) {
+            return derived()->encode_util_store_i64(std::move(offset_expr), in_vr.part(0));
+         })
+         .template Case<dialect::util::VarLen32Type, dialect::util::BufferType>([&](auto) {
+            return derived()->encode_store_i128(std::move(offset_expr), in_vr.part(0), in_vr.part(1));
+         })
+         .Default([](mlir::Type t) {
+            t.dump();
+            assert(false && "Unsupported load type");
+            return false;
+         });
+   }
 
    bool compile_util_buffer_cast_op(dialect::util::BufferCastOp op) {
       auto src_vr = this->val_ref(op.getVal());
@@ -1454,6 +1556,12 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
          })
          .template Case<dialect::util::LoadOp>([&](auto op) { return compile_util_load_op(op); })
          .template Case<dialect::util::StoreOp>([&](auto op) { return compile_util_store_op(op); })
+         .template Case<dialect::util::LoadElementOp>([&](auto op) {
+            return compile_util_load_element_op(op);
+         })
+         .template Case<dialect::util::StoreElementOp>([&](auto op) {
+            return compile_util_store_element_op(op);
+         })
          .template Case<mlir::func::CallOp>([&](auto op) { return compile_func_call_op(op); })
          .template Case<mlir::func::ReturnOp>([&](auto op) { return compile_func_return_op(op); })
          .template Case<mlir::arith::ExtUIOp>([&](auto op) { return compile_arith_exti_op(op, false); })
