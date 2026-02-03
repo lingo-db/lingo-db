@@ -74,6 +74,8 @@ void util::populateUtilTypeConversionPatterns(TypeConverter& typeConverter, Rewr
    patterns.add<SimpleTypeConversionPattern<BufferGetRef>>(typeConverter, patterns.getContext());
    patterns.add<SimpleTypeConversionPattern<BufferGetMemRefOp>>(typeConverter, patterns.getContext());
    patterns.add<SimpleTypeConversionPattern<BufferGetElementRef>>(typeConverter, patterns.getContext());
+   patterns.add<SimpleTypeConversionPattern<LoadElementOp>>(typeConverter, patterns.getContext());
+   patterns.add<SimpleTypeConversionPattern<StoreElementOp>>(typeConverter, patterns.getContext());
 
    typeConverter.addConversion([&](util::RefType genericMemrefType) {
       return util::RefType::get(genericMemrefType.getContext(), typeConverter.convertType(genericMemrefType.getElementType()));

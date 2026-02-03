@@ -114,9 +114,18 @@ LogicalResult util::GetTupleOp::canonicalize(util::GetTupleOp op, mlir::PatternR
          }
 
          auto elemTy = op.getResult().getType();
-         auto elemRefTy = util::RefType::get(elemTy);
-         auto tep = rewriter.create<util::TupleElementPtrOp>(loadOp.getLoc(), elemRefTy, base, op.getOffset());
-         auto newLoad = rewriter.create<util::LoadOp>(loadOp.getLoc(), tep);
+         auto newLoad = rewriter.create<util::LoadElementOp>(loadOp.getLoc(), elemTy, base, op.getOffset());
+         rewriter.replaceOp(op.getOperation(), newLoad.getResult());
+         return success();
+      }
+      if (auto loadElementOp = mlir::dyn_cast_or_null<util::LoadElementOp>(tupleCreationOp)) {
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPoint(loadElementOp);
+         auto base = loadElementOp.getRef();
+         auto elemTy = op.getResult().getType();
+         auto tupleRefTy = util::RefType::get(loadElementOp.getType());
+         auto tep = rewriter.create<util::TupleElementPtrOp>(loadElementOp.getLoc(), tupleRefTy, base, loadElementOp.getIdx());
+         auto newLoad = rewriter.create<util::LoadElementOp>(loadElementOp.getLoc(), elemTy, tep, op.getOffset());
          rewriter.replaceOp(op.getOperation(), newLoad.getResult());
          return success();
       }
@@ -141,10 +150,24 @@ LogicalResult util::StoreOp::canonicalize(util::StoreOp op, mlir::PatternRewrite
          base = rewriter.create<util::ArrayElementPtrOp>(op.getLoc(), base.getType(), base, idx);
       }
       for (size_t i = 0; i < ty.size(); i++) {
-         auto elemRefTy = util::RefType::get(ty.getType(i));
          auto gt = rewriter.createOrFold<util::GetTupleOp>(op.getLoc(), ty.getType(i), op.getVal(), i);
-         auto tep = rewriter.create<util::TupleElementPtrOp>(op.getLoc(), elemRefTy, base, i);
-         rewriter.create<util::StoreOp>(op.getLoc(), gt, tep, Value());
+         rewriter.create<util::StoreElementOp>(op.getLoc(), gt, base, i);
+      }
+      rewriter.eraseOp(op);
+      return mlir::success();
+   }
+   return failure();
+}
+
+::llvm::LogicalResult util::StoreElementOp::canonicalize(lingodb::compiler::dialect::util::StoreElementOp op, ::mlir::PatternRewriter& rewriter) {
+   // rewrite StoreElementOp into TupleElementPtrOp + StoreElementOp in the case of tuple types
+   auto tupleType = mlir::dyn_cast_or_null<mlir::TupleType>(op.getRef().getType().getElementType());
+   if (auto storedTupleType = mlir::dyn_cast_or_null<mlir::TupleType>(op.getVal().getType())) {
+      auto base = op.getRef();
+      base = rewriter.create<util::TupleElementPtrOp>(op.getLoc(), util::RefType::get(tupleType.getType(op.getIdx())), base, op.getIdx());
+      for (size_t i = 0; i < storedTupleType.size(); i++) {
+         auto gt = rewriter.createOrFold<util::GetTupleOp>(op.getLoc(), storedTupleType.getType(i), op.getVal(), i);
+         rewriter.create<util::StoreElementOp>(op.getLoc(), gt, base, i);
       }
       rewriter.eraseOp(op);
       return mlir::success();
@@ -165,9 +188,10 @@ LogicalResult util::StoreOp::canonicalize(util::StoreOp op, mlir::PatternRewrite
 }
 
 void util::LoadOp::getEffects(::mlir::SmallVectorImpl<::mlir::SideEffects::EffectInstance<::mlir::MemoryEffects::Effect>>& effects) {
-   if (!getOperation()->hasAttr("nosideffect")) {
-      effects.emplace_back(MemoryEffects::Read::get());
-   }
+   effects.emplace_back(MemoryEffects::Read::get());
+}
+void util::LoadElementOp::getEffects(::mlir::SmallVectorImpl<::mlir::SideEffects::EffectInstance<::mlir::MemoryEffects::Effect>>& effects) {
+   effects.emplace_back(MemoryEffects::Read::get());
 }
 ::mlir::LogicalResult util::TupleElementPtrOp::verify() {
    util::TupleElementPtrOp& op = *this;

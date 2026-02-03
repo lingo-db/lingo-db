@@ -189,7 +189,33 @@ class DeAllocOpLowering : public OpConversionPattern<util::DeAllocOp> {
       return success();
    }
 };
-
+class StoreElementOpLowering : public OpConversionPattern<util::StoreElementOp> {
+   public:
+   using OpConversionPattern<util::StoreElementOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(util::StoreElementOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto elemType = typeConverter->convertType(op.getRef().getType().getElementType());
+      auto targetPtrType = mlir::LLVM::LLVMPointerType::get(getContext());
+      Value zero = rewriter.create<mlir::LLVM::ConstantOp>(op->getLoc(), rewriter.getI64Type(), rewriter.getI64IntegerAttr(0));
+      Value structIdx = rewriter.create<mlir::LLVM::ConstantOp>(op->getLoc(), rewriter.getI32Type(), op.getIdxAttr());
+      Value elementPtr = rewriter.create<LLVM::GEPOp>(op->getLoc(), targetPtrType, elemType, adaptor.getRef(), ValueRange({zero, structIdx}));
+      rewriter.replaceOpWithNewOp<LLVM::StoreOp>(op, adaptor.getVal(), elementPtr);
+      return success();
+   }
+};
+class LoadElementOpLowering : public OpConversionPattern<util::LoadElementOp> {
+   public:
+   using OpConversionPattern<util::LoadElementOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(util::LoadElementOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto structType = typeConverter->convertType(op.getRef().getType().getElementType());
+      auto elementType = mlir::cast<mlir::LLVM::LLVMStructType>(structType).getBody()[op.getIdx()];
+      auto targetPtrType = mlir::LLVM::LLVMPointerType::get(getContext());
+      Value zero = rewriter.create<mlir::LLVM::ConstantOp>(op->getLoc(), rewriter.getI64Type(), rewriter.getI64IntegerAttr(0));
+      Value structIdx = rewriter.create<mlir::LLVM::ConstantOp>(op->getLoc(), rewriter.getI32Type(), op.getIdxAttr());
+      Value elementPtr = rewriter.create<LLVM::GEPOp>(op->getLoc(), targetPtrType, structType, adaptor.getRef(), ValueRange({zero, structIdx}));
+      rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, elementType, elementPtr);
+      return success();
+   }
+};
 class StoreOpLowering : public OpConversionPattern<util::StoreOp> {
    public:
    using OpConversionPattern<util::StoreOp>::OpConversionPattern;
@@ -637,6 +663,8 @@ void util::populateUtilToLLVMConversionPatterns(LLVMTypeConverter& typeConverter
    patterns.add<BufferCreateOpLowering>(typeConverter, patterns.getContext());
    patterns.add<BufferGetMemRefOpLowering>(typeConverter, patterns.getContext());
    patterns.add<BufferGetElementRefLowering>(typeConverter, patterns.getContext());
+   patterns.add<StoreElementOpLowering>(typeConverter, patterns.getContext());
+   patterns.add<LoadElementOpLowering>(typeConverter, patterns.getContext());
 }
 namespace {
 
