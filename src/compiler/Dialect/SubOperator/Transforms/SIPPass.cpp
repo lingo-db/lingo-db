@@ -398,7 +398,7 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
                   for (auto& in : joinInfo->probeKeyColumnsNames) {
                      std::cerr << " - " << in;
                   }
-                  std::cerr << "\nSIP Name: " << sipName << std::endl;
+                  std::cerr << "\nSIP Name: " << count << std::endl;
                   std::cerr << "----------------SIP Info----------------\n";
 
                   std::cerr << "Probe: " << std::endl;

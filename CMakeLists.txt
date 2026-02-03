@@ -6,6 +6,8 @@ project(lingodb LANGUAGES CXX C)
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 set(CMAKE_CXX_STANDARD 20 CACHE STRING "C++ standard to conform to")
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g -DTRACER")
+set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g -DDEBUG=1")
+set(CMAKE_C_FLAGS_DEBUG "-O0 -g -DDEBUG=1")
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     # Silence warning about default label in switch which covers all enumeration values (false positive)
