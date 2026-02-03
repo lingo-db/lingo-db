@@ -6,13 +6,20 @@
 #include <shared_mutex>
 namespace lingodb::runtime {
 class SIP {
+
    public:
+   struct SIPNode {
+      lingodb::runtime::HashIndexedView* hashView;
+      SIPNode* next;
+      uint8_t id;
+   };
    //virtual void iterate(bool parallel, std::vector<std::string> members, const std::function<void(BatchView*)>& cb) = 0;
    virtual ~SIP() {}
+   static std::atomic<SIPNode*> sips;
    static std::unordered_map<std::string, lingodb::runtime::HashIndexedView*> filters;
    static std::shared_mutex filtersMutex;
-   static lingodb::runtime::HashIndexedView* getFilter(const std::string& sipName);
-   static lingodb::runtime::HashIndexedView* createSIP(lingodb::runtime::HashIndexedView* hashView, VarLen32 sipName);
+   static lingodb::runtime::HashIndexedView* getFilter(const uint8_t id);
+   static lingodb::runtime::HashIndexedView* createSIP(lingodb::runtime::HashIndexedView* hashView, uint8_t id);
    //static DataSource* getFromTable(ArrowTable* arrowTable, runtime::VarLen32 mappingVal,runtime::VarLen32 columnArray);
 };
 

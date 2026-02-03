@@ -3764,9 +3764,9 @@ class CreateHashIndexedViewLowering : public SubOpConversionPattern<subop::Creat
 class CreateSIPFilterLowering : public SubOpConversionPattern<subop::CreateSIPFilterOp> {
    using SubOpConversionPattern<subop::CreateSIPFilterOp>::SubOpConversionPattern;
    LogicalResult matchAndRewrite(subop::CreateSIPFilterOp op, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
-      // Convert the SIP name attribute (string) into a VarLen32 runtime value
-      mlir::Value sipNameVal = rewriter.create<util::CreateConstVarLen>(op->getLoc(), util::VarLen32Type::get(rewriter.getContext()), op.getSipNameAttr());
-      auto result = rt::SIP::createSIP(rewriter, op->getLoc())(mlir::ValueRange{adaptor.getHashView(), sipNameVal})[0];
+      auto sipIdAttr = op.getSipNameAttr();
+      auto sipIdVal = rewriter.create<arith::ConstantIntOp>(op->getLoc(), sipIdAttr.getValue().getZExtValue(), 8);
+      auto result = rt::SIP::createSIP(rewriter, op->getLoc())(mlir::ValueRange{adaptor.getHashView(), sipIdVal})[0];
       rewriter.replaceOp(op, result);
       return success();
    }

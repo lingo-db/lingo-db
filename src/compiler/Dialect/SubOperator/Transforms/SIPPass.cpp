@@ -17,6 +17,7 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/BuiltinOps.h"
 
+#include <cstdint>
 #include <queue>
 #include <string>
 
@@ -379,8 +380,10 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
             std::string sipName = genRandom(10);
             auto probeColRef = joinInfo->probeKeyColumnsNames[0];
             auto buildColRef = joinInfo->buildKeyColumnNames[0];
+            static int64_t count = 0;
+            count++;
+            lingodb::runtime::FilterDescription filterDesc{.columnName = probeColRef, .op = lingodb::runtime::FilterOp::SIP, .value = count};
 
-            lingodb::runtime::FilterDescription filterDesc{.columnName = probeColRef, .op = lingodb::runtime::FilterOp::SIP, .value = sipName};
             externalDataSourceProp.filterDescriptions.push_back(filterDesc);
 
             {
@@ -412,7 +415,7 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
                joinInfo->externalProbeOp.setDescr(b.getStringAttr(updatedDescr));
             }
 
-            auto sipFilter = b.create<subop::CreateSIPFilterOp>(loc, joinInfo->hashView.getResult().getType(), joinInfo->hashView.getResult(), b.getStringAttr(sipName));
+            auto sipFilter = b.create<subop::CreateSIPFilterOp>(loc, joinInfo->hashView.getResult().getType(), joinInfo->hashView.getResult(), b.getI8IntegerAttr(count));
             // Update lookup to use the SIP-filtered view, ensuring the filter is built before lookup execution
             joinInfo->lookupOp.setOperand(1, sipFilter.getResult());
          }

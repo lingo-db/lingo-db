@@ -313,7 +313,7 @@ class BitMapFilter : public lingodb::runtime::Filter {
 
 template <class T>
 class HashViewFilter : public lingodb::runtime::Filter {
-   std::string sipId;
+   lingodb::runtime::HashIndexedView* view;
    template <class V>
    inline uint64_t hashValue(V val) {
       if constexpr (std::is_integral_v<V>) {
@@ -354,15 +354,10 @@ class HashViewFilter : public lingodb::runtime::Filter {
    }
 
    public:
-   HashViewFilter(std::string sipId) : sipId(sipId) {
+   HashViewFilter(lingodb::runtime::HashIndexedView* view) : view(view) {
+      assert(view);
    }
    size_t filter(size_t len, uint16_t* currSelVec, uint16_t* nextSelVec, const lingodb::runtime::ArrayView* arrayView, size_t offset) override {
-      auto* view = lingodb::runtime::SIP::getFilter(sipId);
-      assert(view);
-      /*if (!view) {
-         std::memcpy(nextSelVec, currSelVec, len * sizeof(uint16_t));
-         return len;
-      }*/
       auto* writer = nextSelVec;
       if (std::is_same_v<T, std::string>) {
          const uint8_t* data = reinterpret_cast<const uint8_t*>(arrayView->buffers[2]);
@@ -456,7 +451,7 @@ std::unique_ptr<lingodb::runtime::Filter> createSimpleTypeFilter(lingodb::runtim
          return std::make_unique<SimpleTypeInFilter<T>>(values);
       }
       case lingodb::runtime::FilterOp::SIP: {
-         return std::make_unique<HashViewFilter<T>>(std::get<std::string>(filterDesc.value));
+         return std::make_unique<HashViewFilter<T>>(lingodb::runtime::SIP::getFilter(std::get<std::int64_t>(filterDesc.value)));
       }
       default:
          throw std::runtime_error("unsupported filter op");
@@ -575,7 +570,7 @@ std::unique_ptr<lingodb::runtime::Restrictions> lingodb::runtime::Restrictions::
          }
          case arrow::Type::STRING: {
             std::string value;
-            if (filterDesc.op != FilterOp::IN) {
+            if (filterDesc.op != FilterOp::IN && filterDesc.op != FilterOp::SIP) {
                value = std::get<std::string>(filterDesc.value);
             }
             switch (filterDesc.op) {
@@ -604,7 +599,7 @@ std::unique_ptr<lingodb::runtime::Restrictions> lingodb::runtime::Restrictions::
                   break;
                }
                case lingodb::runtime::FilterOp::SIP:
-                  restrictions->filters.push_back({std::make_unique<HashViewFilter<std::string>>(std::get<std::string>(filterDesc.value)), colId});
+                  restrictions->filters.push_back({std::make_unique<HashViewFilter<std::string>>(SIP::getFilter(std::get<std::int64_t>(filterDesc.value))), colId});
 
                   break;
 

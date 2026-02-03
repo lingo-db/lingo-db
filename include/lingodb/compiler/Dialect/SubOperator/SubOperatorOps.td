@@ -1017,7 +1017,7 @@ def NestedExecutionGroupReturnOp : SubOperator_Op<"nested_execution_group_return
 
 def CreateSIPFilterOp : SubOperator_Op<"create_sip_filter", [SubOperator]> {
     let summary = "Creates a id which can be used for SIP filtering.";
-    let arguments = (ins HashIndexedView:$hashView, StrAttr:$sip_name);
+    let arguments = (ins HashIndexedView:$hashView, I8Attr:$sip_name);
     let results = (outs HashIndexedView:$res);
 
     let assemblyFormat = [{  $hashView `:` type($hashView) `->` type($res)  attr-dict }];
