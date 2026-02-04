@@ -761,8 +761,14 @@ class SubOpRewriter {
       }
       for (auto* op : toInsert) {
          op->remove();
-         builder.insert(op);
-         registerOpInserted(op);
+         llvm::SmallVector<mlir::Value> res;
+         if (builder.tryFold(op, res).succeeded()) {
+            op->replaceAllUsesWith(res);
+            eraseOp(op);
+         } else {
+            builder.insert(op);
+            registerOpInserted(op);
+         }
       }
       llvm::SmallVector<mlir::Value> adaptorVals;
       for (auto operand : terminator->getOperands()) {
