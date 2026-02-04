@@ -300,7 +300,6 @@ class EntryStorageHelper {
 
       void store() {
          ensureRefIsRefType();
-         bool emptyNullbitset = false;
          if (esh.nullBitsetType) {
             if (values.size() < esh.memberInfos.size()) {
                // load null bit set if not already loaded (not loaded if only set() was called on the map)
@@ -308,7 +307,6 @@ class EntryStorageHelper {
                populateNullBitSet();
             } else if (!nullBitSet) {
                nullBitSet = rewriter.create<mlir::arith::ConstantIntOp>(loc, 0, esh.nullBitsetType);
-               emptyNullbitset = true;
             }
          }
          for (auto& [name, value] : values) {
@@ -317,26 +315,7 @@ class EntryStorageHelper {
                llvm::SmallVector<mlir::Value> isNullVals;
                rewriter.createOrFold<db::IsNullOp>(isNullVals, loc, value);
                const mlir::Value nullBit = isNullVals[0];
-               const mlir::Value shiftAmount = rewriter.create<mlir::arith::ConstantIntOp>(loc, memberInfo.nullBitOffset, esh.nullBitsetType);
-               if (emptyNullbitset) {
-                  // the nullbitset is empty (= 0) => we can just set the bit
-                  const mlir::Value shiftedNullBit = rewriter.create<mlir::arith::ShLIOp>(loc, rewriter.create<mlir::arith::ExtUIOp>(loc, esh.nullBitsetType, nullBit), shiftAmount);
-                  nullBitSet = rewriter.create<mlir::arith::OrIOp>(loc, *nullBitSet, shiftedNullBit);
-               }
-               // did we already load this value? aka. can we reuse variables from the load phase?
-               else if (nullBitCache.contains(name)) {
-                  const mlir::Value isNull = nullBitCache.at(name);
-                  const mlir::Value replacementNullBit = rewriter.create<mlir::arith::XOrIOp>(loc, nullBit, isNull);
-                  const mlir::Value shiftedReplacementNullBit = rewriter.create<mlir::arith::ShLIOp>(loc, rewriter.create<mlir::arith::ExtUIOp>(loc, esh.nullBitsetType, replacementNullBit), shiftAmount);
-                  nullBitSet = rewriter.create<mlir::arith::XOrIOp>(loc, *nullBitSet, shiftedReplacementNullBit);
-               } else {
-                  // value not loaded yet. We need to surgically set the bit in the nullBitSet by masking the rest of the set
-                  const mlir::Value shiftedNullBit = rewriter.create<mlir::arith::ShLIOp>(loc, rewriter.create<mlir::arith::ExtUIOp>(loc, esh.nullBitsetType, nullBit), shiftAmount);
-                  // invertedShiftedClearBit masks the rest of the nullBitSet
-                  const mlir::Value invertedShiftedClearBit = rewriter.create<mlir::arith::ConstantIntOp>(loc, ~(1 << memberInfo.nullBitOffset), esh.nullBitsetType);
-                  nullBitSet = rewriter.create<mlir::arith::AndIOp>(loc, *nullBitSet, invertedShiftedClearBit);
-                  nullBitSet = rewriter.create<mlir::arith::OrIOp>(loc, *nullBitSet, shiftedNullBit);
-               }
+               nullBitSet = rewriter.create<util::SetBitConstOp>(loc, esh.nullBitsetType, *nullBitSet, nullBit, memberInfo.nullBitOffset);
                llvm::SmallVector<mlir::Value> rawValues;
                rewriter.createOrFold<db::NullableGetVal>(rawValues, loc, value);
                value = rawValues[0];
@@ -397,8 +376,7 @@ class EntryStorageHelper {
          if (memberInfo.isNullable) {
             populateNullBitSet();
             assert(nullBitSet);
-            mlir::Value shiftedNullBit = rewriter.create<mlir::arith::ConstantIntOp>(loc, 1ull << memberInfo.nullBitOffset, esh.nullBitsetType);
-            mlir::Value isNull = rewriter.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::eq, rewriter.create<mlir::arith::AndIOp>(loc, *nullBitSet, shiftedNullBit), shiftedNullBit);
+            mlir::Value isNull = rewriter.create<util::IsBitSetConstOp>(loc, rewriter.getI1Type(), *nullBitSet, memberInfo.nullBitOffset);
             value = rewriter.create<db::AsNullableOp>(loc, db::NullableType::get(rewriter.getContext(), memberInfo.stored), value, isNull);
             nullBitCache.insert({member, isNull});
          }

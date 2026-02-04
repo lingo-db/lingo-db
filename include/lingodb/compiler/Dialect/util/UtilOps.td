@@ -245,4 +245,14 @@ let assemblyFormat = "$tuple `[` $offset `]` `:` `(`type($tuple)`)` `->` type($v
 let hasCanonicalizeMethod = 1;
  let hasFolder = 1;
 }
+def IsBitSetConstOp : Util_Op<"is_bit_set_const",[Pure]> {
+    let arguments = (ins AnyInteger: $bitset, I32Attr:$bitpos);
+    let results =(outs I1: $is_set);
+    let assemblyFormat = " $bitset  `:` type($bitset)  `,` $bitpos attr-dict";
+}
+def SetBitConstOp : Util_Op<"set_bit_const",[Pure]> {
+    let arguments = (ins AnyInteger: $bitset, I1: $val,  I32Attr:$bitpos);
+    let results =(outs AnyInteger: $res);
+    let assemblyFormat = " $bitset `:` type($bitset) `,` $val `,` $bitpos `->` type($res) attr-dict";
+}
 #endif// OPS

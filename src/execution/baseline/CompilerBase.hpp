@@ -1092,6 +1092,46 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
       res_ref.part(1).set_value(ValuePart{std::bit_cast<uint64_t>(content.data()), 8, Config::GP_BANK});
       return true;
    }
+   bool compile_util_set_bit_const_op(dialect::util::SetBitConstOp op) {
+      mlir::Value bitmap = op.getBitset();
+      mlir::Value bitVal = op.getVal();
+      mlir::Value res = op.getRes();
+
+      auto bitmap_vr = this->val_ref(bitmap);
+      auto bit_val_vr = this->val_ref(bitVal);
+      auto res_vr = this->result_ref(res);
+      auto bitPos = ValuePartRef(this, op.getBitpos(), 4, Config::GP_BANK);
+      auto bitwidth = op.getBitset().getType().getWidth();
+      switch (bitwidth) {
+         case 8: derived()->encode_set_bit_8(bitmap_vr.part(0), bit_val_vr.part(0), std::move(bitPos), res_vr.part(0)); break;
+         case 16: derived()->encode_set_bit_16(bitmap_vr.part(0), bit_val_vr.part(0), std::move(bitPos), res_vr.part(0)); break;
+         case 32: derived()->encode_set_bit_32(bitmap_vr.part(0), bit_val_vr.part(0), std::move(bitPos), res_vr.part(0)); break;
+         case 64: derived()->encode_set_bit_64(bitmap_vr.part(0), bit_val_vr.part(0), std::move(bitPos), res_vr.part(0)); break;
+         default:
+            assert(false && "Unsupported bitwidth for set_bit_const operation");
+            return false;
+      }
+      return true;
+   }
+   bool compile_util_is_bit_set_const_op(dialect::util::IsBitSetConstOp op) {
+      mlir::Value bitmap = op.getBitset();
+      mlir::Value res = op.getIsSet();
+
+      auto bitmap_vr = this->val_ref(bitmap);
+      auto res_vr = this->result_ref(res);
+      auto bitPos = ValuePartRef(this, op.getBitpos(), 4, Config::GP_BANK);
+      auto bitwidth = op.getBitset().getType().getWidth();
+      switch (bitwidth) {
+         case 8: derived()->encode_is_bit_set_8(bitmap_vr.part(0), std::move(bitPos), res_vr.part(0)); break;
+         case 16: derived()->encode_is_bit_set_16(bitmap_vr.part(0), std::move(bitPos), res_vr.part(0)); break;
+         case 32: derived()->encode_is_bit_set_32(bitmap_vr.part(0), std::move(bitPos), res_vr.part(0)); break;
+         case 64: derived()->encode_is_bit_set_64(bitmap_vr.part(0), std::move(bitPos), res_vr.part(0)); break;
+         default:
+            assert(false && "Unsupported bitwidth for is_bit_set_const operation");
+            return false;
+      }
+      return true;
+   }
 
    bool compile_arith_trunci_op(mlir::arith::TruncIOp op) {
       auto src = op.getIn();
@@ -1534,6 +1574,12 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
                mlir::arith::DivFOp, mlir::arith::MaxSIOp, mlir::arith::MinSIOp, mlir::arith::MaxUIOp,
                mlir::arith::MinUIOp>([&](auto op) {
             return compile_arith_binary_op(op);
+         })
+         .template Case<dialect::util::SetBitConstOp>([&](auto op) {
+            return compile_util_set_bit_const_op(op);
+         })
+         .template Case<dialect::util::IsBitSetConstOp>([&](auto op) {
+            return compile_util_is_bit_set_const_op(op);
          })
          .template Case<mlir::arith::CmpIOp>(
             [&](auto op) { return derived()->compile_arith_cmp_int_op(op); })
