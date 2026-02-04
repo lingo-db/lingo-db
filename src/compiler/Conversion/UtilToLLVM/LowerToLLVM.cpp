@@ -610,6 +610,39 @@ class UnTagPtrLowering : public OpConversionPattern<util::UnTagPtr> {
       return success();
    }
 };
+class SetBitConstLowering : public OpConversionPattern<util::SetBitConstOp> {
+   public:
+   using OpConversionPattern<util::SetBitConstOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(util::SetBitConstOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op->getLoc();
+      Value bitVal = adaptor.getVal(); // i1
+      uint32_t bitPos = op.getBitpos();
+      Value bitset = adaptor.getBitset(); // any integer type
+      Value bitPosVal = rewriter.create<mlir::LLVM::ConstantOp>(loc, bitset.getType(), rewriter.getIntegerAttr(bitset.getType(), bitPos));
+      Value shiftedBit = rewriter.create<mlir::LLVM::ShlOp>(loc, bitset.getType(), rewriter.create<mlir::LLVM::ZExtOp>(loc, bitset.getType(), bitVal), bitPosVal);
+      //delete existing bit
+      Value invertedMask = rewriter.create<mlir::LLVM::ConstantOp>(loc, bitset.getType(), rewriter.getIntegerAttr(bitset.getType(), ~(1ull << bitPos)));
+      bitset = rewriter.create<mlir::LLVM::AndOp>(loc, bitset.getType(), bitset, invertedMask);
+      Value result = rewriter.create<mlir::LLVM::OrOp>(loc, bitset.getType(), bitset, shiftedBit);
+      rewriter.replaceOp(op, result);
+      return success();
+   }
+};
+class IsBitSetConstLowering : public OpConversionPattern<util::IsBitSetConstOp> {
+   public:
+   using OpConversionPattern<util::IsBitSetConstOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(util::IsBitSetConstOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op->getLoc();
+      uint32_t bitPos = op.getBitpos();
+      Value bitset = adaptor.getBitset(); // any integer type
+      Value bitPosVal = rewriter.create<mlir::LLVM::ConstantOp>(loc, bitset.getType(), rewriter.getIntegerAttr(bitset.getType(), bitPos));
+      Value shiftedBit = rewriter.create<mlir::LLVM::LShrOp>(loc, bitset.getType(), bitset, bitPosVal);
+      Value maskedBit = rewriter.create<mlir::LLVM::AndOp>(loc, bitset.getType(), shiftedBit, rewriter.create<mlir::LLVM::ConstantOp>(loc, bitset.getType(), rewriter.getIntegerAttr(bitset.getType(), 1)));
+      Value isSet = rewriter.create<mlir::LLVM::ICmpOp>(loc, LLVM::ICmpPredicate::ne, maskedBit, rewriter.create<mlir::LLVM::ConstantOp>(loc, bitset.getType(), rewriter.getIntegerAttr(bitset.getType(), 0)));
+      rewriter.replaceOp(op, isSet);
+      return success();
+   }
+};
 
 } // end anonymous namespace
 
@@ -665,6 +698,8 @@ void util::populateUtilToLLVMConversionPatterns(LLVMTypeConverter& typeConverter
    patterns.add<BufferGetElementRefLowering>(typeConverter, patterns.getContext());
    patterns.add<StoreElementOpLowering>(typeConverter, patterns.getContext());
    patterns.add<LoadElementOpLowering>(typeConverter, patterns.getContext());
+   patterns.add<IsBitSetConstLowering>(typeConverter, patterns.getContext());
+   patterns.add<SetBitConstLowering>(typeConverter, patterns.getContext());
 }
 namespace {
 
