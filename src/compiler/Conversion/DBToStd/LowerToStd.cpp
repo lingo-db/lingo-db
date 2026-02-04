@@ -57,7 +57,24 @@ static TupleType convertTuple(TupleType tupleType, TypeConverter& typeConverter)
    return TupleType::get(tupleType.getContext(), TypeRange(types));
 }
 static bool hasDBType(TypeConverter& converter, TypeRange types) {
-   return llvm::any_of(types, [&converter](mlir::Type t) { auto converted = converter.convertType(t);return converted&&converted!=t; });
+   for (auto t : types) {
+      if (t.getDialect().getNamespace() == "db") {
+         return true;
+      } else if (auto tupleT = mlir::dyn_cast_or_null<mlir::TupleType>(t)) {
+         if (hasDBType(converter, tupleT.getTypes())) {
+            return true;
+         }
+      } else if (auto refType = mlir::dyn_cast_or_null<util::RefType>(t)) {
+         if (hasDBType(converter, TypeRange(refType.getElementType()))) {
+            return true;
+         }
+      } else if (auto bufType = mlir::dyn_cast_or_null<util::BufferType>(t)) {
+         if (hasDBType(converter, TypeRange(bufType.getElementType()))) {
+            return true;
+         }
+      }
+   }
+   return false;
 }
 
 std::pair<mlir::Value, mlir::Value> unpackNullable(mlir::OpBuilder& rewriter, mlir::Location loc, mlir::Value nullableVal) {

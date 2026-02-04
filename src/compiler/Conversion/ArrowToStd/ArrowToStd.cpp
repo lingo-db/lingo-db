@@ -241,6 +241,27 @@ class BuilderAppendVariableSizeBinaryLowering : public OpConversionPattern<arrow
       return success();
    }
 };
+static bool hasArrowType(TypeConverter& converter, TypeRange types) {
+   for (auto t : types) {
+      if (t.getDialect().getNamespace() == "arrow") {
+         return true;
+      } else if (auto tupleT = mlir::dyn_cast_or_null<mlir::TupleType>(t)) {
+         if (hasArrowType(converter, tupleT.getTypes())) {
+            return true;
+         }
+      } else if (auto refType = mlir::dyn_cast_or_null<util::RefType>(t)) {
+         if (hasArrowType(converter, TypeRange(refType.getElementType()))) {
+            return true;
+         }
+      } else if (auto bufType = mlir::dyn_cast_or_null<util::BufferType>(t)) {
+         if (hasArrowType(converter, TypeRange(bufType.getElementType()))) {
+            return true;
+         }
+      }
+   }
+   return false;
+}
+
 } // end anonymous namespace
 template <class Op>
 class SimpleTypeConversionPattern : public ConversionPattern {
@@ -259,6 +280,7 @@ class SimpleTypeConversionPattern : public ConversionPattern {
       return success();
    }
 };
+
 void ArrowToStdLoweringPass::runOnOperation() {
    auto module = getOperation();
    getContext().getLoadedDialect<util::UtilDialect>()->getFunctionHelper().setParentModule(module);
@@ -274,9 +296,6 @@ void ArrowToStdLoweringPass::runOnOperation() {
    target.addIllegalDialect<arrow::ArrowDialect>();
    TypeConverter typeConverter;
    typeConverter.addConversion([&](mlir::Type type) { return type; });
-   static auto hasArrowType = [](TypeConverter& converter, TypeRange types) -> bool {
-      return llvm::any_of(types, [&converter](mlir::Type t) { auto converted = converter.convertType(t);return converted&&converted!=t; });
-   };
    auto opIsWithoutArrowTypes = [&](Operation* op) { return !hasArrowType(typeConverter, op->getOperandTypes()) && !hasArrowType(typeConverter, op->getResultTypes()); };
    target.addDynamicallyLegalDialect<scf::SCFDialect>(opIsWithoutArrowTypes);
    target.addDynamicallyLegalDialect<arith::ArithDialect>(opIsWithoutArrowTypes);
