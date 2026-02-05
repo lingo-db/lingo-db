@@ -5,6 +5,7 @@
 
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOpsAttributes.h"
 
+#include "llvm/ADT/StringMap.h"
 namespace lingodb::compiler::dialect::tuples {
 class ColumnManager {
    public:
@@ -44,10 +45,10 @@ class ColumnManager {
          return hash1 ^ hash2;
       }
    };
-   std::unordered_map<std::pair<std::string, std::string>, std::shared_ptr<Column>, HashPair> attributes;
-   std::unordered_map<const Column*, std::pair<std::string, std::string>> attributesRev;
+   llvm::StringMap<std::shared_ptr<Column>> attributes;
+   llvm::DenseMap<const Column*, std::pair<std::string, std::string>> attributesRev;
 
-   std::unordered_map<std::string, size_t> scopeUnifier;
+   llvm::StringMap<size_t> scopeUnifier;
 };
 } // namespace lingodb::compiler::dialect::tuples
 

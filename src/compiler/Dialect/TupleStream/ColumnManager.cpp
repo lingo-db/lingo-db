@@ -9,13 +9,15 @@ std::shared_ptr<Column> ColumnManager::get(StringRef scope, StringRef attribute)
    if (!scopeUnifier.contains(std::string(scope))) {
       scopeUnifier[std::string(scope)] = 0;
    }
+   std::string combined = std::string(scope) + "##" + std::string(attribute);
    auto pair = std::make_pair(std::string(scope), std::string(attribute));
-   if (!attributes.count(pair)) {
+   if (!attributes.count(combined)) {
       auto attr = std::make_shared<Column>();
-      attributes[pair] = attr;
+      attributes[combined] = attr;
       attributesRev[attr.get()] = pair;
+      return attr;
    }
-   return attributes[pair];
+   return attributes[combined];
 }
 ColumnDefAttr ColumnManager::createDef(SymbolRefAttr name, Attribute fromExisting) {
    assert(name.getNestedReferences().size() == 1);
