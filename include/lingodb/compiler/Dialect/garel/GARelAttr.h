@@ -3,7 +3,7 @@
 #include <mlir/IR/Attributes.h>
 #include <mlir/IR/BuiltinAttributes.h>
 
-#include "garel/GARelEnumAttr.h.inc"
+#include "lingodb/compiler/Dialect/garel/GARelEnumAttr.h.inc"
 
 namespace garel {
 
@@ -13,4 +13,4 @@ using ColumnIdx = std::int32_t;
 } // namespace garel
 
 #define GET_ATTRDEF_CLASSES
-#include "garel/GARelAttr.h.inc"
+#include "lingodb/compiler/Dialect/garel/GARelAttr.h.inc"
