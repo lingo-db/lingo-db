@@ -22,6 +22,9 @@ mlir::Value isNull(mlir::PatternRewriter& rewriter, mlir::Location loc, mlir::Va
    return isNullVals[0];
 }
 mlir::Value getRawValue(mlir::PatternRewriter& rewriter, mlir::Location loc, mlir::Value nullableVal) {
+   if (!mlir::isa<lingodb::compiler::dialect::db::NullableType>(nullableVal.getType())) {
+      return nullableVal;
+   }
    llvm::SmallVector<mlir::Value> rawValues;
    rewriter.createOrFold<lingodb::compiler::dialect::db::NullableGetVal>(rawValues, loc, nullableVal);
    return rawValues[0];
@@ -135,35 +138,54 @@ class SimplifyCompareISAPattern : public mlir::RewritePattern {
       if (cmpOp.getPredicate() != db::DBCmpPredicate::isa) return mlir::failure();
       auto isLeftNullable = mlir::isa<db::NullableType>(cmpOp.getLeft().getType());
       auto isRightNullable = mlir::isa<db::NullableType>(cmpOp.getRight().getType());
+      auto supportsInvalid = cmpOp.supportsInvalidValues();
+
       auto loc = op->getLoc();
       if (isLeftNullable && isRightNullable) {
          mlir::Value isLeftNull = isNull(rewriter, loc, cmpOp.getLeft());
          mlir::Value isRightNull = isNull(rewriter, loc, cmpOp.getRight());
          mlir::Value isAnyNull = rewriter.create<mlir::arith::OrIOp>(loc, isLeftNull, isRightNull);
-         rewriter.replaceOpWithNewOp<mlir::scf::IfOp>(
-            op, isAnyNull, [&](mlir::OpBuilder& b, mlir::Location loc) {
-               mlir::Value bothNull = rewriter.create<mlir::arith::AndIOp>(loc, isLeftNull, isRightNull);
-               b.create<mlir::scf::YieldOp>(loc, bothNull); }, [&](mlir::OpBuilder& b, mlir::Location loc) {
-               mlir::Value left = getRawValue(rewriter, loc, cmpOp.getLeft());
-               mlir::Value right = getRawValue(rewriter, loc, cmpOp.getRight());
-               mlir::Value res=b.create<db::CmpOp>(loc,db::DBCmpPredicate::eq,left,right);
-               b.create<mlir::scf::YieldOp>(loc,res); });
+
+         if (supportsInvalid) {
+            mlir::Value bothNull = rewriter.create<mlir::arith::AndIOp>(loc, isLeftNull, isRightNull);
+            mlir::Value left = getRawValue(rewriter, loc, cmpOp.getLeft());
+            mlir::Value right = getRawValue(rewriter, loc, cmpOp.getRight());
+            mlir::Value potentialRes = rewriter.create<db::CmpOp>(loc, db::DBCmpPredicate::eq, left, right);
+            rewriter.replaceOpWithNewOp<mlir::arith::SelectOp>(op, isAnyNull, bothNull, potentialRes);
+         } else {
+            rewriter.replaceOpWithNewOp<mlir::scf::IfOp>(
+               op, isAnyNull, [&](mlir::OpBuilder& b, mlir::Location loc) {
+                  mlir::Value bothNull = rewriter.create<mlir::arith::AndIOp>(loc, isLeftNull, isRightNull);
+                  b.create<mlir::scf::YieldOp>(loc, bothNull); }, [&](mlir::OpBuilder& b, mlir::Location loc) {
+                  mlir::Value left = getRawValue(rewriter, loc, cmpOp.getLeft());
+                  mlir::Value right = getRawValue(rewriter, loc, cmpOp.getRight());
+                  mlir::Value res=b.create<db::CmpOp>(loc,db::DBCmpPredicate::eq,left,right);
+                  b.create<mlir::scf::YieldOp>(loc,res); });
+         }
       } else if (isLeftNullable || isRightNullable) {
          mlir::Value isNullValue = isNull(rewriter, loc, isLeftNullable ? cmpOp.getLeft() : cmpOp.getRight());
-         rewriter.replaceOpWithNewOp<mlir::scf::IfOp>(
-            op, isNullValue, [&](mlir::OpBuilder& b, mlir::Location loc) {
-               mlir::Value falseVal = rewriter.create<mlir::arith::ConstantIntOp>(loc, 0, rewriter.getI1Type());
-               b.create<mlir::scf::YieldOp>(loc, falseVal); }, [&](mlir::OpBuilder& b, mlir::Location loc) {
-               mlir::Value left=cmpOp.getLeft();
-               mlir::Value right=cmpOp.getRight();
-               if(isLeftNullable) {
-                  left = getRawValue(rewriter, loc, left);
-               }
-               if(isRightNullable) {
-                  right = getRawValue(rewriter, loc, right);
-               }
-               mlir::Value res=b.create<db::CmpOp>(loc,db::DBCmpPredicate::eq,left,right);
-               b.create<mlir::scf::YieldOp>(loc,res); });
+         if (supportsInvalid) {
+            mlir::Value notNull = rewriter.create<db::NotOp>(loc, isNullValue);
+            mlir::Value left = getRawValue(rewriter, loc, cmpOp.getLeft());
+            mlir::Value right = getRawValue(rewriter, loc, cmpOp.getRight());
+            mlir::Value potentialRes = rewriter.create<db::CmpOp>(loc, db::DBCmpPredicate::eq, left, right);
+            rewriter.replaceOpWithNewOp<mlir::arith::AndIOp>(op, notNull, potentialRes);
+         } else {
+            rewriter.replaceOpWithNewOp<mlir::scf::IfOp>(
+               op, isNullValue, [&](mlir::OpBuilder& b, mlir::Location loc) {
+                  mlir::Value falseVal = rewriter.create<mlir::arith::ConstantIntOp>(loc, 0, rewriter.getI1Type());
+                  b.create<mlir::scf::YieldOp>(loc, falseVal); }, [&](mlir::OpBuilder& b, mlir::Location loc) {
+                  mlir::Value left=cmpOp.getLeft();
+                  mlir::Value right=cmpOp.getRight();
+                  if(isLeftNullable) {
+                     left = getRawValue(rewriter, loc, left);
+                  }
+                  if(isRightNullable) {
+                     right = getRawValue(rewriter, loc, right);
+                  }
+                  mlir::Value res=b.create<db::CmpOp>(loc,db::DBCmpPredicate::eq,left,right);
+                  b.create<mlir::scf::YieldOp>(loc,res); });
+         }
       } else {
          rewriter.replaceOpWithNewOp<db::CmpOp>(op, db::DBCmpPredicate::eq, cmpOp.getLeft(), cmpOp.getRight());
       }
