@@ -20,6 +20,9 @@ add_mlir_dialect_library(MLIRGraphAlg
         GraphAlgToCorePipeline.cpp
         GraphAlgVerifyDimensions.cpp
 
+        # Transforms
+        Transforms/GraphAlgToLingoRelAlg.cpp
+
         ADDITIONAL_HEADER_DIRS
         ../../include/graphalg/Dialect/GraphAlg
 
