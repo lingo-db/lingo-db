@@ -2,10 +2,10 @@
 
 #include <mlir/IR/Types.h>
 
-#include "garel/GARelAttr.h"
+#include "lingodb/compiler/Dialect/garel/GARelAttr.h"
 
 #define GET_TYPEDEF_CLASSES
-#include "garel/GARelOpsTypes.h.inc"
+#include "lingodb/compiler/Dialect/garel/GARelOpsTypes.h.inc"
 
 namespace garel {
 

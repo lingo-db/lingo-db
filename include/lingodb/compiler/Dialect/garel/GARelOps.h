@@ -9,7 +9,7 @@
 #include <mlir/Interfaces/InferTypeOpInterface.h>
 #include <mlir/Interfaces/SideEffectInterfaces.h>
 
-#include "garel/GARelTypes.h"
+#include "lingodb/compiler/Dialect/garel/GARelTypes.h"
 
 #define GET_OP_CLASSES
-#include "garel/GARelOps.h.inc"
+#include "lingodb/compiler/Dialect/garel/GARelOps.h.inc"

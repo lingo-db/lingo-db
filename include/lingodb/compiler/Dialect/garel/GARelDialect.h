@@ -3,4 +3,4 @@
 #include <mlir/IR/Dialect.h>
 #include <mlir/Interfaces/SideEffectInterfaces.h>
 
-#include "garel/GARelOpsDialect.h.inc"
+#include "lingodb/compiler/Dialect/garel/GARelOpsDialect.h.inc"

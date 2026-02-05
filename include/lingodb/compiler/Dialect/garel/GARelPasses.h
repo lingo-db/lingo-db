@@ -3,9 +3,9 @@
 namespace garel {
 
 #define GEN_PASS_DECL
-#include "garel/GARelPasses.h.inc"
+#include "lingodb/compiler/Dialect/garel/GARelPasses.h.inc"
 
 #define GEN_PASS_REGISTRATION
-#include "garel/GARelPasses.h.inc"
+#include "lingodb/compiler/Dialect/garel/GARelPasses.h.inc"
 
 } // namespace garel
