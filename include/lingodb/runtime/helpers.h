@@ -84,6 +84,10 @@ class VarLen32 {
          };
       };
       __int128 i128Val;
+      struct {
+         uint64_t first8;
+         uint64_t second8;
+      };
    };
 
    private:
