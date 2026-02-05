@@ -1,0 +1,9 @@
+add_library(GraphAlgAnalysis
+    DenseAnalysis.cpp
+)
+target_link_libraries(
+    GraphAlgAnalysis
+    PRIVATE
+    GraphAlgIR
+    MLIRAnalysis
+)
