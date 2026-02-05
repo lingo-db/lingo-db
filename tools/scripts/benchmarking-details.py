@@ -37,10 +37,23 @@ RESULT_TIMEOUT_S = 60.0
 # Scenario configurations
 SCENARIOS = {
     "Baseline": ({
-        "LINGODB_OPT_PATTERNS_EXTRA_OPT": "true",
+        "LINGODB_EXECUTION_MODE": sys.argv[2].replace("_SPEED",""),
+         "LINGODB_OPT_ASYNC_CONTEXT": "false",
+         "LINGODB_OPT_PATTERNS_EXTRA_OPT": "true",
         "LINGODB_OPT_PUSHDOWN_RESTRICTIONS": "false",
         "LINGODB_OPT_ELIMINATE_NULLABLE": "false",
     },BINARY),
+    "NoVerification": ({
+         "LINGODB_OPT_ASYNC_CONTEXT": "false",
+         "LINGODB_OPT_PATTERNS_EXTRA_OPT": "true",
+         "LINGODB_OPT_PUSHDOWN_RESTRICTIONS": "false",
+         "LINGODB_OPT_ELIMINATE_NULLABLE": "false",
+    },BINARY),
+    "AsyncContext": ({
+       "LINGODB_OPT_PATTERNS_EXTRA_OPT": "true",
+       "LINGODB_OPT_PUSHDOWN_RESTRICTIONS": "false",
+       "LINGODB_OPT_ELIMINATE_NULLABLE": "false",
+                       },BINARY),
     "CheaperPatterns": ({
         "LINGODB_OPT_PATTERNS_EXTRA_OPT": "false",
         "LINGODB_OPT_PUSHDOWN_RESTRICTIONS": "false",
