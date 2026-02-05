@@ -1,4 +1,5 @@
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/ColumnUsageAnalysis.h"
+#include "lingodb/compiler/Dialect/SubOperator/SubOperatorInterfaces.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOpsAttributes.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
 using namespace lingodb::compiler::dialect;
@@ -27,12 +28,18 @@ void subop::ColumnUsageAnalysis::analyze(mlir::Operation* op, mlir::Attribute at
 }
 subop::ColumnUsageAnalysis::ColumnUsageAnalysis(mlir::Operation* op) {
    op->walk([&](mlir::Operation* curr) {
-      for (auto attr : curr->getAttrs()) {
-         analyze(curr, attr.getValue());
-      }
-      if (auto* parentOp = curr->getParentOp()) {
-         auto currUsedColumns = getUsedColumns(curr);
-         usedColumns[parentOp].insert(currUsedColumns.begin(), currUsedColumns.end());
+      if (mlir::isa<subop::SubOperator>(curr)) {
+         for (auto attr : curr->getAttrs()) {
+            analyze(curr, attr.getValue());
+         }
+         mlir::Operation* subopParentOp = curr->getParentOp();
+         while (subopParentOp && !mlir::isa<subop::SubOperator>(subopParentOp)) {
+            subopParentOp = subopParentOp->getParentOp();
+         }
+         if (subopParentOp) {
+            auto currUsedColumns = getUsedColumns(curr);
+            usedColumns[subopParentOp].insert(currUsedColumns.begin(), currUsedColumns.end());
+         }
       }
    });
 }
