@@ -1,6 +1,5 @@
 #include "lingodb/runtime/storage/Restrictions.h"
 
-#include "lingodb/compiler/Dialect/SubOperator/MemberManager.h"
 #include "lingodb/runtime/ArrowView.h"
 #include "lingodb/runtime/LazyJoinHashtable.h"
 #include "lingodb/runtime/SIP.h"

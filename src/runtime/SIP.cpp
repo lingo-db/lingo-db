@@ -1,8 +1,6 @@
 #include "lingodb/runtime/SIP.h"
 
-#include "lingodb/compiler/Dialect/SubOperator/MemberManager.h"
-
-#include <functional>
+#include <assert.h>
 #include <string>
 
 namespace lingodb::runtime {
