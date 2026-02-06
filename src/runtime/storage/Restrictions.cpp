@@ -359,13 +359,13 @@ class HashViewFilter : public lingodb::runtime::Filter {
       assert(view);
    }
    size_t filter(size_t len, uint16_t* currSelVec, uint16_t* nextSelVec, const lingodb::runtime::ArrayView* arrayView, size_t offset) override {
-      if (sip->skipState.load(std::memory_order_relaxed) == 2) {
+      if (sip->skipState.load(std::memory_order_relaxed)) {
          std::memcpy(nextSelVec, currSelVec, len * sizeof(uint16_t));
          return len;
       }
       auto* writer = nextSelVec;
       size_t filteredCount = 0;
-      if (std::is_same_v<T, std::string>) {
+      if constexpr (std::is_same_v<T, std::string>) {
          const uint8_t* data = reinterpret_cast<const uint8_t*>(arrayView->buffers[2]);
          const int32_t* offsets = reinterpret_cast<const int32_t*>(arrayView->buffers[1]) + offset + arrayView->offset;
          for (size_t i = 0; i < len; i++) {
