@@ -50,10 +50,10 @@ mlir::FailureOr<mlir::Value> createScalarOpFor(mlir::Location loc, BinaryOp op,
                                                mlir::OpBuilder& builder);
 
 #define GEN_PASS_DECL
-#include "graphalg/GraphAlgPasses.h.inc"
+#include "lingodb/compiler/Dialect/graphalg/GraphAlgPasses.h.inc"
 
 #define GEN_PASS_REGISTRATION
-#include "graphalg/GraphAlgPasses.h.inc"
+#include "lingodb/compiler/Dialect/graphalg/GraphAlgPasses.h.inc"
 
 struct GraphAlgToCorePipelineOptions
    : public mlir::PassPipelineOptions<GraphAlgToCorePipelineOptions> {};
@@ -61,6 +61,10 @@ struct GraphAlgToCorePipelineOptions
 void buildGraphAlgToCorePipeline(mlir::OpPassManager& pm,
                                  const GraphAlgToCorePipelineOptions& options);
 void registerGraphAlgToCorePipeline();
+
+void createLowerGraphAlgToRelAlgPipeline(mlir::OpPassManager& pm);
+void registerGraphAlgToRelAlgConversionPasses();
+std::unique_ptr<::mlir::Pass> createGraphAlgToRelAlgPass();
 
 // Testing only:
 void registerTestDensePass();

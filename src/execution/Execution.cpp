@@ -6,9 +6,11 @@
 #include "lingodb/compiler/Conversion/DBToStd/DBToStd.h"
 #include "lingodb/compiler/Conversion/RelAlgToSubOp/RelAlgToSubOpPass.h"
 #include "lingodb/compiler/Conversion/SubOpToControlFlow/SubOpToControlFlowPass.h"
+
 #include "lingodb/compiler/Dialect/RelAlg/Passes.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/Passes.h"
+#include "lingodb/compiler/Dialect/graphalg/GraphAlgPasses.h"
 #include "lingodb/compiler/helper.h"
 #include "lingodb/execution/BaselineBackend.h"
 #include "lingodb/execution/CBackend.h"
@@ -57,6 +59,34 @@ class DefaultQueryOptimizer : public QueryOptimizer {
       timing["QOpt"] = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000.0;
    }
 };
+
+class GraphAlgToCoreLoweringStep : public LoweringStep {
+   std::string getShortName() const override {
+      return "graphalg-to-core";
+   }
+   void implement(mlir::ModuleOp& moduleOp) override {
+      mlir::PassManager graphalgToCorePM(moduleOp->getContext());
+      graphalg::GraphAlgToCorePipelineOptions options{};
+      graphalg::buildGraphAlgToCorePipeline(graphalgToCorePM, options);
+      if (mlir::failed(graphalgToCorePM.run(moduleOp))) {
+         error.emit() << "Lowering of GraphAlg to GraphAlg Core failed";
+         return;
+      }
+   }
+};
+class GraphAlgToRelAlgLoweringStep : public LoweringStep {
+   std::string getShortName() const override {
+      return "graphalg-to-relalg";
+   }
+   void implement(mlir::ModuleOp& moduleOp) override {
+      mlir::PassManager graphalgToRelAlgPM(moduleOp->getContext());
+      graphalg::createLowerGraphAlgToRelAlgPipeline(graphalgToRelAlgPM);
+      if (mlir::failed(graphalgToRelAlgPM.run(moduleOp))) {
+         error.emit() << "Lowering of GraphAlg Core to RelAlg failed";
+      }
+   }
+};
+
 class RelAlgLoweringStep : public LoweringStep {
    std::string getShortName() const override {
       return "subop";
@@ -404,6 +434,8 @@ std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(execution::Exec
       config->frontend = createMLIRFrontend();
    }
    config->queryOptimizer = std::make_unique<DefaultQueryOptimizer>();
+   config->loweringSteps.emplace_back(std::make_unique<GraphAlgToCoreLoweringStep>());
+   config->loweringSteps.emplace_back(std::make_unique<GraphAlgToRelAlgLoweringStep>());
    config->loweringSteps.emplace_back(std::make_unique<RelAlgLoweringStep>());
    config->loweringSteps.emplace_back(std::make_unique<SubOpLoweringStep>());
    config->loweringSteps.emplace_back(std::make_unique<DefaultImperativeLowering>());

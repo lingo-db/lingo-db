@@ -20,6 +20,36 @@
 #include <lingodb/compiler/Dialect/graphalg/GraphAlgTypes.h>
 #include <lingodb/compiler/Dialect/graphalg/SemiringTypes.h>
 
+#include "lingodb/compiler/Conversion/RelAlgToSubOp/OrderedAttributes.h"
+#include "lingodb/compiler/Dialect/Arrow/IR/ArrowDialect.h"
+#include "lingodb/compiler/Dialect/DB/IR/DBDialect.h"
+#include "lingodb/compiler/Dialect/DB/IR/DBOps.h"
+#include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgDialect.h"
+#include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOps.h"
+#include "lingodb/compiler/Dialect/SubOperator/SubOperatorDialect.h"
+#include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
+#include "lingodb/compiler/Dialect/SubOperator/Utils.h"
+#include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
+#include "lingodb/compiler/Dialect/util/FunctionHelper.h"
+#include "lingodb/compiler/Dialect/util/UtilDialect.h"
+#include "lingodb/compiler/Dialect/util/UtilOps.h"
+#include "lingodb/runtime/ExternalDataSourceProperty.h"
+
+#include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Async/IR/Async.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
+#include "mlir/Dialect/Func/Transforms/FuncConversions.h"
+#include "mlir/Dialect/GPU/IR/GPUDialect.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/IRMapping.h"
+#include "mlir/Pass/Pass.h"
+#include "mlir/Pass/PassManager.h"
+#include "mlir/Transforms/DialectConversion.h"
+#include "mlir/Transforms/Passes.h"
+
 namespace graphalg {
 
 #define GEN_PASS_DEF_GRAPHALGTOCORE
@@ -250,6 +280,25 @@ void GraphAlgToCore::runOnOperation() {
    target.addLegalDialect<mlir::func::FuncDialect>();
    // We use some scalar ops from ArithDialect
    target.addLegalDialect<mlir::arith::ArithDialect>();
+
+   // copy from RelAlg to
+   using namespace lingodb::compiler::dialect;
+   using namespace mlir;
+   target.addLegalDialect<gpu::GPUDialect>();
+   target.addLegalDialect<async::AsyncDialect>();
+   target.addIllegalDialect<relalg::RelAlgDialect>();
+   target.addLegalDialect<subop::SubOperatorDialect>();
+   target.addLegalDialect<db::DBDialect>();
+   target.addLegalDialect<lingodb::compiler::dialect::arrow::ArrowDialect>();
+
+   target.addLegalDialect<tuples::TupleStreamDialect>();
+   target.addLegalDialect<func::FuncDialect>();
+   target.addLegalDialect<memref::MemRefDialect>();
+   target.addLegalDialect<arith::ArithDialect>();
+   target.addLegalDialect<cf::ControlFlowDialect>();
+   target.addLegalDialect<scf::SCFDialect>();
+   target.addLegalDialect<util::UtilDialect>();
+
    // Only graphalg ops are only allowed if they are part of the 'Core' subset.
    target.addIllegalDialect<graphalg::GraphAlgDialect>();
    target.addDynamicallyLegalDialect<graphalg::GraphAlgDialect>(

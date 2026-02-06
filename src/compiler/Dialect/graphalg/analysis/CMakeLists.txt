@@ -4,6 +4,5 @@ add_library(GraphAlgAnalysis
 target_link_libraries(
     GraphAlgAnalysis
     PRIVATE
-    GraphAlgIR
     MLIRAnalysis
 )

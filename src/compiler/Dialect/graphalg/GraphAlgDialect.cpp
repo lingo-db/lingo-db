@@ -72,8 +72,8 @@ void GraphAlgDialect::initialize() {
    registerAttributes();
    registerTypes();
    _cast.registerCasts(getContext());
-   addInterface<lingodb/compiler/Dialect/graphalgOpAsmDialectInterface>();
-   addInterface<lingodb/compiler/Dialect/graphalgInlinerInterface>();
+   addInterface<GraphAlgOpAsmDialectInterface>();
+   addInterface<GraphAlgInlinerInterface>();
 }
 
 mlir::Operation* GraphAlgDialect::materializeConstant(mlir::OpBuilder& builder,
