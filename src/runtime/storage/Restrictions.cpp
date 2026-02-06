@@ -378,7 +378,7 @@ class HashViewFilter : public lingodb::runtime::Filter {
             //Keep value (IN filter logic - keep if found in hash table)
             *writer = index0;
             writer += matches;
-            filteredCount+=!matches;
+            filteredCount += !matches;
          }
 
       } else {
@@ -409,8 +409,7 @@ class HashViewFilter : public lingodb::runtime::Filter {
             *writer = index3;
             bool m3 = lingodb::runtime::matchesTag(entry3, hashed3);
             writer += m3;
-            filteredCount+=!m3 + !m2 + !m1 + !m0;
-
+            filteredCount += !m3 + !m2 + !m1 + !m0;
          }
 
          for (size_t i = len4; i < len; i++) {
@@ -420,8 +419,7 @@ class HashViewFilter : public lingodb::runtime::Filter {
             bool matches = lingodb::runtime::matchesTag(current, hashed);
             *writer = index0;
             writer += matches;
-            filteredCount+=!matches;
-
+            filteredCount += !matches;
          }
       }
       if (filteredCount == 0) {

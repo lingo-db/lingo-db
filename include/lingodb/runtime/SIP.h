@@ -6,7 +6,6 @@
 #include <shared_mutex>
 namespace lingodb::runtime {
 class SIP {
-
    public:
    struct SIPNode {
       lingodb::runtime::HashIndexedView* hashView;

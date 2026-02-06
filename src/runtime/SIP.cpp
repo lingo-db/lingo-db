@@ -1,7 +1,6 @@
 #include "lingodb/runtime/SIP.h"
 
 #include <assert.h>
-#include <string>
 
 namespace lingodb::runtime {
 std::unordered_map<std::string, lingodb::runtime::HashIndexedView*> SIP::filters{};
@@ -21,23 +20,21 @@ lingodb::runtime::HashIndexedView* SIP::createSIP(lingodb::runtime::HashIndexedV
    return hash;
 }
 
-lingodb::runtime::HashIndexedView*  SIP::getFilter(const uint8_t id) {
-   auto current = sips.load(std::memory_order_relaxed);
+lingodb::runtime::HashIndexedView* SIP::getFilter(const uint8_t id) {
+   auto* current = sips.load(std::memory_order_relaxed);
    while (current->id != id && current->next != nullptr) {
       current = current->next;
    }
    assert(current);
    return current->hashView;
-
 }
 
 SIP::SIPNode* SIP::getFilterNode(const uint8_t id) {
-   auto current = sips.load(std::memory_order_relaxed);
+   auto *current = sips.load(std::memory_order_relaxed);
    while (current->id != id && current->next != nullptr) {
       current = current->next;
    }
    assert(current);
    return current;
-
 }
 } // namespace lingodb::runtime
