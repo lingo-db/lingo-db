@@ -322,6 +322,17 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
                return true;
             }
          }
+      } else {
+         if (auto isNullOp = mlir::dyn_cast_or_null<db::IsNullOp>(returnOp.getResults()[0].getDefiningOp())) {
+            std::string columnName;
+            bool colNullable;
+            if (getColumnName(isNullOp.getVal(), baseTableOp, columnName, colNullable)) {
+               assert(!columnName.empty() && "must be column");
+               lingodb::runtime::FilterDescription desc{.columnName = columnName, .columnId = 0, .op = lingodb::runtime::FilterOp::ISNULL, .value = 0, .values = {}};
+               appendRestrictions(baseTableOp, {desc});
+               return true;
+            }
+         }
       }
       if (auto condOp = mlir::dyn_cast_or_null<db::CmpOp>(returnOp.getResults()[0].getDefiningOp())) {
          if (getBaseType(condOp.getLeft().getType()) != getBaseType(condOp.getRight().getType())) return false;

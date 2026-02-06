@@ -21,7 +21,8 @@ enum class FilterOp : uint8_t {
    NOTNULL,
    IN,
    SIP,
-   NS
+   NS,
+   ISNULL,
 
 };
 struct FilterDescription {

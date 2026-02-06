@@ -159,6 +159,53 @@ class NotNullFilter : public lingodb::runtime::Filter {
       return writer - nextSelVec;
    }
 };
+
+class IsNullFilter : public lingodb::runtime::Filter {
+   public:
+   IsNullFilter() {}
+   size_t filter(size_t len, uint16_t* currSelVec, uint16_t* nextSelVec, const lingodb::runtime::ArrayView* arrayView, size_t offset) override {
+      auto* writer = nextSelVec;
+      if (arrayView->nullCount == 0) {
+         //fast path: no nulls
+         return writer - nextSelVec;
+      }
+      const uint8_t* validData = reinterpret_cast<const uint8_t*>(arrayView->buffers[0]);
+
+      size_t len8 = len & ~7;
+      for (size_t i = 0; i < len8; i += 8) {
+         size_t index0 = currSelVec[i] + offset + arrayView->offset;
+         size_t index1 = currSelVec[i + 1] + offset + arrayView->offset;
+         size_t index2 = currSelVec[i + 2] + offset + arrayView->offset;
+         size_t index3 = currSelVec[i + 3] + offset + arrayView->offset;
+         size_t index4 = currSelVec[i + 4] + offset + arrayView->offset;
+         size_t index5 = currSelVec[i + 5] + offset + arrayView->offset;
+         size_t index6 = currSelVec[i + 6] + offset + arrayView->offset;
+         size_t index7 = currSelVec[i + 7] + offset + arrayView->offset;
+         *writer = currSelVec[i];
+         writer += !(bool) ((validData[index0 / 8] >> (index0 % 8)) & 1);
+         *writer = currSelVec[i + 1];
+         writer += !(bool) ((validData[index1 / 8] >> (index1 % 8)) & 1);
+         *writer = currSelVec[i + 2];
+         writer += !(bool) ((validData[index2 / 8] >> (index2 % 8)) & 1);
+         *writer = currSelVec[i + 3];
+         writer += !(bool) ((validData[index3 / 8] >> (index3 % 8)) & 1);
+         *writer = currSelVec[i + 4];
+         writer += !(bool) ((validData[index4 / 8] >> (index4 % 8)) & 1);
+         *writer = currSelVec[i + 5];
+         writer += !(bool) ((validData[index5 / 8] >> (index5 % 8)) & 1);
+         *writer = currSelVec[i + 6];
+         writer += !(bool) ((validData[index6 / 8] >> (index6 % 8)) & 1);
+         *writer = currSelVec[i + 7];
+         writer += !(bool) ((validData[index7 / 8] >> (index7 % 8)) & 1);
+      }
+      for (size_t i = len8; i < len; i++) {
+         size_t index0 = currSelVec[i];
+         *writer = index0;
+         writer += !(bool) ((validData[(index0 + offset + arrayView->offset) / 8] >> ((index0 + offset + arrayView->offset) % 8)) & 1);
+      }
+      return writer - nextSelVec;
+   }
+};
 template <class T, template <class> class CMP>
 class SimpleTypeFilter : public lingodb::runtime::Filter {
    T value;
@@ -517,6 +564,9 @@ std::unique_ptr<lingodb::runtime::Restrictions> lingodb::runtime::Restrictions::
          } else {
             restrictions->filters.push_back({std::make_unique<NotNullFilter>(), colId});
          }
+         continue;
+      } else if (filterDesc.op == FilterOp::ISNULL) {
+         restrictions->filters.push_back({std::make_unique<IsNullFilter>(), colId});
          continue;
       }
       auto type = schema.field(colId)->type();
