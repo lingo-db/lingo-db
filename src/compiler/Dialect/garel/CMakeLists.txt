@@ -22,9 +22,9 @@ add_mlir_dialect_library(MLIRGARel
 
 # Apply flags
 target_compile_options(MLIRGARel PRIVATE -Wno-dangling-assignment-gsl)
-if(NOT GRAPHALG_ENABLE_RTTI)
-  target_compile_options(MLIRGARel PUBLIC -fno-rtti)
-endif()
+#if(NOT GRAPHALG_ENABLE_RTTI)
+#  target_compile_options(MLIRGARel PUBLIC -fno-rtti)
+#endif()
 
 # --- Conversion Library ---
 add_mlir_dialect_library(MLIRGraphAlgToRel

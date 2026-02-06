@@ -403,7 +403,7 @@ mlir::OpFoldResult CastScalarOp::fold(FoldAdaptor adaptor) {
    // Constant folding.
    if (auto typedAttr =
           llvm::dyn_cast_if_present<mlir::TypedAttr>(adaptor.getInput())) {
-      auto* dialect = getContext()->getLoadedDialect<lingodb/compiler/Dialect/graphalgDialect>();
+      auto* dialect = getContext()->getLoadedDialect<GraphAlgDialect>();
       // Note: castAttribute returns nullptr if the cast failed, preventing a
       // fold if the cast fails.
       return dialect->castAttribute(typedAttr, outRing);

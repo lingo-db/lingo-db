@@ -53,7 +53,7 @@ void parser<graphalg::CallArgumentDimensions>::print(
 namespace graphalg {
 
 #define GEN_PASS_DEF_GRAPHALGSETDIMENSIONS
-#include "graphalg/GraphAlgPasses.h.inc"
+#include "lingodb/compiler/Dialect/graphalg/GraphAlgPasses.h.inc"
 
 namespace {
 

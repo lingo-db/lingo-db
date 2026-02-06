@@ -9,7 +9,7 @@
 #include <lingodb/compiler/Dialect/graphalg/GraphAlgInterfaces.h>
 #include <lingodb/compiler/Dialect/graphalg/GraphAlgOps.h>
 #include <lingodb/compiler/Dialect/graphalg/analysis/DenseAnalysis.h>
-#include <util/mlir/PrintDataFlowLatticeTestPass.h>
+#include <lingodb/compiler/Dialect/graphalg/util/PrintDataFlowLatticeTestPass.h>
 
 namespace graphalg {
 

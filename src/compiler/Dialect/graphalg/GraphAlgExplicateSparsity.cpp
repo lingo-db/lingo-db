@@ -51,7 +51,7 @@ namespace {
  * to optimize unnecessary \c MakeDenseOp away.
  */
 class GraphAlgExplicateSparsity
-   : public impl::GraphAlgExplicateSparsityBase<lingodb/compiler/Dialect/graphalgExplicateSparsity> {
+   : public impl::GraphAlgExplicateSparsityBase<GraphAlgExplicateSparsity> {
    using impl::GraphAlgExplicateSparsityBase<
       GraphAlgExplicateSparsity>::GraphAlgExplicateSparsityBase;
 

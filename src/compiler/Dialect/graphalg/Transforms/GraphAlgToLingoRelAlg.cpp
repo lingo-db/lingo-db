@@ -19,10 +19,6 @@
 #include <mlir/Pass/Pass.h>
 #include <mlir/Transforms/DialectConversion.h>
 
-#include "lingodb/compiler/Dialect/garel/GARelAttr.h"
-#include "lingodb/compiler/Dialect/garel/GARelDialect.h"
-#include "lingodb/compiler/Dialect/garel/GARelOps.h"
-#include "lingodb/compiler/Dialect/garel/GARelTypes.h"
 #include "lingodb/compiler/Dialect/graphalg/GraphAlgAttr.h"
 #include "lingodb/compiler/Dialect/graphalg/GraphAlgCast.h"
 #include "lingodb/compiler/Dialect/graphalg/GraphAlgDialect.h"
@@ -53,18 +49,18 @@ namespace {
  * dialect.
  */
 class GraphAlgToRel : public impl::GraphAlgToRelBase<GraphAlgToRel> {
-   public:
+public:
    using impl::GraphAlgToRelBase<GraphAlgToRel>::GraphAlgToRelBase;
 
-   void runOnOperation() final;
+void runOnOperation() final;
 };
 
 /** Converts semiring types into their relational equivalents. */
 class SemiringTypeConverter : public mlir::TypeConverter {
-   private:
+private:
    static mlir::Type convertSemiringType(graphalg::SemiringTypeInterface type);
 
-   public:
+public:
    SemiringTypeConverter();
 };
 
@@ -89,7 +85,7 @@ class MatrixTypeConverter : public mlir::TypeConverter {
  * the rows, columns or values of the matrix.
  */
 class MatrixAdaptor {
-   private:
+private:
    mlir::TypedValue<graphalg::MatrixType> _matrix;
 
    RelationType _relType;

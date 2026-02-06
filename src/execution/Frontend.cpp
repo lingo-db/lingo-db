@@ -8,6 +8,7 @@
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorDialect.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamDialect.h"
+#include "lingodb/compiler/Dialect/graphalg/GraphAlgDialect.h"
 #include "lingodb/compiler/Dialect/util/UtilDialect.h"
 #include "lingodb/compiler/frontend/driver.h"
 #include "lingodb/compiler/frontend/sql_analyzer.h"
@@ -51,6 +52,8 @@ void lingodb::execution::initializeContext(mlir::MLIRContext& context, bool incl
    registry.insert<mlir::memref::MemRefDialect>();
    registry.insert<util::UtilDialect>();
    registry.insert<mlir::scf::SCFDialect>();
+
+   registry.insert<graphalg::GraphAlgDialect>();
    if (includeLLVM) {
       registry.insert<mlir::LLVM::LLVMDialect>();
    }

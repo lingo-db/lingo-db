@@ -48,4 +48,12 @@ def GraphAlgSetDimensions : Pass<"graphalg-set-dimensions", "::mlir::ModuleOp"> 
     ];
 }
 
+def GraphAlgToRelAlgPass : Pass<"convert-graphalg-to-relalg", "::mlir::ModuleOp"> {
+    let summary = "Converts GraphAlg operations to LingoDB RelAlg and DB dialects";
+    let description = [{
+        Lowers GraphAlg specific operations (Matrix Addition, Deferred Reduce, etc.)
+        into relational algebra (Aggregation, Select) and database scalar operations
+        compatible with the LingoDB backend.
+    }];
+}
 #endif // GRAPHALG_GRAPH_ALG_PASSES
