@@ -358,10 +358,6 @@ class HashViewFilter : public lingodb::runtime::Filter {
       assert(view);
    }
    size_t filter(size_t len, uint16_t* currSelVec, uint16_t* nextSelVec, const lingodb::runtime::ArrayView* arrayView, size_t offset) override {
-      if (sip->skipState.load(std::memory_order_relaxed)) {
-         std::memcpy(nextSelVec, currSelVec, len * sizeof(uint16_t));
-         return len;
-      }
       auto* writer = nextSelVec;
       size_t filteredCount = 0;
       if constexpr (std::is_same_v<T, std::string>) {
@@ -374,16 +370,23 @@ class HashViewFilter : public lingodb::runtime::Filter {
             std::string_view strView0(reinterpret_cast<const char*>(data + offset0), nextOffset0 - offset0);
             auto hashed = hashValue<std::string_view>(strView0);
             lingodb::runtime::HashIndexedView::Entry* current(view->ht[hashed & view->getHtMask()]);
-            bool matches = lingodb::runtime::matchesTag(current, hashed);
+
             //Keep value (IN filter logic - keep if found in hash table)
             *writer = index0;
+#if DEBUG
+            bool matches = lingodb::runtime::matchesTag(current, hashed);
             writer += matches;
             filteredCount += !matches;
+#else
+            writer += lingodb::runtime::matchesTag(current, hashed);
+#endif
          }
 
       } else {
          size_t len4 = len & ~3;
          const T* data = reinterpret_cast<const T*>(arrayView->buffers[1]) + offset + arrayView->offset;
+         auto *ht = view->ht;
+         auto htMask = view->getHtMask();
          for (size_t i = 0; i < len4; i += 4) {
             size_t index0 = currSelVec[i];
             size_t index1 = currSelVec[i + 1];
@@ -393,39 +396,41 @@ class HashViewFilter : public lingodb::runtime::Filter {
             auto hashed1 = hashValue<T>(data[index1]);
             auto hashed2 = hashValue<T>(data[index2]);
             auto hashed3 = hashValue<T>(data[index3]);
-            lingodb::runtime::HashIndexedView::Entry* entry0(view->ht[hashed0 & view->getHtMask()]);
+            lingodb::runtime::HashIndexedView::Entry* entry0(ht[hashed0 & htMask]);
             *writer = index0;
-            bool m0 = lingodb::runtime::matchesTag(entry0, hashed0);
-            writer += m0;
-            lingodb::runtime::HashIndexedView::Entry* entry1(view->ht[hashed1 & view->getHtMask()]);
+            writer += lingodb::runtime::matchesTag(entry0, hashed0);
+            lingodb::runtime::HashIndexedView::Entry* entry1(ht[hashed1 & htMask]);
             *writer = index1;
-            bool m1 = lingodb::runtime::matchesTag(entry1, hashed1);
-            writer += m1;
-            lingodb::runtime::HashIndexedView::Entry* entry2(view->ht[hashed2 & view->getHtMask()]);
+            writer += lingodb::runtime::matchesTag(entry1, hashed1);
+            lingodb::runtime::HashIndexedView::Entry* entry2(ht[hashed2 & htMask]);
             *writer = index2;
-            bool m2 = lingodb::runtime::matchesTag(entry2, hashed2);
-            writer += m2;
-            lingodb::runtime::HashIndexedView::Entry* entry3(view->ht[hashed3 & view->getHtMask()]);
+            writer += lingodb::runtime::matchesTag(entry2, hashed2);
+            lingodb::runtime::HashIndexedView::Entry* entry3(ht[hashed3 & htMask]);
             *writer = index3;
-            bool m3 = lingodb::runtime::matchesTag(entry3, hashed3);
-            writer += m3;
+            writer +=  lingodb::runtime::matchesTag(entry3, hashed3);
+#if DEBUG
+            bool m0 = lingodb::runtime::matchesTag(entry0, hashed0);
+            bool m1 = lingodb::runtime::matchesTag(entry1, hashed0);
+            bool m2 = lingodb::runtime::matchesTag(entry2, hashed0);
+            bool m3 = lingodb::runtime::matchesTag(entry3, hashed0);
             filteredCount += !m3 + !m2 + !m1 + !m0;
+#endif
          }
 
          for (size_t i = len4; i < len; i++) {
             size_t index0 = currSelVec[i];
             auto hashed = hashValue<T>(data[index0]);
-            lingodb::runtime::HashIndexedView::Entry* current(view->ht[hashed & view->getHtMask()]);
-            bool matches = lingodb::runtime::matchesTag(current, hashed);
+            lingodb::runtime::HashIndexedView::Entry* current(ht[hashed & htMask]);
             *writer = index0;
-            writer += matches;
+            writer += lingodb::runtime::matchesTag(current, hashed);
+#if DEBUG
+            bool matches = lingodb::runtime::matchesTag(current, hashed);
             filteredCount += !matches;
+#endif
+
          }
       }
-      if (filteredCount == 0) {
-         //SKIP
-         sip->skipState.fetch_add(1, std::memory_order_relaxed);
-      }
+
 #if DEBUG
       sip->filteredCount.fetch_add(filteredCount);
       sip->completeCount.fetch_add(len);
