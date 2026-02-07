@@ -392,7 +392,9 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
 
             std::string descrRaw = joinInfo->externalProbeOp.getDescr().str();
             auto externalDataSourceProp = lingodb::utility::deserializeFromHexString<lingodb::runtime::ExternalDatasourceProperty>(descrRaw);
-
+            if (externalDataSourceProp.filterDescriptions.empty()) {
+               return;
+            }
             std::string sipName = genRandom(10);
             auto probeColRef = joinInfo->probeKeyColumnsNames[0];
             auto buildColRef = joinInfo->buildKeyColumnNames[0];
