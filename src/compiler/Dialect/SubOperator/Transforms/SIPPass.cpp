@@ -116,6 +116,14 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
             }
             if (!minLevel) {
                return {scan, members};
+            } else {
+               if (auto get_external = mlir::dyn_cast_or_null<subop::GetExternalOp>(scan.getState().getDefiningOp())) {
+                  std::string descrRaw = get_external.getDescr().str();
+                  auto externalDataSourceProp = lingodb::utility::deserializeFromHexString<lingodb::runtime::ExternalDatasourceProperty>(descrRaw);
+                  if (!externalDataSourceProp.filterDescriptions.empty()) {
+                     return {scan, members};
+                  }
+               }
             }
          } else if (auto lookupOp = mlir::dyn_cast_or_null<subop::LookupOp>(current)) {
             minLevel = 0;
@@ -177,7 +185,7 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
             } else if (!isValid) {
                return {nullptr, {}};
             }
-            return walkToFindSourceScan(mat, buildKeyColumns, debug);
+            return walkToFindSourceScan(mat, buildKeyColumns, debug, 1);
          }
       }
 
@@ -373,6 +381,8 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
             if (joinInfo->probeKeyColumnsNames.size() != 1 || joinInfo->buildKeyColumnNames.size() != 1) {
                return;
             }
+            static int64_t count = 0;
+            count++;
 
             //Do SIP
             mlir::Location loc = joinInfo->hashView->getLoc();
@@ -386,8 +396,7 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
             std::string sipName = genRandom(10);
             auto probeColRef = joinInfo->probeKeyColumnsNames[0];
             auto buildColRef = joinInfo->buildKeyColumnNames[0];
-            static int64_t count = 0;
-            count++;
+
             lingodb::runtime::FilterDescription filterDesc{.columnName = probeColRef, .op = lingodb::runtime::FilterOp::SIP, .value = count};
 
             externalDataSourceProp.filterDescriptions.push_back(filterDesc);
