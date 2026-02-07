@@ -202,7 +202,7 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
                keys.push_back(columRef);
             }
          }
-         return walkToFindSourceScan(map, keys, debug, 1);
+         return walkToFindSourceScan(map, keys, debug, 0);
       } else {
          if (debug) {
             std::cerr << "Is no map at start\n";
