@@ -268,6 +268,14 @@ class EntryStorageHelper {
       assert(mlir::isa<mlir::IntegerType>(storageType.getTypes().back()));
       return rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(rewriter.getContext(), storageType.getTypes().back()), ref, storageType.getTypes().size() - 1);
    }
+   mlir::Type getMemberType(Member member) const {
+      auto baseType = memberInfos.at(member).stored;
+      if (memberInfos.at(member).isNullable) {
+         return db::NullableType::get(baseType);
+      } else {
+         return baseType;
+      }
+   }
 
    class LazyValueMap {
       llvm::SmallDenseMap<Member, mlir::Value> values;
@@ -291,6 +299,7 @@ class EntryStorageHelper {
          }
       }
       void set(const Member& member, mlir::Value value) {
+         assert(value.getImpl());
          values[member] = std::move(value);
       }
       mlir::Value& get(const Member& member) {
@@ -310,6 +319,7 @@ class EntryStorageHelper {
             }
          }
          for (auto& [name, value] : values) {
+            assert(value.getImpl());
             const MemberInfo& memberInfo = esh.memberInfos.at(name);
             if (memberInfo.isNullable) {
                llvm::SmallVector<mlir::Value> isNullVals;
@@ -724,8 +734,13 @@ class SubOpRewriter {
 
    template <class AdaptorType>
    void inlineBlock(mlir::Block* block, mlir::ValueRange values, const std::function<void(AdaptorType)> processTerminator) {
-      for (auto z : llvm::zip(block->getArguments(), values)) {
-         std::get<0>(z).replaceAllUsesWith(std::get<1>(z));
+      llvm::SmallDenseSet<mlir::Value> nullInputs;
+      for (auto [blockArg, arg] : llvm::zip(block->getArguments(), values)) {
+         if (arg) {
+            blockArg.replaceAllUsesWith(arg);
+         } else {
+            nullInputs.insert(blockArg);
+         }
       }
       llvm::SmallVector<mlir::Operation*> toInsert;
       mlir::Operation* terminator;
@@ -750,7 +765,11 @@ class SubOpRewriter {
       }
       llvm::SmallVector<mlir::Value> adaptorVals;
       for (auto operand : terminator->getOperands()) {
-         adaptorVals.push_back(getMapped(operand));
+         if (nullInputs.contains(operand)) {
+            adaptorVals.push_back(mlir::Value());
+         } else {
+            adaptorVals.push_back(getMapped(operand));
+         }
       }
       AdaptorType adaptor(adaptorVals);
       processTerminator(adaptor);
@@ -3723,22 +3742,36 @@ class ReduceOpLowering : public SubOpTupleStreamConsumerConversionPattern<subop:
             arguments.push_back(arg);
          }
          for (auto member : reduceOp.getMembers()) {
-            mlir::Value arg = values.get(mlir::cast<subop::MemberAttr>(member).getMember());
-            if (arg.getType() != reduceOp.getRegion().getArgument(arguments.size()).getType()) {
-               arg = rewriter.create<mlir::UnrealizedConversionCastOp>(reduceOp->getLoc(), reduceOp.getRegion().getArgument(arguments.size()).getType(), arg).getResult(0);
+            auto blockArg = reduceOp.getRegion().getArgument(arguments.size());
+            auto isReallyUsed = false;
+            for (auto& use : blockArg.getUses()) {
+               if (!mlir::isa<tuples::ReturnOp>(use.getOwner())) {
+                  isReallyUsed = true;
+                  break;
+               }
             }
-            arguments.push_back(arg);
+            if (isReallyUsed) {
+               mlir::Value arg = values.get(mlir::cast<subop::MemberAttr>(member).getMember());
+               if (arg.getType() != blockArg.getType()) {
+                  arg = rewriter.create<mlir::UnrealizedConversionCastOp>(reduceOp->getLoc(), blockArg.getType(), arg).getResult(0);
+               }
+               arguments.push_back(arg);
+            } else {
+               arguments.push_back(mlir::Value());
+            }
          }
 
          rewriter.inlineBlock<tuples::ReturnOpAdaptor>(&reduceOp.getRegion().front(), arguments, [&](tuples::ReturnOpAdaptor adaptor) {
             for (size_t i = 0; i < reduceOp.getMembers().size(); i++) {
                auto member = mlir::cast<subop::MemberAttr>(reduceOp.getMembers()[i]).getMember();
-               auto& memberVal = values.get(member);
                auto updatedVal = adaptor.getResults()[i];
-               if (updatedVal.getType() != memberVal.getType()) {
-                  updatedVal = rewriter.create<mlir::UnrealizedConversionCastOp>(reduceOp->getLoc(), memberVal.getType(), updatedVal).getResult(0);
+               if (updatedVal) {
+                  auto memberType = storageHelper.getMemberType(member);
+                  if (updatedVal.getType() != memberType) {
+                     updatedVal = rewriter.create<mlir::UnrealizedConversionCastOp>(reduceOp->getLoc(), memberType, updatedVal).getResult(0);
+                  }
+                  values.set(member, updatedVal);
                }
-               memberVal = updatedVal;
             }
             values.store();
             rewriter.eraseOp(reduceOp);
