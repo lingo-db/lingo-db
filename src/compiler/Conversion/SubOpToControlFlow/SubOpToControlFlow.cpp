@@ -26,6 +26,7 @@
 #include "lingodb/compiler/runtime/LingoDBHashIndex.h"
 #include "lingodb/compiler/runtime/PreAggregationHashtable.h"
 #include "lingodb/compiler/runtime/RelationHelper.h"
+#include "lingodb/compiler/runtime/SIP.h"
 #include "lingodb/compiler/runtime/SegmentTreeView.h"
 #include "lingodb/compiler/runtime/SimpleState.h"
 #include "lingodb/compiler/runtime/ThreadLocal.h"
@@ -3760,6 +3761,16 @@ class CreateHashIndexedViewLowering : public SubOpConversionPattern<subop::Creat
       return success();
    }
 };
+class CreateSIPFilterLowering : public SubOpConversionPattern<subop::CreateSIPFilterOp> {
+   using SubOpConversionPattern<subop::CreateSIPFilterOp>::SubOpConversionPattern;
+   LogicalResult matchAndRewrite(subop::CreateSIPFilterOp op, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
+      auto sipIdAttr = op.getSipNameAttr();
+      auto sipIdVal = rewriter.create<arith::ConstantIntOp>(op->getLoc(), sipIdAttr.getValue().getZExtValue(), 8);
+      auto result = rt::SIP::createSIP(rewriter, op->getLoc())(mlir::ValueRange{adaptor.getHashView(), sipIdVal})[0];
+      rewriter.replaceOp(op, result);
+      return success();
+   }
+};
 class CreateContinuousViewLowering : public SubOpConversionPattern<subop::CreateContinuousView> {
    using SubOpConversionPattern<subop::CreateContinuousView>::SubOpConversionPattern;
    LogicalResult matchAndRewrite(subop::CreateContinuousView createOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
@@ -4286,6 +4297,7 @@ PatternList getCPUPatternList(TypeConverter& typeConverter, mlir::MLIRContext* c
    patterns.insertPattern<CreateHashIndexedViewLowering>(typeConverter, ctxt);
    patterns.insertPattern<LookupHashIndexedViewLowering>(typeConverter, ctxt);
    patterns.insertPattern<ScanListLowering>(typeConverter, ctxt);
+   patterns.insertPattern<CreateSIPFilterLowering>(typeConverter, ctxt);
    //ContinuousView
    patterns.insertPattern<CreateContinuousViewLowering>(typeConverter, ctxt);
    patterns.insertPattern<ScanRefsContinuousViewLowering>(typeConverter, ctxt);
@@ -4596,3 +4608,14 @@ void subop::registerSubOpToControlFlowConversionPasses() {
       "",
       subop::createLowerSubOpPipeline);
 }
+
+class CreateBloomFilterLowering : public OpConversionPattern<subop::CreateBloomFilterOp> {
+   public:
+   using OpConversionPattern::OpConversionPattern;
+
+   mlir::LogicalResult
+   matchAndRewrite(subop::CreateBloomFilterOp op, OpAdaptor adaptor,
+                   ConversionPatternRewriter& rewriter) const override {
+      return mlir::success();
+   }
+};
