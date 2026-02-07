@@ -10,10 +10,11 @@ class SIP {
    struct SIPNode {
       lingodb::runtime::HashIndexedView* hashView;
       SIPNode* next;
-      std::atomic<int8_t> skipState{0};
+
       uint8_t id;
 
 #if DEBUG
+      std::atomic<int8_t> skipState{0};
       std::atomic<size_t> filteredCount;
       std::atomic<size_t> completeCount;
 #endif
