@@ -41,7 +41,7 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
       subop::GetExternalOp externalProbeOp;
    };
 
-   std::pair<mlir::Operation*, std::vector<subop::Member>> walkToFindSourceScan(mlir::Operation* op, std::vector<tuples::ColumnRefAttr> keys, bool debug = false) {
+   std::pair<mlir::Operation*, std::vector<subop::Member>> walkToFindSourceScan(mlir::Operation* op, std::vector<tuples::ColumnRefAttr> keys, bool debug = false, int minLevel = 0) {
       /* mlir::Operation* current = op;
       while (current->getNumOperands() > 0) {
          if (debug) {
@@ -77,6 +77,7 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
       if (debug) {
          std::cerr << "--------------walkToFindSourceScan--------------\n";
       }
+
       std::queue<mlir::Operation*> queue;
       queue.push(op);
       while (!queue.empty()) {
@@ -113,7 +114,11 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
                scan.dump();
                std::cerr << "--------------walkToFindSourceScan--------------\n";
             }
-            return {scan, members};
+            if (!minLevel) {
+               return {scan, members};
+            }
+         } else if (auto lookupOp = mlir::dyn_cast_or_null<subop::LookupOp>(current)) {
+            minLevel = 0;
          }
          std::vector<mlir::Operation*> toAdd;
          for (auto operand : current->getOperands()) {
@@ -197,7 +202,7 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
                keys.push_back(columRef);
             }
          }
-         return walkToFindSourceScan(map, keys, debug);
+         return walkToFindSourceScan(map, keys, debug, 1);
       } else {
          if (debug) {
             std::cerr << "Is no map at start\n";
@@ -377,6 +382,7 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
 
             std::string descrRaw = joinInfo->externalProbeOp.getDescr().str();
             auto externalDataSourceProp = lingodb::utility::deserializeFromHexString<lingodb::runtime::ExternalDatasourceProperty>(descrRaw);
+
             std::string sipName = genRandom(10);
             auto probeColRef = joinInfo->probeKeyColumnsNames[0];
             auto buildColRef = joinInfo->buildKeyColumnNames[0];
