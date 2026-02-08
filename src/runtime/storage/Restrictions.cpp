@@ -704,8 +704,6 @@ std::unique_ptr<lingodb::runtime::Restrictions> lingodb::runtime::Restrictions::
                   break;
                }
                case lingodb::runtime::FilterOp::SIP: {
-                  auto sipId = static_cast<uint8_t>(std::get<std::int64_t>(filterDesc.value));
-                  restrictions->filters.push_back({std::make_unique<HashViewFilter<std::string>>(SIP::getFilterNode(sipId)), colId});
                   break;
                }
 

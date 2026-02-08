@@ -397,8 +397,7 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
             }
             auto last = externalDataSourceProp.filterDescriptions[externalDataSourceProp.filterDescriptions.size() - 1];
             if (last.op == lingodb::runtime::FilterOp::SIP) {
-
-               return;
+               externalDataSourceProp.filterDescriptions.pop_back();
             }
             std::string sipName = genRandom(10);
             auto probeColRef = joinInfo->probeKeyColumnsNames[0];
