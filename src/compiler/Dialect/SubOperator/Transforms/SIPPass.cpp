@@ -116,7 +116,7 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
             }
             if (!minLevel) {
                return {scan, members};
-            } else {
+            } else if (minLevel==1) {
                if (auto get_external = mlir::dyn_cast_or_null<subop::GetExternalOp>(scan.getState().getDefiningOp())) {
                   std::string descrRaw = get_external.getDescr().str();
                   auto externalDataSourceProp = lingodb::utility::deserializeFromHexString<lingodb::runtime::ExternalDatasourceProperty>(descrRaw);
@@ -210,7 +210,7 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
                keys.push_back(columRef);
             }
          }
-         return walkToFindSourceScan(map, keys, debug, 0);
+         return walkToFindSourceScan(map, keys, debug, 2);
       } else {
          if (debug) {
             std::cerr << "Is no map at start\n";
