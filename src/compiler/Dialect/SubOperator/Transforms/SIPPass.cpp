@@ -188,7 +188,7 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
             } else if (!isValid) {
                return {nullptr, {}};
             }
-            return walkToFindSourceScan(mat, buildKeyColumns, debug, 1);
+            return walkToFindSourceScan(mat, buildKeyColumns, debug, 0);
          }
       }
 
@@ -213,7 +213,7 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
                keys.push_back(columRef);
             }
          }
-         return walkToFindSourceScan(map, keys, debug, 2);
+         return walkToFindSourceScan(map, keys, debug, 0);
       } else {
          if (debug) {
             std::cerr << "Is no map at start\n";
@@ -395,9 +395,16 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
 
             std::string descrRaw = joinInfo->externalProbeOp.getDescr().str();
             auto externalDataSourceProp = lingodb::utility::deserializeFromHexString<lingodb::runtime::ExternalDatasourceProperty>(descrRaw);
-            if (externalDataSourceProp.filterDescriptions.empty()) {
+
+            if (!lookupOp->hasAttr("rows")) {
                return;
             }
+            auto rows = mlir::dyn_cast<mlir::FloatAttr>(lookupOp->getAttr("rows")).getValue().convertToDouble();
+            //If join is not restrictive enough we skip
+            if (rows >= 0.05) {
+               return;
+            }
+
 
 
 
@@ -425,10 +432,12 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
                   for (auto& in : joinInfo->probeKeyColumnsNames) {
                      std::cerr << " - " << in;
                   }
+                  std::cerr << "SEL: " << rows << std::endl;
                   std::cerr << "\nSIP Name: " << count << std::endl;
                   std::cerr << "----------------SIP Info----------------\n";
 
                   std::cerr << "Probe: " << std::endl;
+
                   joinInfo->externalProbeOp->dump();
                }
             }

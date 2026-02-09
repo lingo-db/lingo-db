@@ -9,6 +9,7 @@ std::shared_mutex SIP::filtersMutex{};
 lingodb::runtime::HashIndexedView* SIP::createSIP(lingodb::runtime::HashIndexedView* hash, uint8_t id) {
    // Create a hash based on the DataSource pointer so we get a stable identifier
    // for this DataSource instance. Use uintptr_t to avoid narrowing.
+   auto* executionContext = runtime::getCurrentExecutionContext();
    SIPNode* newSIP = new SIPNode();
    newSIP->hashView = hash;
    newSIP->id = id;
@@ -16,6 +17,10 @@ lingodb::runtime::HashIndexedView* SIP::createSIP(lingodb::runtime::HashIndexedV
    do {
       newSIP->next = oldHead;
    } while (!sips.compare_exchange_weak(oldHead, newSIP));
+   executionContext->registerState({newSIP, [](void* ptr) {
+      delete reinterpret_cast<lingodb::runtime::SIP::SIPNode*>(ptr);
+
+   }});
 
    return hash;
 }

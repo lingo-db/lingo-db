@@ -190,7 +190,11 @@ class MultiMapAsHashIndexedView : public mlir::RewritePattern {
                rewriter.clone(op, mapping);
             }
          });
-         rewriter.replaceOpWithNewOp<subop::LookupOp>(lookupOp, tuples::TupleStreamType::get(rewriter.getContext()), mapOp.getResult(), hashIndexedView, rewriter.getArrayAttr({hashRefLookup}), listDef);
+
+         auto rows = lookupOp->getAttr("rows");
+         auto x = rewriter.replaceOpWithNewOp<subop::LookupOp>(lookupOp, tuples::TupleStreamType::get(rewriter.getContext()), mapOp.getResult(), hashIndexedView, rewriter.getArrayAttr({hashRefLookup}), listDef);
+
+         x->setAttr("rows", rows);
 
          mlir::Value currentTuple;
          transformer.setCallBeforeFn([&](mlir::Operation* op) {
