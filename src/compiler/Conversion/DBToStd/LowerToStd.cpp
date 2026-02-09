@@ -74,8 +74,14 @@ std::pair<mlir::Value, mlir::Value> unpackNullable(mlir::OpBuilder& rewriter, ml
 }
 mlir::Value packNullable(mlir::PatternRewriter& rewriter, mlir::Location loc, mlir::Value isNull, mlir::Value rawVal) {
    if (mlir::isa<util::VarLen32Type>(rawVal.getType())) {
+      if (!isNull) {
+         return rawVal;
+      }
       return rewriter.create<mlir::arith::SelectOp>(loc, isNull, rewriter.create<util::VarLenInvalid>(loc, util::VarLen32Type::get(rewriter.getContext())), rawVal);
    } else {
+      if (!isNull) {
+         isNull = rewriter.create<mlir::arith::ConstantOp>(loc, rewriter.getI1Type(), rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
+      }
       llvm::SmallVector<mlir::Value> toPack = {isNull, rawVal};
       llvm::SmallVector<mlir::Type> packTypes = {isNull.getType(), rawVal.getType()};
       return rewriter.create<util::PackOp>(loc, TupleType::get(rewriter.getContext(), packTypes), toPack);
@@ -669,9 +675,6 @@ class AsNullableOpLowering : public OpConversionPattern<db::AsNullableOp> {
    using OpConversionPattern<db::AsNullableOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(db::AsNullableOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       mlir::Value isNull = adaptor.getNull();
-      if (!isNull) {
-         isNull = rewriter.create<mlir::arith::ConstantOp>(op->getLoc(), rewriter.getI1Type(), rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
-      }
       auto packed = packNullable(rewriter, op->getLoc(), isNull, adaptor.getVal());
       rewriter.replaceOp(op, packed);
       return success();

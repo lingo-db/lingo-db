@@ -158,6 +158,13 @@ OpFoldResult db::ConstantOp::fold(db::ConstantOp::FoldAdaptor adaptor) {
    }
    return {};
 }
+::mlir::OpFoldResult db::NotOp::fold(lingodb::compiler::dialect::db::NotOp::FoldAdaptor adaptor) {
+   auto val = mlir::dyn_cast_or_null<mlir::IntegerAttr>(adaptor.getVal());
+   if (val && val.getType().isInteger(1)) {
+      return IntegerAttr::get(val.getType(), !val.getValue().getBoolValue());
+   }
+   return {};
+}
 
 ::mlir::OpFoldResult db::CastOp::fold(db::CastOp::FoldAdaptor adaptor) {
    auto scalarSourceType = getVal().getType();

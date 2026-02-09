@@ -2,6 +2,7 @@
 
 #include "lingodb/compiler/Conversion/UtilToLLVM/Passes.h"
 #include "lingodb/compiler/Dialect/util/FunctionHelper.h"
+#include "lingodb/compiler/helper.h"
 #include "lingodb/execution/BackendPasses.h"
 #include "lingodb/execution/Error.h"
 #include "lingodb/execution/Instrumentation.h"
@@ -542,6 +543,7 @@ static bool lowerToLLVMDialect(mlir::ModuleOp& moduleOp, std::shared_ptr<executi
       mlir::PassManager pm2(moduleOp->getContext());
       pm2.enableVerifier(verify);
       lingodb::execution::addLingoDBInstrumentation(pm2, serializationState);
+      pm2.addPass(lingodb::compiler::createCanonicalizerPass());
       pm2.addPass(mlir::createConvertSCFToCFPass());
       pm2.addPass(util::createUtilToLLVMPass());
       pm2.addPass(mlir::createConvertControlFlowToLLVMPass());
