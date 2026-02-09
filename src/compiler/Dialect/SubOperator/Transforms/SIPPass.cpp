@@ -116,7 +116,7 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
             }
             if (!minLevel) {
                return {scan, members};
-            } else if (minLevel==1) {
+            } else if (minLevel == 1) {
                if (auto get_external = mlir::dyn_cast_or_null<subop::GetExternalOp>(scan.getState().getDefiningOp())) {
                   std::string descrRaw = get_external.getDescr().str();
                   auto externalDataSourceProp = lingodb::utility::deserializeFromHexString<lingodb::runtime::ExternalDatasourceProperty>(descrRaw);
@@ -395,10 +395,13 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
 
             std::string descrRaw = joinInfo->externalProbeOp.getDescr().str();
             auto externalDataSourceProp = lingodb::utility::deserializeFromHexString<lingodb::runtime::ExternalDatasourceProperty>(descrRaw);
-            /*if (externalDataSourceProp.filterDescriptions.empty()) {
+            if (externalDataSourceProp.filterDescriptions.empty()) {
                return;
             }
-            auto last = externalDataSourceProp.filterDescriptions[externalDataSourceProp.filterDescriptions.size() - 1];
+
+
+
+            /*auto last = externalDataSourceProp.filterDescriptions[externalDataSourceProp.filterDescriptions.size() - 1];
             if (last.op == lingodb::runtime::FilterOp::SIP) {
                externalDataSourceProp.filterDescriptions.pop_back();
             }*/
