@@ -27,9 +27,7 @@
 //CHECK: [[INITIAL:%.*]], %{{.*}}:2 = subop.generate
 //CHECK: [[MAP:%.*]]  = subop.create !subop.map<[keyval$0 : !db.string], [] >
 //CHECK: %{{.*}} = subop.lookup_or_insert [[INITIAL]][[MAP]] [@t::@col1] : !subop.map<[keyval$0 : !db.string], [] > @lookup::@ref({type = !subop.lookup_entry_ref<!subop.map<[keyval$0 : !db.string], [] >>}) eq: ([%arg0],[%arg1]) {
-//CHECK:   %true = arith.constant true
 //CHECK:   %{{.*}} = db.compare isa %arg0 : !db.string, %arg1 : !db.string
-//CHECK:   %{{.*}} = arith.andi %true, %{{.*}} : i1
 //CHECK:   tuples.return %{{.*}} : i1
 //CHECK: }initial: {
 //CHECK:   tuples.return
@@ -172,11 +170,6 @@
 //CHECK:   %{{.*}} = subop.scan_list %arg1 : !subop.list<!subop.multi_map_entry_ref<<[member$0 : i64], []>>> @lookup_u_1::@entryref({type = !subop.multi_map_entry_ref<<[member$0 : i64], []>>})
 //CHECK:   %{{.*}} = subop.gather %{{.*}} @lookup_u_1::@entryref {member$0 => @t::@col1({type = i64})}
 //CHECK:   %{{.*}} = subop.combine_tuple %{{.*}}, %arg0
-//CHECK:   %{{.*}} = subop.map %{{.*}} computes : [@map::@pred({type = i1})] input : [] (){
-//CHECK:     %{{.*}} = db.constant(1 : i64) : i1
-//CHECK:     tuples.return %{{.*}} : i1
-//CHECK:   }
-//CHECK:   %{{.*}} = subop.filter %{{.*}} all_true [@map::@pred]
 //CHECK:   tuples.return %{{.*}} : !tuples.tuplestream
 //CHECK: }
 
@@ -203,21 +196,16 @@
 //CHECK:   %{{.*}} = subop.scan_list %arg1 : !subop.list<!subop.multi_map_entry_ref<<[member$0 : i64], []>>> @lookup_u_1::@entryref({type = !subop.multi_map_entry_ref<<[member$0 : i64], []>>})
 //CHECK:   %{{.*}} = subop.gather %{{.*}} @lookup_u_1::@entryref {member$0 => @t_u_2::@col1({type = i64})}
 //CHECK:   %{{.*}} = subop.combine_tuple %{{.*}}, %arg0
-//CHECK:   %{{.*}} = subop.map %{{.*}} computes : [@map::@pred({type = i1})] input : [] (){
-//CHECK:     %{{.*}} = db.constant(1 : i64) : i1
-//CHECK:     tuples.return %{{.*}} : i1
-//CHECK:   }
-//CHECK:   %{{.*}} = subop.filter %{{.*}} all_true [@map::@pred]
 //CHECK:   %{{.*}} = subop.create_simple_state <[marker$0 : i1]> initial : {
 //CHECK:     %{{.*}} = db.constant(false) : i1
 //CHECK:     tuples.return %{{.*}} : i1
 //CHECK:   }
-//CHECK:   %{{.*}} = subop.map %{{.*}} computes : [@map_u_1::@boolval({type = i1})] input : [] (){
+//CHECK:   %{{.*}} = subop.map %{{.*}} computes : [@map::@boolval({type = i1})] input : [] (){
 //CHECK:     %{{.*}} = db.constant(true) : i1
 //CHECK:     tuples.return %{{.*}} : i1
 //CHECK:   }
 //CHECK:   %{{.*}} = subop.lookup %{{.*}}%{{.*}} [] : !subop.simple_state<[marker$0 : i1]> @lookup_u_2::@ref({type = !subop.lookup_entry_ref<!subop.simple_state<[marker$0 : i1]>>})
-//CHECK:   subop.scatter %{{.*}} @lookup_u_2::@ref {@map_u_1::@boolval => marker$0}
+//CHECK:   subop.scatter %{{.*}} @lookup_u_2::@ref {@map::@boolval => marker$0}
 //CHECK:   %{{.*}} = subop.scan %{{.*}} : !subop.simple_state<[marker$0 : i1]> {marker$0 => @marker::@marker({type = i1})}
 //CHECK:   %{{.*}} = subop.filter %{{.*}} all_true [@marker::@marker]
 //CHECK:   tuples.return %{{.*}} : !tuples.tuplestream
@@ -246,21 +234,16 @@
 //CHECK:   %{{.*}} = subop.scan_list %arg1 : !subop.list<!subop.multi_map_entry_ref<<[member$0 : i64], []>>> @lookup_u_1::@entryref({type = !subop.multi_map_entry_ref<<[member$0 : i64], []>>})
 //CHECK:   %{{.*}} = subop.gather %{{.*}} @lookup_u_1::@entryref {member$0 => @t_u_2::@col1({type = i64})}
 //CHECK:   %{{.*}} = subop.combine_tuple %{{.*}}, %arg0
-//CHECK:   %{{.*}} = subop.map %{{.*}} computes : [@map::@pred({type = i1})] input : [] (){
-//CHECK:     %{{.*}} = db.constant(1 : i64) : i1
-//CHECK:     tuples.return %{{.*}} : i1
-//CHECK:   }
-//CHECK:   %{{.*}} = subop.filter %{{.*}} all_true [@map::@pred]
 //CHECK:   %{{.*}} = subop.create_simple_state <[marker$0 : i1]> initial : {
 //CHECK:     %{{.*}} = db.constant(false) : i1
 //CHECK:     tuples.return %{{.*}} : i1
 //CHECK:   }
-//CHECK:   %{{.*}} = subop.map %{{.*}} computes : [@map_u_1::@boolval({type = i1})] input : [] (){
+//CHECK:   %{{.*}} = subop.map %{{.*}} computes : [@map::@boolval({type = i1})] input : [] (){
 //CHECK:     %{{.*}} = db.constant(true) : i1
 //CHECK:     tuples.return %{{.*}} : i1
 //CHECK:   }
 //CHECK:   %{{.*}} = subop.lookup %{{.*}}%{{.*}} [] : !subop.simple_state<[marker$0 : i1]> @lookup_u_2::@ref({type = !subop.lookup_entry_ref<!subop.simple_state<[marker$0 : i1]>>})
-//CHECK:   subop.scatter %{{.*}} @lookup_u_2::@ref {@map_u_1::@boolval => marker$0}
+//CHECK:   subop.scatter %{{.*}} @lookup_u_2::@ref {@map::@boolval => marker$0}
 //CHECK:   %{{.*}} = subop.scan %{{.*}} : !subop.simple_state<[marker$0 : i1]> {marker$0 => @marker::@marker({type = i1})}
 //CHECK:   %{{.*}} = subop.filter %{{.*}} none_true [@marker::@marker]
 //CHECK:   tuples.return %{{.*}} : !tuples.tuplestream
@@ -293,11 +276,6 @@
 //CHECK:   %{{.*}} = subop.scan_list %arg1 : !subop.list<!subop.multi_map_entry_ref<<[member$0 : i64], [member$1 : i64, flag$0 : i1]>>> @lookup_u_1::@entryref({type = !subop.multi_map_entry_ref<<[member$0 : i64], [member$1 : i64, flag$0 : i1]>>})
 //CHECK:   %{{.*}} = subop.gather %{{.*}} @lookup_u_1::@entryref {member$1 => @t_u_2::@col1({type = i64}), member$0 => @t::@col1({type = i64})}
 //CHECK:   %{{.*}} = subop.combine_tuple %{{.*}}, %arg0
-//CHECK:   %{{.*}} = subop.map %{{.*}} computes : [@map::@pred({type = i1})] input : [] (){
-//CHECK:     %{{.*}} = db.constant(1 : i64) : i1
-//CHECK:     tuples.return %{{.*}} : i1
-//CHECK:   }
-//CHECK:   %{{.*}} = subop.filter %{{.*}} all_true [@map::@pred]
 //CHECK:   %{{.*}} = subop.map %{{.*}} computes : [@marker::@marker({type = i1})] input : [] (){
 //CHECK:     %{{.*}} = db.constant(true) : i1
 //CHECK:     tuples.return %{{.*}} : i1

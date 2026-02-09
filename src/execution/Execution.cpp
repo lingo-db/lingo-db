@@ -181,8 +181,8 @@ class DefaultImperativeLowering : public LoweringStep {
       lowerArrowPm.enableVerifier(verify);
       addLingoDBInstrumentation(lowerArrowPm, getSerializationState());
       lowerArrowPm.addPass(arrow::createLowerToStdPass());
-      lowerArrowPm.addPass(lingodb::compiler::createCanonicalizerPass());
       if (cleanupAfterImperative.getValue()) {
+         lowerArrowPm.addPass(lingodb::compiler::createCanonicalizerPass());
          lowerArrowPm.addPass(mlir::createLoopInvariantCodeMotionPass());
          lowerArrowPm.addPass(mlir::createCSEPass());
       }
