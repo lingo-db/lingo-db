@@ -503,6 +503,7 @@ def NotOp : DB_Op<"not", [Pure,SameOperandsAndResultType,DB_NeedsNullWrap,DB_Sup
     let arguments = (ins AnyBool: $val);
     let results = (outs AnyBool : $res);
     let assemblyFormat = "$val `:` type($val) attr-dict";
+    let hasFolder = 1;
 }
 
 def CastOp : DB_Op<"cast",[DB_NeedsNullWrap,DB_MaySupportInvalidValues,Pure]> {
