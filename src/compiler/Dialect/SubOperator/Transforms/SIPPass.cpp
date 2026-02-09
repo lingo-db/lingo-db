@@ -120,7 +120,10 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
                if (auto get_external = mlir::dyn_cast_or_null<subop::GetExternalOp>(scan.getState().getDefiningOp())) {
                   std::string descrRaw = get_external.getDescr().str();
                   auto externalDataSourceProp = lingodb::utility::deserializeFromHexString<lingodb::runtime::ExternalDatasourceProperty>(descrRaw);
-                  if (!externalDataSourceProp.filterDescriptions.empty()) {
+                  auto found = std::ranges::find_if(externalDataSourceProp.filterDescriptions, [&](auto x) {
+                     return x.op != lingodb::runtime::FilterOp::SIP && x.op != lingodb::runtime::FilterOp::NOTNULL && x.op != lingodb::runtime::FilterOp::ISNULL;
+                  });
+                  if (found != externalDataSourceProp.filterDescriptions.end()) {
                      return {scan, members};
                   }
                }
@@ -392,13 +395,13 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
 
             std::string descrRaw = joinInfo->externalProbeOp.getDescr().str();
             auto externalDataSourceProp = lingodb::utility::deserializeFromHexString<lingodb::runtime::ExternalDatasourceProperty>(descrRaw);
-            if (externalDataSourceProp.filterDescriptions.empty()) {
+            /*if (externalDataSourceProp.filterDescriptions.empty()) {
                return;
             }
             auto last = externalDataSourceProp.filterDescriptions[externalDataSourceProp.filterDescriptions.size() - 1];
             if (last.op == lingodb::runtime::FilterOp::SIP) {
                externalDataSourceProp.filterDescriptions.pop_back();
-            }
+            }*/
             std::string sipName = genRandom(10);
             auto probeColRef = joinInfo->probeKeyColumnsNames[0];
             auto buildColRef = joinInfo->buildKeyColumnNames[0];
