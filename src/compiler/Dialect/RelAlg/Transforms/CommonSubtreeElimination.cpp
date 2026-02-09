@@ -438,11 +438,11 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
             lCol = dPtrWrapper;
             lName = dDef.getName();
          } else {
-            if (auto it = colContext.inverseColMapping.find(dPtr); it != colContext.inverseColMapping.end()) {
-               for (auto& info : it->second) {
-                  if (availableLeaderCols.count(info.col.get())) {
-                     lCol = info.col;
-                     lName = info.name;
+            if (auto it2 = colContext.inverseColMapping.find(dPtr); it2 != colContext.inverseColMapping.end()) {
+               for (auto& [col, name] : it2->second) {
+                  if (availableLeaderCols.count(col.get())) {
+                     lCol = col;
+                     lName = name;
                      break;
                   }
                }
