@@ -282,9 +282,8 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
       for (auto& op : llvm::make_early_inc_range(*block)) {
          if (op.getDialect()->getNamespace() != RELALG_DIALECT_NAMESPACE_STRING) continue;
 
-         auto hash = computeHash(&op);
-
          bool merged = false;
+         auto hash = computeHash(&op);
          if (auto it = candidates.find(hash); it != candidates.end()) {
             for (auto* leader : it->second) {
                if (domInfo.properlyDominates(leader, &op) && areEquivalent(leader, &op)) {
