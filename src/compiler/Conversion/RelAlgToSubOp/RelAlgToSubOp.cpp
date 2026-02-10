@@ -139,11 +139,14 @@ class BaseTableLowering : public OpConversionPattern<relalg::BaseTableOp> {
 };
 
 static mlir::Value compareKeys(mlir::OpBuilder& rewriter, mlir::ValueRange leftUnpacked, mlir::ValueRange rightUnpacked, mlir::Location loc) {
-   mlir::Value equal = rewriter.create<mlir::arith::ConstantOp>(loc, rewriter.getI1Type(), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
+   mlir::Value equal;
    for (size_t i = 0; i < leftUnpacked.size(); i++) {
       mlir::Value compared = rewriter.create<db::CmpOp>(loc, db::DBCmpPredicate::isa, leftUnpacked[i], rightUnpacked[i]);
-      mlir::Value localEqual = rewriter.create<mlir::arith::AndIOp>(loc, rewriter.getI1Type(), mlir::ValueRange({equal, compared}));
-      equal = localEqual;
+      if (equal) {
+         equal = rewriter.create<mlir::arith::AndIOp>(loc, rewriter.getI1Type(), mlir::ValueRange({equal, compared}));
+      } else {
+         equal = compared;
+      }
    }
    return equal;
 }
@@ -170,6 +173,13 @@ static mlir::Value translateSelection(mlir::Value stream, mlir::Region& predicat
    auto terminator = mlir::cast<tuples::ReturnOp>(predicate.front().getTerminator());
    bool isTrivialSel = false;
    if (terminator->getNumOperands() == 1) {
+      if (auto constOp = mlir::dyn_cast_or_null<db::ConstantOp>(terminator->getOperand(0).getDefiningOp())) {
+         if (auto intAttr = mlir::dyn_cast_or_null<mlir::IntegerAttr>(constOp.getValue())) {
+            if (intAttr.getValue() != 0) {
+               isTrivialSel = true;
+            }
+         }
+      }
       if (auto constOp = mlir::dyn_cast_or_null<arith::ConstantOp>(terminator->getOperand(0).getDefiningOp())) {
          if (auto boolAttr = mlir::dyn_cast_or_null<mlir::BoolAttr>(constOp.getValue())) {
             if (boolAttr.getValue()) {

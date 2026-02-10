@@ -9,12 +9,16 @@
 #endif
 #include "Loader.hpp"
 
+#include "lingodb/compiler/Dialect/util/UtilOps.h"
+#include "lingodb/compiler/helper.h"
 #include "lingodb/execution/BackendPasses.h"
 #include "lingodb/execution/BaselineBackend.h"
 #include "lingodb/utility/Setting.h"
 #include "lingodb/utility/Tracer.h"
 
 #include <mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h>
+#include <mlir/Dialect/Arith/IR/Arith.h>
+#include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/Transforms/Passes.h>
 
 namespace lingodb::execution::baseline {
@@ -26,6 +30,33 @@ IRAdaptor::IRValueRef IRAdaptor::INVALID_VALUE_REF = mlir::Value();
 
 namespace {
 utility::GlobalSetting<std::string> baselineDebugFileOut("system.compilation.baseline_object_out", "");
+
+class LegalizeForBackend : public mlir::PassWrapper<LegalizeForBackend, mlir::OperationPass<mlir::ModuleOp>> {
+   virtual llvm::StringRef getArgument() const override { return "baseline-legalize"; }
+
+   public:
+   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LegalizeForBackend)
+   void runOnOperation() override {
+      //transform "standalone" aggregation functions
+      {
+         mlir::RewritePatternSet patterns(&getContext());
+         //patterns.insert<EliminateNullCmp>(&getContext());
+         lingodb::compiler::dialect::util::UnPackOp::getCanonicalizationPatterns(patterns, patterns.getContext());
+         lingodb::compiler::dialect::util::GetTupleOp::getCanonicalizationPatterns(patterns, patterns.getContext());
+         lingodb::compiler::dialect::util::StoreOp::getCanonicalizationPatterns(patterns, patterns.getContext());
+         lingodb::compiler::dialect::util::UndefOp::getCanonicalizationPatterns(patterns, patterns.getContext());
+         lingodb::compiler::dialect::util::StoreElementOp::getCanonicalizationPatterns(patterns, patterns.getContext());
+         mlir::arith::SelectOp::getCanonicalizationPatterns(patterns, patterns.getContext());
+         mlir::arith::MulIOp::getCanonicalizationPatterns(patterns, patterns.getContext());
+         mlir::scf::IfOp::getCanonicalizationPatterns(patterns, patterns.getContext());
+
+         if (lingodb::compiler::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
+            assert(false && "should not happen");
+         }
+      }
+   }
+};
+
 } // namespace
 
 class BaselineBackend : public ExecutionBackend {
@@ -36,6 +67,8 @@ class BaselineBackend : public ExecutionBackend {
       mlir::PassManager pm2(moduleOp->getContext());
       pm2.enableVerifier(verify);
       addLingoDBInstrumentation(pm2, serializationState);
+      pm2.addPass(std::make_unique<LegalizeForBackend>());
+      //pm2.addPass(lingodb::compiler::createCanonicalizerPass());
       pm2.addPass(mlir::createConvertSCFToCFPass());
       if (mlir::failed(pm2.run(moduleOp))) {
          return false;

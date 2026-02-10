@@ -2308,26 +2308,23 @@ class ScanExternalHashIndexListLowering : public SubOpConversionPattern<subop::S
       auto convertedListType = typeConverter->convertType(listType);
 
       // Create while loop to extract all chained values from hash table
-      auto whileOp = rewriter.create<mlir::scf::WhileOp>(loc, convertedListType, adaptor.getList());
+      auto whileOp = rewriter.create<mlir::scf::WhileOp>(loc, mlir::TypeRange{}, mlir::ValueRange{});
       Block* conditionBlock = new Block;
       Block* bodyBlock = new Block;
       whileOp.getBefore().push_back(conditionBlock);
       whileOp.getAfter().push_back(bodyBlock);
 
-      conditionBlock->addArgument(convertedListType, loc);
-      bodyBlock->addArgument(convertedListType, loc);
       ColumnMapping mapping;
 
       // Check if iterator contains another value
       rewriter.atStartOf(conditionBlock, [&](SubOpRewriter& rewriter) {
-         mlir::Value list = conditionBlock->getArgument(0);
-         mlir::Value cont = rt::HashIndexIteration::hasNext(rewriter, loc)({list})[0];
-         rewriter.create<scf::ConditionOp>(loc, cont, ValueRange({list}));
+         mlir::Value cont = rt::HashIndexIteration::hasNext(rewriter, loc)({adaptor.getList()})[0];
+         rewriter.create<scf::ConditionOp>(loc, cont, mlir::ValueRange{});
       });
 
       // Load record batch from iterator
       rewriter.atStartOf(bodyBlock, [&](SubOpRewriter& rewriter) {
-         mlir::Value list = bodyBlock->getArgument(0);
+         mlir::Value list = adaptor.getList();
          mlir::Value recordBatchPointer;
          rewriter.atStartOf(&scanOp->getParentOfType<mlir::func::FuncOp>().getBody().front(), [&](SubOpRewriter& rewriter) {
             recordBatchPointer = rewriter.create<util::AllocaOp>(loc, util::RefType::get(rewriter.getContext(), recordBatchInfoRepr), mlir::Value());
@@ -2352,7 +2349,7 @@ class ScanExternalHashIndexListLowering : public SubOpConversionPattern<subop::S
             mapping.define(scanOp.getElem(), currentRecord);
             rewriter.replaceTupleStream(scanOp, mapping);
          });
-         rewriter.create<mlir::scf::YieldOp>(loc, list);
+         rewriter.create<mlir::scf::YieldOp>(loc);
       });
 
       return success();
