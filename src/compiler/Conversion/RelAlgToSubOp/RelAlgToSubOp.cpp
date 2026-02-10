@@ -1121,7 +1121,7 @@ static mlir::Value translateHJ(mlir::Value join, mlir::Value left, mlir::Value r
    auto [listDef, listRef] = createColumn(entryRefListType, "lookup", "list");
    auto [entryDef, entryRef] = createColumn(entryRefType, "lookup", "entryref");
    auto afterLookup = rewriter.create<subop::LookupOp>(loc, tuples::TupleStreamType::get(rewriter.getContext()), left, multiMap, hashLeft, listDef);
-   auto sel = joinRows/leftRows;
+   auto sel = joinRows == -1 || leftRows == -1 ? 1 : joinRows/leftRows;
    afterLookup->setAttr("rows", rewriter.getF64FloatAttr(sel));
    afterLookup.getEqFn().push_back(createEqFn(rewriter, hashRight, hashLeft, nullsEqual, loc));
    auto nestedMapOp = rewriter.create<subop::NestedMapOp>(loc, tuples::TupleStreamType::get(rewriter.getContext()), afterLookup, rewriter.getArrayAttr(listRef));
