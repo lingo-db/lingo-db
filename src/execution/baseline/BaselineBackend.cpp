@@ -63,7 +63,7 @@ class BaselineBackend : public ExecutionBackend {
       pm2.enableVerifier(verify);
       addLingoDBInstrumentation(pm2, serializationState);
       pm2.addPass(std::make_unique<LegalizeForBackend>());
-      pm2.addPass(lingodb::compiler::createCanonicalizerPass());
+      //pm2.addPass(lingodb::compiler::createCanonicalizerPass());
       pm2.addPass(mlir::createConvertSCFToCFPass());
       if (mlir::failed(pm2.run(moduleOp))) {
          return false;
