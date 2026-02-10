@@ -17,6 +17,8 @@
 #include "lingodb/utility/Tracer.h"
 
 #include <mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h>
+#include <mlir/Dialect/Arith/IR/Arith.h>
+#include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/Transforms/Passes.h>
 
 namespace lingodb::execution::baseline {
@@ -45,6 +47,8 @@ class LegalizeForBackend : public mlir::PassWrapper<LegalizeForBackend, mlir::Op
          lingodb::compiler::dialect::util::UndefOp::getCanonicalizationPatterns(patterns, patterns.getContext());
          lingodb::compiler::dialect::util::StoreElementOp::getCanonicalizationPatterns(patterns, patterns.getContext());
          mlir::arith::SelectOp::getCanonicalizationPatterns(patterns, patterns.getContext());
+         mlir::arith::MulIOp::getCanonicalizationPatterns(patterns, patterns.getContext());
+         mlir::scf::IfOp::getCanonicalizationPatterns(patterns, patterns.getContext());
 
          if (lingodb::compiler::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
             assert(false && "should not happen");
