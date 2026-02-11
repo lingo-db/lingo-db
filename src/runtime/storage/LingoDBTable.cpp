@@ -375,7 +375,11 @@ class ScanBatchesTask : public lingodb::scheduler::TaskWithImplicitContext {
    std::vector<std::pair<uint16_t*, uint16_t*>> selVecs;
 
    public:
-   ScanBatchesTask(std::vector<lingodb::runtime::LingoDBTable::TableChunk>& batches, std::vector<size_t> colIds, std::unique_ptr<Restrictions> restrictions, const std::function<void(lingodb::runtime::BatchView*)>& cb) : batches(batches), colIds(colIds), restrictions(std::move(restrictions)), cb(cb) {
+   ScanBatchesTask(LingoDBTable& table,std::vector<lingodb::runtime::LingoDBTable::TableChunk>& batches, std::vector<size_t> colIds, std::unique_ptr<Restrictions> restrictions, const std::function<void(lingodb::runtime::BatchView*)>& cb) : batches(batches), colIds(colIds), restrictions(std::move(restrictions)), cb(cb) {
+      size_t smallerSplitSize = std::max(1000ul, table.getNumRows()/(lingodb::scheduler::getNumWorkers()*2));
+      if (smallerSplitSize < splitSize) {
+         splitSize = smallerSplitSize;
+      }
       for (size_t i = 0; i < lingodb::scheduler::getNumWorkers(); i++) {
          batchInfos.emplace_back(lingodb::runtime::BatchView());
          arrayViewPtrs.emplace_back(std::vector<const ArrayView*>(colIds.size()));
@@ -547,7 +551,7 @@ std::unique_ptr<scheduler::Task> LingoDBTable::createScanTask(const ScanConfig& 
    }
    auto restrictions = lingodb::runtime::Restrictions::create(scanConfig.filters, *schema);
    if (scanConfig.parallel) {
-      return std::make_unique<ScanBatchesTask>(tableData, colIds, std::move(restrictions), scanConfig.cb);
+      return std::make_unique<ScanBatchesTask>(*this, tableData, colIds, std::move(restrictions), scanConfig.cb);
    } else {
       return std::make_unique<ScanBatchesSingleThreadedTask>(tableData, colIds, std::move(restrictions), scanConfig.cb);
    }
