@@ -3433,20 +3433,11 @@ class ExternalHashIndexRefGatherOpLowering : public SubOpTupleStreamConsumerConv
    }
 };
 
-static bool checkAtomicStore(mlir::Operation* op) {
-   //on x86, stores are always atomic (if aligned)
-#ifdef __x86_64__
-   return true;
-#else
-   return !op->hasAttr("atomic");
-#endif
-}
 class ContinuousRefScatterOpLowering : public SubOpTupleStreamConsumerConversionPattern<subop::ScatterOp, 2> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<subop::ScatterOp, 2>::SubOpTupleStreamConsumerConversionPattern;
 
    LogicalResult match(subop::ScatterOp scatterOp) const override {
-      if (!checkAtomicStore(scatterOp)) return failure();
       auto continuousRefEntryType = mlir::dyn_cast_or_null<subop::ContinuousEntryRefType>(scatterOp.getRef().getColumn().type);
       if (!continuousRefEntryType) { return failure(); }
       return success();
@@ -3474,7 +3465,6 @@ class ScatterOpLowering : public SubOpTupleStreamConsumerConversionPattern<subop
    using SubOpTupleStreamConsumerConversionPattern<subop::ScatterOp>::SubOpTupleStreamConsumerConversionPattern;
 
    LogicalResult match(subop::ScatterOp scatterOp) const override {
-      if (!checkAtomicStore(scatterOp)) return failure();
       return success();
    }
 
