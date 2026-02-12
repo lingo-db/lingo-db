@@ -4560,6 +4560,28 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
    module->walk([&](tuples::GetParamVal getParamVal) {
       getParamVal.replaceAllUsesWith(getParamVal.getParam());
    });
+   llvm::DenseSet<mlir::Operation*> toErase;
+   for (auto& op : module.getBody()->getOperations()) {
+      if (auto funcOp = mlir::dyn_cast_or_null<mlir::func::FuncOp>(&op)) {
+         if (funcOp.getBody().empty()) continue;
+         for (auto& op2 : module.getBody()->getOperations()) {
+            if (&op2 < &op) continue;
+            if (auto funcOp2 = mlir::dyn_cast_or_null<mlir::func::FuncOp>(&op2)) {
+               if (funcOp.getName() == funcOp2.getName()) continue;
+               if (funcOp.getName().rsplit("_").first==funcOp2.getName().rsplit("_").first) {
+                  if (mlir::OperationEquivalence::isRegionEquivalentTo(&funcOp->getRegion(0), &funcOp2->getRegion(0), mlir::OperationEquivalence::IgnoreLocations)) {
+                     if (funcOp2.replaceAllSymbolUses(funcOp.getNameAttr(), module).succeeded()) {
+                        toErase.insert(funcOp2);
+                     }
+                  }
+               }
+            }
+         }
+      }
+   }
+   for (auto* op : toErase) {
+      op->erase();
+   }
 }
 //} //namespace
 std::unique_ptr<mlir::Pass> subop::createLowerSubOpPass() {
