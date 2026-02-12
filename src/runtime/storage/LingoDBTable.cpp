@@ -20,9 +20,9 @@
 #include <shared_mutex>
 namespace {
 namespace utility = lingodb::utility;
-static utility::Tracer::Event processMorsel("DataSourceIteration", "processMorsel");
+static utility::Tracer::Event processMorsel("TableScan", "☷ morsel");
 
-static utility::Tracer::Event processMorselSingle("DataSourceIteration", "processMorselSingle");
+static utility::Tracer::Event processMorselSingle("TableScan", "☷ single morsel");
 
 std::vector<lingodb::runtime::LingoDBTable::TableChunk> loadTable(std::string name) {
    auto inputFile = arrow::io::ReadableFile::Open(name).ValueOrDie();
@@ -400,7 +400,6 @@ class ScanBatchesTask : public lingodb::scheduler::TaskWithImplicitContext {
       batchView.offset = begin;
       batchView.selectionVector = BatchView::defaultSelectionVector.data();
       batchView.length = std::min(static_cast<size_t>(chunk.getNumRows() - begin), len);
-      utility::Tracer::Trace trace(processMorsel);
 
       for (size_t i = 0; i < colIds.size(); i++) {
          batchView.arrays[i] = chunk.getArrayView(colIds[i]);
@@ -411,9 +410,9 @@ class ScanBatchesTask : public lingodb::scheduler::TaskWithImplicitContext {
       batchView.length = newLen;
       batchView.selectionVector = selVec;
       if (batchView.length > 0) {
+         utility::Tracer::Trace trace(processMorsel);
          cb(&batchView);
       }
-      trace.stop();
    }
 
    bool allocateWork() override {

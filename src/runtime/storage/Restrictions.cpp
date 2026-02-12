@@ -1,5 +1,6 @@
 #include "lingodb/runtime/storage/Restrictions.h"
 #include "lingodb/runtime/ArrowView.h"
+#include "lingodb/utility/Tracer.h"
 
 #include <cstddef>
 #include <cstring>
@@ -9,6 +10,8 @@
 #include <arrow/util/decimal.h>
 #include <arrow/util/value_parsing.h>
 namespace {
+static lingodb::utility::Tracer::Event applyFilter("TableScan", "σ filter");
+
 int32_t parseDate32(std::string str) {
    static std::regex r("(\\d\\d\\d\\d)-(\\d)-(\\d\\d)");
    str = std::regex_replace(str, r, "$1-0$2-$3");
@@ -62,7 +65,7 @@ struct LtE {
 class FirstNotNullFilter : public lingodb::runtime::Filter {
    public:
    FirstNotNullFilter() {}
-   size_t filter(size_t len, uint16_t* currSelVec, uint16_t* nextSelVec, const lingodb::runtime::ArrayView* arrayView, size_t offset) override {
+   size_t filter(size_t len, const uint16_t* currSelVec, uint16_t* nextSelVec, const lingodb::runtime::ArrayView* arrayView, size_t offset) override {
       if (arrayView->nullCount == 0) {
          //fast path: no nulls
          std::memcpy(nextSelVec, currSelVec, len * sizeof(uint16_t));
@@ -110,7 +113,7 @@ class FirstNotNullFilter : public lingodb::runtime::Filter {
 class NotNullFilter : public lingodb::runtime::Filter {
    public:
    NotNullFilter() {}
-   size_t filter(size_t len, uint16_t* currSelVec, uint16_t* nextSelVec, const lingodb::runtime::ArrayView* arrayView, size_t offset) override {
+   size_t filter(size_t len, const uint16_t* currSelVec, uint16_t* nextSelVec, const lingodb::runtime::ArrayView* arrayView, size_t offset) override {
       if (arrayView->nullCount == 0) {
          //fast path: no nulls
          std::memcpy(nextSelVec, currSelVec, len * sizeof(uint16_t));
@@ -159,7 +162,7 @@ class SimpleTypeFilter : public lingodb::runtime::Filter {
 
    public:
    SimpleTypeFilter(T value) : value(value) {}
-   size_t filter(size_t len, uint16_t* currSelVec, uint16_t* nextSelVec, const lingodb::runtime::ArrayView* arrayView, size_t offset) override {
+   size_t filter(size_t len, const uint16_t* currSelVec, uint16_t* nextSelVec, const lingodb::runtime::ArrayView* arrayView, size_t offset) override {
       const T* data = reinterpret_cast<const T*>(arrayView->buffers[1]) + offset + arrayView->offset;
       size_t len4 = len & ~3;
       auto* writer = nextSelVec;
@@ -191,7 +194,7 @@ class SimpleTypeInFilter : public lingodb::runtime::Filter {
 
    public:
    SimpleTypeInFilter(std::vector<T> values) : values(values) {}
-   size_t filter(size_t len, uint16_t* currSelVec, uint16_t* nextSelVec, const lingodb::runtime::ArrayView* arrayView, size_t offset) override {
+   size_t filter(size_t len, const uint16_t* currSelVec, uint16_t* nextSelVec, const lingodb::runtime::ArrayView* arrayView, size_t offset) override {
       const T* data = reinterpret_cast<const T*>(arrayView->buffers[1]) + offset + arrayView->offset;
       auto* writer = nextSelVec;
       for (size_t i = 0; i < len; i++) {
@@ -212,7 +215,7 @@ class VarLen32FilterIn : public lingodb::runtime::Filter {
 
    public:
    VarLen32FilterIn(std::vector<std::string> values) : values(values) {}
-   size_t filter(size_t len, uint16_t* currSelVec, uint16_t* nextSelVec, const lingodb::runtime::ArrayView* arrayView, size_t offset) override {
+   size_t filter(size_t len, const uint16_t* currSelVec, uint16_t* nextSelVec, const lingodb::runtime::ArrayView* arrayView, size_t offset) override {
       const uint8_t* data = reinterpret_cast<const uint8_t*>(arrayView->buffers[2]);
       const int32_t* offsets = reinterpret_cast<const int32_t*>(arrayView->buffers[1]) + offset + arrayView->offset;
       auto* writer = nextSelVec;
@@ -238,7 +241,7 @@ class VarLen32Filter : public lingodb::runtime::Filter {
 
    public:
    VarLen32Filter(std::string value) : value(value) {}
-   size_t filter(size_t len, uint16_t* currSelVec, uint16_t* nextSelVec, const lingodb::runtime::ArrayView* arrayView, size_t offset) override {
+   size_t filter(size_t len, const uint16_t* currSelVec, uint16_t* nextSelVec, const lingodb::runtime::ArrayView* arrayView, size_t offset) override {
       const uint8_t* data = reinterpret_cast<const uint8_t*>(arrayView->buffers[2]);
       const int32_t* offsets = reinterpret_cast<const int32_t*>(arrayView->buffers[1]) + offset + arrayView->offset;
       auto* writer = nextSelVec;
@@ -323,18 +326,23 @@ std::unique_ptr<lingodb::runtime::Filter> createSimpleTypeFilter(lingodb::runtim
 } // namespace
 
 std::pair<size_t, uint16_t*> lingodb::runtime::Restrictions::applyFilters(size_t offset, size_t length, uint16_t* selVec1, uint16_t* selVec2, std::function<const ArrayView*(size_t)> getArrayView) {
+   if (filters.empty()) {
+      return {length, lingodb::runtime::BatchView::defaultSelectionVector.data()};
+   }
+   utility::Tracer::Trace trace(applyFilter);
    uint16_t* currentSelVec = selVec1;
    assert(length <= BatchView::maxBatchSize);
-   std::memcpy(currentSelVec, lingodb::runtime::BatchView::defaultSelectionVector.data(), length * sizeof(uint16_t));
    uint16_t* nextSelVec = selVec2;
    size_t currentLen = length;
+   bool first = true;
    for (auto& filterPair : filters) {
       auto& filter = filterPair.first;
       size_t colId = filterPair.second;
       const lingodb::runtime::ArrayView* arrayView = getArrayView(colId);
-      currentLen = filter->filter(currentLen, currentSelVec, nextSelVec, arrayView, offset);
+      currentLen = filter->filter(currentLen, first?lingodb::runtime::BatchView::defaultSelectionVector.data():currentSelVec, nextSelVec, arrayView, offset);
       std::swap(currentSelVec, nextSelVec);
       assert(currentLen <= length);
+      first = false;
    }
    assert(currentLen == 0 || currentSelVec[currentLen - 1] < length);
    return {currentLen, currentSelVec};

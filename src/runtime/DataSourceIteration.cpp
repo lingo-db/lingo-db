@@ -16,7 +16,7 @@
 namespace utility = lingodb::utility;
 namespace {
 
-static utility::Tracer::Event tableScan("DataSourceIteration", "tableScan");
+static utility::Tracer::Event tableScan("Tablescan", "tableScan");
 
 class TableSource : public lingodb::runtime::DataSource {
    lingodb::runtime::TableStorage& tableStorage;

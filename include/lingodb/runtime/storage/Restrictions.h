@@ -8,7 +8,7 @@
 namespace lingodb::runtime {
 class Filter {
    public:
-   virtual size_t filter(size_t len, uint16_t* currSelVec, uint16_t* nextSelVec, const lingodb::runtime::ArrayView* arrayView, size_t offset) = 0;
+   virtual size_t filter(size_t len, const uint16_t* currSelVec, uint16_t* nextSelVec, const lingodb::runtime::ArrayView* arrayView, size_t offset) = 0;
    virtual ~Filter() {}
 };
 class Restrictions {

@@ -272,6 +272,9 @@ class ToJson {
             return convertExpression(deriveTruth.getOperand().getDefiningOp());
          })
          .Case<db::CastOp>([&](db::CastOp castOp) {
+            if (mlir::isa<db::StringType>(getBaseType(castOp.getType())) && mlir::isa<db::CharType>(getBaseType(castOp.getVal().getType()))) {
+               return convertExpression(castOp.getVal().getDefiningOp());
+            }
             return innerExpression({"cast(", ")"}, castOp.getVal());
          })
          .Case<db::RuntimeCall>([&](db::RuntimeCall runtimeCall) {
@@ -437,18 +440,91 @@ class ToJson {
                   {"attribute", columnAttr.getName().str()},
                   {"column", columnToJSON(mlir::cast<tuples::ColumnDefAttr>(columnAttr.getValue()))}});
             }
-            if (baseTable->hasAttr("restriction")) {
-               auto restrictionStr = mlir::cast<mlir::StringAttr>(baseTable->getAttr("restriction")).str();
-               auto parsedRestrictions = nlohmann::json::parse(restrictionStr);
-               for (auto& r : parsedRestrictions) {
-                  if (r["cmp"] == "isnotnull") {
-                     result["restrictions"].push_back(innerExpression({"", " is not null"}, std::vector<nlohmann::json>{nlohmann::json{{"type", "expression_leaf"}, {"leaf_type", "simple_column"}, {"column", r["column"]}}}));
+
+               for (auto& r :  baseTable.getRestriction().filterDescription) {
+
+                  if (r.op ==lingodb::runtime::FilterOp::NOTNULL) {
+                     result["restrictions"].push_back(innerExpression({"", " is not null"}, std::vector<nlohmann::json>{nlohmann::json{{"type", "expression_leaf"}, {"leaf_type", "simple_column"}, {"column", r.columnName}}}));
 
                   } else {
-                     result["restrictions"].push_back(innerExpression({"", r["cmp"], ""}, std::vector<nlohmann::json>{nlohmann::json{{"type", "expression_leaf"}, {"leaf_type", "simple_column"}, {"column", r["column"]}}, nlohmann::json{{"type", "expression_leaf"}, {"leaf_type", "constant"}, {"value", r["value"]}}}));
+                     std::string op = "";
+                         switch (r.op) {
+                            case lingodb::runtime::FilterOp::EQ:
+                               op = "=";
+                               break;
+                                case lingodb::runtime::FilterOp::NEQ:
+                               op = "<>";
+                                   break;
+                               case lingodb::runtime::FilterOp::GT:
+                                  op = ">";
+                                  break;
+                               case lingodb::runtime::FilterOp::GTE:
+                                  op = ">=";
+                                  break;
+                               case lingodb::runtime::FilterOp::LT:
+                                  op = "<";
+                                  break;
+                               case lingodb::runtime::FilterOp::LTE:
+                                  op = "<=";
+                                  break;
+                               case lingodb::runtime::FilterOp::IN:
+                                  op = "in";
+                                  break;
+                               default:
+                                  op = "?";
+                         }
+                     nlohmann::json constantValue;
+                     if (std::holds_alternative<std::string>(r.value)) {
+                        constantValue = nlohmann::json{{"type", "expression_leaf"}, {"leaf_type", "constant"}, {"value", std::get<std::string>(r.value)}};
+                     }else if (std::holds_alternative<int64_t>(r.value)) {
+                        constantValue = nlohmann::json{{"type", "expression_leaf"}, {"leaf_type", "constant"}, {"value", std::get<int64_t>(r.value)}};
+                     } else if (std::holds_alternative<double>(r.value)) {
+                        constantValue = nlohmann::json{{"type", "expression_leaf"}, {"leaf_type", "constant"}, {"value", std::get<double>(r.value)}};
+                     } else {
+                        constantValue = nlohmann::json{{"type", "expression_leaf"}, {"leaf_type", "unknown"}};
+                     }
+
+                     if (op == "in") {
+                        std::vector<std::string> strings;
+                        std::vector<nlohmann::json> constants;
+                        bool first = true;
+                        strings.push_back("[");
+                        if (auto values = std::get_if<std::vector<int64_t>>(&r.values)) {
+                           for (auto value : *values) {
+                              constants.push_back(nlohmann::json{{"type", "expression_leaf"}, {"leaf_type", "constant"}, {"value", value}});
+                              if (first) {
+                                 first=false;
+                              }else{
+                                 strings.push_back(", ");
+                              }
+                           }
+                        } else if (auto values = std::get_if<std::vector<std::string>>(&r.values)) {
+                           for (auto value : *values) {
+                              constants.push_back(nlohmann::json{{"type", "expression_leaf"}, {"leaf_type", "constant"}, {"value", value}});
+                              if (first) {
+                                 first=false;
+                              }else{
+                                 strings.push_back(", ");
+                              }
+                           }
+                        } else if (auto values = std::get_if<std::vector<double>>(&r.values)) {
+                           for (auto value : *values) {
+                              constants.push_back(nlohmann::json{{"type", "expression_leaf"}, {"leaf_type", "constant"}, {"value", value}});
+                              if (first) {
+                                 first=false;
+                              }else{
+                                 strings.push_back(", ");
+                              }
+                           }
+                        }
+                        strings.push_back("]");
+                         constantValue = innerExpression(strings, constants);
+                     }
+                        result["restrictions"].push_back(innerExpression({"", op, ""}, std::vector<nlohmann::json>{nlohmann::json{{"type", "expression_leaf"}, {"leaf_type", "simple_column"}, {"column", r.columnName}}, constantValue }));
+
                   }
                }
-            }
+
             return result;
          })
          .Case<relalg::SelectionOp>([&](relalg::SelectionOp selectionOp) {

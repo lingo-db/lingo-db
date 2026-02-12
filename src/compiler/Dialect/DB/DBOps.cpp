@@ -359,6 +359,30 @@ LogicalResult db::OrOp::canonicalize(db::OrOp orOp, mlir::PatternRewriter& rewri
    }
    return failure();
 }
+
+LogicalResult db::OneOfOp::canonicalize(db::OneOfOp oneofOp, mlir::PatternRewriter& rewriter) {
+   //if the input is integer and the list is a continuous range of integers, we can replace with a between
+   auto inputType = getBaseType(oneofOp.getVal().getType());
+   if (mlir::isa<mlir::IntegerType>(inputType)) {
+   std::vector<int64_t> vals;
+      for (auto v : oneofOp.getVals()) {
+         auto c = mlir::dyn_cast_or_null<db::ConstantOp>(v.getDefiningOp());
+         if (!c) return failure();
+         auto intAttr = mlir::dyn_cast_or_null<IntegerAttr>(c.getValue());
+         if (!intAttr) return failure();
+         vals.push_back(intAttr.getInt());
+      }
+      if (vals.empty()) return failure();
+        std::sort(vals.begin(), vals.end());
+      if (vals.back() - vals.front() == vals.size() - 1) {
+         auto startAttr = mlir::IntegerAttr::get(inputType, vals.front());
+         auto endAttr = mlir::IntegerAttr::get(inputType, vals.back());
+         rewriter.replaceOpWithNewOp<db::BetweenOp>(oneofOp, oneofOp.getVal(), rewriter.create<db::ConstantOp>(oneofOp->getLoc(), inputType, startAttr), rewriter.create<db::ConstantOp>(oneofOp->getLoc(), inputType, endAttr), true, true);
+         return success();
+      }
+   }
+   return failure();
+}
 OpFoldResult db::IsNullOp::fold(FoldAdaptor adaptor) {
    auto nullableVal = getVal();
    if (!mlir::isa<db::NullableType>(nullableVal.getType())) {
