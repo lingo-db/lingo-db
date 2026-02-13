@@ -462,6 +462,8 @@ double QueryGraph::estimateSelectivity(Operator op, NodeSet left, NodeSet right)
       if (predicate.left.isSubsetOf(predicatesLeft) && predicate.right.isSubsetOf(predicatesRight)) {
          std::optional<size_t> leftNDV = std::nullopt;
          std::optional<size_t> rightNDV = std::nullopt;
+         std::string leftColumnName = "";
+         std::string rightColumnName = "";
          if (predicate.isEq) {
             //Estimates based on unique values only possibly if only on predicate .
             if (predicate.left.size() == 1) {
@@ -479,6 +481,7 @@ double QueryGraph::estimateSelectivity(Operator op, NodeSet left, NodeSet right)
                                  auto numDistinctValues = columnStats.getNumDistinctValues();
                                  if (numDistinctValues.has_value()) {
                                     leftNDV = static_cast<double>(numDistinctValues.value());
+                                    leftColumnName = columnName;
                                     return;
                                  }
                               }
@@ -501,6 +504,7 @@ double QueryGraph::estimateSelectivity(Operator op, NodeSet left, NodeSet right)
                                  auto numDistinctValues = columnStats.getNumDistinctValues();
                                  if (numDistinctValues.has_value()) {
                                     rightNDV = static_cast<double>(numDistinctValues.value());
+                                    rightColumnName = columnName;
                                     return;
                                  }
                               }
@@ -514,7 +518,10 @@ double QueryGraph::estimateSelectivity(Operator op, NodeSet left, NodeSet right)
             if (!leftNDV.has_value() || !rightNDV.has_value()) {
                selectivity *= 0.1;
             } else {
-               selectivity *= 1.0 / std::min(leftNDV.value(), rightNDV.value());
+               double x = 1.0 / std::min(leftNDV.value(), rightNDV.value());
+               constexpr double minEqSelectivity = 1.0 / 10000;
+               x = std::max(x, minEqSelectivity);
+               selectivity *= x;
             }
          } else {
             selectivity *= 0.25;
