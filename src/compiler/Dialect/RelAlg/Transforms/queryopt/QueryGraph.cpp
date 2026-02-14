@@ -519,7 +519,7 @@ double QueryGraph::estimateSelectivity(Operator op, NodeSet left, NodeSet right)
                selectivity *= 0.1;
             } else {
                double x = 1.0 / std::min(leftNDV.value(), rightNDV.value());
-               constexpr double minEqSelectivity = 1.0 / 10000;
+               constexpr double minEqSelectivity = 1.0 / 1000;
                x = std::max(x, minEqSelectivity);
                selectivity *= x;
             }
