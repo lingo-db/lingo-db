@@ -375,13 +375,7 @@ class StringCmpOpLowering : public OpConversionPattern<db::CmpOp> {
                // for small constant strings, we can use direct comparison
                res = rewriter.create<util::VarLenCmpSimple>(cmpOp->getLoc(), rewriter.getI1Type(), left, right);
             } else {
-               auto varlenCmp = rewriter.create<util::VarLenCmp>(cmpOp->getLoc(), rewriter.getI1Type(), rewriter.getI1Type(), left, right);
-               // TODO: this should be speculated to be **false** to move longer string comparisons out of the hot path
-               res = rewriter.create<mlir::scf::IfOp>(
-                                cmpOp->getLoc(), varlenCmp.getNeedsDetailedEval(), [&](mlir::OpBuilder& builder, mlir::Location loc) {
-                                                         auto rtCmp=StringRuntime::compareEq(rewriter, cmpOp->getLoc())({left, right})[0];
-                                                         builder.create<mlir::scf::YieldOp>(loc, rtCmp); }, [&](mlir::OpBuilder& builder, mlir::Location loc) { builder.create<mlir::scf::YieldOp>(loc, varlenCmp.getEq()); })
-                        .getResult(0);
+               res = StringRuntime::compareEq(rewriter, cmpOp->getLoc())({left, right})[0];
             }
             break;
          }
