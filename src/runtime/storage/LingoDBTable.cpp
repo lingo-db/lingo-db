@@ -20,9 +20,9 @@
 #include <shared_mutex>
 namespace {
 namespace utility = lingodb::utility;
-static utility::Tracer::Event processMorsel("TableScan", "☷ morsel");
+static utility::Tracer::Event processMorsel("TableScan", "morsel", false);
 
-static utility::Tracer::Event processMorselSingle("TableScan", "☷ single morsel");
+static utility::Tracer::Event processMorselSingle("TableScan", "single morsel", false);
 
 std::vector<lingodb::runtime::LingoDBTable::TableChunk> loadTable(std::string name) {
    auto inputFile = arrow::io::ReadableFile::Open(name).ValueOrDie();

@@ -10,7 +10,7 @@
 #include <arrow/util/decimal.h>
 #include <arrow/util/value_parsing.h>
 namespace {
-static lingodb::utility::Tracer::Event applyFilter("TableScan", "σ filter");
+static lingodb::utility::Tracer::Event applyFilter("TableScan", "filter");
 
 int32_t parseDate32(std::string str) {
    static std::regex r("(\\d\\d\\d\\d)-(\\d)-(\\d\\d)");

@@ -5,8 +5,10 @@
 #include <mutex>
 #include <shared_mutex>
 namespace {
-static lingodb::utility::Tracer::Event iterateEvent("FlexibleBuffer", "iterateParallel");
-static lingodb::utility::Tracer::Event bufferIteratorEvent("BufferIterator", "iterate");
+static lingodb::utility::Tracer::Event chunkedBufferScan("ChunkedBuffer", "bufferScan");
+static lingodb::utility::Tracer::Event bufferScan("Buffer", "bufferScan");
+static lingodb::utility::Tracer::Event chunkedBufferChunk("BufferIterator", "chunk", false);
+static lingodb::utility::Tracer::Event bufferChunk("BufferIterator", "chunk", false);
 
 class FlexibleBufferWorkerResvState {
    public:
@@ -68,7 +70,7 @@ class FlexibleBufferIteratorTask : public lingodb::scheduler::TaskWithImplicitCo
       if (unitId < 0) {
          return;
       }
-      lingodb::utility::Tracer::Trace trace(iterateEvent);
+      lingodb::utility::Tracer::Trace trace(chunkedBufferChunk);
       size_t begin = splitSize * unitId;
       size_t len = std::min(begin + splitSize, static_cast<size_t>(buffer.numElements)) - begin;
       auto buf = lingodb::runtime::Buffer{len, buffer.ptr + begin * std::max(1ul, typeSize)};
@@ -163,7 +165,7 @@ class BufferIteratorTask : public lingodb::scheduler::TaskWithImplicitContext {
       if (end > bufferLen) {
          end = bufferLen;
       }
-      lingodb::utility::Tracer::Trace trace(iterateEvent);
+      lingodb::utility::Tracer::Trace trace(bufferChunk);
       cb(buffer, begin, end, contextPtr);
       trace.stop();
    }
@@ -206,11 +208,13 @@ class FlexibleBufferIterator : public lingodb::runtime::BufferIterator {
       if (parallel) {
          flexibleBuffer.iterateBuffersParallel([&](lingodb::runtime::Buffer buffer) {
             buffer = lingodb::runtime::Buffer{buffer.numElements * std::max(1ul, flexibleBuffer.getTypeSize()), buffer.ptr};
+            lingodb::utility::Tracer::Trace trace(chunkedBufferChunk);
             forEachChunk(buffer, contextPtr);
          });
       } else {
          for (auto buffer : flexibleBuffer.getBuffers()) {
             buffer = lingodb::runtime::Buffer{buffer.numElements * std::max(1ul, flexibleBuffer.getTypeSize()), buffer.ptr};
+            lingodb::utility::Tracer::Trace trace(chunkedBufferChunk);
             forEachChunk(buffer, contextPtr);
          }
       }
@@ -227,14 +231,16 @@ size_t lingodb::runtime::FlexibleBuffer::getLen() const {
 }
 
 void lingodb::runtime::BufferIterator::iterate(lingodb::runtime::BufferIterator* iterator, bool parallel, void (*forEachChunk)(lingodb::runtime::Buffer, void*), void* contextPtr) {
-   utility::Tracer::Trace trace(bufferIteratorEvent);
+   utility::Tracer::Trace trace(chunkedBufferScan);
    iterator->iterateEfficient(parallel, forEachChunk, contextPtr);
 }
 
 void lingodb::runtime::Buffer::iterate(bool parallel, lingodb::runtime::Buffer buffer, size_t typeSize, void (*forEachChunk)(lingodb::runtime::Buffer, size_t, size_t, void*), void* contextPtr) {
+   utility::Tracer::Trace trace(bufferScan);
    if (parallel) {
       lingodb::scheduler::awaitChildTask(std::make_unique<BufferIteratorTask>(buffer, typeSize, contextPtr, forEachChunk));
    } else {
+      lingodb::utility::Tracer::Trace trace2(bufferChunk);
       forEachChunk(buffer, 0, buffer.numElements / typeSize, contextPtr);
    }
 }

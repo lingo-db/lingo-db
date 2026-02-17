@@ -24,7 +24,8 @@ class Tracer {
       unsigned id;
       std::string category;
       std::string name;
-      Event(std::string_view category, std::string_view name) : id(registerEvent(this)), category(category), name(name) {}
+      bool runtime;
+      Event(std::string_view category, std::string_view name, bool runtime =true) : id(registerEvent(this)), category(category), name(name), runtime(runtime) {}
 
       virtual void writeOut(TraceRecord* record, nlohmann::json& j);
    };
@@ -136,7 +137,7 @@ class Tracer {
       std::string metaName;
 
       public:
-      StringMetaDataEvent(std::string category, std::string name, std::string metaName) : utility::Tracer::Event(category, name), metaName(metaName) {}
+      StringMetaDataEvent(std::string category, std::string name, std::string metaName, bool runtime=true) : utility::Tracer::Event(category, name,runtime), metaName(metaName) {}
       void writeOut(utility::Tracer::TraceRecord* record, nlohmann::json& j) override;
       uint64_t serializeMetaData(std::string pass);
    };
