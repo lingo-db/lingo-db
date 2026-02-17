@@ -8,6 +8,7 @@ add_library(runtime OBJECT
         Heap.cpp
         DumpRuntime.cpp
         DataSourceIteration.cpp
+        SIP.cpp
         Sorting.cpp
         GrowingBuffer.cpp
         Buffer.cpp

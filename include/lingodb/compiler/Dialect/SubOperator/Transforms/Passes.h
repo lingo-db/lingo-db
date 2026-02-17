@@ -7,6 +7,7 @@ namespace subop {
 std::unique_ptr<mlir::Pass> createFoldColumnsPass();
 std::unique_ptr<mlir::Pass> createEnforceOrderPass();
 std::unique_ptr<mlir::Pass> createNormalizeSubOpPass();
+std::unique_ptr<mlir::Pass> createSIPPass();
 std::unique_ptr<mlir::Pass> createSpecializeSubOpPass(bool withOptimizations);
 std::unique_ptr<mlir::Pass> createPullGatherUpPass();
 std::unique_ptr<mlir::Pass> createReuseLocalPass();
