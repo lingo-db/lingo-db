@@ -444,8 +444,6 @@ double QueryGraph::estimateSelectivity(Operator op, NodeSet left, NodeSet right)
       predicatesLeft.insert(predicate.left);
       predicatesRight.insert(predicate.right);
    }
-
-
    for (auto p : pkeysLeft) {
       auto [rows, pkey] = p;
       if (pkey.isSubsetOf(predicatesLeft)) {
@@ -461,63 +459,70 @@ double QueryGraph::estimateSelectivity(Operator op, NodeSet left, NodeSet right)
       }
    }
    for (auto predicate : predicates) {
-
       if (predicate.left.isSubsetOf(predicatesLeft) && predicate.right.isSubsetOf(predicatesRight)) {
          std::optional<size_t> leftNDV = std::nullopt;
          std::optional<size_t> rightNDV = std::nullopt;
+         std::string leftColumnName = "";
+         std::string rightColumnName = "";
          if (predicate.isEq) {
-            //Get the number of distinct values for the columns on the left side
-            iterateNodes(left, [&](auto node) {
-               if (node.op) {
-                  if (auto baseTableOp = mlir::dyn_cast_or_null<BaseTableOp>(node.op.getOperation())) {
-                     auto meta = mlir::dyn_cast_or_null<TableMetaDataAttr>(baseTableOp->getAttr("meta"));
-                     if (!meta) return;
-                     for (auto* predColumn : predicate.left) {
-                        for (auto baseTableColum : baseTableOp.getColumns()) {
-                           if (mlir::cast<tuples::ColumnDefAttr>(baseTableColum.getValue()).getColumnPtr().get() == predColumn) {
-                              auto columnName = baseTableColum.getName().str();
-                              auto columnStats = meta.getMeta()->getColumnStatistics(columnName);
-                              auto numDistinctValues = columnStats.getNumDistinctValues();
-                              if (numDistinctValues.has_value()) {
-                                 leftNDV = static_cast<double>(numDistinctValues.value());
-                                 return;
-
+            //Estimates based on unique values only possibly if only on predicate .
+            if (predicate.left.size() == 1) {
+               //Get the number of distinct values for the columns on the left side
+               iterateNodes(left, [&](auto node) {
+                  if (node.op) {
+                     if (auto baseTableOp = mlir::dyn_cast_or_null<BaseTableOp>(node.op.getOperation())) {
+                        auto meta = mlir::dyn_cast_or_null<TableMetaDataAttr>(baseTableOp->getAttr("meta"));
+                        if (!meta) return;
+                        for (auto* predColumn : predicate.left) {
+                           for (auto baseTableColum : baseTableOp.getColumns()) {
+                              if (mlir::cast<tuples::ColumnDefAttr>(baseTableColum.getValue()).getColumnPtr().get() == predColumn) {
+                                 auto columnName = baseTableColum.getName().str();
+                                 auto columnStats = meta.getMeta()->getColumnStatistics(columnName);
+                                 auto numDistinctValues = columnStats.getNumDistinctValues();
+                                 if (numDistinctValues.has_value()) {
+                                    leftNDV = static_cast<double>(numDistinctValues.value());
+                                    leftColumnName = columnName;
+                                    return;
+                                 }
                               }
                            }
                         }
                      }
                   }
-               }
-            });
-            //Get the number of distinct values for the columns on the right side
-            iterateNodes(right, [&](auto node) {
-               if (node.op) {
-                  if (auto baseTableOp = mlir::dyn_cast_or_null<BaseTableOp>(node.op.getOperation())) {
-                     auto meta = mlir::dyn_cast_or_null<TableMetaDataAttr>(baseTableOp->getAttr("meta"));
-                     if (!meta) return;
-                     for (auto* predColumn : predicate.right) {
-                        for (auto baseTableColum : baseTableOp.getColumns()) {
-                           if (mlir::cast<tuples::ColumnDefAttr>(baseTableColum.getValue()).getColumnPtr().get() == predColumn) {
-                              auto columnName = baseTableColum.getName().str();
-                              auto columnStats = meta.getMeta()->getColumnStatistics(columnName);
-                              auto numDistinctValues = columnStats.getNumDistinctValues();
-                              if (numDistinctValues.has_value()) {
-                                 rightNDV = static_cast<double>(numDistinctValues.value());
-                                 return;
-
+               });
+               //Get the number of distinct values for the columns on the right side
+               iterateNodes(right, [&](auto node) {
+                  if (node.op) {
+                     if (auto baseTableOp = mlir::dyn_cast_or_null<BaseTableOp>(node.op.getOperation())) {
+                        auto meta = mlir::dyn_cast_or_null<TableMetaDataAttr>(baseTableOp->getAttr("meta"));
+                        if (!meta) return;
+                        for (auto* predColumn : predicate.right) {
+                           for (auto baseTableColum : baseTableOp.getColumns()) {
+                              if (mlir::cast<tuples::ColumnDefAttr>(baseTableColum.getValue()).getColumnPtr().get() == predColumn) {
+                                 auto columnName = baseTableColum.getName().str();
+                                 auto columnStats = meta.getMeta()->getColumnStatistics(columnName);
+                                 auto numDistinctValues = columnStats.getNumDistinctValues();
+                                 if (numDistinctValues.has_value()) {
+                                    rightNDV = static_cast<double>(numDistinctValues.value());
+                                    rightColumnName = columnName;
+                                    return;
+                                 }
                               }
                            }
                         }
                      }
                   }
-               }
-            });
+               });
+            }
+
             if (!leftNDV.has_value() || !rightNDV.has_value()) {
                selectivity *= 0.1;
             } else {
-               selectivity *= 1.0 / std::min(leftNDV.value(), rightNDV.value());
+               double x = 1.0 / std::min(leftNDV.value(), rightNDV.value());
+               constexpr double minEqSelectivity = 1.0 / 1000;
+               x = std::max(x, minEqSelectivity);
+               selectivity *= x;
             }
-
          } else {
             selectivity *= 0.25;
          }

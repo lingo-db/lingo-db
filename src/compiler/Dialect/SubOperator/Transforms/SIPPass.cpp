@@ -401,17 +401,14 @@ class SIPPass : public mlir::PassWrapper<SIPPass, mlir::OperationPass<mlir::Modu
             }
             auto rows = mlir::dyn_cast<mlir::FloatAttr>(lookupOp->getAttr("rows")).getValue().convertToDouble();
             //If join is not restrictive enough we skip
-            if (rows >= 0.5) {
-               if (rows>=0.8) {
+            if (rows > 0.5) {
+               if (rows >= 0.8) {
                   return;
                }
                if (externalDataSourceProp.filterDescriptions.empty()) {
                   return;
                }
             }
-
-
-
 
             /*auto last = externalDataSourceProp.filterDescriptions[externalDataSourceProp.filterDescriptions.size() - 1];
             if (last.op == lingodb::runtime::FilterOp::SIP) {
