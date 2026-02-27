@@ -38,10 +38,10 @@ struct IRCompilerA64
       // emit lea with relocation
       reloc_text(
          global_sym, tpde::elf::R_AARCH64_ADR_PREL_PG_HI21, this->text_writer.offset());
-      ASMNC(ADRP, dst, 0, 0);
+      ASM(ADRP, dst, 0, 0);
       reloc_text(
          global_sym, tpde::elf::R_AARCH64_ADD_ABS_LO12_NC, this->text_writer.offset());
-      ASMNC(ADDxi, dst, dst, 0);
+      ASM(ADDxi, dst, dst, 0);
    }
 
    void create_helper_call(std::span<IRValueRef> args, ValueRef* result, SymRef sym) noexcept {
@@ -249,10 +249,10 @@ struct IRCompilerA64
       // mov the ptr from the GOT
       reloc_text(
          sym, tpde::elf::R_AARCH64_ADR_GOT_PAGE, this->text_writer.offset());
-      ASMNC(ADRP, dst, 0, 0);
+      ASM(ADRP, dst, 0, 0);
       reloc_text(
          sym, tpde::elf::R_AARCH64_LD64_GOT_LO12_NC, this->text_writer.offset());
-      ASMNC(LDRxu, dst, dst, 0);
+      ASM(LDRxu, dst, dst, 0);
    }
 
    void reset() noexcept {
