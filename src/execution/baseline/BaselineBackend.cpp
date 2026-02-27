@@ -42,17 +42,11 @@ class LegalizeForBackend : public mlir::PassWrapper<LegalizeForBackend, mlir::Op
          mlir::RewritePatternSet patterns(&getContext());
          //patterns.insert<EliminateNullCmp>(&getContext());
 
-         //lingo
          dialect::util::UnPackOp::getCanonicalizationPatterns(patterns, patterns.getContext());
          dialect::util::GetTupleOp::getCanonicalizationPatterns(patterns, patterns.getContext());
          dialect::util::StoreOp::getCanonicalizationPatterns(patterns, patterns.getContext());
          dialect::util::UndefOp::getCanonicalizationPatterns(patterns, patterns.getContext());
          dialect::util::StoreElementOp::getCanonicalizationPatterns(patterns, patterns.getContext());
-
-         //mlir
-         mlir::arith::SelectOp::getCanonicalizationPatterns(patterns, patterns.getContext());
-         mlir::arith::MulIOp::getCanonicalizationPatterns(patterns, patterns.getContext());
-         mlir::scf::IfOp::getCanonicalizationPatterns(patterns, patterns.getContext());
 
          if (lingodb::compiler::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
             assert(false && "should not happen");
