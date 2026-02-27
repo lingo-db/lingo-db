@@ -112,6 +112,12 @@ double arith_uitofp_i64_f64(uint64_t in) { return (double) in; }
 
 double arith_extf_f32_f64(float in) { return (double) in; }
 
+int64_t arith_fptosi_f32_i64(float fl) { return (int64_t) fl; }
+int64_t arith_fptosi_f64_i64(double dou) { return (int64_t) dou; }
+
+uint64_t arith_fptoui_f32_i64(float fl) { return (uint64_t) fl; }
+uint64_t arith_fptoui_f64_i64(double dou) { return (uint64_t) dou; }
+
 // --------------------------
 // float comparisons
 // --------------------------
