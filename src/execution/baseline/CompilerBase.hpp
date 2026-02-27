@@ -1482,6 +1482,61 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
       return ret;
    }
 
+   bool compile_arith_fptosi_op(const auto op, const bool sign) {
+      mlir::Value src = op->getOperand(0);
+      mlir::Value res = op->getResult(0);
+
+      assert(mlir::isa<mlir::FloatType>(src.getType()) && "Source value must be a float type for fptosi");
+      assert(mlir::isa<mlir::IntegerType>(res.getType()) && "Result value must be an integer type for fptosi");
+
+      const unsigned src_width = src.getType().getIntOrFloatBitWidth();
+      const unsigned dst_width = res.getType().getIntOrFloatBitWidth();
+
+      assert((src_width == 32 || src_width == 64) && (dst_width <= 64 || dst_width == 128) &&
+             "Source width must be 32 or 64 bits and destination width <= 64 or 128 bits");
+
+      if (dst_width == 128) {
+         auto builder = derived()->create_call_builder();
+         builder.add_arg(typename Base::CallArg{src});
+         std::string_view func_name;
+
+         if (src_width == 32) {
+            func_name = "fptosiF32I128";
+         } else {
+            func_name = "fptosiF64I128";
+         }
+
+         assert(externFuncMap.contains(func_name) && "Missing fptosi 128-bit runtime function");
+         ValuePart funcPtrRef{
+            std::bit_cast<uint64_t>(externFuncMap[func_name]), 8, Config::GP_BANK};
+
+         builder.call(std::move(funcPtrRef));
+         ValueRef res_vr = this->result_ref(res);
+         builder.add_ret(res_vr);
+         return true;
+      }
+
+      auto [_, src_vpr] = this->val_ref_single(src);
+      auto res_ref = this->result_ref(res);
+      bool ret = false;
+
+      if (sign) {
+         if (src_width == 32) {
+            ret = derived()->encode_arith_fptosi_f32_i64(std::move(src_vpr), res_ref.part(0));
+         } else {
+            ret = derived()->encode_arith_fptosi_f64_i64(std::move(src_vpr), res_ref.part(0));
+         }
+      } else {
+         if (src_width == 32) {
+            ret = derived()->encode_arith_fptoui_f32_i64(std::move(src_vpr), res_ref.part(0));
+         } else {
+            ret = derived()->encode_arith_fptoui_f64_i64(std::move(src_vpr), res_ref.part(0));
+         }
+      }
+
+      return ret;
+   }
+
    bool compile_util_pack_op(dialect::util::PackOp op) {
       mlir::TypedValue<mlir::Type> res = op.getTuple();
       auto vals = op.getVals();
@@ -1668,6 +1723,12 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
          })
          .template Case<mlir::arith::UIToFPOp>([&](auto op) {
             return compile_arith_sitofp_op(op, false);
+         })
+         .template Case<mlir::arith::FPToSIOp>([&](auto op) {
+            return compile_arith_fptosi_op(op, true);
+         })
+         .template Case<mlir::arith::FPToUIOp>([&](auto op) {
+            return compile_arith_fptosi_op(op, false);
          })
          .template Case<dialect::util::PackOp>([&](auto op) {
             return compile_util_pack_op(op);
