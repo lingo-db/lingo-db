@@ -12,7 +12,7 @@ cd tools
 if [[ "$OSTYPE" == "darwin"* ]]; then
   make OS=MACOS MACOS_CFLAGS="-g -Wall --std=c89"  # macOS
 else
-  make OS=LINUX     # Linux
+  make OS=LINUX LINUX_CFLAGS="-Wno-implicit-int"     # Linux
 fi
 ./dsdgen -FORCE -SCALE $2
 chmod +r *.dat

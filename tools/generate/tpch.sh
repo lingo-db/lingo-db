@@ -7,7 +7,7 @@ wget -q https://github.com/electrum/tpch-dbgen/archive/32f1c1b92d1664dba542e927d
 unzip -q tpch-dbgen.zip
 mv tpch-dbgen-32f1c1b92d1664dba542e927d23d86ffa57aa253/* .
 rm tpch-dbgen.zip
-make
+make CFLAGS="-g -DDBNAME=\"dss\" -DMAC -DORACLE -DTPCH -DRNG_TEST -D_FILE_OFFSET_BITS=64 -Wno-implicit-function-declaration"
 set -x
 ./dbgen -f -s $2
 ls -la .
