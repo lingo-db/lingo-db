@@ -12,9 +12,8 @@ class Filter {
    virtual ~Filter() {}
 };
 class Restrictions {
-   std::vector<std::pair<std::unique_ptr<lingodb::runtime::Filter>, size_t>> filters;
-
    public:
+   std::vector<std::pair<std::unique_ptr<lingodb::runtime::Filter>, size_t>> filters;
    std::pair<size_t, uint16_t*> applyFilters(size_t offset, size_t length, uint16_t* selVec1, uint16_t* selVec2, std::function<const ArrayView*(size_t)> getArrayView);
    static std::unique_ptr<Restrictions> create(std::vector<FilterDescription> filterDescs, const arrow::Schema& schema);
 };

@@ -31,6 +31,15 @@ unsigned char hexval(unsigned char c) {
    else
       abort();
 }
+
+std::string rtrimSpaces(std::string value) {
+   auto lastNonSpace = value.find_last_not_of(' ');
+   if (lastNonSpace == std::string::npos) {
+      return "";
+   }
+   value.erase(lastNonSpace + 1);
+   return value;
+}
 struct ResultHasher : public execution::ResultProcessor {
    //input
    SortMode sortMode;
@@ -130,7 +139,11 @@ struct ResultHasher : public execution::ResultProcessor {
                out << static_cast<char>(currChar);
             }
             if (!first) {
-               toHash.push_back(out.str());
+               auto outValue = out.str();
+               if (convertHex[column]) {
+                  outValue = rtrimSpaces(std::move(outValue));
+               }
+               toHash.push_back(std::move(outValue));
             }
          }
       }
