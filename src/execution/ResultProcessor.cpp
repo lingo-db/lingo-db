@@ -21,6 +21,15 @@ unsigned char hexval(unsigned char c) {
       abort();
 }
 
+std::string rtrimSpaces(std::string value) {
+   auto lastNonSpace = value.find_last_not_of(' ');
+   if (lastNonSpace == std::string::npos) {
+      return "";
+   }
+   value.erase(lastNonSpace + 1);
+   return value;
+}
+
 class TableRetriever : public lingodb::execution::ResultProcessor {
    std::shared_ptr<arrow::Table>& result;
 
@@ -123,7 +132,11 @@ void printTable(const std::shared_ptr<arrow::Table>& table) {
             if (column == 0) {
                std::cout << "|";
             }
-            std::cout << std::setw(30) << out.str() << "  |";
+            auto outValue = out.str();
+            if (convertHex[column]) {
+               outValue = rtrimSpaces(std::move(outValue));
+            }
+            std::cout << std::setw(30) << outValue << "  |";
          }
       }
       if (!skipNL) {

@@ -20,6 +20,7 @@ set(COMMON_LIBS runner utility runtime mlir-support scheduler)
 if (ENABLE_MIMALLOC)
     list(APPEND COMMON_LIBS mimalloc-static)
 endif ()
+
 add_executable(sql sql.cpp)
 # sql needs linenoise-ng in addition to the common libs
 target_link_libraries(sql PRIVATE ${COMMON_LIBS} linenoise-ng)
@@ -57,3 +58,14 @@ add_executable(run-sql run-sql.cpp)
 target_link_libraries(run-sql PUBLIC ${COMMON_LIBS})
 set_target_properties(run-sql PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 target_compile_definitions(run-sql PRIVATE ${COMPILE_DEFS})
+
+
+
+# custom-scanner2
+add_executable(custom-scanner_dataset2 custom_scanner_apache_arrow_datasets2.cpp)
+target_link_libraries(custom-scanner_dataset2 PUBLIC ${COMMON_LIBS} parquet_static arrow_dataset_static arrow_acero_static)
+set_target_properties(custom-scanner_dataset2 PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+target_compile_definitions(custom-scanner_dataset2 PRIVATE ${COMPILE_DEFS})
+
+
+

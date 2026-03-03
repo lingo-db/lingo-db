@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <cstring>
+#include <iostream>
 #include <regex>
 
 #include <arrow/table.h>
@@ -351,6 +352,7 @@ std::pair<size_t, uint16_t*> lingodb::runtime::Restrictions::applyFilters(size_t
 std::unique_ptr<lingodb::runtime::Restrictions> lingodb::runtime::Restrictions::create(std::vector<lingodb::runtime::FilterDescription> filterDescs, const arrow::Schema& schema) {
    auto restrictions = std::make_unique<lingodb::runtime::Restrictions>();
    for (auto& filterDesc : filterDescs) {
+      std::cerr << "Filter " << std::to_string((uint8_t) filterDesc.op) << "for " << filterDesc.columnName << std::endl;
       size_t colId = schema.GetFieldIndex(filterDesc.columnName);
       if (colId == static_cast<size_t>(-1)) {
          throw std::runtime_error("unknown column in filter");
