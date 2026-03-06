@@ -66,11 +66,9 @@ class GraphAlgToCoreLoweringStep : public LoweringStep {
    }
    void implement(mlir::ModuleOp& moduleOp) override {
       mlir::PassManager graphalgToCorePM(moduleOp->getContext());
-      graphalg::GraphAlgToCorePipelineOptions options{};
-      graphalg::buildGraphAlgToCorePipeline(graphalgToCorePM, options);
+      graphalg::buildGraphAlgToCorePipeline(graphalgToCorePM);
       if (mlir::failed(graphalgToCorePM.run(moduleOp))) {
          error.emit() << "Lowering of GraphAlg to GraphAlg Core failed";
-         return;
       }
    }
 };
@@ -80,7 +78,7 @@ class GraphAlgToRelAlgLoweringStep : public LoweringStep {
    }
    void implement(mlir::ModuleOp& moduleOp) override {
       mlir::PassManager graphalgToRelAlgPM(moduleOp->getContext());
-      graphalg::createLowerGraphAlgToRelAlgPipeline(graphalgToRelAlgPM);
+      graphalg::createLowerGraphAlgCoreToRelAlgPipeline(graphalgToRelAlgPM);
       if (mlir::failed(graphalgToRelAlgPM.run(moduleOp))) {
          error.emit() << "Lowering of GraphAlg Core to RelAlg failed";
       }

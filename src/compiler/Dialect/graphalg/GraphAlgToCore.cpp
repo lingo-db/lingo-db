@@ -58,6 +58,8 @@ namespace graphalg {
 namespace {
 
 class GraphAlgToCore : public impl::GraphAlgToCoreBase<GraphAlgToCore> {
+   virtual llvm::StringRef getArgument() const override { return "graphalg-to-core"; }
+
    public:
    using impl::GraphAlgToCoreBase<GraphAlgToCore>::GraphAlgToCoreBase;
 
@@ -274,33 +276,7 @@ static mlir::LogicalResult convertLiteral(LiteralOp op,
 void GraphAlgToCore::runOnOperation() {
    mlir::ConversionTarget target(getContext());
 
-   // Programs are still ModuleOps
-   target.addLegalOp<mlir::ModuleOp>();
-   // Functions still use the FuncDialect
-   target.addLegalDialect<mlir::func::FuncDialect>();
-   // We use some scalar ops from ArithDialect
-   target.addLegalDialect<mlir::arith::ArithDialect>();
-
-   // copy from RelAlg to
-   using namespace lingodb::compiler::dialect;
-   using namespace mlir;
-   target.addLegalDialect<gpu::GPUDialect>();
-   target.addLegalDialect<async::AsyncDialect>();
-   target.addIllegalDialect<relalg::RelAlgDialect>();
-   target.addLegalDialect<subop::SubOperatorDialect>();
-   target.addLegalDialect<db::DBDialect>();
-   target.addLegalDialect<lingodb::compiler::dialect::arrow::ArrowDialect>();
-
-   target.addLegalDialect<tuples::TupleStreamDialect>();
-   target.addLegalDialect<func::FuncDialect>();
-   target.addLegalDialect<memref::MemRefDialect>();
-   target.addLegalDialect<arith::ArithDialect>();
-   target.addLegalDialect<cf::ControlFlowDialect>();
-   target.addLegalDialect<scf::SCFDialect>();
-   target.addLegalDialect<util::UtilDialect>();
-
    // Only graphalg ops are only allowed if they are part of the 'Core' subset.
-   target.addIllegalDialect<graphalg::GraphAlgDialect>();
    target.addDynamicallyLegalDialect<graphalg::GraphAlgDialect>(
       [](mlir::Operation* op) { return op->hasTrait<IsCore>(); });
 
@@ -315,8 +291,8 @@ void GraphAlgToCore::runOnOperation() {
    patterns.add(convertTriu);
    patterns.add(convertLiteral);
 
-   if (mlir::failed(mlir::applyFullConversion(getOperation(), target,
-                                              std::move(patterns)))) {
+   if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
+                                                 std::move(patterns)))) {
       signalPassFailure();
    }
 }

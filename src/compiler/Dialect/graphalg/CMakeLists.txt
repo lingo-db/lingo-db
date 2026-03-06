@@ -21,8 +21,7 @@ add_mlir_dialect_library(MLIRGraphAlg
         GraphAlgVerifyDimensions.cpp
 
         # Transforms
-        #        Transforms/GraphAlgToLingoRelAlg.cpp
-        Transforms/GraphAlgToLingoRelAlgGemini.cpp
+        Transforms/GraphAlgToLingoRelAlg.cpp
 
         ADDITIONAL_HEADER_DIRS
         ../../include/graphalg/Dialect/GraphAlg
@@ -49,5 +48,4 @@ target_compile_options(MLIRGraphAlg PRIVATE -Wno-dangling-assignment-gsl)
 #endif()
 
 add_subdirectory(analysis)
-add_subdirectory(evaluate)
 add_subdirectory(parse)

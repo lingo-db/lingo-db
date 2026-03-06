@@ -26,14 +26,14 @@
 #include <mlir/IR/Types.h>
 #include <mlir/Support/LLVM.h>
 
-#include "graphalg/GraphAlgAttr.h"
-#include "graphalg/GraphAlgCast.h"
-#include "graphalg/GraphAlgDialect.h"
-#include "graphalg/GraphAlgOps.h"
-#include "graphalg/GraphAlgTypes.h"
-#include "graphalg/SemiringTypes.h"
-#include "graphalg/parse/Lexer.h"
-#include "graphalg/parse/Parser.h"
+#include "lingodb/compiler/Dialect/graphalg/GraphAlgAttr.h"
+#include "lingodb/compiler/Dialect/graphalg/GraphAlgCast.h"
+#include "lingodb/compiler/Dialect/graphalg/GraphAlgDialect.h"
+#include "lingodb/compiler/Dialect/graphalg/GraphAlgOps.h"
+#include "lingodb/compiler/Dialect/graphalg/GraphAlgTypes.h"
+#include "lingodb/compiler/Dialect/graphalg/SemiringTypes.h"
+#include "lingodb/compiler/Dialect/graphalg/parse/Lexer.h"
+#include "lingodb/compiler/Dialect/graphalg/parse/Parser.h"
 #include "llvm/ADT/StringMap.h"
 
 namespace graphalg {
