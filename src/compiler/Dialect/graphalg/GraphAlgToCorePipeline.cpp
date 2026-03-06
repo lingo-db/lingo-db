@@ -6,8 +6,7 @@
 
 namespace graphalg {
 
-void buildGraphAlgToCorePipeline(mlir::OpPassManager& pm,
-                                 const GraphAlgToCorePipelineOptions& options) {
+void buildGraphAlgToCorePipeline(mlir::OpPassManager& pm) {
    pm.addPass(graphalg::createGraphAlgPrepareInline());
    pm.addPass(mlir::createInlinerPass());
    pm.addNestedPass<mlir::func::FuncOp>(
@@ -15,8 +14,8 @@ void buildGraphAlgToCorePipeline(mlir::OpPassManager& pm,
    pm.addNestedPass<mlir::func::FuncOp>(graphalg::createGraphAlgToCore());
    pm.addPass(mlir::createCanonicalizerPass());
 }
-void registerGraphAlgToCorePipeline() {
-   mlir::PassPipelineRegistration<GraphAlgToCorePipelineOptions>(
+void createGraphAlgToGraphAlgCorePipeline() {
+   mlir::PassPipelineRegistration<mlir::EmptyPipelineOptions>(
       "graphalg-to-core-pipeline",
       "Lowers graphalg source IR into core operations",
       buildGraphAlgToCorePipeline);

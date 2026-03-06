@@ -11,7 +11,7 @@
 #include <mlir/IR/MLIRContext.h>
 #include <mlir/Support/LLVM.h>
 
-#include "graphalg/parse/Lexer.h"
+#include "lingodb/compiler/Dialect/graphalg/parse/Lexer.h"
 
 namespace graphalg {
 

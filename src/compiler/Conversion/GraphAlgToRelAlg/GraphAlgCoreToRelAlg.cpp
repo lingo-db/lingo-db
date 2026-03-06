@@ -37,16 +37,17 @@
 namespace graphalg {
 using namespace mlir;
 
-void createLowerGraphAlgToRelAlgPipeline(mlir::OpPassManager& pm) {
+void createLowerGraphAlgCoreToRelAlgPipeline(mlir::OpPassManager& pm) {
    pm.addPass(graphalg::createGraphAlgToRelAlgPass());
+   pm.addPass(mlir::createCanonicalizerPass());
 }
-void registerGraphAlgToRelAlgConversionPasses() {
+void registerGraphAlgCoreToRelAlgConversionPasses() {
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return graphalg::createGraphAlgToRelAlgPass();
    });
    mlir::PassPipelineRegistration<EmptyPipelineOptions>(
       "lower-graphalg-core-to-relalg",
       "",
-      graphalg::createLowerGraphAlgToRelAlgPipeline);
+      graphalg::createLowerGraphAlgCoreToRelAlgPipeline);
 }
 }

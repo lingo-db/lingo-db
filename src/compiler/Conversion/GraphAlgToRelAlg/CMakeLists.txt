@@ -1,5 +1,6 @@
 add_mlir_conversion_library(MLIGraphAlgToRelAlg
-        GraphAlgToRelAlg.cpp
+        GraphAlgCoreToRelAlg.cpp
+        GraphAlgToGraphAlgCore.cpp
 
         ADDITIONAL_HEADER_DIRS
         ../../../lingodb/compiler/Conversion/GraphAlgToRelAlg
