@@ -124,13 +124,17 @@ struct MatrixMeta {
 class GraphAlgTypeConverter : public TypeConverter {
    public:
    GraphAlgTypeConverter(MLIRContext* ctx) {
-      addConversion([&](graphalg::MatrixType type) -> Type {
+      addConversion([&](Type type) { return type; });
+
+      addConversion([&](MatrixType type) -> Type {
          return tuples::TupleStreamType::get(ctx);
       });
 
       addConversion([&](Type type) -> std::optional<Type> {
-         if (auto st = llvm::dyn_cast<graphalg::SemiringTypeInterface>(type)) {
-            return convertSemiringType(st);
+         if (auto st = llvm::dyn_cast<SemiringTypeInterface>(type)) {
+            if (Type converted = convertSemiringType(st)) {
+               return converted;
+            }
          }
          return std::nullopt;
       });
@@ -144,7 +148,12 @@ class GraphAlgTypeConverter : public TypeConverter {
          return FunctionType::get(type.getContext(), inputs, results);
       });
 
-      addConversion([](Type type) { return type; });
+      addSourceMaterialization([&](OpBuilder& builder, Type resultType, ValueRange inputs, Location loc) -> Value {
+         return builder.create<UnrealizedConversionCastOp>(loc, resultType, inputs).getResult(0);
+      });
+      addTargetMaterialization([&](OpBuilder& builder, Type resultType, ValueRange inputs, Location loc) -> Value {
+         return builder.create<UnrealizedConversionCastOp>(loc, resultType, inputs).getResult(0);
+      });
    }
 
    static Type convertSemiringType(graphalg::SemiringTypeInterface t) {
@@ -216,13 +225,19 @@ class StatefulConversion : public OpConversionPattern<T> {
       : OpConversionPattern<T>(tc, ctx), state(state) {}
 };
 
-class FuncOpConversion : public OpConversionPattern<func::FuncOp> {
+class FuncOpConversion : public StatefulConversion<func::FuncOp> {
    public:
-   using OpConversionPattern::OpConversionPattern;
+   using StatefulConversion::StatefulConversion;
    LogicalResult matchAndRewrite(func::FuncOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto funcType = op.getFunctionType();
       auto newFuncType = llvm::cast_if_present<FunctionType>(typeConverter->convertType(funcType));
       if (!newFuncType) return failure();
+
+      if (!op.getBody().empty()) {
+         for (BlockArgument arg : op.getBody().front().getArguments()) {
+            state.get(arg, rewriter.getContext());
+         }
+      }
 
       rewriter.modifyOpInPlace(op, [&] { op.setFunctionType(newFuncType); });
 
@@ -852,7 +867,7 @@ void GraphAlgToRelAlgPass::runOnOperation() {
    target.addLegalDialect<scf::SCFDialect>();
    target.addLegalDialect<util::UtilDialect>();
 
-   target.addIllegalDialect<graphalg::GraphAlgDialect>();
+   target.addIllegalDialect<GraphAlgDialect>();
 
    target.addDynamicallyLegalOp<func::FuncOp>([&](func::FuncOp op) {
       return typeConverter.isSignatureLegal(op.getFunctionType());
@@ -863,11 +878,10 @@ void GraphAlgToRelAlgPass::runOnOperation() {
 
    RewritePatternSet patterns(context);
 
-   patterns.add<
-      FuncOpConversion,
-      ReturnOpConversion>(typeConverter, context);
+   patterns.add<ReturnOpConversion>(typeConverter, context);
 
    patterns.add<
+      FuncOpConversion,
       ConstantMatrixConversion,
       ApplyOpConversion,
       DeferredReduceConversion,
