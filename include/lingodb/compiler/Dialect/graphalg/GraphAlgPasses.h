@@ -55,7 +55,6 @@ mlir::FailureOr<mlir::Value> createScalarOpFor(mlir::Location loc, BinaryOp op,
 #define GEN_PASS_REGISTRATION
 #include "lingodb/compiler/Dialect/graphalg/GraphAlgPasses.h.inc"
 
-
 void buildGraphAlgToCorePipeline(mlir::OpPassManager& pm);
 void createGraphAlgToGraphAlgCorePipeline();
 void registerGraphAlgToGraphAlgCoreConversionPasses();

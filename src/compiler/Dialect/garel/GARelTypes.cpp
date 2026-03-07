@@ -13,15 +13,15 @@
 namespace garel {
 
 bool isColumnType(mlir::Type t) {
-  // Allow i1, i64, f64, index
-  return t.isSignlessInteger(1) || t.isSignlessInteger(64) || t.isF64() ||
-         t.isIndex();
+   // Allow i1, i64, f64, index
+   return t.isSignlessInteger(1) || t.isSignlessInteger(64) || t.isF64() ||
+      t.isIndex();
 }
 
 // Need to define this here to avoid depending on IPRTypes in
 // IPRDialect and creating a cycle.
 void GARelDialect::registerTypes() {
-  addTypes<
+   addTypes<
 #define GET_TYPEDEF_LIST
 #include "lingodb/compiler/Dialect/garel/GARelOpsTypes.cpp.inc"
       >();

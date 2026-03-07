@@ -6,12 +6,12 @@
 namespace garel {
 
 void GARelDialect::initialize() {
-  addOperations<
+   addOperations<
 #define GET_OP_LIST
 #include "lingodb/compiler/Dialect/garel/GARelOps.cpp.inc"
       >();
-  registerAttributes();
-  registerTypes();
+   registerAttributes();
+   registerTypes();
 }
 
 } // namespace garel
