@@ -124,13 +124,13 @@ struct MatrixMeta {
 class GraphAlgTypeConverter : public TypeConverter {
    public:
    GraphAlgTypeConverter(MLIRContext* ctx) {
-      addConversion([&](Type type) { return type; });
+      addConversion([](Type type) { return type; });
 
-      addConversion([&](MatrixType type) -> Type {
-         return tuples::TupleStreamType::get(ctx);
+      addConversion([](MatrixType type) -> Type {
+         return tuples::TupleStreamType::get(type.getContext());
       });
 
-      addConversion([&](Type type) -> std::optional<Type> {
+      addConversion([](Type type) -> std::optional<Type> {
          if (auto st = llvm::dyn_cast<SemiringTypeInterface>(type)) {
             if (Type converted = convertSemiringType(st)) {
                return converted;
@@ -139,7 +139,7 @@ class GraphAlgTypeConverter : public TypeConverter {
          return std::nullopt;
       });
 
-      addConversion([&](FunctionType type) -> Type {
+      addConversion([this](FunctionType type) -> Type {
          SmallVector<Type> inputs, results;
          if (failed(convertTypes(type.getInputs(), inputs)) ||
              failed(convertTypes(type.getResults(), results))) {
@@ -148,10 +148,10 @@ class GraphAlgTypeConverter : public TypeConverter {
          return FunctionType::get(type.getContext(), inputs, results);
       });
 
-      addSourceMaterialization([&](OpBuilder& builder, Type resultType, ValueRange inputs, Location loc) -> Value {
+      addSourceMaterialization([](OpBuilder& builder, Type resultType, ValueRange inputs, Location loc) -> Value {
          return builder.create<UnrealizedConversionCastOp>(loc, resultType, inputs).getResult(0);
       });
-      addTargetMaterialization([&](OpBuilder& builder, Type resultType, ValueRange inputs, Location loc) -> Value {
+      addTargetMaterialization([](OpBuilder& builder, Type resultType, ValueRange inputs, Location loc) -> Value {
          return builder.create<UnrealizedConversionCastOp>(loc, resultType, inputs).getResult(0);
       });
    }
@@ -495,21 +495,27 @@ class ForDimOpConversion : public ConversionPattern {
          MatrixMeta blockArgMeta = state.get(oldBlockArg, ctx);
          blockArgMetas.push_back(blockArgMeta);
 
-         SmallVector<Attribute> renamePairs;
+         SmallVector<Attribute> renameDefs;
          if (blockArgMeta.hasRow() && initMeta.hasRow()) {
-            renamePairs.push_back(ArrayAttr::get(ctx, {blockArgMeta.rowDef, initMeta.row}));
+            renameDefs.push_back(tuples::ColumnDefAttr::get(
+               ctx, blockArgMeta.rowDef.getName(), blockArgMeta.rowDef.getColumnPtr(),
+               ArrayAttr::get(ctx, {initMeta.row})));
          }
          if (blockArgMeta.hasCol() && initMeta.hasCol()) {
-            renamePairs.push_back(ArrayAttr::get(ctx, {blockArgMeta.colDef, initMeta.col}));
+            renameDefs.push_back(tuples::ColumnDefAttr::get(
+               ctx, blockArgMeta.colDef.getName(), blockArgMeta.colDef.getColumnPtr(),
+               ArrayAttr::get(ctx, {initMeta.col})));
          }
          if (blockArgMeta.val && initMeta.val) {
-            renamePairs.push_back(ArrayAttr::get(ctx, {blockArgMeta.valDef, initMeta.val}));
+            renameDefs.push_back(tuples::ColumnDefAttr::get(
+               ctx, blockArgMeta.valDef.getName(), blockArgMeta.valDef.getColumnPtr(),
+               ArrayAttr::get(ctx, {initMeta.val})));
          }
 
-         if (!renamePairs.empty()) {
+         if (!renameDefs.empty()) {
             auto renameOp = rewriter.create<relalg::RenamingOp>(
                loc, tuples::TupleStreamType::get(ctx), newInit,
-               ArrayAttr::get(ctx, renamePairs));
+               ArrayAttr::get(ctx, renameDefs));
             renamedInitArgs.push_back(renameOp.getResult());
          } else {
             renamedInitArgs.push_back(newInit);
@@ -569,21 +575,27 @@ class YieldOpConversion : public ConversionPattern {
          Value newBlockArg = op->getBlock()->getArgument(i + 1);
          MatrixMeta blockArgMeta = state.get(newBlockArg, ctx);
 
-         SmallVector<Attribute> renamePairs;
+         SmallVector<Attribute> renameDefs;
          if (blockArgMeta.hasRow() && yieldMeta.hasRow()) {
-            renamePairs.push_back(ArrayAttr::get(ctx, {blockArgMeta.rowDef, yieldMeta.row}));
+            renameDefs.push_back(tuples::ColumnDefAttr::get(
+               ctx, blockArgMeta.rowDef.getName(), blockArgMeta.rowDef.getColumnPtr(),
+               ArrayAttr::get(ctx, {yieldMeta.row})));
          }
          if (blockArgMeta.hasCol() && yieldMeta.hasCol()) {
-            renamePairs.push_back(ArrayAttr::get(ctx, {blockArgMeta.colDef, yieldMeta.col}));
+            renameDefs.push_back(tuples::ColumnDefAttr::get(
+               ctx, blockArgMeta.colDef.getName(), blockArgMeta.colDef.getColumnPtr(),
+               ArrayAttr::get(ctx, {yieldMeta.col})));
          }
          if (blockArgMeta.val && yieldMeta.val) {
-            renamePairs.push_back(ArrayAttr::get(ctx, {blockArgMeta.valDef, yieldMeta.val}));
+            renameDefs.push_back(tuples::ColumnDefAttr::get(
+               ctx, blockArgMeta.valDef.getName(), blockArgMeta.valDef.getColumnPtr(),
+               ArrayAttr::get(ctx, {yieldMeta.val})));
          }
 
-         if (!renamePairs.empty()) {
+         if (!renameDefs.empty()) {
             auto renameOp = rewriter.create<relalg::RenamingOp>(
                loc, tuples::TupleStreamType::get(ctx), newYield,
-               ArrayAttr::get(ctx, renamePairs));
+               ArrayAttr::get(ctx, renameDefs));
             renamedYields.push_back(renameOp.getResult());
          } else {
             renamedYields.push_back(newYield);
