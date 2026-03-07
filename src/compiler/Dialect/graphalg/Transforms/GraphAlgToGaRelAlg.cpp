@@ -49,18 +49,18 @@ namespace {
  * dialect.
  */
 class GraphAlgToRel : public impl::GraphAlgToRelBase<GraphAlgToRel> {
-public:
+   public:
    using impl::GraphAlgToRelBase<GraphAlgToRel>::GraphAlgToRelBase;
 
-void runOnOperation() final;
+   void runOnOperation() final;
 };
 
 /** Converts semiring types into their relational equivalents. */
 class SemiringTypeConverter : public mlir::TypeConverter {
-private:
+   private:
    static mlir::Type convertSemiringType(graphalg::SemiringTypeInterface type);
 
-public:
+   public:
    SemiringTypeConverter();
 };
 
@@ -85,7 +85,7 @@ class MatrixTypeConverter : public mlir::TypeConverter {
  * the rows, columns or values of the matrix.
  */
 class MatrixAdaptor {
-private:
+   private:
    mlir::TypedValue<graphalg::MatrixType> _matrix;
 
    RelationType _relType;

@@ -50,7 +50,6 @@
 #include "lingodb/compiler/Dialect/util/UtilOps.h"
 #include "lingodb/runtime/ExternalDataSourceProperty.h"
 
-
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Async/IR/Async.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
