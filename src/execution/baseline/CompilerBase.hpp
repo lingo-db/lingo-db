@@ -1033,7 +1033,9 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
          }
          assert(src.getType().getIntOrFloatBitWidth() <= 64);
          if (src.getType().getIntOrFloatBitWidth() != 64)
-            src_vpr = std::move(src_vpr).into_extended(false, src.getType().getIntOrFloatBitWidth(), 64);
+            // We sign-extend here so LLVM-Backend and TPDE-Backend both sign-extend
+            // e.g. a bool, with value true, is then extended to 0xff...ff instead of 0x00..01
+            src_vpr = std::move(src_vpr).into_extended(true, src.getType().getIntOrFloatBitWidth(), 64);
          res_ref.part(0).set_value(std::move(src_vpr));
          return true;
       }
