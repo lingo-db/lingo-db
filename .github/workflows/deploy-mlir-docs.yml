@@ -20,6 +20,8 @@ jobs:
           cd build/lingodb-debug/
           cmake --build . --target mlir-doc
           cd ../..
+        env:
+          ENABLE_MIMALLOC: "OFF"
 
       - name: Fix generated documentation
         run: |
