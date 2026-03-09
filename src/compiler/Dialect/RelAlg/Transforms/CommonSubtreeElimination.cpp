@@ -15,7 +15,7 @@ namespace {
 using namespace lingodb::compiler::dialect;
 
 class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeElimination, mlir::OperationPass<mlir::func::FuncOp>> {
-   static constexpr llvm::StringRef RELALG_DIALECT_NAMESPACE_STRING = "relalg";
+   static constexpr llvm::StringRef relalgDialectNamespaceString = "relalg";
 
    // Helper to manage column equivalence mapping
    struct ColumnMappingContext {
@@ -280,7 +280,7 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
                      llvm::DenseMap<llvm::hash_code, llvm::SmallVector<mlir::Operation*, 2>>& candidates,
                      llvm::function_ref<void(mlir::Region&)> traverseRegion) {
       for (auto& op : llvm::make_early_inc_range(*block)) {
-         if (op.getDialect()->getNamespace() != RELALG_DIALECT_NAMESPACE_STRING) continue;
+         if (op.getDialect()->getNamespace() != relalgDialectNamespaceString) continue;
 
          bool merged = false;
          auto hash = computeHash(&op);
@@ -639,7 +639,7 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
 
          if (op->getNumOperands() > 0) {
             if (auto* defOp = op->getOperand(0).getDefiningOp()) {
-               if (defOp->getDialect()->getNamespace() == RELALG_DIALECT_NAMESPACE_STRING) {
+               if (defOp->getDialect()->getNamespace() == relalgDialectNamespaceString) {
                   llvm::DenseSet<const tuples::Column*> childCols;
                   getAvailableColumns(defOp, childCols, visited);
                   for (auto* c : childCols) {
@@ -664,7 +664,7 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
                     relalg::IntersectOp, relalg::ExceptOp, relalg::GroupJoinOp>(op)) {
          if (op->getNumOperands() > 0) {
             if (auto* defOp = op->getOperand(0).getDefiningOp()) {
-               if (defOp->getDialect()->getNamespace() == RELALG_DIALECT_NAMESPACE_STRING)
+               if (defOp->getDialect()->getNamespace() == relalgDialectNamespaceString)
                   getAvailableColumns(defOp, out, visited);
             }
          }
@@ -673,7 +673,7 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
 
       for (auto operand : op->getOperands()) {
          if (auto* defOp = operand.getDefiningOp()) {
-            if (defOp->getDialect()->getNamespace() == RELALG_DIALECT_NAMESPACE_STRING) {
+            if (defOp->getDialect()->getNamespace() == relalgDialectNamespaceString) {
                getAvailableColumns(defOp, out, visited);
             }
          }
@@ -687,7 +687,7 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
 
       for (auto operand : op->getOperands()) {
          if (auto* definingOp = operand.getDefiningOp()) {
-            if (definingOp->getDialect()->getNamespace() == RELALG_DIALECT_NAMESPACE_STRING) {
+            if (definingOp->getDialect()->getNamespace() == relalgDialectNamespaceString) {
                collectRecursiveDefs(definingOp, defs, visited);
             }
          }
@@ -701,7 +701,7 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
       for (unsigned i = 0; i < root->getNumOperands(); ++i) {
          auto opd = root->getOperand(i);
          if (auto* defOp = opd.getDefiningOp()) {
-            if (defOp->getDialect()->getNamespace() == RELALG_DIALECT_NAMESPACE_STRING) {
+            if (defOp->getDialect()->getNamespace() == relalgDialectNamespaceString) {
                auto res = findDefiningOp(defOp, col);
                if (res.first) {
                   res.second.push_back(i);
