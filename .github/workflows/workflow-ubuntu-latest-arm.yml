@@ -18,7 +18,7 @@ jobs:
       matrix:
         build_type: [ debug, asan, release ]
     runs-on: ubuntu-24.04-arm
-    container: ghcr.io/lingo-db/lingodb-dev:9237b839644c4206405d37635ed3403f66219aa7
+    container: ghcr.io/lingo-db/lingodb-dev:8a696e7a8a48fd5af5173299d52463bf24d6f8b5
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -52,7 +52,7 @@ jobs:
       matrix:
         build_type: [ debug, asan ]
     runs-on: ubuntu-24.04-arm
-    container: ghcr.io/lingo-db/lingodb-dev:9237b839644c4206405d37635ed3403f66219aa7
+    container: ghcr.io/lingo-db/lingodb-dev:8a696e7a8a48fd5af5173299d52463bf24d6f8b5
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
@@ -102,7 +102,7 @@ jobs:
         build_type: [ release, asan ]
     needs: build
     runs-on: ubuntu-24.04-arm
-    container: ghcr.io/lingo-db/lingodb-dev:9237b839644c4206405d37635ed3403f66219aa7
+    container: ghcr.io/lingo-db/lingodb-dev:8a696e7a8a48fd5af5173299d52463bf24d6f8b5
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
@@ -134,7 +134,7 @@ jobs:
         build_type: [ release, asan ]
     needs: build
     runs-on: ubuntu-24.04-arm
-    container: ghcr.io/lingo-db/lingodb-dev:9237b839644c4206405d37635ed3403f66219aa7
+    container: ghcr.io/lingo-db/lingodb-dev:8a696e7a8a48fd5af5173299d52463bf24d6f8b5
     steps:
       - name: Freeing up space
         run: |
@@ -261,7 +261,7 @@ jobs:
       matrix:
         build_type: [ debug ]
     runs-on: ubuntu-24.04-arm
-    container: ghcr.io/lingo-db/lingodb-dev:9237b839644c4206405d37635ed3403f66219aa7
+    container: ghcr.io/lingo-db/lingodb-dev:8a696e7a8a48fd5af5173299d52463bf24d6f8b5
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
