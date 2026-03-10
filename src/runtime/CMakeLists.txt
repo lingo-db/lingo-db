@@ -46,7 +46,14 @@ else ()
 endif (ENABLE_GPU_BACKEND)
 
 target_compile_definitions(runtime PUBLIC ${COMPILE_DEFS})
-target_link_libraries(runtime PRIVATE Arrow::arrow_static)
+
+#todo: should not be necessary, but it is for Arrow 23
+if("abslAlt" IN_LIST ARROW_SYSTEM_DEPENDENCIES)
+    target_link_libraries(runtime PRIVATE Arrow::arrow_static absl::strings absl::time absl::bad_optional_access)
+else()
+    target_link_libraries(runtime PRIVATE Arrow::arrow_static)
+endif()
+
 
 add_subdirectory(GPU)
 target_link_libraries(runtime PUBLIC GPU-rt scheduler)

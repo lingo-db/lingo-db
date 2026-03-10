@@ -18,7 +18,7 @@ jobs:
       matrix:
         build_type: [ debug, asan, release ]
     runs-on: ubuntu-24.04-arm
-    container: ghcr.io/lingo-db/lingodb-dev:9237b839644c4206405d37635ed3403f66219aa7
+    container: ghcr.io/lingo-db/lingodb-dev:e3e4ce05ae1c45664a8e9d38d1f89d54103a7951
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -52,7 +52,7 @@ jobs:
       matrix:
         build_type: [ debug, asan ]
     runs-on: ubuntu-24.04-arm
-    container: ghcr.io/lingo-db/lingodb-dev:9237b839644c4206405d37635ed3403f66219aa7
+    container: ghcr.io/lingo-db/lingodb-dev:e3e4ce05ae1c45664a8e9d38d1f89d54103a7951
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
@@ -102,7 +102,7 @@ jobs:
         build_type: [ release, asan ]
     needs: build
     runs-on: ubuntu-24.04-arm
-    container: ghcr.io/lingo-db/lingodb-dev:9237b839644c4206405d37635ed3403f66219aa7
+    container: ghcr.io/lingo-db/lingodb-dev:e3e4ce05ae1c45664a8e9d38d1f89d54103a7951
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
@@ -134,7 +134,7 @@ jobs:
         build_type: [ release, asan ]
     needs: build
     runs-on: ubuntu-24.04-arm
-    container: ghcr.io/lingo-db/lingodb-dev:9237b839644c4206405d37635ed3403f66219aa7
+    container: ghcr.io/lingo-db/lingodb-dev:e3e4ce05ae1c45664a8e9d38d1f89d54103a7951
     steps:
       - name: Freeing up space
         run: |
@@ -221,7 +221,7 @@ jobs:
 
   build_lingodb_python:
     runs-on: ubuntu-24.04-arm
-    container: ghcr.io/lingo-db/lingodb-py-dev@sha256:e74271ce2cb1ccf9f4421f7269d96bfef1a13f851771e8c5d5fceb805ab5d5de
+    container: ghcr.io/lingo-db/lingodb-py-dev:8a696e7a8a48fd5af5173299d52463bf24d6f8b5
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -261,7 +261,7 @@ jobs:
       matrix:
         build_type: [ debug ]
     runs-on: ubuntu-24.04-arm
-    container: ghcr.io/lingo-db/lingodb-dev:9237b839644c4206405d37635ed3403f66219aa7
+    container: ghcr.io/lingo-db/lingodb-dev:e3e4ce05ae1c45664a8e9d38d1f89d54103a7951
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
