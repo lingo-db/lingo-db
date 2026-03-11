@@ -2,7 +2,7 @@
 #include "lingodb/utility/Tracer.h"
 
 #ifdef TRACER
-static lingodb::utility::Tracer::StringMetaDataEvent executionStepEvent("Execution", "Step", "location");
+static lingodb::utility::Tracer::StringMetaDataEvent executionStepEvent("Execution", "Step", "location", false);
 uint8_t* lingodb::runtime::ExecutionStepTracing::start(lingodb::runtime::VarLen32 step) {
    return reinterpret_cast<uint8_t*>(new utility::Tracer::MetaDataTrace<utility::Tracer::StringMetaDataEvent, std::string>(executionStepEvent, step.str()));
 }

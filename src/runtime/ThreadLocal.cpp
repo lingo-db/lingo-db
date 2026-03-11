@@ -3,11 +3,9 @@
 
 #include <lingodb/runtime/ExecutionContext.h>
 namespace {
-static lingodb::utility::Tracer::Event getLocalEvent("ThreadLocal", "getLocal");
 static lingodb::utility::Tracer::Event mergeEvent("ThreadLocal", ",merge");
 } // end namespace
 uint8_t* lingodb::runtime::ThreadLocal::getLocal() {
-   utility::Tracer::Trace trace(getLocalEvent);
    assert(lingodb::scheduler::currentWorkerId() < lingodb::scheduler::getNumWorkers());
    if (!values[lingodb::scheduler::currentWorkerId()]) {
       values[lingodb::scheduler::currentWorkerId()] = initFn(arg);

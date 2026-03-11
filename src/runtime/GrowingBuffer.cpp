@@ -6,17 +6,14 @@
 #include <cstring>
 #include <iostream>
 namespace {
-static lingodb::utility::Tracer::Event createEvent("GrowingBuffer", "create");
 static lingodb::utility::Tracer::Event mergeEvent("GrowingBuffer", "merge");
 static lingodb::utility::Tracer::Event sortEvent("GrowingBuffer", "sort");
 
 class DefaultAllocator : public lingodb::runtime::GrowingBufferAllocator {
    public:
    lingodb::runtime::GrowingBuffer* create(lingodb::runtime::ExecutionContext* executionContext, size_t sizeOfType, size_t initialCapacity) override {
-      lingodb::utility::Tracer::Trace trace(createEvent);
       auto* res = new lingodb::runtime::GrowingBuffer(initialCapacity, sizeOfType);
       executionContext->registerState({res, [](void* ptr) { delete reinterpret_cast<lingodb::runtime::GrowingBuffer*>(ptr); }});
-      trace.stop();
       return res;
    }
 };
