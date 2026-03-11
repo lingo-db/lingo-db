@@ -23,7 +23,7 @@ for line in sys.stdin:
 
     # Match the assembly line with sample data
     assembly_match = re.match(
-        r"^\s*(\d+)\s*:\s*([0-9a-f]+):\s+([a-z0-9\s,%\(\)\$]+)(?:\s+//\s+([\w:\.-]+))?$",
+        r"^\s*(\d+)\s*:\s*([0-9a-f]+):\s+([a-z0-9\s,%\(\)\$\<\>\+\*\-_]+)(?:\s*//\s+([\w:\.-]+))?$",
         line
     )
     if assembly_match and current_function:
