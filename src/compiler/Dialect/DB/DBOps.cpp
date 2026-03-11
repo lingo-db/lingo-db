@@ -311,6 +311,13 @@ bool db::CastOp::supportsInvalidValues() {
    }
    return true;
 }
+bool db::BetweenOp::supportsInvalidValues() {
+   auto type = getBaseType(getVal().getType());
+   if (mlir::isa<db::StringType>(type)) {
+      return false;
+   }
+   return true;
+}
 
 LogicalResult db::OrOp::canonicalize(db::OrOp orOp, mlir::PatternRewriter& rewriter) {
    llvm::SmallDenseMap<mlir::Value, size_t> usage;

@@ -904,7 +904,11 @@ class CastOpLowering : public OpConversionPattern<db::CastOp> {
             if (sourceIntWidth < decimalWidth) {
                value = rewriter.create<arith::ExtSIOp>(loc, convertedTargetType, value);
             }
-            rewriter.replaceOpWithNewOp<arith::MulIOp>(op, convertedTargetType, value, getDecimalScaleMultiplierConstant(rewriter, decimalTargetType.getS(), convertedTargetType, op->getLoc()));
+            if (decimalTargetType.getS() == 0) {
+               rewriter.replaceOp(op, value);
+            } else {
+               rewriter.replaceOpWithNewOp<arith::MulIOp>(op, convertedTargetType, value, getDecimalScaleMultiplierConstant(rewriter, decimalTargetType.getS(), convertedTargetType, op->getLoc()));
+            }
             return success();
          } else if (auto targetIntWidth = getIntegerWidth(scalarTargetType, false)) {
             if (targetIntWidth < sourceIntWidth) {
@@ -932,13 +936,18 @@ class CastOpLowering : public OpConversionPattern<db::CastOp> {
             if (convertedSourceType.getIntOrFloatBitWidth() < convertedTargetType.getIntOrFloatBitWidth()) {
                value = rewriter.create<mlir::arith::ExtSIOp>(loc, convertedTargetType, value);
             }
-            auto [low, high] = lingodb::compiler::support::getDecimalScaleMultiplier(std::max(sourceScale, targetScale) - std::min(sourceScale, targetScale));
-            std::vector<uint64_t> parts = {low, high};
-            auto multiplier = rewriter.create<arith::ConstantOp>(loc, convertedTargetType, rewriter.getIntegerAttr(convertedTargetType, APInt(decimalWidth, parts)));
-            if (sourceScale < targetScale) {
-               rewriter.replaceOpWithNewOp<arith::MulIOp>(op, convertedTargetType, value, multiplier);
+            auto scaleDiff = std::max(sourceScale, targetScale) - std::min(sourceScale, targetScale);
+            if (scaleDiff != 0) {
+               auto [low, high] = lingodb::compiler::support::getDecimalScaleMultiplier(scaleDiff);
+               std::vector<uint64_t> parts = {low, high};
+               auto multiplier = rewriter.create<arith::ConstantOp>(loc, convertedTargetType, rewriter.getIntegerAttr(convertedTargetType, APInt(decimalWidth, parts)));
+               if (sourceScale < targetScale) {
+                  rewriter.replaceOpWithNewOp<arith::MulIOp>(op, convertedTargetType, value, multiplier);
+               } else {
+                  rewriter.replaceOpWithNewOp<arith::DivSIOp>(op, convertedTargetType, value, multiplier);
+               }
             } else {
-               rewriter.replaceOpWithNewOp<arith::DivSIOp>(op, convertedTargetType, value, multiplier);
+               rewriter.replaceOp(op, value);
             }
             return success();
          } else if (mlir::isa<FloatType>(scalarTargetType)) {

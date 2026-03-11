@@ -461,7 +461,7 @@ def DB_CmpOp : DB_LogicalOp<"compare",
         }];
 }
 
-def DB_BetweenOp : DB_LogicalOp<"between",[DB_NeedsNullWrap]> {
+def DB_BetweenOp : DB_LogicalOp<"between",[DB_NeedsNullWrap,DB_MaySupportInvalidValues]> {
     let summary = "whether value is between `lower` and `upper`";
     let description = [{
         Determine whether a value is in a given range. This is preferred over (and also internally derived from) two comparisons to simplify optimizations depending on information about a value range.
