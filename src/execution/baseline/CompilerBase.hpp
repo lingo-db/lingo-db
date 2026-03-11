@@ -1078,6 +1078,30 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
       return false;
    }
 
+   bool compile_arith_bitcast_op(const mlir::arith::BitcastOp op) {
+      auto in = op->getOperand(0);
+      auto out = op->getResult(0);
+      auto in_vr = this->val_ref(in);
+      auto res_vr = this->result_ref(out);
+      if (in.getType().isF32() && out.getType().isInteger(32)) {
+         derived()->encode_arith_bitcast_f32_i32(in_vr.part(0), res_vr.part(0));
+         return true;
+      }
+      if (in.getType().isInteger(32) && out.getType().isF32()) {
+         derived()->encode_arith_bitcast_i32_f32(in_vr.part(0), res_vr.part(0));
+         return true;
+      }
+      if (in.getType().isF64() && out.getType().isInteger(64)) {
+         derived()->encode_arith_bitcast_f64_i64(in_vr.part(0), res_vr.part(0));
+         return true;
+      }
+      if (in.getType().isInteger(64) && out.getType().isF64()) {
+         derived()->encode_arith_bitcast_i64_f64(in_vr.part(0), res_vr.part(0));
+         return true;
+      }
+      return false;
+   }
+
    bool compile_util_buffer_get_len_op(dialect::util::BufferGetLen op) {
       auto elem_size = get_size(op.getBuffer().getType().getT());
       if (!elem_size) {
@@ -1724,6 +1748,7 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
          .template Case<mlir::arith::ExtFOp>([&](auto op) { return compile_arith_extf_op(op); })
          .template Case<mlir::arith::SelectOp>([&](auto op) { return compile_arith_select_op(op); })
          .template Case<mlir::arith::IndexCastOp>([&](auto op) { return compile_arith_index_cast_op(op); })
+         .template Case<mlir::arith::BitcastOp>([&](auto op) { return compile_arith_bitcast_op(op); })
          .template Case<dialect::util::CreateConstVarLen>([&](auto op) {
             return compile_util_const_varlen_op(op);
          })
