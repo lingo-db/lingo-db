@@ -479,6 +479,7 @@ def DB_OneOfOp : DB_LogicalOp<"oneof",[DB_NeedsNullWrap]> {
 
     let arguments = (ins NullableDBType:$val,Variadic<NullableDBType>:$vals );
     let assemblyFormat = "$val `:` type ($val) `?` $vals `:` type ($vals) attr-dict";
+    let hasCanonicalizeMethod = 1;
 }
 
 def AndOp : DB_LogicalOp<"and"> {
