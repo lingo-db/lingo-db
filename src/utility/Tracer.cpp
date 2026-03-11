@@ -34,6 +34,7 @@ void Tracer::Event::writeOut(utility::Tracer::TraceRecord* record, nlohmann::jso
    j["name"] = name;
    j["category"] = category;
    j["start"] = record->traceBegin;
+   j["runtime"] = runtime;
    j["duration"] = record->traceEnd - record->traceBegin;
 }
 void Tracer::StringMetaDataEvent::writeOut(utility::Tracer::TraceRecord* record, nlohmann::json& j) {
