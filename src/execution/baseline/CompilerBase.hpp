@@ -41,6 +41,8 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
          udivti3,
          modti3,
          umodti3,
+         fmodf,
+         fmod,
          MAX, // sentinel counter-element
       };
 
@@ -65,6 +67,12 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
                   break;
                case Type::umodti3:
                   name = "__umodti3";
+                  break;
+               case Type::fmodf:
+                  name = "fmodf";
+                  break;
+               case Type::fmod:
+                  name = "fmod";
                   break;
                default: __builtin_unreachable();
             }
@@ -1501,6 +1509,28 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
       }
       return ret;
    }
+   bool compile_arith_rem_f_op(mlir::arith::RemFOp op) {
+      mlir::Value lhs = op.getLhs();
+      mlir::Value rhs = op.getRhs();
+      mlir::Value res = op.getResult();
+      assert(lhs.getType() == rhs.getType() && "LHS and RHS must have the same type for float remainder");
+      const mlir::Type rem_type = lhs.getType();
+      assert((rem_type.isF32() || rem_type.isF64()) && "Unsupported float type for remainder");
+
+      if (rem_type.isF32()) {
+         auto res_ref = this->result_ref(res);
+         auto symbol = builtins.get_symbol(derived(), BuiltinFuncStorage::Type::fmodf);
+         std::array args{lhs, rhs};
+         derived()->create_helper_call(args, &res_ref, symbol);
+         return true;
+      } else {
+         auto res_ref = this->result_ref(res);
+         auto symbol = builtins.get_symbol(derived(), BuiltinFuncStorage::Type::fmod);
+         std::array args{lhs, rhs};
+         derived()->create_helper_call(args, &res_ref, symbol);
+         return true;
+      }
+   }
 
    bool compile_arith_fptosi_op(const auto op, const bool sign) {
       mlir::Value src = op->getOperand(0);
@@ -1657,6 +1687,7 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
             return compile_util_is_bit_set_const_op(op);
          })
          .template Case<mlir::arith::NegFOp>([&](auto op) { return compile_arith_negf_op(op); })
+         .template Case<mlir::arith::RemFOp>([&](auto op) { return compile_arith_rem_f_op(op); })
          .template Case<mlir::arith::CmpIOp>(
             [&](auto op) { return derived()->compile_arith_cmp_int_op(op); })
          .template Case<mlir::arith::CmpFOp>([&](auto op) { return compile_arith_cmp_float_op(op); })
