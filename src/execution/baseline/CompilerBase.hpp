@@ -305,6 +305,8 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
             return ValuePartRef(this, 0, ret_type.getIntOrFloatBitWidth() / 8, Config::FP_BANK);
          } else if (mlir::isa<dialect::util::VarLen32Type, dialect::util::BufferType>(ret_type)) {
             return ValuePartRef(this, 0, 8, Config::GP_BANK);
+         } else if (mlir::isa<dialect::util::RefType>(ret_type)) {
+            return ValuePartRef(this, 0, 8, Config::GP_BANK);
          } else {
             assert(0);
             return ValuePartRef{this};
