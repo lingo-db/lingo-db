@@ -143,7 +143,6 @@ add_subdirectory(src/compiler/Dialect/TupleStream)
 add_subdirectory(src/compiler/Dialect/SubOperator)
 
 add_subdirectory(src/compiler/Dialect/graphalg)
-add_subdirectory(src/compiler/Dialect/garel)
 
 add_subdirectory(src/compiler/Dialect/DB)
 add_subdirectory(src/compiler/Dialect/Arrow)
