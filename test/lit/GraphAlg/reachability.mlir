@@ -9,10 +9,10 @@ module {
 
       // -----------------------------------------------------------------
       // 1. Setup the Graph Relation
-      // Path: 1->2->3->4->5 with self-edges
+      // Path: 1->2->3->4->5 and path 6->7 (with self-edges)
       // -----------------------------------------------------------------
-      %edges_rel = relalg.const_relation columns:[@edges::@src({type=i64}), @edges::@dst({type=i64}), @edges::@val({type=i1})] values: [[1: i64, 2: i64, true], [2: i64, 3: i64, true],[3: i64, 4: i64, true],[4: i64, 5: i64, true],
-          [1: i64, 1: i64, true],[2: i64, 2: i64, true],[3: i64, 3: i64, true],[4: i64, 4: i64, true],[5: i64, 5: i64, true]
+      %edges_rel = relalg.const_relation columns:[@edges::@src({type=i64}), @edges::@dst({type=i64}), @edges::@val({type=i1})] values: [[1: i64, 2: i64, true], [2: i64, 3: i64, true],[3: i64, 4: i64, true],[4: i64, 5: i64, true], [6: i64, 7: i64, true],
+          [1: i64, 1: i64, true],[2: i64, 2: i64, true],[3: i64, 3: i64, true],[4: i64, 4: i64, true],[5: i64, 5: i64, true],[6: i64, 6: i64, true],[7: i64, 7: i64, true]
       ]
       %graph = builtin.unrealized_conversion_cast %edges_rel : !tuples.tuplestream to !graphalg.mat<#dim x #dim x i1> { cols =[@edges::@dst, @edges::@src, @edges::@val] }
 
@@ -47,11 +47,19 @@ module {
     subop.set_result 0 %result : !subop.local_table<[dst: i64],["dst"]>
 
     // Check that all 5 nodes were successfully reached!
-    // CHECK-DAG: 1
-    // CHECK-DAG: 2
-    // CHECK-DAG: 3
-    // CHECK-DAG: 4
-    // CHECK-DAG: 5
+    // CHECK-LABEL: |                           dst  |
+    // CHECK-NEXT: ----------------------------------
+
+    // 2. Assert 1-5 exist (order-independent)
+    // CHECK-DAG: |                             1  |
+    // CHECK-DAG: |                             2  |
+    // CHECK-DAG: |                             3  |
+    // CHECK-DAG: |                             4  |
+    // CHECK-DAG: |                             5  |
+
+    // CHECK-NOT: |                             6  |
+    // CHECK-NOT: |                             7  |
+    // CHECK-NOT: |                             8  |
     return
   }
 }
