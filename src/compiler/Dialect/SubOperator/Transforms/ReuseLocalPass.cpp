@@ -81,7 +81,7 @@ class AvoidUnnecessaryMaterialization : public mlir::RewritePattern {
                   auto currentMember = curr.first;
                   auto otherColumnDef = colManager.createDef(&materializeOp.getMapping().getColumnRef(currentMember).getColumn());
                   auto otherMember = scanOp2.getMapping().getMember(otherColumnDef);
-                  newMapping.push_back({otherMember, otherColumnDef});
+                  newMapping.push_back({otherMember, curr.second});
                }
                rewriter.modifyOpInPlace(op, [&] {
                   scanOp.setOperand(scanOp2.getState());
