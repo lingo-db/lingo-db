@@ -56,17 +56,17 @@ else ()
 endif (ENABLE_GPU_BACKEND)
 list(APPEND COMPILE_DEFS "SOURCE_DIR=\"${CMAKE_SOURCE_DIR}\"")
 target_compile_definitions(runtime PUBLIC ${COMPILE_DEFS})
+set(RUNTIME_LINK_LIBARIES Arrow::arrow_static)
 
 #todo: should not be necessary, but it is for Arrow 23
 if("abslAlt" IN_LIST ARROW_SYSTEM_DEPENDENCIES)
-    target_link_libraries(runtime PRIVATE Arrow::arrow_static absl::strings absl::time absl::bad_optional_access)
-else()
-    target_link_libraries(runtime PRIVATE Arrow::arrow_static)
+    list(APPEND RUNTIME_LINK_LIBARIES absl::strings absl::time absl::bad_optional_access)
 endif()
 
 
 add_subdirectory(GPU)
-target_link_libraries(runtime PUBLIC GPU-rt scheduler)
+list(APPEND RUNTIME_LINK_LIBARIES GPU-rt scheduler)
 if(ENABLE_PYTHON STREQUAL "WASM")
-target_link_libraries(runtime PUBLIC cpython-wasm vmlib -lm)
+    list(APPEND RUNTIME_LINK_LIBARIES cpython-wasm vmlib -lm)
 endif()
+target_link_libraries(runtime PUBLIC ${RUNTIME_LINK_LIBARIES})

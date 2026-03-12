@@ -14,7 +14,7 @@ add_executable(tester
         utility/TestSerialization.cpp
         execution/TestBaselineUtils.cpp
 )
-target_link_libraries(tester PRIVATE Catch2::Catch2WithMain ${LIBS} utility catalog MLIRSQLFrontend runtime runner)
+target_link_libraries(tester PRIVATE Catch2::Catch2WithMain ${LIBS} utility catalog MLIRSQLFrontend  runner runtime)
 set_target_properties(tester PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 if(ENABLE_PYTHON STREQUAL "CPYTHON")
     target_link_libraries(tester PRIVATE python3.14)
