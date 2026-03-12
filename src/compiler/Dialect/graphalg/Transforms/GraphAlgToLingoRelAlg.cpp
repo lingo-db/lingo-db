@@ -548,8 +548,41 @@ class MatMulOpConversion : public ConversionPattern {
       auto rhsMatType = llvm::cast<MatrixType>(op->getOperand(1).getType());
       Type rhsValType = GraphAlgTypeConverter::convertSemiringType(rhsMatType.getSemiring());
 
-      auto [renamedRhsMeta, rhsRel] = renameMeta(rewriter, loc, rhsMeta, "rhs", operands[1], rhsValType);
+      // : Only rename RHS if its columns collide with LHS
+      auto isConflict = [&](tuples::ColumnRefAttr c) {
+         if (!c) return false;
+         return c == lhsMeta.row || c == lhsMeta.col || c == lhsMeta.val;
+      };
 
+      SmallVector<Attribute> renameDefs;
+      MatrixMeta renamedRhsMeta = rhsMeta;
+      StringRef prefix = "rhs";
+
+      if (rhsMeta.hasRow() && isConflict(rhsMeta.row)) {
+         auto newDef = createColumnDef(ctx, AttributeGenerator::nextName(prefix.str() + "_row"), rewriter.getI64Type());
+         renameDefs.push_back(tuples::ColumnDefAttr::get(ctx, newDef.getName(), newDef.getColumnPtr(), ArrayAttr::get(ctx, {rhsMeta.row})));
+         renamedRhsMeta.rowDef = newDef;
+         renamedRhsMeta.row = createColumnRef(newDef);
+      }
+      if (rhsMeta.hasCol() && isConflict(rhsMeta.col)) {
+         auto newDef = createColumnDef(ctx, AttributeGenerator::nextName(prefix.str() + "_col"), rewriter.getI64Type());
+         renameDefs.push_back(tuples::ColumnDefAttr::get(ctx, newDef.getName(), newDef.getColumnPtr(), ArrayAttr::get(ctx, {rhsMeta.col})));
+         renamedRhsMeta.colDef = newDef;
+         renamedRhsMeta.col = createColumnRef(newDef);
+      }
+      if (rhsMeta.val && isConflict(rhsMeta.val)) {
+         auto newDef = createColumnDef(ctx, AttributeGenerator::nextName(prefix.str() + "_val"), rhsValType);
+         renameDefs.push_back(tuples::ColumnDefAttr::get(ctx, newDef.getName(), newDef.getColumnPtr(), ArrayAttr::get(ctx, {rhsMeta.val})));
+         renamedRhsMeta.valDef = newDef;
+         renamedRhsMeta.val = createColumnRef(newDef);
+      }
+
+      Value rhsRel = operands[1];
+      if (!renameDefs.empty()) {
+         rhsRel = rewriter.create<relalg::RenamingOp>(loc, tuples::TupleStreamType::get(ctx), rhsRel, ArrayAttr::get(ctx, renameDefs)).getResult();
+      }
+
+      // 2. JOIN
       auto joinOp = rewriter.create<relalg::InnerJoinOp>(loc, operands[0], rhsRel);
       {
          Block* predBlock = new Block;
@@ -570,6 +603,7 @@ class MatMulOpConversion : public ConversionPattern {
          rewriter.create<tuples::ReturnOp>(loc, ValueRange{cmp});
       }
 
+      // 3. MAP (Product)
       auto mapOp = rewriter.create<relalg::MapOp>(loc, joinOp.getResult());
       auto matrixType = llvm::cast<MatrixType>(op->getResultTypes()[0]);
       Type resType = GraphAlgTypeConverter::convertSemiringType(matrixType.getSemiring());
@@ -610,19 +644,24 @@ class MatMulOpConversion : public ConversionPattern {
          rewriter.create<tuples::ReturnOp>(loc, ValueRange{res});
       }
 
-      // Math Matrix Multiply requires aggregating the Map product to emulate standard inner dimensions sums!
-      // This additionally cleanly projects away internal dimensions, preventing dirty stream reference overlaps.
-      SmallVector<Attribute> groupByAttrs;
-      MatrixMeta resMeta;
+      // 4. AGGREGATION (Conditional based on existence of inner summation dimensions)
+      bool needsAggregation = lhsMeta.hasCol() && renamedRhsMeta.hasRow();
 
-      if (lhsMeta.hasRow()) {
-         groupByAttrs.push_back(lhsMeta.row);
-         resMeta.row = lhsMeta.row;
+      MatrixMeta resMeta;
+      if (lhsMeta.hasRow()) resMeta.row = lhsMeta.row;
+      if (renamedRhsMeta.hasCol()) resMeta.col = renamedRhsMeta.col;
+
+      if (!needsAggregation) {
+         resMeta.valDef = mulValDef;
+         resMeta.val = mulValRef;
+         state.set(op->getResult(0), resMeta);
+         rewriter.replaceOp(op, mapOp.getResult());
+         return success();
       }
-      if (renamedRhsMeta.hasCol()) {
-         groupByAttrs.push_back(renamedRhsMeta.col);
-         resMeta.col = renamedRhsMeta.col;
-      }
+
+      SmallVector<Attribute> groupByAttrs;
+      if (resMeta.hasRow()) groupByAttrs.push_back(resMeta.row);
+      if (resMeta.hasCol()) groupByAttrs.push_back(resMeta.col);
 
       auto aggDefAttr = createColumnDef(ctx, AttributeGenerator::nextName("agg_val"), resType);
       resMeta.valDef = aggDefAttr;
@@ -787,17 +826,17 @@ class YieldOpConversion : public ConversionPattern {
          MatrixMeta blockArgMeta = state.get(newBlockArg, ctx);
 
          SmallVector<Attribute> renameDefs;
-         if (blockArgMeta.hasRow() && yieldMeta.hasRow()) {
+         if (blockArgMeta.hasRow() && yieldMeta.hasRow() && blockArgMeta.row != yieldMeta.row) {
             renameDefs.push_back(tuples::ColumnDefAttr::get(
                ctx, blockArgMeta.rowDef.getName(), blockArgMeta.rowDef.getColumnPtr(),
                ArrayAttr::get(ctx, {yieldMeta.row})));
          }
-         if (blockArgMeta.hasCol() && yieldMeta.hasCol()) {
+         if (blockArgMeta.hasCol() && yieldMeta.hasCol() && blockArgMeta.col != yieldMeta.col) {
             renameDefs.push_back(tuples::ColumnDefAttr::get(
                ctx, blockArgMeta.colDef.getName(), blockArgMeta.colDef.getColumnPtr(),
                ArrayAttr::get(ctx, {yieldMeta.col})));
          }
-         if (blockArgMeta.val && yieldMeta.val) {
+         if (blockArgMeta.val && yieldMeta.val && blockArgMeta.val != yieldMeta.val) {
             renameDefs.push_back(tuples::ColumnDefAttr::get(
                ctx, blockArgMeta.valDef.getName(), blockArgMeta.valDef.getColumnPtr(),
                ArrayAttr::get(ctx, {yieldMeta.val})));
