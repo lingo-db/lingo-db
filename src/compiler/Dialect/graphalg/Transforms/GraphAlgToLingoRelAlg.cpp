@@ -230,6 +230,31 @@ class StatefulConversion : public OpConversionPattern<T> {
 class LoadCastConversion : public ConversionPattern {
    ConversionState& state;
 
+   static tuples::ColumnRefAttr resolveColumnRef(Operation* contextOp, Attribute attr) {
+      if (auto colRef = llvm::dyn_cast<tuples::ColumnRefAttr>(attr)) return colRef;
+      if (auto symRef = llvm::dyn_cast<SymbolRefAttr>(attr)) {
+         tuples::ColumnRefAttr resolved;
+         contextOp->getParentOfType<ModuleOp>()->walk([&](Operation* child) {
+            if (resolved) return WalkResult::interrupt();
+            for (auto namedAttr : child->getAttrs()) {
+               if (auto arrayAttr = llvm::dyn_cast<ArrayAttr>(namedAttr.getValue())) {
+                  for (auto item : arrayAttr) {
+                     if (auto def = llvm::dyn_cast<tuples::ColumnDefAttr>(item)) {
+                        if (def.getName() == symRef) {
+                           resolved = createColumnRef(def);
+                           return WalkResult::interrupt();
+                        }
+                     }
+                  }
+               }
+            }
+            return WalkResult::advance();
+         });
+         return resolved;
+      }
+      return nullptr;
+   }
+
    public:
    LoadCastConversion(const TypeConverter& tc, MLIRContext* ctx, ConversionState& state)
       : ConversionPattern(tc, "builtin.unrealized_conversion_cast", 1, ctx), state(state) {}
@@ -245,19 +270,19 @@ class LoadCastConversion : public ConversionPattern {
          MatrixMeta meta;
          auto matType = llvm::cast<MatrixType>(op->getResultTypes()[0]);
          if (colsAttr.size() == 3) {
-            meta.row = llvm::cast<tuples::ColumnRefAttr>(colsAttr[0]);
-            meta.col = llvm::cast<tuples::ColumnRefAttr>(colsAttr[1]);
-            meta.val = llvm::cast<tuples::ColumnRefAttr>(colsAttr[2]);
+            meta.row = resolveColumnRef(op, colsAttr[0]);
+            meta.col = resolveColumnRef(op, colsAttr[1]);
+            meta.val = resolveColumnRef(op, colsAttr[2]);
          } else if (colsAttr.size() == 2) {
             if (matType.getRows().isOne()) {
-               meta.col = llvm::cast<tuples::ColumnRefAttr>(colsAttr[0]);
-               meta.val = llvm::cast<tuples::ColumnRefAttr>(colsAttr[1]);
+               meta.col = resolveColumnRef(op, colsAttr[0]);
+               meta.val = resolveColumnRef(op, colsAttr[1]);
             } else {
-               meta.row = llvm::cast<tuples::ColumnRefAttr>(colsAttr[0]);
-               meta.val = llvm::cast<tuples::ColumnRefAttr>(colsAttr[1]);
+               meta.row = resolveColumnRef(op, colsAttr[0]);
+               meta.val = resolveColumnRef(op, colsAttr[1]);
             }
          } else if (colsAttr.size() == 1) {
-            meta.val = llvm::cast<tuples::ColumnRefAttr>(colsAttr[0]);
+            meta.val = resolveColumnRef(op, colsAttr[0]);
          }
 
          state.set(op->getResult(0), meta);
@@ -276,9 +301,6 @@ class LoadCastConversion : public ConversionPattern {
          auto meta = state.get(op->getOperand(0), rewriter.getContext());
          SmallVector<Attribute> renameDefs;
          auto ctx = rewriter.getContext();
-
-         // VITAL: Re-use the existing exact `Column*` pointer inside `exp`
-         // to ensure `DenseMap` column tracking matches downstream queries perfectly!
          auto addRename = [&](tuples::ColumnRefAttr exp, tuples::ColumnRefAttr from) {
             if (exp != from) {
                renameDefs.push_back(tuples::ColumnDefAttr::get(ctx, exp.getName(), exp.getColumnPtr(), ArrayAttr::get(ctx, {from})));
@@ -286,26 +308,26 @@ class LoadCastConversion : public ConversionPattern {
          };
 
          if (colsAttr.size() == 3) {
-            auto expRow = llvm::cast<tuples::ColumnRefAttr>(colsAttr[0]);
-            auto expCol = llvm::cast<tuples::ColumnRefAttr>(colsAttr[1]);
-            auto expVal = llvm::cast<tuples::ColumnRefAttr>(colsAttr[2]);
+            auto expRow = resolveColumnRef(op, colsAttr[0]);
+            auto expCol = resolveColumnRef(op, colsAttr[1]);
+            auto expVal = resolveColumnRef(op, colsAttr[2]);
             if (meta.hasRow()) addRename(expRow, meta.row);
             if (meta.hasCol()) addRename(expCol, meta.col);
             if (meta.val) addRename(expVal, meta.val);
          } else if (colsAttr.size() == 2) {
             if (!meta.hasRow() && meta.hasCol()) {
-               auto expCol = llvm::cast<tuples::ColumnRefAttr>(colsAttr[0]);
-               auto expVal = llvm::cast<tuples::ColumnRefAttr>(colsAttr[1]);
+               auto expCol = resolveColumnRef(op, colsAttr[0]);
+               auto expVal = resolveColumnRef(op, colsAttr[1]);
                addRename(expCol, meta.col);
                if (meta.val) addRename(expVal, meta.val);
             } else {
-               auto expRow = llvm::cast<tuples::ColumnRefAttr>(colsAttr[0]);
-               auto expVal = llvm::cast<tuples::ColumnRefAttr>(colsAttr[1]);
+               auto expRow = resolveColumnRef(op, colsAttr[0]);
+               auto expVal = resolveColumnRef(op, colsAttr[1]);
                if (meta.hasRow()) addRename(expRow, meta.row);
                if (meta.val) addRename(expVal, meta.val);
             }
          } else if (colsAttr.size() == 1) {
-            auto expVal = llvm::cast<tuples::ColumnRefAttr>(colsAttr[0]);
+            auto expVal = resolveColumnRef(op, colsAttr[0]);
             if (meta.val) addRename(expVal, meta.val);
          }
 
@@ -918,7 +940,7 @@ class CastScalarOpConversion : public OpConversionPattern<CastScalarOp> {
          }
          return success();
       }
-
+      // TODO add more cases following spec https://wildarch.dev/graphalg/spec/core/relalg#castscalarop
       return failure();
    }
 };
@@ -972,6 +994,8 @@ void GraphAlgToRelAlgPass::runOnOperation() {
    target.addDynamicallyLegalOp<func::ReturnOp>([&](func::ReturnOp op) {
       return typeConverter.isLegal(op.getOperandTypes());
    });
+
+   target.addIllegalOp<UnrealizedConversionCastOp>();
 
    RewritePatternSet patterns(context);
 
