@@ -1,7 +1,7 @@
 #include <array>
 #include <atomic>
+#include <limits>
 #include <memory>
-#include <numeric>
 #include <string>
 #include <vector>
 
@@ -74,7 +74,6 @@ static bool isTropical(Type t) {
 static tuples::ColumnDefAttr createColumnDef(MLIRContext* ctx, StringRef name, Type type) {
    auto column = std::make_shared<tuples::Column>();
    column->type = type;
-   // Guarantee exactly 1 nested reference size for LingoDB's column manager lookup: `@@name`
    auto symName = SymbolRefAttr::get(ctx, "graphalg", {FlatSymbolRefAttr::get(ctx, name)});
    return tuples::ColumnDefAttr::get(ctx, symName, column, Attribute());
 }
@@ -431,31 +430,32 @@ class ApplyOpConversion : public StatefulConversion<ApplyOp> {
          inputMetas.push_back(renamedMeta);
 
          auto joinOp = rewriter.create<relalg::InnerJoinOp>(loc, currentRel, renamedRel);
-         Block* joinBlock = new Block;
+         auto joinBlock = new Block;
          joinOp.getPredicate().push_back(joinBlock);
-         auto tupleArg = joinBlock->addArgument(tuples::TupleType::get(ctx), loc);
+         {
+            OpBuilder::InsertionGuard guard(rewriter);
+            rewriter.setInsertionPointToStart(joinBlock);
 
-         OpBuilder::InsertionGuard guard(rewriter);
-         rewriter.setInsertionPointToStart(joinBlock);
-
-         Value cmpAcc;
-         if (currentMeta.hasRow() && renamedMeta.hasRow()) {
-            auto valA = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), currentMeta.row, tupleArg);
-            auto valB = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), renamedMeta.row, tupleArg);
-            Value cmp = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, valA, valB);
-            cmpAcc = cmp;
-         }
-         if (currentMeta.hasCol() && renamedMeta.hasCol()) {
-            auto valA = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), currentMeta.col, tupleArg);
-            auto valB = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), renamedMeta.col, tupleArg);
-            Value cmp = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, valA, valB);
-            if (cmpAcc)
-               cmpAcc = rewriter.create<arith::AndIOp>(loc, cmpAcc, cmp);
-            else
+            auto tupleArg = joinBlock->addArgument(tuples::TupleType::get(ctx), loc);
+            Value cmpAcc;
+            if (currentMeta.hasRow() && renamedMeta.hasRow()) {
+               auto valA = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), currentMeta.row, tupleArg);
+               auto valB = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), renamedMeta.row, tupleArg);
+               Value cmp = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, valA, valB);
                cmpAcc = cmp;
+            }
+            if (currentMeta.hasCol() && renamedMeta.hasCol()) {
+               auto valA = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), currentMeta.col, tupleArg);
+               auto valB = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), renamedMeta.col, tupleArg);
+               Value cmp = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, valA, valB);
+               if (cmpAcc)
+                  cmpAcc = rewriter.create<arith::AndIOp>(loc, cmpAcc, cmp);
+               else
+                  cmpAcc = cmp;
+            }
+            if (!cmpAcc) cmpAcc = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
+            rewriter.create<tuples::ReturnOp>(loc, ValueRange{cmpAcc});
          }
-         if (!cmpAcc) cmpAcc = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
-         rewriter.create<tuples::ReturnOp>(loc, ValueRange{cmpAcc});
 
          currentRel = joinOp.getResult();
          if (!currentMeta.hasRow() && renamedMeta.hasRow()) currentMeta.row = renamedMeta.row;
@@ -469,7 +469,7 @@ class ApplyOpConversion : public StatefulConversion<ApplyOp> {
       mapOp.setComputedColsAttr(ArrayAttr::get(ctx, {resDef}));
 
       {
-         Block* mapBlock = new Block;
+         auto* mapBlock = new Block;
          mapOp.getPredicate().push_back(mapBlock);
          auto tupleArg = mapBlock->addArgument(tuples::TupleType::get(ctx), loc);
 
@@ -490,18 +490,16 @@ class ApplyOpConversion : public StatefulConversion<ApplyOp> {
       resMeta.valDef = resDef;
       resMeta.val = createColumnRef(resDef);
 
-      // Aggregation handles Distinct Projection mapping, cleanly dropping unused internal stream vars!
       SmallVector<Attribute> keepCols;
       if (resMeta.hasRow()) keepCols.push_back(resMeta.row);
       if (resMeta.hasCol()) keepCols.push_back(resMeta.col);
       if (resMeta.val) keepCols.push_back(resMeta.val);
 
-      auto aggOp = rewriter.create<relalg::AggregationOp>(
-         loc, tuples::TupleStreamType::get(ctx), mapOp.getResult(),
-         ArrayAttr::get(ctx, keepCols), ArrayAttr::get(ctx, {}));
-      Block* aggBlock = rewriter.createBlock(&aggOp.getAggrFunc());
-      aggBlock->addArgument(tuples::TupleStreamType::get(ctx), loc);
+      auto aggOp = rewriter.create<relalg::AggregationOp>(loc, tuples::TupleStreamType::get(ctx), mapOp.getResult(), ArrayAttr::get(ctx, keepCols), ArrayAttr::get(ctx, {}));
+
       {
+         Block* aggBlock = rewriter.createBlock(&aggOp.getAggrFunc());
+         aggBlock->addArgument(tuples::TupleStreamType::get(ctx), loc);
          OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPointToStart(aggBlock);
          rewriter.create<tuples::ReturnOp>(loc, ValueRange{});
@@ -548,7 +546,6 @@ class MatMulOpConversion : public ConversionPattern {
       auto rhsMatType = llvm::cast<MatrixType>(op->getOperand(1).getType());
       Type rhsValType = GraphAlgTypeConverter::convertSemiringType(rhsMatType.getSemiring());
 
-      // : Only rename RHS if its columns collide with LHS
       auto isConflict = [&](tuples::ColumnRefAttr c) {
          if (!c) return false;
          return c == lhsMeta.row || c == lhsMeta.col || c == lhsMeta.val;
@@ -582,10 +579,9 @@ class MatMulOpConversion : public ConversionPattern {
          rhsRel = rewriter.create<relalg::RenamingOp>(loc, tuples::TupleStreamType::get(ctx), rhsRel, ArrayAttr::get(ctx, renameDefs)).getResult();
       }
 
-      // 2. JOIN
       auto joinOp = rewriter.create<relalg::InnerJoinOp>(loc, operands[0], rhsRel);
       {
-         Block* predBlock = new Block;
+         auto* predBlock = new Block;
          joinOp.getPredicate().push_back(predBlock);
          auto tupleArg = predBlock->addArgument(tuples::TupleType::get(ctx), loc);
 
@@ -603,7 +599,6 @@ class MatMulOpConversion : public ConversionPattern {
          rewriter.create<tuples::ReturnOp>(loc, ValueRange{cmp});
       }
 
-      // 3. MAP (Product)
       auto mapOp = rewriter.create<relalg::MapOp>(loc, joinOp.getResult());
       auto matrixType = llvm::cast<MatrixType>(op->getResultTypes()[0]);
       Type resType = GraphAlgTypeConverter::convertSemiringType(matrixType.getSemiring());
@@ -613,7 +608,7 @@ class MatMulOpConversion : public ConversionPattern {
       auto mulValRef = createColumnRef(mulValDef);
 
       {
-         Block* mapBlock = new Block;
+         auto* mapBlock = new Block;
          mapOp.getPredicate().push_back(mapBlock);
          auto tupleArg = mapBlock->addArgument(tuples::TupleType::get(ctx), loc);
 
@@ -644,7 +639,6 @@ class MatMulOpConversion : public ConversionPattern {
          rewriter.create<tuples::ReturnOp>(loc, ValueRange{res});
       }
 
-      // 4. AGGREGATION (Conditional based on existence of inner summation dimensions)
       bool needsAggregation = lhsMeta.hasCol() && renamedRhsMeta.hasRow();
 
       MatrixMeta resMeta;
@@ -689,6 +683,131 @@ class MatMulOpConversion : public ConversionPattern {
 
       state.set(op->getResult(0), resMeta);
       rewriter.replaceOp(op, aggOp.getResult());
+      return success();
+   }
+};
+
+// Not explicit lowered or in Core, so maybe unused
+class MatMulJoinOpConversion : public ConversionPattern {
+   ConversionState& state;
+
+   public:
+   MatMulJoinOpConversion(const TypeConverter& tc, MLIRContext* ctx, ConversionState& state)
+      : ConversionPattern(tc, "graphalg.mxm_join", 1, ctx), state(state) {}
+
+   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      auto lhsMeta = state.get(op->getOperand(0), rewriter.getContext());
+      auto rhsMeta = state.get(op->getOperand(1), rewriter.getContext());
+
+      if (!lhsMeta.val || !rhsMeta.val) return op->emitError("Missing metadata for MatMulJoinOp");
+
+      auto ctx = rewriter.getContext();
+      auto loc = op->getLoc();
+
+      auto rhsMatType = llvm::cast<MatrixType>(op->getOperand(1).getType());
+      Type rhsValType = GraphAlgTypeConverter::convertSemiringType(rhsMatType.getSemiring());
+
+      auto isConflict = [&](tuples::ColumnRefAttr c) {
+         if (!c) return false;
+         return c == lhsMeta.row || c == lhsMeta.col || c == lhsMeta.val;
+      };
+
+      SmallVector<Attribute> renameDefs;
+      MatrixMeta renamedRhsMeta = rhsMeta;
+      StringRef prefix = "rhs";
+
+      if (rhsMeta.hasRow() && isConflict(rhsMeta.row)) {
+         auto newDef = createColumnDef(ctx, AttributeGenerator::nextName(prefix.str() + "_row"), rewriter.getI64Type());
+         renameDefs.push_back(tuples::ColumnDefAttr::get(ctx, newDef.getName(), newDef.getColumnPtr(), ArrayAttr::get(ctx, {rhsMeta.row})));
+         renamedRhsMeta.rowDef = newDef;
+         renamedRhsMeta.row = createColumnRef(newDef);
+      }
+      if (rhsMeta.hasCol() && isConflict(rhsMeta.col)) {
+         auto newDef = createColumnDef(ctx, AttributeGenerator::nextName(prefix.str() + "_col"), rewriter.getI64Type());
+         renameDefs.push_back(tuples::ColumnDefAttr::get(ctx, newDef.getName(), newDef.getColumnPtr(), ArrayAttr::get(ctx, {rhsMeta.col})));
+         renamedRhsMeta.colDef = newDef;
+         renamedRhsMeta.col = createColumnRef(newDef);
+      }
+      if (rhsMeta.val && isConflict(rhsMeta.val)) {
+         auto newDef = createColumnDef(ctx, AttributeGenerator::nextName(prefix.str() + "_val"), rhsValType);
+         renameDefs.push_back(tuples::ColumnDefAttr::get(ctx, newDef.getName(), newDef.getColumnPtr(), ArrayAttr::get(ctx, {rhsMeta.val})));
+         renamedRhsMeta.valDef = newDef;
+         renamedRhsMeta.val = createColumnRef(newDef);
+      }
+
+      Value rhsRel = operands[1];
+      if (!renameDefs.empty()) {
+         rhsRel = rewriter.create<relalg::RenamingOp>(loc, tuples::TupleStreamType::get(ctx), rhsRel, ArrayAttr::get(ctx, renameDefs)).getResult();
+      }
+
+      auto joinOp = rewriter.create<relalg::InnerJoinOp>(loc, operands[0], rhsRel);
+      {
+         auto* predBlock = new Block;
+         joinOp.getPredicate().push_back(predBlock);
+         auto tupleArg = predBlock->addArgument(tuples::TupleType::get(ctx), loc);
+
+         OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(predBlock);
+
+         Value cmp;
+         if (lhsMeta.hasCol() && renamedRhsMeta.hasRow()) {
+            auto lhsColVal = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), lhsMeta.col, tupleArg);
+            auto rhsRowVal = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), renamedRhsMeta.row, tupleArg);
+            cmp = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, lhsColVal, rhsRowVal);
+         } else {
+            cmp = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
+         }
+         rewriter.create<tuples::ReturnOp>(loc, ValueRange{cmp});
+      }
+
+      auto mapOp = rewriter.create<relalg::MapOp>(loc, joinOp.getResult());
+      auto matrixType = llvm::cast<MatrixType>(op->getResultTypes()[0]);
+      Type resType = GraphAlgTypeConverter::convertSemiringType(matrixType.getSemiring());
+
+      auto mulValDef = createColumnDef(ctx, AttributeGenerator::nextName("mul_res"), resType);
+      mapOp.setComputedColsAttr(ArrayAttr::get(ctx, {mulValDef}));
+      auto mulValRef = createColumnRef(mulValDef);
+
+      {
+         auto* mapBlock = new Block;
+         mapOp.getPredicate().push_back(mapBlock);
+         auto tupleArg = mapBlock->addArgument(tuples::TupleType::get(ctx), loc);
+
+         OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(mapBlock);
+
+         auto lhsMatType = llvm::cast<MatrixType>(op->getOperand(0).getType());
+         Type lhsValType = GraphAlgTypeConverter::convertSemiringType(lhsMatType.getSemiring());
+
+         auto lhsVal = rewriter.create<tuples::GetColumnOp>(loc, lhsValType, lhsMeta.val, tupleArg);
+         auto rhsVal = rewriter.create<tuples::GetColumnOp>(loc, rhsValType, renamedRhsMeta.val, tupleArg);
+
+         Value res;
+         if (isTropical(matrixType.getSemiring())) {
+            if (resType.isF64())
+               res = rewriter.create<arith::AddFOp>(loc, lhsVal, rhsVal);
+            else
+               res = rewriter.create<arith::AddIOp>(loc, lhsVal, rhsVal);
+         } else {
+            if (resType.isInteger(1))
+               res = rewriter.create<arith::AndIOp>(loc, lhsVal, rhsVal);
+            else if (resType.isF64())
+               res = rewriter.create<arith::MulFOp>(loc, lhsVal, rhsVal);
+            else
+               res = rewriter.create<arith::MulIOp>(loc, lhsVal, rhsVal);
+         }
+
+         rewriter.create<tuples::ReturnOp>(loc, ValueRange{res});
+      }
+
+      MatrixMeta resMeta;
+      if (lhsMeta.hasRow()) resMeta.row = lhsMeta.row;
+      if (renamedRhsMeta.hasCol()) resMeta.col = renamedRhsMeta.col;
+
+      resMeta.valDef = mulValDef;
+      resMeta.val = mulValRef;
+      state.set(op->getResult(0), resMeta);
+      rewriter.replaceOp(op, mapOp.getResult());
       return success();
    }
 };
@@ -770,7 +889,119 @@ class ForDimOpConversion : public ConversionPattern {
          auto actualIdxDef = createColumnDef(ctx, AttributeGenerator::nextName("loop_idx"), rewriter.getI64Type());
          mapOp.setComputedColsAttr(ArrayAttr::get(ctx, {actualIdxDef}));
 
-         Block* mapBlock = new Block;
+         auto* mapBlock = new Block;
+         mapOp.getPredicate().push_back(mapBlock);
+         mapBlock->addArgument(tuples::TupleType::get(ctx), loc);
+         {
+            OpBuilder::InsertionGuard guardMap(rewriter);
+            rewriter.setInsertionPointToStart(mapBlock);
+            auto castedIdx = rewriter.create<arith::IndexCastOp>(loc, rewriter.getI64Type(), forBody->getArgument(0));
+            rewriter.create<tuples::ReturnOp>(loc, ValueRange{castedIdx});
+         }
+
+         MatrixMeta dummyMeta;
+         dummyMeta.valDef = actualIdxDef;
+         dummyMeta.val = createColumnRef(actualIdxDef);
+         state.set(oldBody->getArgument(0), dummyMeta);
+
+         replacedArgs.push_back(mapOp.getResult());
+      } else {
+         replacedArgs.push_back(forBody->getArgument(0));
+      }
+
+      for (size_t i = 0; i < renamedInitArgs.size(); ++i) {
+         replacedArgs.push_back(forBody->getArgument(i + 1));
+      }
+
+      rewriter.mergeBlocks(oldBody, forBody, replacedArgs);
+
+      for (size_t i = 0; i < renamedInitArgs.size(); ++i) {
+         state.set(forBody->getArgument(i + 1), blockArgMetas[i]);
+      }
+
+      rewriter.replaceOp(op, forOp.getResults());
+      return success();
+   }
+};
+
+class ForConstOpConversion : public ConversionPattern {
+   ConversionState& state;
+
+   public:
+   ForConstOpConversion(const TypeConverter& tc, MLIRContext* ctx, ConversionState& state)
+      : ConversionPattern(tc, "graphalg.for_const", 1, ctx), state(state) {}
+
+   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op->getLoc();
+      auto ctx = rewriter.getContext();
+
+      Value zero = rewriter.create<arith::ConstantIndexOp>(loc, 0);
+      Value one = rewriter.create<arith::ConstantIndexOp>(loc, 1);
+      Value step = rewriter.create<arith::ConstantIndexOp>(loc, 1);
+
+      Block* oldBody = &op->getRegion(0).front();
+
+      SmallVector<MatrixMeta> blockArgMetas;
+      SmallVector<Value> renamedInitArgs;
+
+      for (size_t i = 0; i < op->getNumOperands(); ++i) {
+         Value oldInit = op->getOperand(i);
+         Value newInit = operands[i];
+         MatrixMeta initMeta = state.get(oldInit, ctx);
+
+         Value oldBlockArg = oldBody->getArgument(i + 1);
+         MatrixMeta blockArgMeta = state.get(oldBlockArg, ctx);
+         blockArgMetas.push_back(blockArgMeta);
+
+         SmallVector<Attribute> renameDefs;
+         if (blockArgMeta.hasRow() && initMeta.hasRow()) {
+            renameDefs.push_back(tuples::ColumnDefAttr::get(
+               ctx, blockArgMeta.rowDef.getName(), blockArgMeta.rowDef.getColumnPtr(),
+               ArrayAttr::get(ctx, {initMeta.row})));
+         }
+         if (blockArgMeta.hasCol() && initMeta.hasCol()) {
+            renameDefs.push_back(tuples::ColumnDefAttr::get(
+               ctx, blockArgMeta.colDef.getName(), blockArgMeta.colDef.getColumnPtr(),
+               ArrayAttr::get(ctx, {initMeta.col})));
+         }
+         if (blockArgMeta.val && initMeta.val) {
+            renameDefs.push_back(tuples::ColumnDefAttr::get(
+               ctx, blockArgMeta.valDef.getName(), blockArgMeta.valDef.getColumnPtr(),
+               ArrayAttr::get(ctx, {initMeta.val})));
+         }
+
+         if (!renameDefs.empty()) {
+            auto renameOp = rewriter.create<relalg::RenamingOp>(
+               loc, tuples::TupleStreamType::get(ctx), newInit,
+               ArrayAttr::get(ctx, renameDefs));
+            renamedInitArgs.push_back(renameOp.getResult());
+         } else {
+            renamedInitArgs.push_back(newInit);
+         }
+
+         state.set(op->getResult(i), blockArgMeta);
+      }
+
+      auto forOp = rewriter.create<scf::ForOp>(loc, zero, one, step, renamedInitArgs);
+      Block* forBody = forOp.getBody();
+
+      SmallVector<Value> replacedArgs;
+      Type oldArgType = oldBody->getArgument(0).getType();
+      if (llvm::isa<MatrixType>(oldArgType)) {
+         OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(forBody);
+
+         auto dummyDef = createColumnDef(ctx, AttributeGenerator::nextName("dummy_idx"), rewriter.getI64Type());
+         auto constRel = rewriter.create<relalg::ConstRelationOp>(
+            loc,
+            ArrayAttr::get(ctx, {dummyDef}),
+            ArrayAttr::get(ctx, {ArrayAttr::get(ctx, {rewriter.getI64IntegerAttr(0)})}));
+
+         auto mapOp = rewriter.create<relalg::MapOp>(loc, constRel.getResult());
+         auto actualIdxDef = createColumnDef(ctx, AttributeGenerator::nextName("loop_idx"), rewriter.getI64Type());
+         mapOp.setComputedColsAttr(ArrayAttr::get(ctx, {actualIdxDef}));
+
+         auto* mapBlock = new Block;
          mapOp.getPredicate().push_back(mapBlock);
          mapBlock->addArgument(tuples::TupleType::get(ctx), loc);
          {
@@ -935,6 +1166,317 @@ class TransposeOpConversion : public StatefulConversion<TransposeOp> {
    }
 };
 
+class DiagOpConversion : public StatefulConversion<DiagOp> {
+   public:
+   using StatefulConversion::StatefulConversion;
+   LogicalResult matchAndRewrite(DiagOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto info = state.get(op.getInput(), rewriter.getContext());
+      auto loc = op.getLoc();
+      auto ctx = rewriter.getContext();
+
+      MatrixMeta resMeta = info;
+      auto mapOp = rewriter.create<relalg::MapOp>(loc, adaptor.getInput());
+
+      if (info.hasRow() && !info.hasCol()) {
+         auto colDef = createColumnDef(ctx, AttributeGenerator::nextName("diag_col"), rewriter.getI64Type());
+         mapOp.setComputedColsAttr(ArrayAttr::get(ctx, {colDef}));
+         resMeta.colDef = colDef;
+         resMeta.col = createColumnRef(colDef);
+
+         auto* mapBlock = new Block;
+         mapOp.getPredicate().push_back(mapBlock);
+         {
+            OpBuilder::InsertionGuard guard(rewriter);
+            rewriter.setInsertionPointToStart(mapBlock);
+
+            auto tupleArg = mapBlock->addArgument(tuples::TupleType::get(ctx), loc);
+            auto rowVal = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), info.row, tupleArg);
+            rewriter.create<tuples::ReturnOp>(loc, ValueRange{rowVal});
+         }
+      } else if (!info.hasRow() && info.hasCol()) {
+         auto rowDef = createColumnDef(ctx, AttributeGenerator::nextName("diag_row"), rewriter.getI64Type());
+         mapOp.setComputedColsAttr(ArrayAttr::get(ctx, {rowDef}));
+         resMeta.rowDef = rowDef;
+         resMeta.row = createColumnRef(rowDef);
+
+         auto* mapBlock = new Block;
+         mapOp.getPredicate().push_back(mapBlock);
+
+         {
+            OpBuilder::InsertionGuard guard(rewriter);
+            rewriter.setInsertionPointToStart(mapBlock);
+            auto tupleArg = mapBlock->addArgument(tuples::TupleType::get(ctx), loc);
+            auto colVal = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), info.col, tupleArg);
+            rewriter.create<tuples::ReturnOp>(loc, ValueRange{colVal});
+         }
+      } else {
+         rewriter.replaceOp(op, adaptor.getInput());
+         return success();
+      }
+
+      state.set(op.getResult(), resMeta);
+      rewriter.replaceOp(op, mapOp.getResult());
+      return success();
+   }
+};
+
+class BroadcastOpConversion : public StatefulConversion<BroadcastOp> {
+   public:
+   using StatefulConversion::StatefulConversion;
+   LogicalResult matchAndRewrite(BroadcastOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto info = state.get(op.getInput(), rewriter.getContext());
+      auto loc = op.getLoc();
+      auto ctx = rewriter.getContext();
+
+      auto outType = llvm::cast<MatrixType>(op.getResult().getType());
+      Value currentRel = adaptor.getInput();
+      MatrixMeta resMeta = info;
+
+      auto addBroadcast = [&](StringRef prefix, auto dimObj, tuples::ColumnRefAttr& outRef, tuples::ColumnDefAttr& outDef) {
+         int64_t size = dimObj.getConcreteDim();
+         outDef = createColumnDef(ctx, AttributeGenerator::nextName(prefix.str()), rewriter.getI64Type());
+         SmallVector<Attribute> rows;
+         for (int64_t i = 0; i < size; ++i) {
+            rows.push_back(ArrayAttr::get(ctx, {rewriter.getI64IntegerAttr(i)}));
+         }
+         auto constRel = rewriter.create<relalg::ConstRelationOp>(
+            loc, ArrayAttr::get(ctx, {outDef}), ArrayAttr::get(ctx, rows));
+
+         auto joinOp = rewriter.create<relalg::InnerJoinOp>(loc, currentRel, constRel.getResult());
+         auto* joinBlock = new Block;
+         joinOp.getPredicate().push_back(joinBlock);
+         joinBlock->addArgument(tuples::TupleType::get(ctx), loc);
+         {
+            OpBuilder::InsertionGuard guard(rewriter);
+            rewriter.setInsertionPointToStart(joinBlock);
+            Value trueVal = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
+            rewriter.create<tuples::ReturnOp>(loc, ValueRange{trueVal});
+         }
+         currentRel = joinOp.getResult();
+         outRef = createColumnRef(outDef);
+      };
+
+      if (!info.hasRow() && !outType.getRows().isOne()) {
+         addBroadcast("broadcast_row", outType.getRows(), resMeta.row, resMeta.rowDef);
+      }
+      if (!info.hasCol() && !outType.getCols().isOne()) {
+         addBroadcast("broadcast_col", outType.getCols(), resMeta.col, resMeta.colDef);
+      }
+
+      state.set(op.getResult(), resMeta);
+      rewriter.replaceOp(op, currentRel);
+      return success();
+   }
+};
+
+class TrilOpConversion : public StatefulConversion<TrilOp> {
+   public:
+   using StatefulConversion::StatefulConversion;
+   LogicalResult matchAndRewrite(TrilOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto info = state.get(op.getInput(), rewriter.getContext());
+      auto loc = op.getLoc();
+      auto ctx = rewriter.getContext();
+
+      if (!info.hasRow() || !info.hasCol()) {
+         rewriter.replaceOp(op, adaptor.getInput());
+         return success();
+      }
+
+      auto selOp = rewriter.create<relalg::SelectionOp>(loc, adaptor.getInput());
+      auto* selBlock = new Block;
+      selOp.getPredicate().push_back(selBlock);
+      {
+         OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(selBlock);
+
+         auto tupleArg = selBlock->addArgument(tuples::TupleType::get(ctx), loc);
+         auto colVal = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), info.col, tupleArg);
+         auto rowVal = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), info.row, tupleArg);
+         auto cmp = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt, colVal, rowVal);
+
+         rewriter.create<tuples::ReturnOp>(loc, ValueRange{cmp});
+      }
+
+      state.set(op.getResult(), info);
+      rewriter.replaceOp(op, selOp.getResult());
+      return success();
+   }
+};
+
+class PickAnyOpConversion : public StatefulConversion<PickAnyOp> {
+   public:
+   using StatefulConversion::StatefulConversion;
+   LogicalResult matchAndRewrite(PickAnyOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto info = state.get(op.getInput(), rewriter.getContext());
+      auto loc = op.getLoc();
+      auto ctx = rewriter.getContext();
+      Type valType = GraphAlgTypeConverter::convertSemiringType(op.getType().getSemiring());
+      Type sring = op.getType().getSemiring();
+
+      // 1. Filter out structural zeros (σ_{val != 0})
+      auto selOp = rewriter.create<relalg::SelectionOp>(loc, adaptor.getInput());
+      auto* selBlock = new Block;
+      selOp.getPredicate().push_back(selBlock);
+
+      {
+         OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(selBlock);
+
+         auto tupleArgSel = selBlock->addArgument(tuples::TupleType::get(ctx), loc);
+         auto val = rewriter.create<tuples::GetColumnOp>(loc, valType, info.val, tupleArgSel);
+
+         Value zero;
+         if (sring == SemiringTypes::forBool(ctx))
+            zero = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
+         else if (sring == SemiringTypes::forInt(ctx))
+            zero = rewriter.create<arith::ConstantOp>(loc, rewriter.getI64IntegerAttr(0));
+         else if (sring == SemiringTypes::forReal(ctx))
+            zero = rewriter.create<arith::ConstantOp>(loc, rewriter.getFloatAttr(rewriter.getF64Type(), 0.0));
+         else if (sring == SemiringTypes::forTropInt(ctx))
+            zero = rewriter.create<arith::ConstantOp>(loc, rewriter.getI64IntegerAttr(std::numeric_limits<int64_t>::max()));
+         else if (sring == SemiringTypes::forTropMaxInt(ctx))
+            zero = rewriter.create<arith::ConstantOp>(loc, rewriter.getI64IntegerAttr(std::numeric_limits<int64_t>::min()));
+         else if (sring == SemiringTypes::forTropReal(ctx))
+            zero = rewriter.create<arith::ConstantOp>(loc, rewriter.getFloatAttr(rewriter.getF64Type(), std::numeric_limits<double>::infinity()));
+
+         Value cmpZero;
+         if (valType.isInteger(1) || valType.isInteger(64)) {
+            cmpZero = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ne, val, zero);
+         } else {
+            cmpZero = rewriter.create<arith::CmpFOp>(loc, arith::CmpFPredicate::UNE, val, zero);
+         }
+         rewriter.create<tuples::ReturnOp>(loc, ValueRange{cmpZero});
+      }
+      Value selRel = selOp.getResult();
+
+      // 2. Perform Group-By Aggregation on Row computing min(col)
+      SmallVector<Attribute> groupByAttrs;
+      if (info.hasRow()) groupByAttrs.push_back(info.row);
+
+      auto minColDef = createColumnDef(ctx, AttributeGenerator::nextName("pick_min_col"), rewriter.getI64Type());
+      auto minColRef = createColumnRef(minColDef);
+
+      auto aggOp = rewriter.create<relalg::AggregationOp>(
+         loc, tuples::TupleStreamType::get(ctx), selRel,
+         ArrayAttr::get(ctx, groupByAttrs), ArrayAttr::get(ctx, {minColDef}));
+
+      {
+         OpBuilder::InsertionGuard guard(rewriter);
+         auto* aggBlock = rewriter.createBlock(&aggOp.getAggrFunc());
+         rewriter.setInsertionPointToStart(aggBlock);
+
+         Value groupStream = aggBlock->addArgument(tuples::TupleStreamType::get(ctx), loc);
+         Value minCol = rewriter.create<relalg::AggrFuncOp>(
+            loc, rewriter.getI64Type(), relalg::AggrFuncAttr::get(ctx, relalg::AggrFunc::min), groupStream, info.col);
+         rewriter.create<tuples::ReturnOp>(loc, ValueRange{minCol});
+      }
+      Value aggRel = aggOp.getResult();
+
+      // 3. For bool, simply Map the constant 1 to a new val column and we're done.
+      if (sring == SemiringTypes::forBool(ctx)) {
+         auto trueValDef = createColumnDef(ctx, AttributeGenerator::nextName("pick_val_true"), valType);
+         auto mapOp = rewriter.create<relalg::MapOp>(loc, aggRel);
+         mapOp.setComputedColsAttr(ArrayAttr::get(ctx, {trueValDef}));
+         auto* mapBlock = new Block;
+         mapOp.getPredicate().push_back(mapBlock);
+         mapBlock->addArgument(tuples::TupleType::get(ctx), loc);
+         {
+            OpBuilder::InsertionGuard guard(rewriter);
+            rewriter.setInsertionPointToStart(mapBlock);
+            Value trueVal = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
+            rewriter.create<tuples::ReturnOp>(loc, ValueRange{trueVal});
+         }
+
+         MatrixMeta resMeta;
+         resMeta.row = info.row;
+         resMeta.rowDef = info.rowDef;
+         resMeta.col = minColRef;
+         resMeta.colDef = minColDef;
+         resMeta.val = createColumnRef(trueValDef);
+         resMeta.valDef = trueValDef;
+
+         state.set(op.getResult(), resMeta);
+         rewriter.replaceOp(op, mapOp.getResult());
+         return success();
+      }
+
+      // 4. Renaming grouped row to avoid collision in join for non-bool cases
+      Value renamedAggRel = aggRel;
+      tuples::ColumnRefAttr aggRowRef = nullptr;
+      if (info.hasRow()) {
+         auto aggRowDef = createColumnDef(ctx, AttributeGenerator::nextName("pick_agg_row"), rewriter.getI64Type());
+         aggRowRef = createColumnRef(aggRowDef);
+         auto renameDef = tuples::ColumnDefAttr::get(ctx, aggRowDef.getName(), aggRowDef.getColumnPtr(), ArrayAttr::get(ctx, {info.row}));
+         renamedAggRel = rewriter.create<relalg::RenamingOp>(loc, tuples::TupleStreamType::get(ctx), aggRel, ArrayAttr::get(ctx, {renameDef})).getResult();
+      }
+
+      // 5. InnerJoin with the original filtered stream to extract the associated original `val`
+      auto joinOp = rewriter.create<relalg::InnerJoinOp>(loc, selRel, renamedAggRel);
+      auto* joinBlock = new Block;
+      joinOp.getPredicate().push_back(joinBlock);
+      {
+         OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(joinBlock);
+
+         auto tupleArgJoin = joinBlock->addArgument(tuples::TupleType::get(ctx), loc);
+         Value cmpAcc = nullptr;
+         if (info.hasRow()) {
+            auto r1 = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), info.row, tupleArgJoin);
+            auto r2 = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), aggRowRef, tupleArgJoin);
+            cmpAcc = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, r1, r2);
+         }
+
+         auto c1 = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), info.col, tupleArgJoin);
+         auto c2 = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), minColRef, tupleArgJoin);
+         Value cmpCol = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, c1, c2);
+
+         if (cmpAcc)
+            cmpAcc = rewriter.create<arith::AndIOp>(loc, cmpAcc, cmpCol);
+         else
+            cmpAcc = cmpCol;
+
+         rewriter.create<tuples::ReturnOp>(loc, ValueRange{cmpAcc});
+      }
+
+      state.set(op.getResult(), info);
+      rewriter.replaceOp(op, joinOp.getResult());
+      return success();
+   }
+};
+
+class UnionOpConversion : public StatefulConversion<UnionOp> {
+   public:
+   using StatefulConversion::StatefulConversion;
+   LogicalResult matchAndRewrite(UnionOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op.getLoc();
+      auto ctx = rewriter.getContext();
+
+      auto lhsMeta = state.get(op.getInputs()[0], ctx);
+      auto rhsMeta = state.get(op.getInputs()[1], ctx);
+
+      SmallVector<Attribute> renameDefs;
+      if (lhsMeta.hasRow() && rhsMeta.hasRow() && lhsMeta.row != rhsMeta.row) {
+         renameDefs.push_back(tuples::ColumnDefAttr::get(ctx, lhsMeta.rowDef.getName(), lhsMeta.rowDef.getColumnPtr(), ArrayAttr::get(ctx, {rhsMeta.row})));
+      }
+      if (lhsMeta.hasCol() && rhsMeta.hasCol() && lhsMeta.col != rhsMeta.col) {
+         renameDefs.push_back(tuples::ColumnDefAttr::get(ctx, lhsMeta.colDef.getName(), lhsMeta.colDef.getColumnPtr(), ArrayAttr::get(ctx, {rhsMeta.col})));
+      }
+      if (lhsMeta.val && rhsMeta.val && lhsMeta.val != rhsMeta.val) {
+         renameDefs.push_back(tuples::ColumnDefAttr::get(ctx, lhsMeta.valDef.getName(), lhsMeta.valDef.getColumnPtr(), ArrayAttr::get(ctx, {rhsMeta.val})));
+      }
+
+      Value rhsRel = adaptor.getInputs()[1];
+      if (!renameDefs.empty()) {
+         rhsRel = rewriter.create<relalg::RenamingOp>(loc, tuples::TupleStreamType::get(ctx), rhsRel, ArrayAttr::get(ctx, renameDefs)).getResult();
+      }
+
+      auto unionOp = rewriter.create<relalg::UnionOp>(loc, tuples::TupleStreamType::get(ctx), ValueRange{adaptor.getInputs()[0], rhsRel});
+      state.set(op.getResult(), lhsMeta);
+      rewriter.replaceOp(op, unionOp.getResult());
+      return success();
+   }
+};
+
 class AddConversion : public OpConversionPattern<AddOp> {
    public:
    using OpConversionPattern::OpConversionPattern;
@@ -958,28 +1500,183 @@ class AddConversion : public OpConversionPattern<AddOp> {
    }
 };
 
+class MulConversion : public OpConversionPattern<MulOp> {
+   public:
+   using OpConversionPattern::OpConversionPattern;
+   LogicalResult matchAndRewrite(MulOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto sring = op.getType();
+      auto* ctx = rewriter.getContext();
+      if (sring == SemiringTypes::forBool(ctx)) {
+         rewriter.replaceOpWithNewOp<arith::AndIOp>(op, adaptor.getLhs(), adaptor.getRhs());
+      } else if (sring == SemiringTypes::forInt(ctx)) {
+         rewriter.replaceOpWithNewOp<arith::MulIOp>(op, adaptor.getLhs(), adaptor.getRhs());
+      } else if (sring == SemiringTypes::forReal(ctx)) {
+         rewriter.replaceOpWithNewOp<arith::MulFOp>(op, adaptor.getLhs(), adaptor.getRhs());
+      } else if (sring == SemiringTypes::forTropInt(ctx) || sring == SemiringTypes::forTropMaxInt(ctx)) {
+         rewriter.replaceOpWithNewOp<arith::AddIOp>(op, adaptor.getLhs(), adaptor.getRhs());
+      } else if (sring == SemiringTypes::forTropReal(ctx)) {
+         rewriter.replaceOpWithNewOp<arith::AddFOp>(op, adaptor.getLhs(), adaptor.getRhs());
+      }
+      return success();
+   }
+};
+
+class EqConversion : public OpConversionPattern<EqOp> {
+   public:
+   using OpConversionPattern::OpConversionPattern;
+   LogicalResult matchAndRewrite(EqOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto type = adaptor.getLhs().getType();
+      if (type.isInteger(1) || type.isInteger(64)) {
+         rewriter.replaceOpWithNewOp<arith::CmpIOp>(op, arith::CmpIPredicate::eq, adaptor.getLhs(), adaptor.getRhs());
+      } else if (type.isF64()) {
+         rewriter.replaceOpWithNewOp<arith::CmpFOp>(op, arith::CmpFPredicate::OEQ, adaptor.getLhs(), adaptor.getRhs());
+      } else {
+         return failure();
+      }
+      return success();
+   }
+};
+
+class ConstantOpConversion : public OpConversionPattern<ConstantOp> {
+   public:
+   using OpConversionPattern::OpConversionPattern;
+   LogicalResult matchAndRewrite(ConstantOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto type = GraphAlgTypeConverter::convertSemiringType(op.getType());
+      Attribute rawVal = op.getValue();
+      if (auto tropInt = llvm::dyn_cast<TropIntAttr>(rawVal)) rawVal = tropInt.getValue();
+      if (auto tropF = llvm::dyn_cast<TropFloatAttr>(rawVal)) rawVal = tropF.getValue();
+
+      TypedAttr newAttr;
+      if (type.isInteger(1) || type.isInteger(64)) {
+         newAttr = rewriter.getIntegerAttr(type, llvm::cast<IntegerAttr>(rawVal).getInt());
+      } else if (type.isF64()) {
+         newAttr = rewriter.getFloatAttr(type, llvm::cast<FloatAttr>(rawVal).getValueAsDouble());
+      } else {
+         newAttr = llvm::cast<TypedAttr>(rawVal);
+      }
+
+      rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, newAttr);
+      return success();
+   }
+};
+
 class CastScalarOpConversion : public OpConversionPattern<CastScalarOp> {
    public:
    using OpConversionPattern::OpConversionPattern;
    LogicalResult matchAndRewrite(CastScalarOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto outType = GraphAlgTypeConverter::convertSemiringType(op.getType());
+      auto outRing = op.getType();
+      auto inRing = op.getInput().getType();
+      auto outType = GraphAlgTypeConverter::convertSemiringType(outRing);
       auto inType = adaptor.getInput().getType();
 
-      if (inType == outType) {
-         rewriter.replaceOp(op, adaptor.getInput());
+      auto loc = op.getLoc();
+      auto input = adaptor.getInput();
+      auto* ctx = rewriter.getContext();
+
+      if (inRing == outRing) {
+         rewriter.replaceOp(op, input);
          return success();
       }
 
-      if (inType.isInteger(1)) {
-         if (outType.isInteger(64)) {
-            rewriter.replaceOpWithNewOp<arith::ExtUIOp>(op, outType, adaptor.getInput());
-         } else if (outType.isF64()) {
-            auto ext = rewriter.create<arith::ExtUIOp>(op.getLoc(), rewriter.getI64Type(), adaptor.getInput());
-            rewriter.replaceOpWithNewOp<arith::UIToFPOp>(op, outType, ext);
+      auto getZero = [&](Type ring) -> Value {
+         if (ring == SemiringTypes::forBool(ctx)) return rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
+         if (ring == SemiringTypes::forInt(ctx)) return rewriter.create<arith::ConstantOp>(loc, rewriter.getI64IntegerAttr(0));
+         if (ring == SemiringTypes::forReal(ctx)) return rewriter.create<arith::ConstantOp>(loc, rewriter.getFloatAttr(rewriter.getF64Type(), 0.0));
+         if (ring == SemiringTypes::forTropInt(ctx)) return rewriter.create<arith::ConstantOp>(loc, rewriter.getI64IntegerAttr(std::numeric_limits<int64_t>::max()));
+         if (ring == SemiringTypes::forTropMaxInt(ctx)) return rewriter.create<arith::ConstantOp>(loc, rewriter.getI64IntegerAttr(std::numeric_limits<int64_t>::min()));
+         if (ring == SemiringTypes::forTropReal(ctx)) return rewriter.create<arith::ConstantOp>(loc, rewriter.getFloatAttr(rewriter.getF64Type(), std::numeric_limits<double>::infinity()));
+         return nullptr;
+      };
+
+      auto getOne = [&](Type ring) -> Value {
+         if (ring == SemiringTypes::forBool(ctx)) return rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
+         if (ring == SemiringTypes::forInt(ctx)) return rewriter.create<arith::ConstantOp>(loc, rewriter.getI64IntegerAttr(1));
+         if (ring == SemiringTypes::forReal(ctx)) return rewriter.create<arith::ConstantOp>(loc, rewriter.getFloatAttr(rewriter.getF64Type(), 1.0));
+         if (ring == SemiringTypes::forTropInt(ctx) || ring == SemiringTypes::forTropMaxInt(ctx)) return rewriter.create<arith::ConstantOp>(loc, rewriter.getI64IntegerAttr(0));
+         if (ring == SemiringTypes::forTropReal(ctx)) return rewriter.create<arith::ConstantOp>(loc, rewriter.getFloatAttr(rewriter.getF64Type(), 0.0));
+         return nullptr;
+      };
+
+      if (outRing == SemiringTypes::forBool(ctx)) {
+         Value zeroIn = getZero(inRing);
+         if (!zeroIn) return failure();
+         if (inType.isInteger(64)) {
+            rewriter.replaceOpWithNewOp<arith::CmpIOp>(op, arith::CmpIPredicate::ne, input, zeroIn);
+         } else if (inType.isF64()) {
+            rewriter.replaceOpWithNewOp<arith::CmpFOp>(op, arith::CmpFPredicate::UNE, input, zeroIn);
          }
          return success();
       }
-      // TODO add more cases following spec https://wildarch.dev/graphalg/spec/core/relalg#castscalarop
+
+      if (inRing == SemiringTypes::forBool(ctx)) {
+         Value oneOut = getOne(outRing);
+         Value zeroOut = getZero(outRing);
+         if (!oneOut || !zeroOut) return failure();
+         rewriter.replaceOpWithNewOp<arith::SelectOp>(op, input, oneOut, zeroOut);
+         return success();
+      }
+
+      if (inRing == SemiringTypes::forInt(ctx) && outRing == SemiringTypes::forReal(ctx)) {
+         rewriter.replaceOpWithNewOp<arith::SIToFPOp>(op, outType, input);
+         return success();
+      }
+
+      if (inRing == SemiringTypes::forInt(ctx) && outRing == SemiringTypes::forTropInt(ctx)) {
+         Value zeroIn = getZero(inRing);
+         Value infOut = getZero(outRing);
+         Value isZero = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, input, zeroIn);
+         rewriter.replaceOpWithNewOp<arith::SelectOp>(op, isZero, infOut, input);
+         return success();
+      }
+
+      if (inRing == SemiringTypes::forInt(ctx) && outRing == SemiringTypes::forTropMaxInt(ctx)) {
+         Value zeroIn = getZero(inRing);
+         Value infOut = getZero(outRing);
+         Value isZero = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, input, zeroIn);
+         rewriter.replaceOpWithNewOp<arith::SelectOp>(op, isZero, infOut, input);
+         return success();
+      }
+
+      if (inRing == SemiringTypes::forInt(ctx) && outRing == SemiringTypes::forTropReal(ctx)) {
+         Value zeroIn = getZero(inRing);
+         Value infOut = getZero(outRing);
+         Value isZero = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, input, zeroIn);
+         Value promoted = rewriter.create<arith::SIToFPOp>(loc, outType, input);
+         rewriter.replaceOpWithNewOp<arith::SelectOp>(op, isZero, infOut, promoted);
+         return success();
+      }
+
+      if (inRing == SemiringTypes::forReal(ctx) && outRing == SemiringTypes::forInt(ctx)) {
+         rewriter.replaceOpWithNewOp<arith::FPToSIOp>(op, outType, input);
+         return success();
+      }
+
+      if (inRing == SemiringTypes::forReal(ctx) && outRing == SemiringTypes::forTropInt(ctx)) {
+         Value zeroIn = getZero(inRing);
+         Value infOut = getZero(outRing);
+         Value isZero = rewriter.create<arith::CmpFOp>(loc, arith::CmpFPredicate::OEQ, input, zeroIn);
+         Value promoted = rewriter.create<arith::FPToSIOp>(loc, outType, input);
+         rewriter.replaceOpWithNewOp<arith::SelectOp>(op, isZero, infOut, promoted);
+         return success();
+      }
+
+      if (inRing == SemiringTypes::forReal(ctx) && outRing == SemiringTypes::forTropMaxInt(ctx)) {
+         Value zeroIn = getZero(inRing);
+         Value infOut = getZero(outRing);
+         Value isZero = rewriter.create<arith::CmpFOp>(loc, arith::CmpFPredicate::OEQ, input, zeroIn);
+         Value promoted = rewriter.create<arith::FPToSIOp>(loc, outType, input);
+         rewriter.replaceOpWithNewOp<arith::SelectOp>(op, isZero, infOut, promoted);
+         return success();
+      }
+
+      if (inRing == SemiringTypes::forReal(ctx) && outRing == SemiringTypes::forTropReal(ctx)) {
+         Value zeroIn = getZero(inRing);
+         Value infOut = getZero(outRing);
+         Value isZero = rewriter.create<arith::CmpFOp>(loc, arith::CmpFPredicate::OEQ, input, zeroIn);
+         rewriter.replaceOpWithNewOp<arith::SelectOp>(op, isZero, infOut, input);
+         return success();
+      }
+
       return failure();
    }
 };
@@ -1040,6 +1737,7 @@ void GraphAlgToRelAlgPass::runOnOperation() {
 
    patterns.add<ReturnOpConversion>(typeConverter, context);
    patterns.add<LoadCastConversion>(typeConverter, context, state);
+
    patterns.add<
       FuncOpConversion,
       ConstantMatrixConversion,
@@ -1049,12 +1747,24 @@ void GraphAlgToRelAlgPass::runOnOperation() {
 
    patterns.add<
       MatMulOpConversion,
+      MatMulJoinOpConversion,
       ForDimOpConversion,
+      ForConstOpConversion,
       YieldOpConversion>(typeConverter, context, state);
+
+   patterns.add<
+      DiagOpConversion,
+      BroadcastOpConversion,
+      TrilOpConversion,
+      UnionOpConversion,
+      PickAnyOpConversion>(typeConverter, context, state);
 
    patterns.add<
       ApplyReturnOpConversion,
       AddConversion,
+      MulConversion,
+      EqConversion,
+      ConstantOpConversion,
       CastScalarOpConversion>(typeConverter, context);
 
    if (failed(applyFullConversion(getOperation(), target, std::move(patterns)))) {
