@@ -79,7 +79,15 @@ static mlir::LogicalResult convertVecMatMul(VecMatMulOp op,
 
 static mlir::LogicalResult convertElementWise(ElementWiseOp op,
                                               mlir::PatternRewriter& rewriter) {
-   // Wrap in Apply to make the arguments scalar.
+   // add: Union and DeferredReduceOp
+   if (op.getOp() == BinaryOp::ADD) {
+      auto unionOp = rewriter.create<UnionOp>(op.getLoc(), op.getType(), op.getOperands());
+
+      rewriter.replaceOpWithNewOp<DeferredReduceOp>(op, op.getType(), unionOp.getResult());
+      return mlir::success();
+   }
+
+   // mul: Intersection and Inner Join
    auto applyOp =
       rewriter.replaceOpWithNewOp<ApplyOp>(op, op.getType(), op->getOperands());
 
