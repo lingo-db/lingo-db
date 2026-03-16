@@ -858,35 +858,35 @@ def MatMulJoinOp : GraphAlg_Op<"mxm_join", [
     }];
 }
 
-def UnionOp : GraphAlg_Op<"union", [
-        Pure,
-        SameOperandsAndResultSemiring]> {
-    let summary = "Union of matrices";
+    def UnionOp : Core_Op<"union", [
+            Pure,
+            SameOperandsAndResultSemiring]> {
+        let summary = "Union of matrices";
 
-    let description = [{
-        Combines the cells of the input matrices.
+        let description = [{
+            Combines the cells of the input matrices.
 
-        This may result in a matrix with multiple values per cell, which is not
-        well-formed. In this case, it should be followed with a
-        `DeferredReduceOp` to perform the aggregation.
+            This may result in a matrix with multiple values per cell, which is not
+            well-formed. In this case, it should be followed with a
+            `DeferredReduceOp` to perform the aggregation.
 
-        If an input has higher dimensionality than the result, it is implicitly
-        flattened.
-    }];
+            If an input has higher dimensionality than the result, it is implicitly
+            flattened.
+        }];
 
-    let arguments = (ins Variadic<Matrix>:$inputs);
+        let arguments = (ins Variadic<Matrix>:$inputs);
 
-    let results = (outs Matrix:$result);
+        let results = (outs Matrix:$result);
 
-    let assemblyFormat = [{
-        $inputs `:` type($inputs) `->` type($result) attr-dict
-    }];
+        let assemblyFormat = [{
+            $inputs `:` type($inputs) `->` type($result) attr-dict
+        }];
 
-    let hasFolder = 1;
-    let hasVerifier = 1;
-}
+        let hasFolder = 1;
+        let hasVerifier = 1;
+    }
 
-def DeferredReduceOp : GraphAlg_Op<"deferred_reduce", [
+def DeferredReduceOp : Core_Op<"deferred_reduce", [
         Pure,
         SameOperandsAndResultSemiring]> {
     let summary = "Deferred aggregation";

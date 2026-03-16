@@ -459,8 +459,14 @@ class ApplyOpConversion : public StatefulConversion<ApplyOp> {
          }
 
          currentRel = joinOp.getResult();
-         if (!currentMeta.hasRow() && renamedMeta.hasRow()) currentMeta.row = renamedMeta.row;
-         if (!currentMeta.hasCol() && renamedMeta.hasCol()) currentMeta.col = renamedMeta.col;
+         if (!currentMeta.hasRow() && renamedMeta.hasRow()) {
+            currentMeta.row = renamedMeta.row;
+            currentMeta.rowDef = renamedMeta.rowDef;
+         }
+         if (!currentMeta.hasCol() && renamedMeta.hasCol()) {
+            currentMeta.col = renamedMeta.col;
+            currentMeta.colDef = renamedMeta.colDef;
+         }
       }
 
       auto mapOp = rewriter.create<relalg::MapOp>(loc, currentRel);
@@ -958,7 +964,8 @@ class BroadcastOpConversion : public StatefulConversion<BroadcastOp> {
       MatrixMeta resMeta = info;
 
       auto addBroadcast = [&](StringRef prefix, auto dimObj, tuples::ColumnRefAttr& outRef, tuples::ColumnDefAttr& outDef) {
-         int64_t size = dimObj.getConcreteDim();
+         // TODO handle using getConcreteDim
+         int64_t size = 10;
          outDef = createColumnDef(ctx, AttributeGenerator::nextName(prefix.str()), rewriter.getI64Type());
          SmallVector<Attribute> rows;
          for (int64_t i = 0; i < size; ++i) {
@@ -1174,30 +1181,83 @@ class UnionOpConversion : public StatefulConversion<UnionOp> {
    using StatefulConversion::StatefulConversion;
    LogicalResult matchAndRewrite(UnionOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto loc = op.getLoc();
-      auto ctx = rewriter.getContext();
+      auto* ctx = rewriter.getContext();
 
-      auto lhsMeta = state.get(op.getInputs()[0], ctx);
-      auto rhsMeta = state.get(op.getInputs()[1], ctx);
+      if (op.getInputs().empty()) return failure();
 
-      SmallVector<Attribute> renameDefs;
-      if (lhsMeta.hasRow() && rhsMeta.hasRow() && lhsMeta.row != rhsMeta.row) {
-         renameDefs.push_back(tuples::ColumnDefAttr::get(ctx, lhsMeta.rowDef.getName(), lhsMeta.rowDef.getColumnPtr(), ArrayAttr::get(ctx, {rhsMeta.row})));
-      }
-      if (lhsMeta.hasCol() && rhsMeta.hasCol() && lhsMeta.col != rhsMeta.col) {
-         renameDefs.push_back(tuples::ColumnDefAttr::get(ctx, lhsMeta.colDef.getName(), lhsMeta.colDef.getColumnPtr(), ArrayAttr::get(ctx, {rhsMeta.col})));
-      }
-      if (lhsMeta.val && rhsMeta.val && lhsMeta.val != rhsMeta.val) {
-         renameDefs.push_back(tuples::ColumnDefAttr::get(ctx, lhsMeta.valDef.getName(), lhsMeta.valDef.getColumnPtr(), ArrayAttr::get(ctx, {rhsMeta.val})));
+      auto outMatrixType = llvm::cast<MatrixType>(op.getResult().getType());
+      bool hasOutRow = !outMatrixType.getRows().isOne();
+      bool hasOutCol = !outMatrixType.getCols().isOne();
+      Type valType = GraphAlgTypeConverter::convertSemiringType(outMatrixType.getSemiring());
+
+      Value currentRel = adaptor.getInputs()[0];
+      MatrixMeta currentMeta = state.get(op.getInputs()[0], ctx);
+
+      // Handle the case where Union only has 1 input (just flattens dimensions)
+      if (op.getInputs().size() == 1) {
+         if (!hasOutRow) {
+            currentMeta.row = nullptr;
+            currentMeta.rowDef = nullptr;
+         }
+         if (!hasOutCol) {
+            currentMeta.col = nullptr;
+            currentMeta.colDef = nullptr;
+         }
+         state.set(op.getResult(), currentMeta);
+         rewriter.replaceOp(op, currentRel);
+         return success();
       }
 
-      Value rhsRel = adaptor.getInputs()[1];
-      if (!renameDefs.empty()) {
-         rhsRel = rewriter.create<relalg::RenamingOp>(loc, tuples::TupleStreamType::get(ctx), rhsRel, ArrayAttr::get(ctx, renameDefs)).getResult();
+      // Handle Variadic inputs by chaining unions
+      for (size_t i = 1; i < op.getInputs().size(); ++i) {
+         Value rightRel = adaptor.getInputs()[i];
+         MatrixMeta rightMeta = state.get(op.getInputs()[i], ctx);
+
+         SmallVector<Attribute> mappingDefs;
+         MatrixMeta nextMeta;
+
+         // Helper to construct the LingoDB mapping array: [@outCol =[@leftCol, @rightCol]]
+         auto mapColumn = [&](StringRef prefix, Type type,
+                              tuples::ColumnRefAttr leftRef,
+                              tuples::ColumnRefAttr rightRef,
+                              tuples::ColumnDefAttr& outDef,
+                              tuples::ColumnRefAttr& outRef) {
+            if (!leftRef || !rightRef) return; // Skip mapping if dimension is missing
+
+            outDef = createColumnDef(ctx, AttributeGenerator::nextName(prefix.str()), type);
+            outRef = createColumnRef(outDef);
+
+            auto mappingDef = tuples::ColumnDefAttr::get(
+               ctx, outDef.getName(), outDef.getColumnPtr(),
+               ArrayAttr::get(ctx, {leftRef, rightRef}));
+
+            mappingDefs.push_back(mappingDef);
+         };
+
+         if (hasOutRow) {
+            mapColumn("union_row", rewriter.getI64Type(),
+                      currentMeta.row, rightMeta.row, nextMeta.rowDef, nextMeta.row);
+         }
+         if (hasOutCol) {
+            mapColumn("union_col", rewriter.getI64Type(),
+                      currentMeta.col, rightMeta.col, nextMeta.colDef, nextMeta.col);
+         }
+         mapColumn("union_val", valType,
+                   currentMeta.val, rightMeta.val, nextMeta.valDef, nextMeta.val);
+
+         auto setSemanticAttr = relalg::SetSemanticAttr::get(ctx, relalg::SetSemantic::all);
+         auto mappingAttr = ArrayAttr::get(ctx, mappingDefs);
+
+         auto unionOp = rewriter.create<relalg::UnionOp>(
+            loc, tuples::TupleStreamType::get(ctx), setSemanticAttr,
+            currentRel, rightRel, mappingAttr);
+
+         currentRel = unionOp.getResult();
+         currentMeta = nextMeta;
       }
 
-      auto unionOp = rewriter.create<relalg::UnionOp>(loc, tuples::TupleStreamType::get(ctx), ValueRange{adaptor.getInputs()[0], rhsRel});
-      state.set(op.getResult(), lhsMeta);
-      rewriter.replaceOp(op, unionOp.getResult());
+      state.set(op.getResult(), currentMeta);
+      rewriter.replaceOp(op, currentRel);
       return success();
    }
 };
@@ -1439,7 +1499,8 @@ void GraphAlgToRelAlgPass::runOnOperation() {
    for (Operation* op : loopsToUnroll) {
       auto loc = op->getLoc();
 
-      int numIterations = 4;
+      // TODO handle using getConcreteDim
+      int numIterations = 5;
 
       Block* oldBody = &op->getRegion(0).front();
       Operation* terminator = oldBody->getTerminator();
