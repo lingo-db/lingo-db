@@ -301,34 +301,34 @@ class LoadCastConversion : public ConversionPattern {
          auto meta = state.get(op->getOperand(0), rewriter.getContext());
          SmallVector<Attribute> renameDefs;
          auto ctx = rewriter.getContext();
-         auto addRename = [&](tuples::ColumnRefAttr exp, tuples::ColumnRefAttr from) {
-            if (exp && from && exp != from) {
-               renameDefs.push_back(tuples::ColumnDefAttr::get(ctx, exp.getName(), exp.getColumnPtr(), ArrayAttr::get(ctx, {from})));
+         auto addRename = [&](Attribute expAttr, tuples::ColumnRefAttr from) {
+            if (!expAttr || !from) return;
+            auto exp = resolveColumnRef(op, expAttr);
+            if (exp) {
+               if (exp != from) {
+                  renameDefs.push_back(tuples::ColumnDefAttr::get(ctx, exp.getName(), exp.getColumnPtr(), ArrayAttr::get(ctx, {from})));
+               }
+            } else if (auto symRef = llvm::dyn_cast<SymbolRefAttr>(expAttr)) {
+               auto column = std::make_shared<tuples::Column>();
+               column->type = from.getColumnPtr()->type;
+               renameDefs.push_back(tuples::ColumnDefAttr::get(ctx, symRef, column, ArrayAttr::get(ctx, {from})));
             }
          };
 
          if (colsAttr.size() == 3) {
-            auto expRow = resolveColumnRef(op, colsAttr[0]);
-            auto expCol = resolveColumnRef(op, colsAttr[1]);
-            auto expVal = resolveColumnRef(op, colsAttr[2]);
-            if (meta.hasRow()) addRename(expRow, meta.row);
-            if (meta.hasCol()) addRename(expCol, meta.col);
-            if (meta.val) addRename(expVal, meta.val);
+            if (meta.hasRow()) addRename(colsAttr[0], meta.row);
+            if (meta.hasCol()) addRename(colsAttr[1], meta.col);
+            if (meta.val) addRename(colsAttr[2], meta.val);
          } else if (colsAttr.size() == 2) {
             if (!meta.hasRow() && meta.hasCol()) {
-               auto expCol = resolveColumnRef(op, colsAttr[0]);
-               auto expVal = resolveColumnRef(op, colsAttr[1]);
-               addRename(expCol, meta.col);
-               if (meta.val) addRename(expVal, meta.val);
+               addRename(colsAttr[0], meta.col);
+               if (meta.val) addRename(colsAttr[1], meta.val);
             } else {
-               auto expRow = resolveColumnRef(op, colsAttr[0]);
-               auto expVal = resolveColumnRef(op, colsAttr[1]);
-               if (meta.hasRow()) addRename(expRow, meta.row);
-               if (meta.val) addRename(expVal, meta.val);
+               if (meta.hasRow()) addRename(colsAttr[0], meta.row);
+               if (meta.val) addRename(colsAttr[1], meta.val);
             }
          } else if (colsAttr.size() == 1) {
-            auto expVal = resolveColumnRef(op, colsAttr[0]);
-            if (meta.val) addRename(expVal, meta.val);
+            if (meta.val) addRename(colsAttr[0], meta.val);
          }
 
          if (!renameDefs.empty()) {
@@ -526,20 +526,18 @@ class ApplyReturnOpConversion : public OpConversionPattern<ApplyReturnOp> {
       return success();
    }
 };
-
+static relalg::AggrFunc getAggrFuncForSemiring(Type semiringType) {
+   if (isTropicalNonMax(semiringType)) return relalg::AggrFunc::min;
+   if (isTropicalMax(semiringType)) return relalg::AggrFunc::max;
+   if (isBool(semiringType)) return relalg::AggrFunc::max;
+   return relalg::AggrFunc::sum;
+}
 class MatMulOpConversion : public ConversionPattern {
    ConversionState& state;
 
    public:
    MatMulOpConversion(const TypeConverter& tc, MLIRContext* ctx, ConversionState& state)
       : ConversionPattern(tc, "graphalg.mxm", 1, ctx), state(state) {}
-
-   static relalg::AggrFunc getAggrFuncForSemiring(Type semiringType) {
-      if (isTropicalNonMax(semiringType)) return relalg::AggrFunc::min;
-      if (isTropicalMax(semiringType)) return relalg::AggrFunc::max;
-      if (isBool(semiringType)) return relalg::AggrFunc::max;
-      return relalg::AggrFunc::sum;
-   }
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto lhsMeta = state.get(op->getOperand(0), rewriter.getContext());
@@ -807,14 +805,50 @@ class MatMulJoinOpConversion : public ConversionPattern {
          rewriter.create<tuples::ReturnOp>(loc, ValueRange{res});
       }
 
+      bool needsAggregation = lhsMeta.hasCol() && renamedRhsMeta.hasRow();
+
       MatrixMeta resMeta;
       if (lhsMeta.hasRow()) resMeta.row = lhsMeta.row;
       if (renamedRhsMeta.hasCol()) resMeta.col = renamedRhsMeta.col;
 
-      resMeta.valDef = mulValDef;
-      resMeta.val = mulValRef;
+      if (!needsAggregation) {
+         resMeta.valDef = mulValDef;
+         resMeta.val = mulValRef;
+         state.set(op->getResult(0), resMeta);
+         rewriter.replaceOp(op, mapOp.getResult());
+         return success();
+      }
+
+      SmallVector<Attribute> groupByAttrs;
+      if (resMeta.hasRow()) groupByAttrs.push_back(resMeta.row);
+      if (resMeta.hasCol()) groupByAttrs.push_back(resMeta.col);
+
+      auto aggDefAttr = createColumnDef(ctx, AttributeGenerator::nextName("agg_val"), resType);
+      resMeta.valDef = aggDefAttr;
+      resMeta.val = createColumnRef(aggDefAttr);
+
+      auto aggOp = rewriter.create<relalg::AggregationOp>(
+         loc,
+         tuples::TupleStreamType::get(ctx),
+         mapOp.getResult(),
+         ArrayAttr::get(ctx, groupByAttrs),
+         ArrayAttr::get(ctx, {aggDefAttr}));
+
+      {
+         Block* aggBlock = rewriter.createBlock(&aggOp.getAggrFunc());
+         Value groupStream = aggBlock->addArgument(tuples::TupleStreamType::get(ctx), loc);
+         OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(aggBlock);
+
+         relalg::AggrFunc func = getAggrFuncForSemiring(matrixType.getSemiring());
+         Value res = rewriter.create<relalg::AggrFuncOp>(
+            loc, resType, relalg::AggrFuncAttr::get(ctx, func), groupStream, mulValRef);
+
+         rewriter.create<tuples::ReturnOp>(loc, ValueRange{res});
+      }
+
       state.set(op->getResult(0), resMeta);
-      rewriter.replaceOp(op, mapOp.getResult());
+      rewriter.replaceOp(op, aggOp.getResult());
       return success();
    }
 };
@@ -1483,7 +1517,14 @@ class GraphAlgToRelAlgPass : public PassWrapper<GraphAlgToRelAlgPass, OperationP
 
    virtual llvm::StringRef getArgument() const override { return "graphalg-core-to-relalg"; }
 };
+static mlir::IntegerAttr tryGetConstantInt(mlir::Value v) {
+   mlir::Attribute attr;
+   if (!mlir::matchPattern(v, mlir::m_Constant(&attr))) {
+      return nullptr;
+   }
 
+   return llvm::cast<mlir::IntegerAttr>(attr);
+}
 void GraphAlgToRelAlgPass::runOnOperation() {
    MLIRContext* context = &getContext();
 
@@ -1500,7 +1541,14 @@ void GraphAlgToRelAlgPass::runOnOperation() {
       auto loc = op->getLoc();
 
       // TODO handle using getConcreteDim
-      int numIterations = 5;
+      int numIterations = 50;
+      if (auto forConst = dyn_cast<ForConstOp>(op)) {
+         auto rangeBegin = tryGetConstantInt(forConst.getRangeBegin());
+         auto rangeEnd = tryGetConstantInt(forConst.getRangeEnd());
+         if (rangeBegin && rangeEnd) {
+            numIterations = rangeEnd.getInt() - rangeBegin.getInt();
+         }
+      }
 
       Block* oldBody = &op->getRegion(0).front();
       Operation* terminator = oldBody->getTerminator();

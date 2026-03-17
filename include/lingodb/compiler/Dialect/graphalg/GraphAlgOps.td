@@ -832,7 +832,7 @@ def ElementWiseAddOp : GraphAlg_Op<"ewise_add", [
 // ==========================  SPLIT AGGREGATE OPS  ============================
 // =============================================================================
 
-def MatMulJoinOp : GraphAlg_Op<"mxm_join", [
+def MatMulJoinOp : Core_Op<"mxm_join", [
         Pure,
         InferTypeOpAdaptor,
         SameOperandsAndResultSemiring]> {

@@ -21,6 +21,9 @@ def GraphAlgScalarizeApply : Pass<"graphalg-scalarize-apply", "mlir::func::FuncO
 
 def GraphAlgToCore : Pass<"graphalg-to-core", "::mlir::func::FuncOp"> {
     let summary = "Desugar graphalg IR into the Core operations";
+    let dependentDialects = [
+        "mlir::arith::ArithDialect",
+    ];
 }
 
 def GraphAlgExplicateSparsity : Pass<"graphalg-explicate-sparsity", "mlir::func::FuncOp"> {
