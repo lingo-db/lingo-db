@@ -284,6 +284,8 @@ static mlir::LogicalResult convertLiteral(LiteralOp op,
 void GraphAlgToCore::runOnOperation() {
    mlir::ConversionTarget target(getContext());
 
+   target.addLegalDialect<mlir::arith::ArithDialect>();
+
    // Only graphalg ops are only allowed if they are part of the 'Core' subset.
    target.addDynamicallyLegalDialect<graphalg::GraphAlgDialect>(
       [](mlir::Operation* op) { return op->hasTrait<IsCore>(); });

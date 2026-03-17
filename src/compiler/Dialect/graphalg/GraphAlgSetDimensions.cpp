@@ -359,6 +359,7 @@ void GraphAlgSetDimensions::runOnOperation() {
    }
 
    mlir::ConversionTarget target(getContext());
+   target.markUnknownOpDynamicallyLegal(doesNotUseAbstractDimensions);
    target.addDynamicallyLegalDialect<GraphAlgDialect>(
       doesNotUseAbstractDimensions);
    target.addDynamicallyLegalOp<mlir::func::ReturnOp>(
@@ -383,7 +384,7 @@ void GraphAlgSetDimensions::runOnOperation() {
    ForDimOp::getCanonicalizationPatterns(patterns, &getContext());
 
    if (mlir::failed(
-          mlir::applyPartialConversion(func, target, std::move(patterns)))) {
+          mlir::applyPartialConversion(getOperation(), target, std::move(patterns)))) {
       return signalPassFailure();
    }
 }

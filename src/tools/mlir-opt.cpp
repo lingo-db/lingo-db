@@ -55,8 +55,10 @@ int main(int argc, char** argv) {
    }
    mlir::registerAllPasses();
 
+   graphalg::registerPasses();
    graphalg::registerGraphAlgToGraphAlgCoreConversionPasses();
    graphalg::registerGraphAlgCoreToRelAlgConversionPasses();
+
    relalg::registerRelAlgToSubOpConversionPasses();
    relalg::registerQueryOptimizationPasses();
    db::registerDBConversionPasses();
