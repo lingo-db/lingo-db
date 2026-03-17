@@ -69,7 +69,9 @@ class ArrayLoadFixedSizedLowering : public OpConversionPattern<arrow::LoadFixedS
    LogicalResult matchAndRewrite(arrow::LoadFixedSizedOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       mlir::Value valueBuffer;
       createAtArrayCreation(rewriter, adaptor.getArray(), [&](mlir::ConversionPatternRewriter& rewriter) {
-         auto offset = rewriter.create<util::LoadElementOp>(op.getLoc(), rewriter.getIndexType(), adaptor.getArray(), 2);
+         mlir::Value offset = rewriter.create<util::LoadElementOp>(op.getLoc(), rewriter.getI32Type(), adaptor.getArray(), 2);
+         offset = rewriter.create<arith::IndexCastOp>(op.getLoc(),rewriter.getIndexType(), offset);
+
          auto bufferArray = rewriter.create<util::LoadElementOp>(op.getLoc(), util::RefType::get(util::RefType::get(rewriter.getI8Type())), adaptor.getArray(), 5);
          //load buffer with main values (offset 1)
          auto c1 = rewriter.create<arith::ConstantIndexOp>(op.getLoc(), 1);
@@ -109,7 +111,8 @@ class ArrayLoadBoolLowering : public OpConversionPattern<arrow::LoadBoolOp> {
       mlir::Value buffer;
       mlir::Value arrayOffset;
       createAtArrayCreation(rewriter, adaptor.getArray(), [&](mlir::ConversionPatternRewriter& rewriter) {
-         arrayOffset = rewriter.create<util::LoadElementOp>(op.getLoc(), rewriter.getIndexType(), adaptor.getArray(), 2);
+         arrayOffset = rewriter.create<util::LoadElementOp>(op.getLoc(), rewriter.getI32Type(), adaptor.getArray(), 2);
+         arrayOffset = rewriter.create<arith::IndexCastOp>(op.getLoc(),rewriter.getIndexType(), arrayOffset);
          auto bufferArray = rewriter.create<util::LoadElementOp>(op.getLoc(), util::RefType::get(util::RefType::get(rewriter.getI8Type())), adaptor.getArray(), 5);
          //load buffer with main values (offset 1)
          auto c1 = rewriter.create<arith::ConstantIndexOp>(op.getLoc(), 1);
@@ -130,7 +133,8 @@ class ArrayLoadVariableSizeBinaryLowering : public OpConversionPattern<arrow::Lo
       mlir::Value binaryBuffer;
       mlir::Value c1;
       createAtArrayCreation(rewriter, adaptor.getArray(), [&](mlir::ConversionPatternRewriter& rewriter) {
-         auto offset = rewriter.create<util::LoadElementOp>(op.getLoc(), rewriter.getIndexType(), adaptor.getArray(), 2);
+         mlir::Value offset = rewriter.create<util::LoadElementOp>(op.getLoc(), rewriter.getI32Type(), adaptor.getArray(), 2);
+                offset = rewriter.create<arith::IndexCastOp>(op.getLoc(),rewriter.getIndexType(), offset);
          auto bufferArray = rewriter.create<util::LoadElementOp>(op.getLoc(), util::RefType::get(util::RefType::get(rewriter.getI8Type())), adaptor.getArray(), 5);
          //load buffer with main values (offset 1)
          c1 = rewriter.create<arith::ConstantIndexOp>(op.getLoc(), 1);
@@ -158,7 +162,8 @@ class ArrayIsValidLowering : public OpConversionPattern<arrow::IsValidOp> {
       mlir::Value buffer;
       mlir::Value arrayOffset;
       createAtArrayCreation(rewriter, adaptor.getArray(), [&](mlir::ConversionPatternRewriter& rewriter) {
-         arrayOffset = rewriter.create<util::LoadElementOp>(op.getLoc(), rewriter.getIndexType(), adaptor.getArray(), 2);
+         arrayOffset = rewriter.create<util::LoadElementOp>(op.getLoc(), rewriter.getI32Type(), adaptor.getArray(), 2);
+              arrayOffset = rewriter.create<arith::IndexCastOp>(op.getLoc(),rewriter.getIndexType(), arrayOffset);
          auto bufferArray = rewriter.create<util::LoadElementOp>(op.getLoc(), util::RefType::get(util::RefType::get(rewriter.getI8Type())), adaptor.getArray(), 5);
          //load  validity buffer (offset 0)
          auto c0 = rewriter.create<arith::ConstantIndexOp>(op.getLoc(), 0);
@@ -311,11 +316,11 @@ void ArrowToStdLoweringPass::runOnOperation() {
    });
 
    typeConverter.addConversion([&](arrow::ArrayType arrayType) {
-      auto idxType = IndexType::get(ctxt);
+      auto i32Type = IntegerType::get(ctxt, 32);
       auto bufferType = util::RefType::get(ctxt, mlir::IntegerType::get(ctxt, 8));
       auto bufferArrayType = util::RefType::get(ctxt, bufferType);
       //todo: childArrayType
-      return util::RefType::get(&getContext(), mlir::TupleType::get(ctxt, {idxType, idxType, idxType, idxType, idxType, bufferArrayType}));
+      return util::RefType::get(&getContext(), mlir::TupleType::get(ctxt, {i32Type, i32Type, i32Type, i32Type, i32Type, bufferArrayType}));
    });
    typeConverter.addConversion([&](arrow::ArrayBuilderType builderType) {
       return util::RefType::get(&getContext(), IntegerType::get(&getContext(), 8));

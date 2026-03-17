@@ -228,7 +228,7 @@ LingoDBTable::TableChunk::TableChunk(std::shared_ptr<arrow::RecordBatch> data, s
    }
    for (auto colId = 0; colId < data->num_columns(); colId++) {
       auto arrayData = data->column(colId)->data();
-      columnInfo.push_back(ArrayView{.length = arrayData->length, .nullCount = arrayData->null_count, .offset = arrayData->offset, .nBuffers = static_cast<int64_t>(arrayData->buffers.size()), .nChildren = static_cast<int64_t>(arrayData->child_data.size()), .buffers = &buffers[bufferStart.at(colId)], .children = nullptr});
+      columnInfo.push_back(ArrayView{.length = (int32_t)arrayData->length, .nullCount = (int32_t)arrayData->null_count, .offset =  (int32_t)arrayData->offset, .nBuffers = static_cast<int32_t>(arrayData->buffers.size()), .nChildren = static_cast<int32_t>(arrayData->child_data.size()), .buffers = &buffers[bufferStart.at(colId)], .children = nullptr});
    }
 }
 

@@ -1149,7 +1149,8 @@ class ScanRefsTableLowering : public SubOpConversionPattern<subop::ScanRefsOp> {
 
       auto* ctxt = rewriter.getContext();
       auto i16T = mlir::IntegerType::get(rewriter.getContext(), 16);
-      auto recordBatchInfoRepr = mlir::TupleType::get(ctxt, {rewriter.getIndexType(), rewriter.getIndexType(), util::RefType::get(i16T), util::RefType::get(arrow::ArrayType::get(ctxt))});
+      auto i32T = mlir::IntegerType::get(rewriter.getContext(), 32);
+      auto recordBatchInfoRepr = mlir::TupleType::get(ctxt, {i32T, i32T, util::RefType::get(i16T), util::RefType::get(arrow::ArrayType::get(ctxt))});
       ModuleOp parentModule = scanOp->getParentOfType<ModuleOp>();
       mlir::func::FuncOp funcOp;
       static size_t funcIds;
@@ -1165,8 +1166,9 @@ class ScanRefsTableLowering : public SubOpConversionPattern<subop::ScanRefsOp> {
       rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
          rewriter.loadStepRequirements(contextPtr, typeConverter, scanOp.getState());
          recordBatchPointer = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(getContext(), recordBatchInfoRepr), recordBatchPointer);
-         mlir::Value end = rewriter.create<util::LoadElementOp>(loc, rewriter.getIndexType(), recordBatchPointer, 0);
-         mlir::Value globalOffset = rewriter.create<util::LoadElementOp>(loc, rewriter.getIndexType(), recordBatchPointer, 1);
+         mlir::Value end = rewriter.create<util::LoadElementOp>(loc, i32T, recordBatchPointer, 0);
+         mlir::Value globalOffset = rewriter.create<util::LoadElementOp>(loc, i32T, recordBatchPointer, 1);
+         globalOffset = rewriter.create<arith::IndexCastOp>(loc, rewriter.getIndexType(), globalOffset);
          mlir::Value selVecPtr;
          if (tableType.getFiltered()) {
             selVecPtr = rewriter.create<util::LoadElementOp>(loc, util::RefType::get(i16T), recordBatchPointer, 2);
@@ -1179,11 +1181,11 @@ class ScanRefsTableLowering : public SubOpConversionPattern<subop::ScanRefsOp> {
             arrays.push_back(array);
          }
          auto arraysVal = rewriter.create<util::PackOp>(loc, arrays);
-         auto start = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
-         auto c1 = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
+         auto start = rewriter.create<mlir::arith::ConstantIntOp>(loc, 0, 32);
+         auto c1 = rewriter.create<mlir::arith::ConstantIntOp>(loc, 1, 32);
          auto forOp2 = rewriter.create<mlir::scf::ForOp>(loc, start, end, c1, mlir::ValueRange{});
          rewriter.atStartOf(forOp2.getBody(), [&](SubOpRewriter& rewriter) {
-            mlir::Value index = forOp2.getInductionVar();
+            mlir::Value index = rewriter.create<arith::IndexCastOp>(loc, rewriter.getIndexType(), forOp2.getInductionVar());
             if (tableType.getFiltered()) {
                auto idx = rewriter.create<util::LoadOp>(loc, selVecPtr, index);
                index = rewriter.create<mlir::arith::IndexCastOp>(loc, rewriter.getIndexType(), idx);
@@ -2304,7 +2306,8 @@ class ScanExternalHashIndexListLowering : public SubOpConversionPattern<subop::S
       auto tupleType = mlir::TupleType::get(ctxt, unpackTypes(externalHashIndexType.getMembers()));
       mlir::TypeRange typeRange{tupleType.getTypes()};
       auto i16T = mlir::IntegerType::get(rewriter.getContext(), 16);
-      auto recordBatchInfoRepr = mlir::TupleType::get(ctxt, {rewriter.getIndexType(), rewriter.getIndexType(), util::RefType::get(i16T), util::RefType::get(arrow::ArrayType::get(ctxt))});
+      auto i32T = mlir::IntegerType::get(rewriter.getContext(), 32);
+      auto recordBatchInfoRepr = mlir::TupleType::get(ctxt, {i32T, i32T, util::RefType::get(i16T), util::RefType::get(arrow::ArrayType::get(ctxt))});
 
       // Create while loop to extract all chained values from hash table
       auto whileOp = rewriter.create<mlir::scf::WhileOp>(loc, mlir::TypeRange{}, mlir::ValueRange{});
@@ -2338,8 +2341,10 @@ class ScanExternalHashIndexListLowering : public SubOpConversionPattern<subop::S
          }
          auto arraysVal = rewriter.create<util::PackOp>(loc, arrays);
          auto start = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
-         auto globalOffset = rewriter.create<util::LoadElementOp>(loc, rewriter.getIndexType(), recordBatchPointer, 1);
-         auto end = rewriter.create<util::LoadElementOp>(loc, rewriter.getIndexType(), recordBatchPointer, 0);
+         mlir::Value globalOffset = rewriter.create<util::LoadElementOp>(loc, i32T, recordBatchPointer, 1);
+         globalOffset = rewriter.create<arith::IndexCastOp>(loc, rewriter.getIndexType(), globalOffset);
+         mlir::Value end = rewriter.create<util::LoadElementOp>(loc, i32T, recordBatchPointer, 0);
+         end = rewriter.create<arith::IndexCastOp>(loc, rewriter.getIndexType(), end);
          auto c1 = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
          auto forOp2 = rewriter.create<mlir::scf::ForOp>(loc, start, end, c1, mlir::ValueRange{});
          rewriter.atStartOf(forOp2.getBody(), [&](SubOpRewriter& rewriter) {
