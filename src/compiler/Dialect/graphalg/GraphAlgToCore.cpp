@@ -71,9 +71,25 @@ class GraphAlgToCore : public impl::GraphAlgToCoreBase<GraphAlgToCore> {
 static mlir::LogicalResult convertVecMatMul(VecMatMulOp op,
                                             mlir::PatternRewriter& rewriter) {
    // For lhs : Matrix<s1, 1, T> and rhs : Matrix<s1, s2, T>
-   // lhs * rhs => rhs.T * lhs
-   auto rhsT = rewriter.create<TransposeOp>(op->getLoc(), op.getRhs());
-   rewriter.replaceOpWithNewOp<MatMulOp>(op, rhsT, op.getLhs());
+   // lhs * rhs => rhs.T * lhs => MatMulJoinOp + DeferredReduceOp
+   auto rhsT = rewriter.create<TransposeOp>(op.getLoc(), op.getRhs());
+
+   // The new LHS is rhsT, and the new RHS is op.getLhs()
+   auto joinOp = rewriter.create<MatMulJoinOp>(op.getLoc(), op.getType(),
+                                               rhsT, op.getLhs());
+
+   auto innerDim = op.getLhs().getType().getRows();
+
+   // Verify that the inner dimensions align (rows of lhs == rows of rhs)
+   assert(innerDim == op.getRhs().getType().getRows());
+
+   if (innerDim.isOne()) {
+      rewriter.replaceOp(op, joinOp);
+      return mlir::success();
+   }
+
+   rewriter.replaceOpWithNewOp<DeferredReduceOp>(op, op.getType(),
+                                                 mlir::ValueRange{joinOp});
    return mlir::success();
 }
 

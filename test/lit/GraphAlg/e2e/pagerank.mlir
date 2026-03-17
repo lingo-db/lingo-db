@@ -1,4 +1,4 @@
-// RUN: mlir-db-opt %s --graphalg-set-dimensions='func=PR args=50x50' --graphalg-split-aggregate --lower-graphalg-to-graphalg-core --lower-graphalg-core-to-relalg > %t.mlir
+// RUN: mlir-db-opt %s --graphalg-set-dimensions='func=PR args=50x50' --lower-graphalg-to-graphalg-core --lower-graphalg-core-to-relalg > %t.mlir
 // RUN: run-mlir %t.mlir | FileCheck %s
 
 #dim = #graphalg.dim<distinct[0]<>>
@@ -33,7 +33,7 @@ module {
     %19 = graphalg.ewise %17 DIV %18 : <1 x 1 x f64>
     %20 = graphalg.broadcast %19 : <1 x 1 x f64> -> <#dim x 1 x f64>
     %21 = graphalg.literal 0 : i64
-    %22 = graphalg.for_const range(%21, %ex) : <1 x 1 x i64> init(%20) : !graphalg.mat<#dim x 1 x f64> -> !graphalg.mat<#dim x 1 x f64> body {
+    %22 = graphalg.for_const range(%21, %1) : <1 x 1 x i64> init(%20) : !graphalg.mat<#dim x 1 x f64> -> !graphalg.mat<#dim x 1 x f64> body {
     ^bb0(%arg1: !graphalg.mat<1 x 1 x i64>, %arg2: !graphalg.mat<#dim x 1 x f64>):
       %23 = graphalg.const_mat 0.000000e+00 : f64 -> <#dim x 1 x f64>
       %24 = graphalg.mask %23<%15 : <#dim x 1 x i1>> = %arg2 : <#dim x 1 x f64> {complement = false}
