@@ -10,6 +10,7 @@ void buildGraphAlgToCorePipeline(mlir::OpPassManager& pm) {
    pm.addPass(createGraphAlgPrepareInline());
    pm.addPass(mlir::createInlinerPass());
    pm.addNestedPass<mlir::func::FuncOp>(createGraphAlgScalarizeApply());
+   pm.addNestedPass<mlir::func::FuncOp>(createGraphAlgSplitAggregate());
    pm.addNestedPass<mlir::func::FuncOp>(createGraphAlgToCore());
    pm.addPass(mlir::createCanonicalizerPass());
 }

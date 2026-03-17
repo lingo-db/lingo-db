@@ -48,6 +48,9 @@ void registerGraphAlgToGraphAlgCoreConversionPasses() {
       return graphalg::createGraphAlgScalarizeApply();
    });
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+      return graphalg::createGraphAlgSplitAggregate();
+   });
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return graphalg::createGraphAlgToCore();
    });
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
