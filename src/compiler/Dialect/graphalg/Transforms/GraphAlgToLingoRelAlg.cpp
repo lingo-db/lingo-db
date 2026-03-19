@@ -304,7 +304,7 @@ class LoadCastConversion : public ConversionPattern {
          auto addRename = [&](Attribute expAttr, tuples::ColumnRefAttr from) {
             if (!expAttr || !from) return;
             auto exp = resolveColumnRef(op, expAttr);
-            if (exp) {
+            if (exp && exp.getColumnPtr()->type == from.getColumnPtr()->type) {
                if (exp != from) {
                   renameDefs.push_back(tuples::ColumnDefAttr::get(ctx, exp.getName(), exp.getColumnPtr(), ArrayAttr::get(ctx, {from})));
                }
@@ -397,7 +397,6 @@ class ConstantMatrixConversion : public StatefulConversion<ConstantMatrixOp> {
       auto matType = llvm::cast<MatrixType>(op.getType());
       SmallVector<Attribute> defs;
 
-      // Setup coordinate definitions if matrix is not 1D
       if (!matType.getRows().isOne()) {
          meta.rowDef = createColumnDef(ctx, AttributeGenerator::nextName("const_row"), rewriter.getI64Type());
          meta.row = createColumnRef(meta.rowDef);
@@ -412,13 +411,39 @@ class ConstantMatrixConversion : public StatefulConversion<ConstantMatrixOp> {
       meta.val = createColumnRef(valDef);
       defs.push_back(valDef);
 
-      // Generate the cross product of coordinates
       SmallVector<Attribute> tuples;
-      int64_t rows = matType.getRows().isOne() ? 1 : matType.getRows().getConcreteDim(); // Assume bounded
+      int64_t rows = matType.getRows().isOne() ? 1 : matType.getRows().getConcreteDim();
       int64_t cols = matType.getCols().isOne() ? 1 : matType.getCols().getConcreteDim();
 
-      for (int64_t r = 0; r < rows; ++r) {
-         for (int64_t c = 0; c < cols; ++c) {
+      bool isScalar = matType.getRows().isOne() && matType.getCols().isOne();
+
+      bool isZero = false;
+      if (valType.isInteger(1)) {
+         isZero = (llvm::cast<IntegerAttr>(rawVal).getInt() == 0);
+      } else if (valType.isInteger(64)) {
+         if (matType.getSemiring() == SemiringTypes::forTropInt(ctx))
+            isZero = (llvm::cast<IntegerAttr>(rawVal).getInt() == std::numeric_limits<int64_t>::max());
+         else if (matType.getSemiring() == SemiringTypes::forTropMaxInt(ctx))
+            isZero = (llvm::cast<IntegerAttr>(rawVal).getInt() == std::numeric_limits<int64_t>::min());
+         else
+            isZero = (llvm::cast<IntegerAttr>(rawVal).getInt() == 0);
+      } else if (valType.isF64()) {
+         if (matType.getSemiring() == SemiringTypes::forTropReal(ctx))
+            isZero = std::isinf(llvm::cast<FloatAttr>(rawVal).getValueAsDouble()) && llvm::cast<FloatAttr>(rawVal).getValueAsDouble() > 0;
+         else
+            isZero = (llvm::cast<FloatAttr>(rawVal).getValueAsDouble() == 0.0);
+      }
+      if (isScalar) {
+         isZero = false;
+      }
+
+      // LingoDB requires at least 1 tuple. If structurally zero or dimension is 0, emit 1 dummy and filter it.
+      bool isEmpty = isZero || (rows <= 0) || (cols <= 0);
+      int64_t rowsToGen = isEmpty ? 1 : rows;
+      int64_t colsToGen = isEmpty ? 1 : cols;
+
+      for (int64_t r = 0; r < rowsToGen; ++r) {
+         for (int64_t c = 0; c < colsToGen; ++c) {
             SmallVector<Attribute> rowVals;
             if (!matType.getRows().isOne()) rowVals.push_back(rewriter.getI64IntegerAttr(r));
             if (!matType.getCols().isOne()) rowVals.push_back(rewriter.getI64IntegerAttr(c));
@@ -427,11 +452,25 @@ class ConstantMatrixConversion : public StatefulConversion<ConstantMatrixOp> {
          }
       }
 
-      auto constRel = rewriter.create<relalg::ConstRelationOp>(
-         op.getLoc(), ArrayAttr::get(ctx, defs), ArrayAttr::get(ctx, tuples));
+      Value currentRel = rewriter.create<relalg::ConstRelationOp>(
+                                    op.getLoc(), ArrayAttr::get(ctx, defs), ArrayAttr::get(ctx, tuples))
+                            .getResult();
+
+      if (isEmpty) {
+         auto selOp = rewriter.create<relalg::SelectionOp>(op.getLoc(), currentRel);
+         auto* selBlock = new Block;
+         selOp.getPredicate().push_back(selBlock);
+         selBlock->addArgument(tuples::TupleType::get(ctx), op.getLoc());
+
+         OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(selBlock);
+         Value falseVal = rewriter.create<arith::ConstantOp>(op.getLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
+         rewriter.create<tuples::ReturnOp>(op.getLoc(), ValueRange{falseVal});
+         currentRel = selOp.getResult();
+      }
 
       state.set(op.getResult(), meta);
-      rewriter.replaceOp(op, constRel.getResult());
+      rewriter.replaceOp(op, currentRel);
       return success();
    }
 };
@@ -539,6 +578,7 @@ class ApplyReturnOpConversion : public OpConversionPattern<ApplyReturnOp> {
       return success();
    }
 };
+
 class MatMulJoinOpConversion : public ConversionPattern {
    ConversionState& state;
 
@@ -809,20 +849,34 @@ class BroadcastOpConversion : public StatefulConversion<BroadcastOp> {
       MatrixMeta resMeta = info;
 
       auto addBroadcast = [&](StringRef prefix, Attribute dimObj, tuples::ColumnRefAttr& outRef, tuples::ColumnDefAttr& outDef) {
-         // 1. Extract the concrete dimension size dynamically instead of hardcoding
          auto dimAttr = llvm::cast<graphalg::DimAttr>(dimObj);
          int64_t size = dimAttr.getConcreteDim();
-         // 2. Generate the sequence as a ConstRelationOp (since relalg has no RangeOp)
+
          outDef = createColumnDef(ctx, AttributeGenerator::nextName(prefix.str()), rewriter.getI64Type());
          SmallVector<Attribute> rows;
-         for (int64_t i = 0; i < size; ++i) {
+
+         bool isEmpty = (size <= 0);
+         int64_t safeSize = isEmpty ? 1 : size;
+         for (int64_t i = 0; i < safeSize; ++i) {
             rows.push_back(ArrayAttr::get(ctx, {rewriter.getI64IntegerAttr(i)}));
          }
-         auto constRel = rewriter.create<relalg::ConstRelationOp>(
-            loc, ArrayAttr::get(ctx, {outDef}), ArrayAttr::get(ctx, rows));
+         Value broadcastRel = rewriter.create<relalg::ConstRelationOp>(
+                                         loc, ArrayAttr::get(ctx, {outDef}), ArrayAttr::get(ctx, rows))
+                                 .getResult();
 
-         // 3. Perform a cartesian product (InnerJoin with a True predicate)
-         auto joinOp = rewriter.create<relalg::InnerJoinOp>(loc, currentRel, constRel.getResult());
+         if (isEmpty) {
+            auto selOp = rewriter.create<relalg::SelectionOp>(loc, broadcastRel);
+            auto* selBlock = new Block;
+            selOp.getPredicate().push_back(selBlock);
+            selBlock->addArgument(tuples::TupleType::get(ctx), loc);
+            OpBuilder::InsertionGuard guard(rewriter);
+            rewriter.setInsertionPointToStart(selBlock);
+            Value falseVal = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
+            rewriter.create<tuples::ReturnOp>(loc, ValueRange{falseVal});
+            broadcastRel = selOp.getResult();
+         }
+
+         auto joinOp = rewriter.create<relalg::InnerJoinOp>(loc, currentRel, broadcastRel);
          auto* joinBlock = new Block;
          joinOp.getPredicate().push_back(joinBlock);
          joinBlock->addArgument(tuples::TupleType::get(ctx), loc);
@@ -837,12 +891,10 @@ class BroadcastOpConversion : public StatefulConversion<BroadcastOp> {
          outRef = createColumnRef(outDef);
       };
 
-      // Broadcast over all rows if missing in input but required by output
       if (!info.hasRow() && !outType.getRows().isOne()) {
          addBroadcast("broadcast_row", outType.getRows(), resMeta.row, resMeta.rowDef);
       }
 
-      // Broadcast over all columns if missing in input but required by output
       if (!info.hasCol() && !outType.getCols().isOne()) {
          addBroadcast("broadcast_col", outType.getCols(), resMeta.col, resMeta.colDef);
       }
@@ -897,7 +949,6 @@ class PickAnyOpConversion : public StatefulConversion<PickAnyOp> {
       Type valType = GraphAlgTypeConverter::convertSemiringType(op.getType().getSemiring());
       Type sring = op.getType().getSemiring();
 
-      // 1. Filter out structural zeros (σ_{val != 0})
       auto selOp = rewriter.create<relalg::SelectionOp>(loc, adaptor.getInput());
       auto* selBlock = new Block;
       selOp.getPredicate().push_back(selBlock);
@@ -910,7 +961,7 @@ class PickAnyOpConversion : public StatefulConversion<PickAnyOp> {
          auto val = rewriter.create<tuples::GetColumnOp>(loc, valType, info.val, tupleArgSel);
 
          Value zero;
-         if (sring == SemiringTypes::forBool(ctx))
+         if (isBool(sring))
             zero = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
          else if (sring == SemiringTypes::forInt(ctx))
             zero = rewriter.create<arith::ConstantOp>(loc, rewriter.getI64IntegerAttr(0));
@@ -933,7 +984,6 @@ class PickAnyOpConversion : public StatefulConversion<PickAnyOp> {
       }
       Value selRel = selOp.getResult();
 
-      // 2. Perform Group-By Aggregation on Row computing min(col) and any(val) simultaneously
       SmallVector<Attribute> groupByAttrs;
       if (info.hasRow()) groupByAttrs.push_back(info.row);
 
@@ -941,29 +991,60 @@ class PickAnyOpConversion : public StatefulConversion<PickAnyOp> {
       auto anyValDef = createColumnDef(ctx, AttributeGenerator::nextName("pick_any_val"), valType);
       auto minColRef = createColumnRef(minColDef);
 
-      auto aggOp = rewriter.create<relalg::AggregationOp>(
-         loc, tuples::TupleStreamType::get(ctx), selRel,
-         ArrayAttr::get(ctx, groupByAttrs), ArrayAttr::get(ctx, {minColDef, anyValDef}));
+      Value finalRel;
 
-      {
-         OpBuilder::InsertionGuard guard(rewriter);
-         auto* aggBlock = rewriter.createBlock(&aggOp.getAggrFunc());
-         rewriter.setInsertionPointToStart(aggBlock);
+      if (isBool(sring)) {
+         auto aggOp = rewriter.create<relalg::AggregationOp>(
+            loc, tuples::TupleStreamType::get(ctx), selRel,
+            ArrayAttr::get(ctx, groupByAttrs), ArrayAttr::get(ctx, {minColDef}));
 
-         Value groupStream = aggBlock->addArgument(tuples::TupleStreamType::get(ctx), loc);
-         // Extract minimum column
-         Value minCol = rewriter.create<relalg::AggrFuncOp>(
-            loc, rewriter.getI64Type(), relalg::AggrFuncAttr::get(ctx, relalg::AggrFunc::min), groupStream, info.col);
+         {
+            OpBuilder::InsertionGuard guard(rewriter);
+            auto* aggBlock = rewriter.createBlock(&aggOp.getAggrFunc());
+            rewriter.setInsertionPointToStart(aggBlock);
 
-         // Extract *any* valid value associated with this group to avoid Join ties
-         Value anyVal;
-         if (sring == SemiringTypes::forBool(ctx)) {
-            anyVal = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
-         } else {
-            anyVal = rewriter.create<relalg::AggrFuncOp>(
-               loc, valType, relalg::AggrFuncAttr::get(ctx, relalg::AggrFunc::any), groupStream, info.val);
+            Value groupStream = aggBlock->addArgument(tuples::TupleStreamType::get(ctx), loc);
+            Value minCol = rewriter.create<relalg::AggrFuncOp>(
+               loc, rewriter.getI64Type(), relalg::AggrFuncAttr::get(ctx, relalg::AggrFunc::min), groupStream, info.col);
+
+            rewriter.create<tuples::ReturnOp>(loc, ValueRange{minCol});
          }
-         rewriter.create<tuples::ReturnOp>(loc, ValueRange{minCol, anyVal});
+
+         auto mapOp = rewriter.create<relalg::MapOp>(loc, aggOp.getResult());
+         mapOp.setComputedColsAttr(ArrayAttr::get(ctx, {anyValDef}));
+
+         {
+            OpBuilder::InsertionGuard guard(rewriter);
+            auto* mapBlock = new Block;
+            mapOp.getPredicate().push_back(mapBlock);
+            rewriter.setInsertionPointToStart(mapBlock);
+
+            mapBlock->addArgument(tuples::TupleType::get(ctx), loc);
+            Value anyVal = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
+
+            rewriter.create<tuples::ReturnOp>(loc, ValueRange{anyVal});
+         }
+         finalRel = mapOp.getResult();
+      } else {
+         auto aggOp = rewriter.create<relalg::AggregationOp>(
+            loc, tuples::TupleStreamType::get(ctx), selRel,
+            ArrayAttr::get(ctx, groupByAttrs), ArrayAttr::get(ctx, {minColDef, anyValDef}));
+
+         {
+            OpBuilder::InsertionGuard guard(rewriter);
+            auto* aggBlock = rewriter.createBlock(&aggOp.getAggrFunc());
+            rewriter.setInsertionPointToStart(aggBlock);
+
+            Value groupStream = aggBlock->addArgument(tuples::TupleStreamType::get(ctx), loc);
+            Value minCol = rewriter.create<relalg::AggrFuncOp>(
+               loc, rewriter.getI64Type(), relalg::AggrFuncAttr::get(ctx, relalg::AggrFunc::min), groupStream, info.col);
+
+            Value anyVal = rewriter.create<relalg::AggrFuncOp>(
+               loc, valType, relalg::AggrFuncAttr::get(ctx, relalg::AggrFunc::any), groupStream, info.val);
+
+            rewriter.create<tuples::ReturnOp>(loc, ValueRange{minCol, anyVal});
+         }
+         finalRel = aggOp.getResult();
       }
 
       MatrixMeta resMeta;
@@ -975,7 +1056,7 @@ class PickAnyOpConversion : public StatefulConversion<PickAnyOp> {
       resMeta.valDef = anyValDef;
 
       state.set(op.getResult(), resMeta);
-      rewriter.replaceOp(op, aggOp.getResult());
+      rewriter.replaceOp(op, finalRel);
       return success();
    }
 };
@@ -997,7 +1078,6 @@ class UnionOpConversion : public StatefulConversion<UnionOp> {
       Value currentRel = adaptor.getInputs()[0];
       MatrixMeta currentMeta = state.get(op.getInputs()[0], ctx);
 
-      // Handle the case where Union only has 1 input (just flattens dimensions)
       if (op.getInputs().size() == 1) {
          if (!hasOutRow) {
             currentMeta.row = nullptr;
@@ -1012,7 +1092,6 @@ class UnionOpConversion : public StatefulConversion<UnionOp> {
          return success();
       }
 
-      // Handle Variadic inputs by chaining unions
       for (size_t i = 1; i < op.getInputs().size(); ++i) {
          Value rightRel = adaptor.getInputs()[i];
          MatrixMeta rightMeta = state.get(op.getInputs()[i], ctx);
@@ -1020,13 +1099,12 @@ class UnionOpConversion : public StatefulConversion<UnionOp> {
          SmallVector<Attribute> mappingDefs;
          MatrixMeta nextMeta;
 
-         // Helper to construct the LingoDB mapping array: [@outCol =[@leftCol, @rightCol]]
          auto mapColumn = [&](StringRef prefix, Type type,
                               tuples::ColumnRefAttr leftRef,
                               tuples::ColumnRefAttr rightRef,
                               tuples::ColumnDefAttr& outDef,
                               tuples::ColumnRefAttr& outRef) {
-            if (!leftRef || !rightRef) return; // Skip mapping if dimension is missing
+            if (!leftRef || !rightRef) return;
 
             outDef = createColumnDef(ctx, AttributeGenerator::nextName(prefix.str()), type);
             outRef = createColumnRef(outDef);
@@ -1072,7 +1150,7 @@ class AddConversion : public OpConversionPattern<AddOp> {
    LogicalResult matchAndRewrite(AddOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto sring = op.getType();
       auto* ctx = rewriter.getContext();
-      if (sring == SemiringTypes::forBool(ctx)) {
+      if (isBool(sring)) {
          rewriter.replaceOpWithNewOp<arith::OrIOp>(op, adaptor.getLhs(), adaptor.getRhs());
       } else if (sring == SemiringTypes::forInt(ctx)) {
          rewriter.replaceOpWithNewOp<arith::AddIOp>(op, adaptor.getLhs(), adaptor.getRhs());
@@ -1095,7 +1173,7 @@ class MulConversion : public OpConversionPattern<MulOp> {
    LogicalResult matchAndRewrite(MulOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto sring = op.getType();
       auto* ctx = rewriter.getContext();
-      if (sring == SemiringTypes::forBool(ctx)) {
+      if (isBool(sring)) {
          rewriter.replaceOpWithNewOp<arith::AndIOp>(op, adaptor.getLhs(), adaptor.getRhs());
       } else if (sring == SemiringTypes::forInt(ctx)) {
          rewriter.replaceOpWithNewOp<arith::MulIOp>(op, adaptor.getLhs(), adaptor.getRhs());
@@ -1168,7 +1246,7 @@ class CastScalarOpConversion : public OpConversionPattern<CastScalarOp> {
       }
 
       auto getZero = [&](Type ring) -> Value {
-         if (ring == SemiringTypes::forBool(ctx)) return rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
+         if (isBool(ring)) return rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
          if (ring == SemiringTypes::forInt(ctx)) return rewriter.create<arith::ConstantOp>(loc, rewriter.getI64IntegerAttr(0));
          if (ring == SemiringTypes::forReal(ctx)) return rewriter.create<arith::ConstantOp>(loc, rewriter.getFloatAttr(rewriter.getF64Type(), 0.0));
          if (ring == SemiringTypes::forTropInt(ctx)) return rewriter.create<arith::ConstantOp>(loc, rewriter.getI64IntegerAttr(std::numeric_limits<int64_t>::max()));
@@ -1178,7 +1256,7 @@ class CastScalarOpConversion : public OpConversionPattern<CastScalarOp> {
       };
 
       auto getOne = [&](Type ring) -> Value {
-         if (ring == SemiringTypes::forBool(ctx)) return rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
+         if (isBool(ring)) return rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
          if (ring == SemiringTypes::forInt(ctx)) return rewriter.create<arith::ConstantOp>(loc, rewriter.getI64IntegerAttr(1));
          if (ring == SemiringTypes::forReal(ctx)) return rewriter.create<arith::ConstantOp>(loc, rewriter.getFloatAttr(rewriter.getF64Type(), 1.0));
          if (ring == SemiringTypes::forTropInt(ctx) || ring == SemiringTypes::forTropMaxInt(ctx)) return rewriter.create<arith::ConstantOp>(loc, rewriter.getI64IntegerAttr(0));
@@ -1186,7 +1264,7 @@ class CastScalarOpConversion : public OpConversionPattern<CastScalarOp> {
          return nullptr;
       };
 
-      if (outRing == SemiringTypes::forBool(ctx)) {
+      if (isBool(outRing)) {
          Value zeroIn = getZero(inRing);
          if (!zeroIn) return failure();
          if (inType.isInteger(64)) {
@@ -1197,7 +1275,7 @@ class CastScalarOpConversion : public OpConversionPattern<CastScalarOp> {
          return success();
       }
 
-      if (inRing == SemiringTypes::forBool(ctx)) {
+      if (isBool(inRing)) {
          Value oneOut = getOne(outRing);
          Value zeroOut = getZero(outRing);
          if (!oneOut || !zeroOut) return failure();
@@ -1287,14 +1365,68 @@ class GraphAlgToRelAlgPass : public PassWrapper<GraphAlgToRelAlgPass, OperationP
 
    virtual llvm::StringRef getArgument() const override { return "graphalg-core-to-relalg"; }
 };
+
 static mlir::IntegerAttr tryGetConstantInt(mlir::Value v) {
    mlir::Attribute attr;
    if (!mlir::matchPattern(v, mlir::m_Constant(&attr))) {
       return nullptr;
    }
-
    return llvm::cast<mlir::IntegerAttr>(attr);
 }
+
+class MaskOpConversion : public StatefulConversion<MaskOp> {
+   public:
+   using StatefulConversion::StatefulConversion;
+   LogicalResult matchAndRewrite(MaskOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op.getLoc();
+      auto ctx = rewriter.getContext();
+
+      Value inputRel = adaptor.getOperands()[2];
+      Value maskRel = adaptor.getMask();
+
+      auto inputMeta = state.get(op.getOperand(2), ctx);
+      auto maskMeta = state.get(op.getMask(), ctx);
+
+      auto* joinBlock = new Block;
+      auto tupleArg = joinBlock->addArgument(tuples::TupleType::get(ctx), loc);
+      Value cmpAcc;
+      {
+         OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(joinBlock);
+
+         if (inputMeta.hasRow() && maskMeta.hasRow()) {
+            auto valA = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), inputMeta.row, tupleArg);
+            auto valB = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), maskMeta.row, tupleArg);
+            cmpAcc = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, valA, valB);
+         }
+         if (inputMeta.hasCol() && maskMeta.hasCol()) {
+            auto valA = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), inputMeta.col, tupleArg);
+            auto valB = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), maskMeta.col, tupleArg);
+            auto cmp = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, valA, valB);
+            if (cmpAcc)
+               cmpAcc = rewriter.create<arith::AndIOp>(loc, cmpAcc, cmp);
+            else
+               cmpAcc = cmp;
+         }
+         if (!cmpAcc) cmpAcc = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
+         rewriter.create<tuples::ReturnOp>(loc, ValueRange{cmpAcc});
+      }
+
+      if (op.getComplement()) {
+         auto joinOp = rewriter.create<relalg::AntiSemiJoinOp>(loc, inputRel, maskRel);
+         joinOp.getPredicate().push_back(joinBlock);
+         state.set(op.getResult(), inputMeta);
+         rewriter.replaceOp(op, joinOp.getResult());
+      } else {
+         auto joinOp = rewriter.create<relalg::SemiJoinOp>(loc, inputRel, maskRel);
+         joinOp.getPredicate().push_back(joinBlock);
+         state.set(op.getResult(), inputMeta);
+         rewriter.replaceOp(op, joinOp.getResult());
+      }
+      return success();
+   }
+};
+
 void GraphAlgToRelAlgPass::runOnOperation() {
    MLIRContext* context = &getContext();
 
@@ -1310,7 +1442,6 @@ void GraphAlgToRelAlgPass::runOnOperation() {
    for (Operation* op : loopsToUnroll) {
       auto loc = op->getLoc();
 
-      // TODO handle using getConcreteDim
       int numIterations = 50;
       if (auto forConst = dyn_cast<ForConstOp>(op)) {
          auto rangeBegin = tryGetConstantInt(forConst.getRangeBegin());
@@ -1318,8 +1449,9 @@ void GraphAlgToRelAlgPass::runOnOperation() {
          if (rangeBegin && rangeEnd) {
             numIterations = rangeEnd.getInt() - rangeBegin.getInt();
          }
+      } else if (auto forDim = dyn_cast<ForDimOp>(op)) {
+         numIterations = forDim.getDim().getConcreteDim();
       }
-
       Block* oldBody = &op->getRegion(0).front();
       Operation* terminator = oldBody->getTerminator();
 
@@ -1329,7 +1461,6 @@ void GraphAlgToRelAlgPass::runOnOperation() {
       for (int step = 0; step < numIterations; ++step) {
          IRMapping mapping;
 
-         // 1. Map the dummy loop index (safely handling index/matrix checks)
          Type arg0Type = oldBody->getArgument(0).getType();
          Value dummyIdx;
          if (llvm::isa<MatrixType>(arg0Type)) {
@@ -1341,17 +1472,14 @@ void GraphAlgToRelAlgPass::runOnOperation() {
          }
          mapping.map(oldBody->getArgument(0), dummyIdx);
 
-         // 2. Map loop carried arguments
          for (size_t i = 0; i < currentArgs.size(); ++i) {
             mapping.map(oldBody->getArgument(i + 1), currentArgs[i]);
          }
 
-         // 3. Clone inner body cleanly
          for (Operation& innerOp : oldBody->without_terminator()) {
             rewriter.clone(innerOp, mapping);
          }
 
-         // 4. Update the state pointer for the next iteration
          SmallVector<Value> nextArgs;
          for (Value yieldOperand : terminator->getOperands()) {
             nextArgs.push_back(mapping.lookupOrDefault(yieldOperand));
@@ -1411,6 +1539,7 @@ void GraphAlgToRelAlgPass::runOnOperation() {
       DiagOpConversion,
       BroadcastOpConversion,
       TrilOpConversion,
+      MaskOpConversion,
       UnionOpConversion,
       PickAnyOpConversion>(typeConverter, context, state);
 
