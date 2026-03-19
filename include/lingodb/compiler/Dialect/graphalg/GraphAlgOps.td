@@ -353,7 +353,7 @@ def NegOp : GraphAlg_Op<"neg", [Pure, SameOperandsAndResultType]> {
     }];
 }
 
-def MaskOp : GraphAlg_Op<"mask", [
+def MaskOp : Core_Op<"mask", [
         Pure,
         AllTypesMatch<["base", "input", "result"]>,
         AllDimsMatch<["base", "mask"]>]> {
