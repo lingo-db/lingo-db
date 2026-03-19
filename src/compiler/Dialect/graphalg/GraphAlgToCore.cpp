@@ -270,6 +270,7 @@ applyMask(mlir::Operation* op, mlir::TypedValue<MatrixType> mask,
 
 static mlir::LogicalResult convertMask(MaskOp op,
                                        mlir::PatternRewriter& rewriter) {
+   return mlir::failure();
    auto base = op.getBase();
    auto mask = op.getMask();
    auto input = op.getInput();
