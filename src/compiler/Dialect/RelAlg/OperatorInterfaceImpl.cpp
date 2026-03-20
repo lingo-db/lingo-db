@@ -10,6 +10,7 @@
 
 #include <functional>
 #include <unordered_set>
+#include <iostream>
 
 using operator_list = llvm::SmallVector<Operator, 4>;
 namespace {
@@ -77,6 +78,35 @@ void replaceColumnUsesInLamda(mlir::MLIRContext* context, mlir::Block& block, co
          getColumnOp.setAttrAttr(colManager.createRef(columnInfo.directMappings.at(currColumn)));
       }
    });
+}
+mlir::ArrayAttr replaceColumnUsesInMapping(mlir::MLIRContext* context, mlir::ArrayAttr mapping, relalg::ColumnFoldInfo& columnInfo) {
+   auto& colManager = context->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+   llvm::SmallVector<mlir::Attribute> newColDefs;
+   newColDefs.reserve(mapping.size());
+   for (mlir::Attribute attr : mapping) {
+      auto relationDefAttr = mlir::cast<tuples::ColumnDefAttr>(attr);
+      auto* defAttr = &relationDefAttr.getColumn();
+
+      auto fromExistingArr = mlir::cast<mlir::ArrayAttr>(relationDefAttr.getFromExisting());
+      auto fromExistingRef = mlir::cast<tuples::ColumnRefAttr>(fromExistingArr[0]);
+      auto* fromExistingColumn = &fromExistingRef.getColumn();
+
+      auto* newFromExistingColumn = fromExistingColumn;
+      if (columnInfo.directMappings.contains(fromExistingColumn)) {
+         newFromExistingColumn = columnInfo.directMappings.at(fromExistingColumn);
+      }
+
+      if (newFromExistingColumn != fromExistingColumn) {
+         auto newFromExistingRef = colManager.createRef(newFromExistingColumn);
+         auto newFromExistingArr = mlir::ArrayAttr::get(context, {newFromExistingRef});
+         newColDefs.push_back(colManager.createDef(defAttr, newFromExistingArr));
+      } else {
+         newColDefs.push_back(relationDefAttr);
+      }
+
+      columnInfo.directMappings[defAttr] = newFromExistingColumn;
+   }
+   return mlir::ArrayAttr::get(context, newColDefs);
 }
 } // namespace
 
@@ -936,6 +966,55 @@ mlir::LogicalResult relalg::SemiJoinOp::foldColumns(relalg::ColumnFoldInfo& colu
 }
 mlir::LogicalResult relalg::AntiSemiJoinOp::foldColumns(relalg::ColumnFoldInfo& columnInfo) {
    replaceColumnUsesInLamda(getContext(), getPredicate().front(), columnInfo);
+   return mlir::success();
+}
+mlir::LogicalResult relalg::OuterJoinOp::foldColumns(relalg::ColumnFoldInfo& columnInfo) {
+   replaceColumnUsesInLamda(getContext(), getPredicate().front(), columnInfo);
+   setMappingAttr(replaceColumnUsesInMapping(getContext(), getMapping(), columnInfo));
+   return mlir::success();
+}
+mlir::LogicalResult relalg::OuterJoinOp::eliminateDeadColumns(relalg::ColumnSet& usedColumns, mlir::Value& newStream) {
+   auto context = getContext();
+   auto mapping = getMapping();
+   auto& colManager = context->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+   llvm::SmallVector<mlir::Attribute> newColDefs;
+   newColDefs.reserve(mapping.size());
+   for (mlir::Attribute attr : mapping) {
+      auto relationDefAttr = mlir::cast<tuples::ColumnDefAttr>(attr);
+      auto* defAttr = &relationDefAttr.getColumn();
+      if (usedColumns.contains(defAttr)) {
+         newColDefs.push_back(attr);
+      }
+   }
+   std::cerr << mapping.size() << ' ' << newColDefs.size() << std::endl;
+   if (newColDefs.size() == mapping.size()) {
+      return mlir::failure();
+   }
+   setMappingAttr(mlir::ArrayAttr::get(context, newColDefs));
+   return mlir::success();
+}
+mlir::LogicalResult relalg::FullOuterJoinOp::eliminateDeadColumns(relalg::ColumnSet& usedColumns, mlir::Value& newStream) {
+   auto context = getContext();
+   auto mapping = getMapping();
+   auto& colManager = context->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+   llvm::SmallVector<mlir::Attribute> newColDefs;
+   newColDefs.reserve(mapping.size());
+   for (mlir::Attribute attr : mapping) {
+      auto relationDefAttr = mlir::cast<tuples::ColumnDefAttr>(attr);
+      auto* defAttr = &relationDefAttr.getColumn();
+      if (usedColumns.contains(defAttr)) {
+         newColDefs.push_back(attr);
+      }
+   }
+   if (newColDefs.size() == mapping.size()) {
+      return mlir::failure();
+   }
+   setMappingAttr(mlir::ArrayAttr::get(context, newColDefs));
+   return mlir::success();
+}
+mlir::LogicalResult relalg::FullOuterJoinOp::foldColumns(relalg::ColumnFoldInfo& columnInfo) {
+   replaceColumnUsesInLamda(getContext(), getPredicate().front(), columnInfo);
+   setMappingAttr(replaceColumnUsesInMapping(getContext(), getMapping(), columnInfo));
    return mlir::success();
 }
 ColumnSet relalg::NestedOp::getCreatedColumns() {
