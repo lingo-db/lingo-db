@@ -10,7 +10,6 @@
 
 #include <functional>
 #include <unordered_set>
-#include <iostream>
 
 using operator_list = llvm::SmallVector<Operator, 4>;
 namespace {
@@ -986,7 +985,6 @@ mlir::LogicalResult relalg::OuterJoinOp::eliminateDeadColumns(relalg::ColumnSet&
          newColDefs.push_back(attr);
       }
    }
-   std::cerr << mapping.size() << ' ' << newColDefs.size() << std::endl;
    if (newColDefs.size() == mapping.size()) {
       return mlir::failure();
    }
