@@ -20,7 +20,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
       registry.insert<db::DBDialect>();
    }
    llvm::SmallVector<mlir::Operation*> toDestroy;
-   void handleScalarBoolOp(mlir::Location loc, TupleLamdaOperator surroundingOperator, mlir::Operation* op, Operator relOperator, std::function<void(PredicateOperator)> apply) {
+   void handleScalarBoolOp(mlir::Location loc, TupleLambdaOperator surroundingOperator, mlir::Operation* op, Operator relOperator, std::function<void(PredicateOperator)> apply) {
       using namespace mlir;
       auto& attributeManager = getContext().getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
       bool negated = false;
@@ -79,7 +79,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
       auto& attributeManager = getContext().getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
       using namespace mlir;
       getOperation().walk([&](mlir::Operation* op) {
-         TupleLamdaOperator surroundingOperator = op->getParentOfType<TupleLamdaOperator>();
+         TupleLambdaOperator surroundingOperator = op->getParentOfType<TupleLambdaOperator>();
          if (!surroundingOperator) {
             return;
          }

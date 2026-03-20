@@ -206,7 +206,7 @@ return lingodb::compiler::dialect::relalg::detail::rPushable.contains(lingodb::c
 >
 ];
 }
-def TupleLamdaOperator : OpInterface<"TupleLamdaOperator"> {
+def TupleLambdaOperator : OpInterface<"TupleLambdaOperator"> {
 let methods = [
 InterfaceMethod<
         "",

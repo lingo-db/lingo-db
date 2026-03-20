@@ -134,7 +134,7 @@ def BaseTableOp : RelAlg_Op<"basetable",[Pure,Operator]> {
 //===----------------------------------------------------------------------===//
 
 def SelectionOp : RelAlg_Op<"selection",
-        [Pure,Operator,PredicateOperator,TupleLamdaOperator,
+        [Pure,Operator,PredicateOperator,TupleLambdaOperator,
          UnaryOperator,DeclareOpInterfaceMethods<ColumnFoldable>, DeclareOpInterfaceMethods<NullColumnTypeChangeable>]> {
     let summary = "selection operation";
     let description = [{
@@ -152,7 +152,7 @@ def SelectionOp : RelAlg_Op<"selection",
     }];
 }
 
-def MapOp : RelAlg_Op<"map", [Pure,Operator,TupleLamdaOperator,UnaryOperator,DeclareOpInterfaceMethods<ColumnFoldable>, DeclareOpInterfaceMethods<NullColumnTypeChangeable>]> {
+def MapOp : RelAlg_Op<"map", [Pure,Operator,TupleLambdaOperator,UnaryOperator,DeclareOpInterfaceMethods<ColumnFoldable>, DeclareOpInterfaceMethods<NullColumnTypeChangeable>]> {
     let summary = "map operation";
 
     let arguments = (ins TupleStream:$rel,ArrayAttr:$computed_cols);
@@ -279,7 +279,7 @@ def SortOp : RelAlg_Op<"sort", [Pure,Operator,UnaryOperator,DeclareOpInterfaceMe
 // Joins
 class RelAlg_JoinOp<string mnemonic> : RelAlg_Op<mnemonic,
         [Pure,Operator,BinaryOperator,PredicateOperator,
-         TupleLamdaOperator,DeclareOpInterfaceMethods<ColumnFoldable>, DeclareOpInterfaceMethods<NullColumnTypeChangeable>]> {
+         TupleLambdaOperator,DeclareOpInterfaceMethods<ColumnFoldable>, DeclareOpInterfaceMethods<NullColumnTypeChangeable>]> {
     let arguments = (ins TupleStream:$left,TupleStream:$right);
     let results = (outs TupleStream:$result);
     let regions = (region SizedRegion<1>:$predicate);
