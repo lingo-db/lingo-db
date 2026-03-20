@@ -725,12 +725,12 @@ mlir::LogicalResult relalg::MapOp::eliminateDeadColumns(relalg::ColumnSet& usedC
    if (results.size() == returnOp.getNumOperands()) {
       return mlir::failure();
    }
+   returnOp->setOperands(results);
+   setComputedColsAttr(mlir::ArrayAttr::get(getContext(), resultingColumns));
    if (results.size() == 0) {
       newStream = this->getRel();
       return mlir::success();
    }
-   returnOp->setOperands(results);
-   setComputedColsAttr(mlir::ArrayAttr::get(getContext(), resultingColumns));
    return mlir::success();
 }
 mlir::LogicalResult relalg::SelectionOp::foldColumns(relalg::ColumnFoldInfo& columnInfo) {
