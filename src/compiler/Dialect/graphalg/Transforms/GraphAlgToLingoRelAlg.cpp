@@ -945,59 +945,46 @@ class PickAnyOpConversion : public StatefulConversion<PickAnyOp> {
    LogicalResult matchAndRewrite(PickAnyOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto info = state.get(op.getInput(), rewriter.getContext());
       auto loc = op.getLoc();
-      auto ctx = rewriter.getContext();
+      auto* ctx = rewriter.getContext();
       Type valType = GraphAlgTypeConverter::convertSemiringType(op.getType().getSemiring());
       Type sring = op.getType().getSemiring();
-
-      auto selOp = rewriter.create<relalg::SelectionOp>(loc, adaptor.getInput());
-      auto* selBlock = new Block;
-      selOp.getPredicate().push_back(selBlock);
-
-      {
-         OpBuilder::InsertionGuard guard(rewriter);
-         rewriter.setInsertionPointToStart(selBlock);
-
-         auto tupleArgSel = selBlock->addArgument(tuples::TupleType::get(ctx), loc);
-         auto val = rewriter.create<tuples::GetColumnOp>(loc, valType, info.val, tupleArgSel);
-
-         Value zero;
-         if (isBool(sring))
-            zero = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
-         else if (sring == SemiringTypes::forInt(ctx))
-            zero = rewriter.create<arith::ConstantOp>(loc, rewriter.getI64IntegerAttr(0));
-         else if (sring == SemiringTypes::forReal(ctx))
-            zero = rewriter.create<arith::ConstantOp>(loc, rewriter.getFloatAttr(rewriter.getF64Type(), 0.0));
-         else if (sring == SemiringTypes::forTropInt(ctx))
-            zero = rewriter.create<arith::ConstantOp>(loc, rewriter.getI64IntegerAttr(std::numeric_limits<int64_t>::max()));
-         else if (sring == SemiringTypes::forTropMaxInt(ctx))
-            zero = rewriter.create<arith::ConstantOp>(loc, rewriter.getI64IntegerAttr(std::numeric_limits<int64_t>::min()));
-         else if (sring == SemiringTypes::forTropReal(ctx))
-            zero = rewriter.create<arith::ConstantOp>(loc, rewriter.getFloatAttr(rewriter.getF64Type(), std::numeric_limits<double>::infinity()));
-
-         Value cmpZero;
-         if (valType.isInteger(1) || valType.isInteger(64)) {
-            cmpZero = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ne, val, zero);
-         } else {
-            cmpZero = rewriter.create<arith::CmpFOp>(loc, arith::CmpFPredicate::UNE, val, zero);
-         }
-         rewriter.create<tuples::ReturnOp>(loc, ValueRange{cmpZero});
-      }
-      Value selRel = selOp.getResult();
 
       SmallVector<Attribute> groupByAttrs;
       if (info.hasRow()) groupByAttrs.push_back(info.row);
 
-      auto minColDef = createColumnDef(ctx, AttributeGenerator::nextName("pick_min_col"), rewriter.getI64Type());
-      auto anyValDef = createColumnDef(ctx, AttributeGenerator::nextName("pick_any_val"), valType);
-      auto minColRef = createColumnRef(minColDef);
-
       Value finalRel;
-
+      MatrixMeta resMeta = info;
       if (isBool(sring)) {
+         // Filter out explicit `false` values so we only pick mathematically present entries.
+         // We use a SemiJoin instead of SelectionOp to prevent canonicalization from simplifying
+         // `val != false` directly to `val` (tuples.getcol), which crashes the SubOp lowerer.
+         auto constValDef = createColumnDef(ctx, AttributeGenerator::nextName("filter_true"), valType);
+         auto constRel = rewriter.create<relalg::ConstRelationOp>(
+            loc, ArrayAttr::get(ctx, {constValDef}), ArrayAttr::get(ctx, {ArrayAttr::get(ctx, {rewriter.getIntegerAttr(rewriter.getI1Type(), 1)})}));
+         auto constValRef = createColumnRef(constValDef);
+
+         auto semiJoinOp = rewriter.create<relalg::SemiJoinOp>(loc, adaptor.getInput(), constRel);
+         auto* joinBlock = new Block;
+         semiJoinOp.getPredicate().push_back(joinBlock);
+         {
+            OpBuilder::InsertionGuard guard(rewriter);
+            rewriter.setInsertionPointToStart(joinBlock);
+            auto tupleArgSel = joinBlock->addArgument(tuples::TupleType::get(ctx), loc);
+
+            auto valA = rewriter.create<tuples::GetColumnOp>(loc, valType, info.val, tupleArgSel);
+            auto valB = rewriter.create<tuples::GetColumnOp>(loc, valType, constValRef, tupleArgSel);
+            auto cmp = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, valA, valB);
+
+            rewriter.create<tuples::ReturnOp>(loc, ValueRange{cmp});
+         }
+         Value selRel = semiJoinOp.getResult();
+
+         auto minColDef = createColumnDef(ctx, AttributeGenerator::nextName("pick_min_col"), rewriter.getI64Type());
+         auto anyValDef = createColumnDef(ctx, AttributeGenerator::nextName("pick_any_val"), valType);
+
          auto aggOp = rewriter.create<relalg::AggregationOp>(
             loc, tuples::TupleStreamType::get(ctx), selRel,
             ArrayAttr::get(ctx, groupByAttrs), ArrayAttr::get(ctx, {minColDef}));
-
          {
             OpBuilder::InsertionGuard guard(rewriter);
             auto* aggBlock = rewriter.createBlock(&aggOp.getAggrFunc());
@@ -1012,7 +999,6 @@ class PickAnyOpConversion : public StatefulConversion<PickAnyOp> {
 
          auto mapOp = rewriter.create<relalg::MapOp>(loc, aggOp.getResult());
          mapOp.setComputedColsAttr(ArrayAttr::get(ctx, {anyValDef}));
-
          {
             OpBuilder::InsertionGuard guard(rewriter);
             auto* mapBlock = new Block;
@@ -1024,11 +1010,72 @@ class PickAnyOpConversion : public StatefulConversion<PickAnyOp> {
 
             rewriter.create<tuples::ReturnOp>(loc, ValueRange{anyVal});
          }
+
          finalRel = mapOp.getResult();
+         resMeta.col = createColumnRef(minColDef);
+         resMeta.colDef = minColDef;
+         resMeta.val = createColumnRef(anyValDef);
+         resMeta.valDef = anyValDef;
+
       } else {
+         auto selOp = rewriter.create<relalg::SelectionOp>(loc, adaptor.getInput());
+         auto* selBlock = new Block;
+         selOp.getPredicate().push_back(selBlock);
+         {
+            OpBuilder::InsertionGuard guard(rewriter);
+            rewriter.setInsertionPointToStart(selBlock);
+
+            auto tupleArgSel = selBlock->addArgument(tuples::TupleType::get(ctx), loc);
+            auto val = rewriter.create<tuples::GetColumnOp>(loc, valType, info.val, tupleArgSel);
+
+            Value zero;
+            if (sring.isInteger(64) || sring == SemiringTypes::forInt(ctx))
+               zero = rewriter.create<arith::ConstantOp>(loc, rewriter.getI64IntegerAttr(0));
+            else if (sring.isF64() || sring == SemiringTypes::forReal(ctx))
+               zero = rewriter.create<arith::ConstantOp>(loc, rewriter.getFloatAttr(rewriter.getF64Type(), 0.0));
+            else if (sring == SemiringTypes::forTropInt(ctx))
+               zero = rewriter.create<arith::ConstantOp>(loc, rewriter.getI64IntegerAttr(std::numeric_limits<int64_t>::max()));
+            else if (sring == SemiringTypes::forTropMaxInt(ctx))
+               zero = rewriter.create<arith::ConstantOp>(loc, rewriter.getI64IntegerAttr(std::numeric_limits<int64_t>::min()));
+            else if (sring == SemiringTypes::forTropReal(ctx))
+               zero = rewriter.create<arith::ConstantOp>(loc, rewriter.getFloatAttr(rewriter.getF64Type(), std::numeric_limits<double>::infinity()));
+
+            Value cmpZero;
+            if (valType.isIntOrIndex()) {
+               cmpZero = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ne, val, zero);
+            } else {
+               cmpZero = rewriter.create<arith::CmpFOp>(loc, arith::CmpFPredicate::UNE, val, zero);
+            }
+            rewriter.create<tuples::ReturnOp>(loc, ValueRange{cmpZero});
+         }
+         Value selRel = selOp.getResult();
+
+         SmallVector<Attribute> renameDefs;
+         tuples::ColumnRefAttr aggRowRef;
+
+         if (info.hasRow()) {
+            tuples::ColumnDefAttr aggRowDef = createColumnDef(ctx, AttributeGenerator::nextName("pick_agg_row"), rewriter.getI64Type());
+            aggRowRef = createColumnRef(aggRowDef);
+            renameDefs.push_back(tuples::ColumnDefAttr::get(ctx, aggRowDef.getName(), aggRowDef.getColumnPtr(), ArrayAttr::get(ctx, {info.row})));
+         }
+
+         auto aggColDef = createColumnDef(ctx, AttributeGenerator::nextName("pick_agg_col"), rewriter.getI64Type());
+         auto aggColRef = createColumnRef(aggColDef);
+         renameDefs.push_back(tuples::ColumnDefAttr::get(ctx, aggColDef.getName(), aggColDef.getColumnPtr(), ArrayAttr::get(ctx, {info.col})));
+
+         auto renamedRel = rewriter.create<relalg::RenamingOp>(
+                                      loc, tuples::TupleStreamType::get(ctx), selRel, ArrayAttr::get(ctx, renameDefs))
+                              .getResult();
+
+         auto minColDef = createColumnDef(ctx, AttributeGenerator::nextName("pick_min_col"), rewriter.getI64Type());
+         auto minColRef = createColumnRef(minColDef);
+
+         SmallVector<Attribute> aggGroupByAttrs;
+         if (info.hasRow()) aggGroupByAttrs.push_back(aggRowRef);
+
          auto aggOp = rewriter.create<relalg::AggregationOp>(
-            loc, tuples::TupleStreamType::get(ctx), selRel,
-            ArrayAttr::get(ctx, groupByAttrs), ArrayAttr::get(ctx, {minColDef, anyValDef}));
+            loc, tuples::TupleStreamType::get(ctx), renamedRel,
+            ArrayAttr::get(ctx, aggGroupByAttrs), ArrayAttr::get(ctx, {minColDef}));
 
          {
             OpBuilder::InsertionGuard guard(rewriter);
@@ -1037,23 +1084,60 @@ class PickAnyOpConversion : public StatefulConversion<PickAnyOp> {
 
             Value groupStream = aggBlock->addArgument(tuples::TupleStreamType::get(ctx), loc);
             Value minCol = rewriter.create<relalg::AggrFuncOp>(
-               loc, rewriter.getI64Type(), relalg::AggrFuncAttr::get(ctx, relalg::AggrFunc::min), groupStream, info.col);
+               loc, rewriter.getI64Type(), relalg::AggrFuncAttr::get(ctx, relalg::AggrFunc::min), groupStream, aggColRef);
 
-            Value anyVal = rewriter.create<relalg::AggrFuncOp>(
+            rewriter.create<tuples::ReturnOp>(loc, ValueRange{minCol});
+         }
+
+         auto semiJoinOp = rewriter.create<relalg::SemiJoinOp>(loc, selRel, aggOp.getResult());
+         auto* joinBlock = new Block;
+         semiJoinOp.getPredicate().push_back(joinBlock);
+
+         {
+            OpBuilder::InsertionGuard guard(rewriter);
+            rewriter.setInsertionPointToStart(joinBlock);
+            auto tupleArg = joinBlock->addArgument(tuples::TupleType::get(ctx), loc);
+
+            auto valColA = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), info.col, tupleArg);
+            auto valColB = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), minColRef, tupleArg);
+            Value joinCmp = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, valColA, valColB);
+
+            if (info.hasRow()) {
+               auto valRowA = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), info.row, tupleArg);
+               auto valRowB = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), aggRowRef, tupleArg);
+               auto cmpRow = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, valRowA, valRowB);
+               joinCmp = rewriter.create<arith::AndIOp>(loc, cmpRow, joinCmp);
+            }
+            rewriter.create<tuples::ReturnOp>(loc, ValueRange{joinCmp});
+         }
+
+         auto finalColDef = createColumnDef(ctx, AttributeGenerator::nextName("pick_final_col"), rewriter.getI64Type());
+         auto finalValDef = createColumnDef(ctx, AttributeGenerator::nextName("pick_final_val"), valType);
+
+         auto finalAggOp = rewriter.create<relalg::AggregationOp>(
+            loc, tuples::TupleStreamType::get(ctx), semiJoinOp.getResult(),
+            ArrayAttr::get(ctx, groupByAttrs), ArrayAttr::get(ctx, {finalColDef, finalValDef}));
+
+         {
+            OpBuilder::InsertionGuard guard(rewriter);
+            auto* finalAggBlock = rewriter.createBlock(&finalAggOp.getAggrFunc());
+            rewriter.setInsertionPointToStart(finalAggBlock);
+
+            Value groupStream = finalAggBlock->addArgument(tuples::TupleStreamType::get(ctx), loc);
+            Value finalCol = rewriter.create<relalg::AggrFuncOp>(
+               loc, rewriter.getI64Type(), relalg::AggrFuncAttr::get(ctx, relalg::AggrFunc::min), groupStream, info.col);
+            Value finalVal = rewriter.create<relalg::AggrFuncOp>(
                loc, valType, relalg::AggrFuncAttr::get(ctx, relalg::AggrFunc::any), groupStream, info.val);
 
-            rewriter.create<tuples::ReturnOp>(loc, ValueRange{minCol, anyVal});
+            rewriter.create<tuples::ReturnOp>(loc, ValueRange{finalCol, finalVal});
          }
-         finalRel = aggOp.getResult();
-      }
 
-      MatrixMeta resMeta;
-      resMeta.row = info.row;
-      resMeta.rowDef = info.rowDef;
-      resMeta.col = minColRef;
-      resMeta.colDef = minColDef;
-      resMeta.val = createColumnRef(anyValDef);
-      resMeta.valDef = anyValDef;
+         finalRel = finalAggOp.getResult();
+         resMeta.col = createColumnRef(finalColDef);
+         resMeta.colDef = finalColDef;
+         resMeta.val = createColumnRef(finalValDef);
+         resMeta.valDef = finalValDef;
+      }
 
       state.set(op.getResult(), resMeta);
       rewriter.replaceOp(op, finalRel);
@@ -1379,7 +1463,7 @@ class MaskOpConversion : public StatefulConversion<MaskOp> {
    using StatefulConversion::StatefulConversion;
    LogicalResult matchAndRewrite(MaskOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto loc = op.getLoc();
-      auto ctx = rewriter.getContext();
+      auto* ctx = rewriter.getContext();
 
       Value inputRel = adaptor.getOperands()[2];
       Value maskRel = adaptor.getMask();
@@ -1387,10 +1471,67 @@ class MaskOpConversion : public StatefulConversion<MaskOp> {
       auto inputMeta = state.get(op.getOperand(2), ctx);
       auto maskMeta = state.get(op.getMask(), ctx);
 
+      auto maskMatrixType = llvm::cast<MatrixType>(op.getMask().getType());
+      if (Type maskValType = GraphAlgTypeConverter::convertSemiringType(maskMatrixType.getSemiring()); maskValType.isInteger(1)) {
+         auto constValDef = createColumnDef(ctx, AttributeGenerator::nextName("filter_true"), maskValType);
+         auto constRel = rewriter.create<relalg::ConstRelationOp>(
+            loc, ArrayAttr::get(ctx, {constValDef}),
+            ArrayAttr::get(ctx, {ArrayAttr::get(ctx, {rewriter.getIntegerAttr(rewriter.getI1Type(), 1)})}));
+         auto constValRef = createColumnRef(constValDef);
+
+         auto semiJoinOp = rewriter.create<relalg::SemiJoinOp>(loc, maskRel, constRel);
+         auto* joinBlock = new Block;
+         semiJoinOp.getPredicate().push_back(joinBlock);
+
+         OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(joinBlock);
+         auto tupleArg = joinBlock->addArgument(tuples::TupleType::get(ctx), loc);
+         auto valA = rewriter.create<tuples::GetColumnOp>(loc, maskValType, maskMeta.val, tupleArg);
+         auto valB = rewriter.create<tuples::GetColumnOp>(loc, maskValType, constValRef, tupleArg);
+         auto cmp = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, valA, valB);
+
+         rewriter.create<tuples::ReturnOp>(loc, ValueRange{cmp});
+         maskRel = semiJoinOp.getResult();
+      } else {
+         auto selOp = rewriter.create<relalg::SelectionOp>(loc, maskRel);
+         auto* selBlock = new Block;
+         selOp.getPredicate().push_back(selBlock);
+         {
+            OpBuilder::InsertionGuard guard(rewriter);
+            rewriter.setInsertionPointToStart(selBlock);
+
+            auto tupleArgSel = selBlock->addArgument(tuples::TupleType::get(ctx), loc);
+            auto val = rewriter.create<tuples::GetColumnOp>(loc, maskValType, maskMeta.val, tupleArgSel);
+
+            Type sring = maskMatrixType.getSemiring();
+            Value zero;
+            if (sring.isInteger(64) || sring == SemiringTypes::forInt(ctx))
+               zero = rewriter.create<arith::ConstantOp>(loc, rewriter.getI64IntegerAttr(0));
+            else if (sring.isF64() || sring == SemiringTypes::forReal(ctx))
+               zero = rewriter.create<arith::ConstantOp>(loc, rewriter.getFloatAttr(rewriter.getF64Type(), 0.0));
+            else if (sring == SemiringTypes::forTropInt(ctx))
+               zero = rewriter.create<arith::ConstantOp>(loc, rewriter.getI64IntegerAttr(std::numeric_limits<int64_t>::max()));
+            else if (sring == SemiringTypes::forTropMaxInt(ctx))
+               zero = rewriter.create<arith::ConstantOp>(loc, rewriter.getI64IntegerAttr(std::numeric_limits<int64_t>::min()));
+            else if (sring == SemiringTypes::forTropReal(ctx))
+               zero = rewriter.create<arith::ConstantOp>(loc, rewriter.getFloatAttr(rewriter.getF64Type(), std::numeric_limits<double>::infinity()));
+
+            Value cmpZero;
+            if (maskValType.isIntOrIndex()) {
+               cmpZero = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ne, val, zero);
+            } else {
+               cmpZero = rewriter.create<arith::CmpFOp>(loc, arith::CmpFPredicate::UNE, val, zero);
+            }
+
+            rewriter.create<tuples::ReturnOp>(loc, ValueRange{cmpZero});
+         }
+         maskRel = selOp.getResult();
+      }
+
       auto* joinBlock = new Block;
-      auto tupleArg = joinBlock->addArgument(tuples::TupleType::get(ctx), loc);
-      Value cmpAcc;
       {
+         auto tupleArg = joinBlock->addArgument(tuples::TupleType::get(ctx), loc);
+         Value cmpAcc;
          OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPointToStart(joinBlock);
 
