@@ -342,14 +342,14 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
 
       if (idx) {
          if (auto idx_op = mlir::dyn_cast_or_null<mlir::arith::ConstantIndexOp>(idx.getDefiningOp())) {
-            AsmReg ptr_reg = base.load_to_reg();
+            AsmReg ptr_reg = base.has_reg() ? base.cur_reg() : base.load_to_reg();
             return GenericValuePart{
                Expr{
                   std::move(ptr_reg), static_cast<int64_t>(static_cast<size_t>(idx_op.value()) * (*elem_size))}};
          }
          auto [_, idx_ref] = this->val_ref_single(idx);
-         auto generic_ptr_expr = Expr{base.load_to_reg()};
-         generic_ptr_expr.index = idx_ref.load_to_reg();
+         auto generic_ptr_expr = Expr{base.has_reg() ? base.cur_reg() : base.load_to_reg()};
+         generic_ptr_expr.index = idx_ref.has_reg() ? idx_ref.cur_reg() : idx_ref.load_to_reg();
          generic_ptr_expr.scale = *elem_size;
          return GenericValuePart{std::move(generic_ptr_expr)};
       }
@@ -572,7 +572,8 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
       auto res_vr = this->result_ref(dst);
 
       // create a base + offset expression
-      AsmReg base_reg = base_vr.part(0).load_to_reg();
+      auto base_vr_part0 = base_vr.part(0);
+      AsmReg base_reg = base_vr_part0.has_reg() ? base_vr_part0.cur_reg() : base_vr_part0.load_to_reg();
       GenericValuePart addr = typename GenericValuePart::Expr{base_reg, elementOffset};
 
       // load value to register (e.g. mov + add / lea for x86_64)
@@ -596,7 +597,7 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
       auto res = this->result_ref(dst);
 
       // create a base + offset expression
-      AsmReg base_reg = base_vr.load_to_reg();
+      AsmReg base_reg = base_vr.has_reg() ? base_vr.cur_reg() : base_vr.load_to_reg();
       GenericValuePart offset_expr = typename GenericValuePart::Expr{std::move(base_reg), elementOffset};
       return mlir::TypeSwitch<mlir::Type, bool>(op.getType())
          .Case([&](const mlir::IntegerType t) {
@@ -645,7 +646,7 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
       assert(val_parts(base_ref).count() == 1);
       auto [_, base_vr] = this->val_ref_single(base_ref);
       // create a base + offset expression
-      AsmReg base_reg = base_vr.load_to_reg();
+      AsmReg base_reg = base_vr.has_reg() ? base_vr.cur_reg() : base_vr.load_to_reg();
       GenericValuePart offset_expr = typename GenericValuePart::Expr{std::move(base_reg), elementOffset};
       auto in_vr = this->val_ref(in);
       return mlir::TypeSwitch<mlir::Type, bool>(in.getType())
@@ -690,12 +691,12 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
       auto res_vr = this->result_ref(op.getRes());
       {
          ScratchReg res_scratch{derived()};
-         derived()->mov(res_scratch.alloc_gp(), src_vr.part(0).load_to_reg(), 8);
+         derived()->mov(res_scratch.alloc_gp(), src_vr.part(0).has_reg() ? src_vr.part(0).cur_reg() : src_vr.part(0).load_to_reg(), 8);
          res_vr.part(0).set_value(std::move(res_scratch));
       }
       {
          ScratchReg res_scratch{derived()};
-         derived()->mov(res_scratch.alloc_gp(), src_vr.part(1).load_to_reg(), 8);
+         derived()->mov(res_scratch.alloc_gp(), src_vr.part(1).has_reg() ? src_vr.part(1).cur_reg() : src_vr.part(1).load_to_reg(), 8);
          res_vr.part(1).set_value(std::move(res_scratch));
       }
       return true;

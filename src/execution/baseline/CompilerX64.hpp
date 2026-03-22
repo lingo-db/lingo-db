@@ -119,8 +119,8 @@ struct IRCompilerX64
 
          auto rhs_lo = rhs.part(0);
          auto rhs_hi = rhs.part(1);
-         auto rhs_reg_lo = rhs_lo.load_to_reg();
-         auto rhs_reg_hi = rhs_hi.load_to_reg();
+         auto rhs_reg_lo = rhs_lo.has_reg() ? rhs_lo.cur_reg() : rhs_lo.load_to_reg();
+         auto rhs_reg_hi = rhs_hi.has_reg() ? rhs_hi.cur_reg() : rhs_hi.load_to_reg();
 
          // Compare the ints using carried subtraction
          if ((jump == Jump::je) || (jump == Jump::jne)) {
@@ -134,7 +134,7 @@ struct IRCompilerX64
             ASM(OR64rr, res_scratch.cur_reg(), scratch.cur_reg());
          } else {
             auto lhs_lo = lhs.part(0);
-            auto lhs_reg_lo = lhs_lo.load_to_reg();
+            auto lhs_reg_lo = lhs_lo.has_reg() ? lhs_lo.cur_reg() : lhs_lo.load_to_reg();
             auto lhs_high_tmp =
                lhs.part(1).reload_into_specific_fixed(this, res_scratch.alloc_gp());
 
@@ -184,7 +184,7 @@ struct IRCompilerX64
                   return false;
             }
          } else {
-            auto rhs_reg = rhs_pr.load_to_reg();
+            auto rhs_reg = rhs_pr.has_reg() ? rhs_pr.cur_reg() : rhs_pr.load_to_reg();
             switch (int_width) {
                case 1:
                case 8:
@@ -248,7 +248,7 @@ struct IRCompilerX64
       auto* const false_block = op.getFalseDest();
 
       auto [_, cond_ref] = this->val_ref_single(op.getCondition());
-      const auto cond_reg = cond_ref.load_to_reg();
+      const auto cond_reg = cond_ref.has_reg() ? cond_ref.cur_reg() : cond_ref.load_to_reg();
       ASM(TEST32ri, cond_reg, 1);
 
       return generate_conditional_branch(Jump::jne, true_block, false_block);

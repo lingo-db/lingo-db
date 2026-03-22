@@ -115,13 +115,13 @@ struct IRCompilerA64
       if (int_width == 128) {
          auto lhs_lo = lhs.part(0);
          auto lhs_hi = lhs.part(1);
-         auto lhs_reg_lo = lhs_lo.load_to_reg();
-         auto lhs_reg_hi = lhs_hi.load_to_reg();
+         auto lhs_reg_lo = lhs_lo.has_reg() ? lhs_lo.cur_reg() : lhs_lo.load_to_reg();
+         auto lhs_reg_hi = lhs_hi.has_reg() ? lhs_hi.cur_reg() : lhs_hi.load_to_reg();
 
          auto rhs_lo = rhs.part(0);
          auto rhs_hi = rhs.part(1);
-         auto rhs_reg_lo = rhs_lo.load_to_reg();
-         auto rhs_reg_hi = rhs_hi.load_to_reg();
+         auto rhs_reg_lo = rhs_lo.has_reg() ? rhs_lo.cur_reg() : rhs_lo.load_to_reg();
+         auto rhs_reg_hi = rhs_hi.has_reg() ? rhs_hi.cur_reg() : rhs_hi.load_to_reg();
 
          if (jump == Jump::Jeq || jump == Jump::Jne) {
             // Use CCMP for equality
@@ -174,7 +174,7 @@ struct IRCompilerA64
                   return false;
             }
          } else {
-            auto rhs_reg = rhs_pr.load_to_reg();
+            auto rhs_reg = rhs_pr.has_reg() ? rhs_pr.cur_reg() : rhs_pr.load_to_reg();
             switch (int_width) {
                case 1:
                case 8:
@@ -237,7 +237,7 @@ struct IRCompilerA64
       auto* const false_block = op.getFalseDest();
 
       auto [_, cond_ref] = this->val_ref_single(op.getCondition());
-      const auto cond_reg = cond_ref.load_to_reg();
+      const auto cond_reg = cond_ref.has_reg() ? cond_ref.cur_reg() : cond_ref.load_to_reg();
       ASM(TSTwi, cond_reg, 1);
 
       generate_cond_branch(Jump::Jne, true_block, false_block);
