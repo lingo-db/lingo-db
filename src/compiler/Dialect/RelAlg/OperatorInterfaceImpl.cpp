@@ -90,20 +90,14 @@ mlir::ArrayAttr replaceColumnUsesInMapping(mlir::MLIRContext* context, mlir::Arr
       auto fromExistingRef = mlir::cast<tuples::ColumnRefAttr>(fromExistingArr[0]);
       auto* fromExistingColumn = &fromExistingRef.getColumn();
 
-      auto* newFromExistingColumn = fromExistingColumn;
       if (columnInfo.directMappings.contains(fromExistingColumn)) {
-         newFromExistingColumn = columnInfo.directMappings.at(fromExistingColumn);
-      }
-
-      if (newFromExistingColumn != fromExistingColumn) {
+         auto* newFromExistingColumn = columnInfo.directMappings.at(fromExistingColumn);
          auto newFromExistingRef = colManager.createRef(newFromExistingColumn);
          auto newFromExistingArr = mlir::ArrayAttr::get(context, {newFromExistingRef});
          newColDefs.push_back(colManager.createDef(defAttr, newFromExistingArr));
       } else {
          newColDefs.push_back(relationDefAttr);
       }
-
-      columnInfo.directMappings[defAttr] = newFromExistingColumn;
    }
    return mlir::ArrayAttr::get(context, newColDefs);
 }
@@ -967,6 +961,11 @@ mlir::LogicalResult relalg::AntiSemiJoinOp::foldColumns(relalg::ColumnFoldInfo& 
    replaceColumnUsesInLambda(getContext(), getPredicate().front(), columnInfo);
    return mlir::success();
 }
+mlir::LogicalResult relalg::OuterJoinOp::foldColumns(relalg::ColumnFoldInfo& columnInfo) {
+   replaceColumnUsesInLambda(getContext(), getPredicate().front(), columnInfo);
+   replaceColumnUsesInMapping(getContext(), getMapping(), columnInfo);
+   return mlir::success();
+}
 mlir::LogicalResult relalg::OuterJoinOp::eliminateDeadColumns(relalg::ColumnSet& usedColumns, mlir::Value& newStream) {
    auto context = getContext();
    auto mapping = getMapping();
@@ -986,6 +985,11 @@ mlir::LogicalResult relalg::OuterJoinOp::eliminateDeadColumns(relalg::ColumnSet&
    setMappingAttr(mlir::ArrayAttr::get(context, newColDefs));
    return mlir::success();
 }
+mlir::LogicalResult relalg::FullOuterJoinOp::foldColumns(relalg::ColumnFoldInfo& columnInfo) {
+   replaceColumnUsesInLambda(getContext(), getPredicate().front(), columnInfo);
+   replaceColumnUsesInMapping(getContext(), getMapping(), columnInfo);
+   return mlir::success();
+}
 mlir::LogicalResult relalg::FullOuterJoinOp::eliminateDeadColumns(relalg::ColumnSet& usedColumns, mlir::Value& newStream) {
    auto context = getContext();
    auto mapping = getMapping();
@@ -1003,6 +1007,11 @@ mlir::LogicalResult relalg::FullOuterJoinOp::eliminateDeadColumns(relalg::Column
       return mlir::failure();
    }
    setMappingAttr(mlir::ArrayAttr::get(context, newColDefs));
+   return mlir::success();
+}
+mlir::LogicalResult relalg::SingleJoinOp::foldColumns(relalg::ColumnFoldInfo& columnInfo) {
+   replaceColumnUsesInLambda(getContext(), getPredicate().front(), columnInfo);
+   replaceColumnUsesInMapping(getContext(), getMapping(), columnInfo);
    return mlir::success();
 }
 mlir::LogicalResult relalg::SingleJoinOp::eliminateDeadColumns(relalg::ColumnSet& usedColumns, mlir::Value& newStream) {

@@ -326,6 +326,7 @@ def OuterJoinOp : RelAlg_JoinOp<"outerjoin"> {
         ColumnSet getUsedColumns();
         ColumnSet getAvailableColumns(lingodb::compiler::dialect::relalg::AvailabilityCache& cache);
         bool canColumnReach(Operator source, Operator target, const lingodb::compiler::dialect::tuples::Column* col);
+        mlir::LogicalResult foldColumns(dialect::relalg::ColumnFoldInfo& columnInfo);
         mlir::LogicalResult eliminateDeadColumns(dialect::relalg::ColumnSet& usedColumns, mlir::Value& newStream);
     }];
 
@@ -341,6 +342,7 @@ def FullOuterJoinOp : RelAlg_JoinOp<"fullouterjoin"> {
         ColumnSet getUsedColumns();
         ColumnSet getAvailableColumns(lingodb::compiler::dialect::relalg::AvailabilityCache& cache);
         bool canColumnReach(Operator source, Operator target, const lingodb::compiler::dialect::tuples::Column* col);
+        mlir::LogicalResult foldColumns(dialect::relalg::ColumnFoldInfo& columnInfo);
         mlir::LogicalResult eliminateDeadColumns(dialect::relalg::ColumnSet& usedColumns, mlir::Value& newStream);
     }];
 }
@@ -356,6 +358,7 @@ def SingleJoinOp : RelAlg_JoinOp<"singlejoin"> {
         ColumnSet getUsedColumns();
         ColumnSet getAvailableColumns(lingodb::compiler::dialect::relalg::AvailabilityCache& cache);
         bool canColumnReach(Operator source, Operator target, const lingodb::compiler::dialect::tuples::Column* col);
+        mlir::LogicalResult foldColumns(dialect::relalg::ColumnFoldInfo& columnInfo);
         mlir::LogicalResult eliminateDeadColumns(dialect::relalg::ColumnSet& usedColumns, mlir::Value& newStream);
     }];
 }
