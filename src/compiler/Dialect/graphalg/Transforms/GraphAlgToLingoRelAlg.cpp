@@ -300,7 +300,7 @@ class LoadCastConversion : public ConversionPattern {
 
          auto meta = state.get(op->getOperand(0), rewriter.getContext());
          SmallVector<Attribute> renameDefs;
-         auto ctx = rewriter.getContext();
+         auto* ctx = rewriter.getContext();
          auto addRename = [&](Attribute expAttr, tuples::ColumnRefAttr from) {
             if (!expAttr || !from) return;
             auto exp = resolveColumnRef(op, expAttr);
@@ -1591,12 +1591,25 @@ void GraphAlgToRelAlgPass::runOnOperation() {
             numIterations = rangeEnd.getInt() - rangeBegin.getInt();
          }
       } else if (auto forDim = dyn_cast<ForDimOp>(op)) {
-         numIterations = forDim.getDim().getConcreteDim();
+         auto possibleIteration = forDim.getDim().getConcreteDim();
+         if (possibleIteration != 0)
+            numIterations = possibleIteration;
       }
       Block* oldBody = &op->getRegion(0).front();
       Operation* terminator = oldBody->getTerminator();
 
-      SmallVector<Value> currentArgs(op->getOperands().begin(), op->getOperands().end());
+      SmallVector<Value> currentArgs;
+      int64_t startBound = 0;
+      if (auto forConst = dyn_cast<ForConstOp>(op)) {
+         auto initArgs = forConst.getInitArgs();
+         currentArgs.assign(initArgs.begin(), initArgs.end());
+         if (auto beginAttr = tryGetConstantInt(forConst.getRangeBegin()))
+            startBound = beginAttr.getInt();
+      } else if (auto forDim = dyn_cast<ForDimOp>(op)) {
+         auto initArgs = forDim.getInitArgs();
+         currentArgs.assign(initArgs.begin(), initArgs.end());
+      }
+
       rewriter.setInsertionPoint(op);
 
       for (int step = 0; step < numIterations; ++step) {
@@ -1604,12 +1617,13 @@ void GraphAlgToRelAlgPass::runOnOperation() {
 
          Type arg0Type = oldBody->getArgument(0).getType();
          Value dummyIdx;
+         int64_t currentStep = startBound + step;
          if (llvm::isa<MatrixType>(arg0Type)) {
-            dummyIdx = rewriter.create<ConstantMatrixOp>(loc, arg0Type, rewriter.getI64IntegerAttr(step));
+            dummyIdx = rewriter.create<ConstantMatrixOp>(loc, arg0Type, rewriter.getI64IntegerAttr(currentStep));
          } else if (arg0Type.isIndex()) {
-            dummyIdx = rewriter.create<arith::ConstantIndexOp>(loc, step);
+            dummyIdx = rewriter.create<arith::ConstantIndexOp>(loc, currentStep);
          } else {
-            dummyIdx = rewriter.create<arith::ConstantIntOp>(loc, step, arg0Type.getIntOrFloatBitWidth());
+            dummyIdx = rewriter.create<arith::ConstantIntOp>(loc, currentStep, arg0Type.getIntOrFloatBitWidth());
          }
          mapping.map(oldBody->getArgument(0), dummyIdx);
 
