@@ -967,9 +967,8 @@ mlir::LogicalResult relalg::OuterJoinOp::foldColumns(relalg::ColumnFoldInfo& col
    return mlir::success();
 }
 mlir::LogicalResult relalg::OuterJoinOp::eliminateDeadColumns(relalg::ColumnSet& usedColumns, mlir::Value& newStream) {
-   auto context = getContext();
+   auto *context = getContext();
    auto mapping = getMapping();
-   auto& colManager = context->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
    llvm::SmallVector<mlir::Attribute> newColDefs;
    newColDefs.reserve(mapping.size());
    for (mlir::Attribute attr : mapping) {
@@ -991,9 +990,8 @@ mlir::LogicalResult relalg::FullOuterJoinOp::foldColumns(relalg::ColumnFoldInfo&
    return mlir::success();
 }
 mlir::LogicalResult relalg::FullOuterJoinOp::eliminateDeadColumns(relalg::ColumnSet& usedColumns, mlir::Value& newStream) {
-   auto context = getContext();
+   auto *context = getContext();
    auto mapping = getMapping();
-   auto& colManager = context->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
    llvm::SmallVector<mlir::Attribute> newColDefs;
    newColDefs.reserve(mapping.size());
    for (mlir::Attribute attr : mapping) {
@@ -1015,9 +1013,8 @@ mlir::LogicalResult relalg::SingleJoinOp::foldColumns(relalg::ColumnFoldInfo& co
    return mlir::success();
 }
 mlir::LogicalResult relalg::SingleJoinOp::eliminateDeadColumns(relalg::ColumnSet& usedColumns, mlir::Value& newStream) {
-   auto context = getContext();
+   auto *context = getContext();
    auto mapping = getMapping();
-   auto& colManager = context->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
    llvm::SmallVector<mlir::Attribute> newColDefs;
    newColDefs.reserve(mapping.size());
    for (mlir::Attribute attr : mapping) {
