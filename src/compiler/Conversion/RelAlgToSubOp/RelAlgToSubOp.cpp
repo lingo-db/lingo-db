@@ -3041,6 +3041,36 @@ class QueryReturnOpLowering : public OpConversionPattern<relalg::QueryReturnOp> 
    }
 };
 
+class LowerLocalTableScan : public OpConversionPattern<relalg::LocalTableScanOp> {
+   public:
+   using OpConversionPattern::OpConversionPattern;
+
+   LogicalResult matchAndRewrite(relalg::LocalTableScanOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      // 1. Get the members from the LocalTableType
+      auto tableType = op.getState().getType().cast<subop::LocalTableType>();
+      auto members = tableType.getMembers().getMembers();
+
+      // 2. Get the columns from our relalg operation
+      auto columns = op.getColumns();
+
+      // 3. Zip them together! (They are perfectly 1-to-1 aligned)
+      SmallVector<std::pair<subop::Member, tuples::ColumnDefAttr>> mappingList;
+      for (size_t i = 0; i < members.size(); ++i) {
+         mappingList.push_back({members[i], columns[i].cast<tuples::ColumnDefAttr>()});
+      }
+
+      // 4. Create the mapping attribute natively for SubOp
+      auto mappingAttr = subop::ColumnDefMemberMappingAttr::get(getContext(), mappingList);
+
+      // 5. Replace with the actual execution primitive
+      rewriter.replaceOpWithNewOp<subop::ScanOp>(
+         op, tuples::TupleStreamType::get(getContext()),
+         adaptor.getState(),
+         mappingAttr);
+      return success();
+   }
+};
+
 void RelalgToSubOpLoweringPass::runOnOperation() {
    auto module = getOperation();
    getContext().getLoadedDialect<util::UtilDialect>()->getFunctionHelper().setParentModule(module);
@@ -3107,6 +3137,7 @@ void RelalgToSubOpLoweringPass::runOnOperation() {
    patterns.insert<TrackTuplesLowering>(ctxt);
    patterns.insert<QueryOpLowering>(ctxt);
    patterns.insert<QueryReturnOpLowering>(ctxt);
+   patterns.insert<LowerLocalTableScan>(ctxt);
 
    if (failed(applyFullConversion(module, target, std::move(patterns))))
       signalPassFailure();
