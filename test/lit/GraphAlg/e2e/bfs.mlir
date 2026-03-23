@@ -43,41 +43,29 @@ module {
 
   func.func @main() {
     %result = relalg.query() {
-
       // 1. Setup the Graph Relation
-
       %edges_rel = relalg.const_relation columns:[@edges::@src({type=i64}), @edges::@dst({type=i64}), @edges::@val({type=i1})] values:[
         [0: i64, 1: i64, true],[0: i64, 2: i64, true], [1: i64, 2: i64, true], [1: i64, 3: i64, true],[1: i64, 4: i64, true],[2: i64, 0: i64, true], [3: i64, 5: i64, true],[3: i64, 6: i64, true],[3: i64, 7: i64, true], [4: i64, 0: i64, true],[4: i64, 1: i64, true],[5: i64, 3: i64, true],
         [5: i64, 7: i64, true],[7: i64, 0: i64, true],[7: i64, 1: i64, true], [7: i64, 2: i64, true],
         [8: i64, 9: i64, true]
       ]
-
       %graph = builtin.unrealized_conversion_cast %edges_rel : !tuples.tuplestream to !graphalg.mat<#dim x #dim x i1> { cols =[@edges::@src, @edges::@dst, @edges::@val] }
 
-
       // 2. Setup the Source Vector (Start at Node 0)
-
       %source_rel = relalg.const_relation columns:[@source::@id({type=i64}), @source::@val({type=i1})] values: [[0: i64, true]]
       %source = builtin.unrealized_conversion_cast %source_rel : !tuples.tuplestream to !graphalg.mat<#dim x 1 x i1> { cols =[@source::@id, @source::@val] }
 
-
       // 3. Run BFS Algorithm
-
       %bfs_res = func.call @BFS(%graph, %source) : (!graphalg.mat<#dim x #dim x i1>, !graphalg.mat<#dim x 1 x i1>) -> !graphalg.mat<#dim x 1 x i64>
 
-
       // 4. Materialize
-
       %result_rel = builtin.unrealized_conversion_cast %bfs_res : !graphalg.mat<#dim x 1 x i64> to !tuples.tuplestream { cols =[@edges::@dst, @result::@depth] }
-
       %materialized = relalg.materialize %result_rel[@edges::@dst, @result::@depth] => ["dst", "val"] : !subop.local_table<[dst: i64, val: i64], ["dst", "val"]>
-
       relalg.query_return %materialized : !subop.local_table<[dst: i64, val: i64], ["dst", "val"]>
 
     } -> !subop.local_table<[dst: i64, val: i64], ["dst", "val"]>
 
     subop.set_result 0 %result : !subop.local_table<[dst: i64, val: i64], ["dst", "val"]>
-
     // Check that all nodes reached from source (0) have correctly calculated depths!
     // CHECK-LABEL: |                           dst  |                           val  |
     // CHECK-NEXT: ----
