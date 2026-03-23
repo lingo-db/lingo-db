@@ -99,13 +99,15 @@ struct MatrixMeta {
    tuples::ColumnDefAttr colDef;
    tuples::ColumnDefAttr valDef;
 
+   Type semiring;
+
    bool hasRow() const { return row != nullptr; }
    bool hasCol() const { return col != nullptr; }
 };
 
 static std::pair<MatrixMeta, Value> renameMeta(OpBuilder& rewriter, Location loc, MatrixMeta meta, StringRef prefix, Value rel, Type valType) {
    SmallVector<Attribute> renameDefs;
-   MatrixMeta renamedMeta;
+   MatrixMeta renamedMeta = meta; // Preserve semiring and structure
    auto* ctx = rewriter.getContext();
 
    if (meta.hasRow()) {
@@ -192,6 +194,7 @@ class ConversionState {
 
       if (auto matType = llvm::dyn_cast<MatrixType>(origVal.getType())) {
          MatrixMeta meta;
+         meta.semiring = matType.getSemiring();
          std::string prefix = AttributeGenerator::nextName("stream");
 
          if (!matType.getRows().isOne()) {
@@ -269,6 +272,8 @@ class LoadCastConversion : public ConversionPattern {
 
          MatrixMeta meta;
          auto matType = llvm::cast<MatrixType>(op->getResultTypes()[0]);
+         meta.semiring = matType.getSemiring();
+
          if (colsAttr.size() == 3) {
             meta.row = resolveColumnRef(op, colsAttr[0]);
             meta.col = resolveColumnRef(op, colsAttr[1]);
@@ -395,6 +400,8 @@ class ConstantMatrixConversion : public StatefulConversion<ConstantMatrixOp> {
 
       MatrixMeta meta;
       auto matType = llvm::cast<MatrixType>(op.getType());
+      meta.semiring = matType.getSemiring();
+
       SmallVector<Attribute> defs;
 
       if (!matType.getRows().isOne()) {
@@ -491,8 +498,7 @@ class ApplyOpConversion : public StatefulConversion<ApplyOp> {
 
       for (size_t i = 1; i < op.getInputs().size(); ++i) {
          MatrixMeta meta = state.get(op.getInputs()[i], ctx);
-         auto matType = llvm::cast<MatrixType>(op.getInputs()[i].getType());
-         Type valType = GraphAlgTypeConverter::convertSemiringType(matType.getSemiring());
+         Type valType = GraphAlgTypeConverter::convertSemiringType(meta.semiring);
 
          auto [renamedMeta, renamedRel] = renameMeta(rewriter, loc, meta, "apply_rhs", adaptor.getInputs()[i], valType);
          inputMetas.push_back(renamedMeta);
@@ -552,8 +558,7 @@ class ApplyOpConversion : public StatefulConversion<ApplyOp> {
 
          SmallVector<Value> newArgs;
          for (size_t i = 0; i < inputMetas.size(); ++i) {
-            auto matType = llvm::cast<MatrixType>(op.getInputs()[i].getType());
-            Type vType = GraphAlgTypeConverter::convertSemiringType(matType.getSemiring());
+            Type vType = GraphAlgTypeConverter::convertSemiringType(inputMetas[i].semiring);
             newArgs.push_back(rewriter.create<tuples::GetColumnOp>(loc, vType, inputMetas[i].val, tupleArg));
          }
 
@@ -563,6 +568,7 @@ class ApplyOpConversion : public StatefulConversion<ApplyOp> {
       MatrixMeta resMeta = currentMeta;
       resMeta.valDef = resDef;
       resMeta.val = createColumnRef(resDef);
+      resMeta.semiring = op.getType().getSemiring();
 
       state.set(op->getResult(0), resMeta);
       rewriter.replaceOp(op, mapOp.getResult());
@@ -595,8 +601,8 @@ class MatMulJoinOpConversion : public ConversionPattern {
       auto ctx = rewriter.getContext();
       auto loc = op->getLoc();
 
-      auto rhsMatType = llvm::cast<MatrixType>(op->getOperand(1).getType());
-      Type rhsValType = GraphAlgTypeConverter::convertSemiringType(rhsMatType.getSemiring());
+      auto matrixType = llvm::cast<MatrixType>(op->getResultTypes()[0]);
+      Type rhsValType = GraphAlgTypeConverter::convertSemiringType(rhsMeta.semiring);
 
       auto isConflict = [&](tuples::ColumnRefAttr c) {
          if (!c) return false;
@@ -652,7 +658,6 @@ class MatMulJoinOpConversion : public ConversionPattern {
       }
 
       auto mapOp = rewriter.create<relalg::MapOp>(loc, joinOp.getResult());
-      auto matrixType = llvm::cast<MatrixType>(op->getResultTypes()[0]);
       Type resType = GraphAlgTypeConverter::convertSemiringType(matrixType.getSemiring());
 
       auto mulValDef = createColumnDef(ctx, AttributeGenerator::nextName("mul_res"), resType);
@@ -667,8 +672,7 @@ class MatMulJoinOpConversion : public ConversionPattern {
          OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPointToStart(mapBlock);
 
-         auto lhsMatType = llvm::cast<MatrixType>(op->getOperand(0).getType());
-         Type lhsValType = GraphAlgTypeConverter::convertSemiringType(lhsMatType.getSemiring());
+         Type lhsValType = GraphAlgTypeConverter::convertSemiringType(lhsMeta.semiring);
 
          auto lhsVal = rewriter.create<tuples::GetColumnOp>(loc, lhsValType, lhsMeta.val, tupleArg);
          auto rhsVal = rewriter.create<tuples::GetColumnOp>(loc, rhsValType, renamedRhsMeta.val, tupleArg);
@@ -692,6 +696,7 @@ class MatMulJoinOpConversion : public ConversionPattern {
       }
 
       MatrixMeta resMeta;
+      resMeta.semiring = matrixType.getSemiring();
       if (lhsMeta.hasRow()) resMeta.row = lhsMeta.row;
       if (renamedRhsMeta.hasCol()) resMeta.col = renamedRhsMeta.col;
       resMeta.valDef = mulValDef;
@@ -723,6 +728,7 @@ class DeferredReduceConversion : public StatefulConversion<DeferredReduceOp> {
 
       SmallVector<Attribute> groupByAttrs;
       MatrixMeta resMeta;
+      resMeta.semiring = resMatrixType.getSemiring();
 
       if (!resMatrixType.getRows().isOne() && inputMeta.hasRow()) {
          groupByAttrs.push_back(inputMeta.row);
@@ -954,10 +960,9 @@ class PickAnyOpConversion : public StatefulConversion<PickAnyOp> {
 
       Value finalRel;
       MatrixMeta resMeta = info;
+      resMeta.semiring = op.getType().getSemiring();
+
       if (isBool(sring)) {
-         // Filter out explicit `false` values so we only pick mathematically present entries.
-         // We use a SemiJoin instead of SelectionOp to prevent canonicalization from simplifying
-         // `val != false` directly to `val` (tuples.getcol), which crashes the SubOp lowerer.
          auto constValDef = createColumnDef(ctx, AttributeGenerator::nextName("filter_true"), valType);
          auto constRel = rewriter.create<relalg::ConstRelationOp>(
             loc, ArrayAttr::get(ctx, {constValDef}), ArrayAttr::get(ctx, {ArrayAttr::get(ctx, {rewriter.getIntegerAttr(rewriter.getI1Type(), 1)})}));
@@ -1181,7 +1186,7 @@ class UnionOpConversion : public StatefulConversion<UnionOp> {
          MatrixMeta rightMeta = state.get(op.getInputs()[i], ctx);
 
          SmallVector<Attribute> mappingDefs;
-         MatrixMeta nextMeta;
+         MatrixMeta nextMeta = currentMeta; // Preserve semiring
 
          auto mapColumn = [&](StringRef prefix, Type type,
                               tuples::ColumnRefAttr leftRef,
@@ -1471,8 +1476,8 @@ class MaskOpConversion : public StatefulConversion<MaskOp> {
       auto inputMeta = state.get(op.getOperand(2), ctx);
       auto maskMeta = state.get(op.getMask(), ctx);
 
-      auto maskMatrixType = llvm::cast<MatrixType>(op.getMask().getType());
-      if (Type maskValType = GraphAlgTypeConverter::convertSemiringType(maskMatrixType.getSemiring()); maskValType.isInteger(1)) {
+      Type sring = maskMeta.semiring;
+      if (Type maskValType = GraphAlgTypeConverter::convertSemiringType(sring); maskValType.isInteger(1)) {
          auto constValDef = createColumnDef(ctx, AttributeGenerator::nextName("filter_true"), maskValType);
          auto constRel = rewriter.create<relalg::ConstRelationOp>(
             loc, ArrayAttr::get(ctx, {constValDef}),
@@ -1503,7 +1508,6 @@ class MaskOpConversion : public StatefulConversion<MaskOp> {
             auto tupleArgSel = selBlock->addArgument(tuples::TupleType::get(ctx), loc);
             auto val = rewriter.create<tuples::GetColumnOp>(loc, maskValType, maskMeta.val, tupleArgSel);
 
-            Type sring = maskMatrixType.getSemiring();
             Value zero;
             if (sring.isInteger(64) || sring == SemiringTypes::forInt(ctx))
                zero = rewriter.create<arith::ConstantOp>(loc, rewriter.getI64IntegerAttr(0));
@@ -1568,82 +1572,254 @@ class MaskOpConversion : public StatefulConversion<MaskOp> {
    }
 };
 
-void GraphAlgToRelAlgPass::runOnOperation() {
-   MLIRContext* context = &getContext();
+static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRange convInitArgs, ConversionPatternRewriter& rewriter, Value startBoundVal, Value endBoundVal, Value stepBoundVal, subop::MemberManager& memberManager, ConversionState& state) {
+   auto loc = op->getLoc();
+   auto* ctx = rewriter.getContext();
 
-   // unroll ForDimOp, ForConstOp
-   IRRewriter rewriter(context);
-   SmallVector<Operation*> loopsToUnroll;
-   getOperation().walk([&](Operation* op) {
-      if (llvm::isa<ForDimOp, ForConstOp>(op)) {
-         loopsToUnroll.push_back(op);
-      }
-   });
+   SmallVector<Value> initStates;
+   SmallVector<Type> stateTypes;
+   SmallVector<SmallVector<subop::Member>> allMembers;
 
-   for (Operation* op : loopsToUnroll) {
-      auto loc = op->getLoc();
+   for (size_t i = 0; i < origInitArgs.size(); ++i) {
+      Value origArg = origInitArgs[i];
+      Value convArg = convInitArgs[i];
 
-      int numIterations = 50;
-      if (auto forConst = dyn_cast<ForConstOp>(op)) {
-         auto rangeBegin = tryGetConstantInt(forConst.getRangeBegin());
-         auto rangeEnd = tryGetConstantInt(forConst.getRangeEnd());
-         if (rangeBegin && rangeEnd) {
-            numIterations = rangeEnd.getInt() - rangeBegin.getInt();
-         }
-      } else if (auto forDim = dyn_cast<ForDimOp>(op)) {
-         auto possibleIteration = forDim.getDim().getConcreteDim();
-         if (possibleIteration != 0)
-            numIterations = possibleIteration;
-      }
-      Block* oldBody = &op->getRegion(0).front();
-      Operation* terminator = oldBody->getTerminator();
-
-      SmallVector<Value> currentArgs;
-      int64_t startBound = 0;
-      if (auto forConst = dyn_cast<ForConstOp>(op)) {
-         auto initArgs = forConst.getInitArgs();
-         currentArgs.assign(initArgs.begin(), initArgs.end());
-         if (auto beginAttr = tryGetConstantInt(forConst.getRangeBegin()))
-            startBound = beginAttr.getInt();
-      } else if (auto forDim = dyn_cast<ForDimOp>(op)) {
-         auto initArgs = forDim.getInitArgs();
-         currentArgs.assign(initArgs.begin(), initArgs.end());
+      if (!llvm::isa<tuples::TupleStreamType>(convArg.getType())) {
+         convArg = rewriter.create<UnrealizedConversionCastOp>(loc, tuples::TupleStreamType::get(ctx), convArg).getResult(0);
       }
 
-      rewriter.setInsertionPoint(op);
+      MatrixMeta meta = state.get(origArg, ctx);
+      Type valType = GraphAlgTypeConverter::convertSemiringType(meta.semiring);
 
-      for (int step = 0; step < numIterations; ++step) {
-         IRMapping mapping;
+      SmallVector<Attribute> colsAttrVec;
+      SmallVector<Attribute> columnsAttrVec;
+      SmallVector<subop::Member> memberList;
 
-         Type arg0Type = oldBody->getArgument(0).getType();
-         Value dummyIdx;
-         int64_t currentStep = startBound + step;
-         if (llvm::isa<MatrixType>(arg0Type)) {
-            dummyIdx = rewriter.create<ConstantMatrixOp>(loc, arg0Type, rewriter.getI64IntegerAttr(currentStep));
-         } else if (arg0Type.isIndex()) {
-            dummyIdx = rewriter.create<arith::ConstantIndexOp>(loc, currentStep);
-         } else {
-            dummyIdx = rewriter.create<arith::ConstantIntOp>(loc, currentStep, arg0Type.getIntOrFloatBitWidth());
-         }
-         mapping.map(oldBody->getArgument(0), dummyIdx);
+      auto addMember = [&](StringRef name, Type type, tuples::ColumnRefAttr colRef) {
+         subop::Member member = memberManager.createMember(name.str(), type);
+         memberList.push_back(member);
+         colsAttrVec.push_back(colRef);
+         columnsAttrVec.push_back(rewriter.getStringAttr(memberManager.getName(member)));
+      };
 
-         for (size_t i = 0; i < currentArgs.size(); ++i) {
-            mapping.map(oldBody->getArgument(i + 1), currentArgs[i]);
-         }
+      if (meta.hasRow()) addMember("row", rewriter.getI64Type(), meta.row);
+      if (meta.hasCol()) addMember("col", rewriter.getI64Type(), meta.col);
+      addMember("val", valType, meta.val);
 
-         for (Operation& innerOp : oldBody->without_terminator()) {
-            rewriter.clone(innerOp, mapping);
-         }
+      allMembers.push_back(memberList);
 
-         SmallVector<Value> nextArgs;
-         for (Value yieldOperand : terminator->getOperands()) {
-            nextArgs.push_back(mapping.lookupOrDefault(yieldOperand));
-         }
-         currentArgs = nextArgs;
-      }
-      rewriter.replaceOp(op, currentArgs);
+      auto stateMembersAttr = subop::StateMembersAttr::get(ctx, memberList);
+      Type localTableType = subop::LocalTableType::get(ctx, stateMembersAttr, rewriter.getArrayAttr(columnsAttrVec));
+      stateTypes.push_back(localTableType);
+
+      auto matOp = rewriter.create<relalg::MaterializeOp>(
+         loc, localTableType, convArg,
+         rewriter.getArrayAttr(colsAttrVec),
+         rewriter.getArrayAttr(columnsAttrVec));
+      initStates.push_back(matOp.getResult());
    }
 
+   auto forOp = rewriter.create<scf::ForOp>(loc, startBoundVal, endBoundVal, stepBoundVal, initStates);
+
+   rewriter.eraseBlock(forOp.getBody());
+
+   Block* newBody = rewriter.createBlock(&forOp.getRegion());
+   Value newIdx = newBody->addArgument(rewriter.getIndexType(), loc);
+   SmallVector<Value> newStates;
+   for (Type t : stateTypes) {
+      newStates.push_back(newBody->addArgument(t, loc));
+   }
+
+   Value origIdxRepl;
+   Value origArg0 = op->getRegion(0).front().getArgument(0);
+   Type origArg0Type = origArg0.getType();
+   if (origArg0Type.isIndex()) {
+      origIdxRepl = newIdx;
+   } else if (origArg0Type.isIntOrFloat()) {
+      if (origArg0Type.isInteger(64))
+         origIdxRepl = rewriter.create<arith::IndexCastOp>(loc, origArg0Type, newIdx);
+      else if (origArg0Type.isF64()) {
+         auto i64Idx = rewriter.create<arith::IndexCastOp>(loc, rewriter.getI64Type(), newIdx);
+         origIdxRepl = rewriter.create<arith::SIToFPOp>(loc, origArg0Type, i64Idx);
+      } else {
+         origIdxRepl = rewriter.create<arith::IndexCastOp>(loc, origArg0Type, newIdx);
+      }
+   } else if (auto matType = llvm::dyn_cast<MatrixType>(origArg0Type)) {
+      MatrixMeta idxMeta = state.get(origArg0, ctx);
+      Type valType = GraphAlgTypeConverter::convertSemiringType(matType.getSemiring());
+      Value valIdx;
+      if (valType.isInteger(64))
+         valIdx = rewriter.create<arith::IndexCastOp>(loc, valType, newIdx);
+      else if (valType.isF64()) {
+         Value i64Idx = rewriter.create<arith::IndexCastOp>(loc, rewriter.getI64Type(), newIdx);
+         valIdx = rewriter.create<arith::SIToFPOp>(loc, valType, i64Idx);
+      } else
+         valIdx = rewriter.create<arith::IndexCastOp>(loc, rewriter.getI64Type(), newIdx);
+
+      auto constDef = createColumnDef(ctx, AttributeGenerator::nextName("dummy"), valType);
+      Attribute zeroAttr = valType.isInteger(64) ? (Attribute) rewriter.getI64IntegerAttr(0) : (Attribute) rewriter.getFloatAttr(valType, 0.0);
+
+      Value constRel = rewriter.create<relalg::ConstRelationOp>(
+                                  loc, rewriter.getArrayAttr({constDef}),
+                                  rewriter.getArrayAttr({rewriter.getArrayAttr({zeroAttr})}))
+                          .getResult();
+
+      auto mapOp = rewriter.create<relalg::MapOp>(loc, constRel);
+
+      // Reuse the exact validation column definition expected by downstream loop operations
+      mapOp.setComputedColsAttr(rewriter.getArrayAttr({idxMeta.valDef}));
+
+      auto* mapBlock = new Block;
+      mapOp.getPredicate().push_back(mapBlock);
+      mapBlock->addArgument(tuples::TupleType::get(ctx), loc);
+      {
+         OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(mapBlock);
+         rewriter.create<tuples::ReturnOp>(loc, ValueRange{valIdx});
+      }
+
+      origIdxRepl = mapOp.getResult();
+      state.set(origIdxRepl, idxMeta);
+   }
+
+   SmallVector<Value> origStateRepls;
+   for (size_t i = 0; i < newStates.size(); ++i) {
+      Value loopState = newStates[i];
+      Value origArg = op->getRegion(0).front().getArgument(i + 1);
+
+      // Extract the exact column constraints created for the nested block parameters
+      MatrixMeta loopMeta = state.get(origArg, ctx);
+
+      SmallVector<std::pair<subop::Member, tuples::ColumnDefAttr>> mappingList;
+      size_t memberIdx = 0;
+
+      if (loopMeta.hasRow()) {
+         mappingList.push_back({allMembers[i][memberIdx++], loopMeta.rowDef});
+      }
+      if (loopMeta.hasCol()) {
+         mappingList.push_back({allMembers[i][memberIdx++], loopMeta.colDef});
+      }
+      mappingList.push_back({allMembers[i][memberIdx++], loopMeta.valDef});
+
+      auto mappingAttr = subop::ColumnDefMemberMappingAttr::get(ctx, mappingList);
+      auto scanOp = rewriter.create<subop::ScanOp>(loc, tuples::TupleStreamType::get(ctx), loopState, mappingAttr);
+
+      Value scanStream = scanOp.getResult();
+      state.set(scanStream, loopMeta);
+      origStateRepls.push_back(scanStream);
+   }
+
+   SmallVector<Value> replValues;
+   replValues.push_back(origIdxRepl);
+   replValues.append(origStateRepls.begin(), origStateRepls.end());
+
+   Block& oldBody = op->getRegion(0).front();
+   rewriter.mergeBlocks(&oldBody, newBody, replValues);
+
+   auto yieldOp = llvm::cast<YieldOp>(newBody->getTerminator());
+   rewriter.setInsertionPoint(yieldOp);
+   SmallVector<Value> yieldArgs;
+   for (size_t i = 0; i < yieldOp.getOperands().size(); ++i) {
+      Value yieldOperand = yieldOp.getOperand(i);
+
+      Value streamOperand = yieldOperand;
+      if (!llvm::isa<tuples::TupleStreamType>(streamOperand.getType())) {
+         streamOperand = rewriter.create<UnrealizedConversionCastOp>(loc, tuples::TupleStreamType::get(ctx), streamOperand).getResult(0);
+      }
+
+      MatrixMeta actualYieldMeta = state.get(yieldOperand, ctx);
+      SmallVector<Attribute> colsAttrVec;
+      SmallVector<Attribute> columnsAttrVec;
+      size_t memberIdx = 0;
+
+      auto addMapping = [&](tuples::ColumnRefAttr colRef) {
+         colsAttrVec.push_back(colRef);
+         columnsAttrVec.push_back(rewriter.getStringAttr(memberManager.getName(allMembers[i][memberIdx++])));
+      };
+
+      if (actualYieldMeta.hasRow()) addMapping(actualYieldMeta.row);
+      if (actualYieldMeta.hasCol()) addMapping(actualYieldMeta.col);
+      addMapping(actualYieldMeta.val);
+
+      auto matOp = rewriter.create<relalg::MaterializeOp>(
+         loc, stateTypes[i], streamOperand,
+         rewriter.getArrayAttr(colsAttrVec),
+         rewriter.getArrayAttr(columnsAttrVec));
+      yieldArgs.push_back(matOp.getResult());
+   }
+   rewriter.replaceOpWithNewOp<scf::YieldOp>(yieldOp, yieldArgs);
+
+   rewriter.setInsertionPointAfter(forOp);
+   SmallVector<Value> finalResults;
+   for (size_t i = 0; i < forOp.getNumResults(); ++i) {
+      Value finalState = forOp.getResult(i);
+
+      // Reuse the exact metadata matching the final exported variables downstream
+      MatrixMeta finalMeta = state.get(op->getResult(i), ctx);
+
+      SmallVector<std::pair<subop::Member, tuples::ColumnDefAttr>> mappingList;
+      size_t memberIdx = 0;
+
+      if (finalMeta.hasRow()) {
+         mappingList.push_back({allMembers[i][memberIdx++], finalMeta.rowDef});
+      }
+      if (finalMeta.hasCol()) {
+         mappingList.push_back({allMembers[i][memberIdx++], finalMeta.colDef});
+      }
+      mappingList.push_back({allMembers[i][memberIdx++], finalMeta.valDef});
+
+      auto mappingAttr = subop::ColumnDefMemberMappingAttr::get(ctx, mappingList);
+      auto scanOp = rewriter.create<subop::ScanOp>(loc, tuples::TupleStreamType::get(ctx), finalState, mappingAttr);
+
+      Value finalStream = scanOp.getResult();
+      state.set(finalStream, finalMeta);
+      finalResults.push_back(finalStream);
+   }
+
+   rewriter.replaceOp(op, finalResults);
+   return success();
+}
+
+class ForConstOpConversion : public StatefulConversion<ForConstOp> {
+   public:
+   using StatefulConversion::StatefulConversion;
+
+   LogicalResult matchAndRewrite(ForConstOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op.getLoc();
+      auto* ctx = rewriter.getContext();
+      auto& memberManager = ctx->getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager();
+
+      auto rangeBeginAttr = tryGetConstantInt(op.getRangeBegin());
+      auto rangeEndAttr = tryGetConstantInt(op.getRangeEnd());
+      int64_t startIdx = rangeBeginAttr ? rangeBeginAttr.getInt() : 0;
+      int64_t endIdx = rangeEndAttr ? rangeEndAttr.getInt() : 1;
+
+      Value startBoundVal = rewriter.create<arith::ConstantIndexOp>(loc, startIdx);
+      Value endBoundVal = rewriter.create<arith::ConstantIndexOp>(loc, endIdx);
+      Value stepBoundVal = rewriter.create<arith::ConstantIndexOp>(loc, 1);
+
+      return convertLoop(op, op.getInitArgs(), adaptor.getInitArgs(), rewriter, startBoundVal, endBoundVal, stepBoundVal, memberManager, state);
+   }
+};
+
+class ForDimOpConversion : public StatefulConversion<ForDimOp> {
+   public:
+   using StatefulConversion::StatefulConversion;
+
+   LogicalResult matchAndRewrite(ForDimOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op.getLoc();
+      auto* ctx = rewriter.getContext();
+      auto& memberManager = ctx->getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager();
+
+      Value startBoundVal = rewriter.create<arith::ConstantIndexOp>(loc, 0);
+      Value endBoundVal = rewriter.create<arith::ConstantIndexOp>(loc, op.getDim().getConcreteDim());
+      Value stepBoundVal = rewriter.create<arith::ConstantIndexOp>(loc, 1);
+
+      return convertLoop(op, op.getInitArgs(), adaptor.getInitArgs(), rewriter, startBoundVal, endBoundVal, stepBoundVal, memberManager, state);
+   }
+};
+void GraphAlgToRelAlgPass::runOnOperation() {
+   MLIRContext* context = &getContext();
    GraphAlgTypeConverter typeConverter(context);
    ConversionState state;
 
@@ -1705,6 +1881,10 @@ void GraphAlgToRelAlgPass::runOnOperation() {
       EqConversion,
       ConstantOpConversion,
       CastScalarOpConversion>(typeConverter, context);
+
+   patterns.add<
+      ForConstOpConversion,
+      ForDimOpConversion>(typeConverter, context, state);
 
    if (failed(applyFullConversion(getOperation(), target, std::move(patterns)))) {
       signalPassFailure();
