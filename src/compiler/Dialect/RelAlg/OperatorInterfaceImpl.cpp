@@ -969,4 +969,14 @@ ColumnSet AvailabilityCache::getAvailableColumnsFor(Operator op) {
    return result;
 }
 
+ColumnSet LocalTableScanOp::getCreatedColumns() {
+   ColumnSet set;
+   for (auto attr : getColumns()) {
+      if (auto defAttr = mlir::dyn_cast<lingodb::compiler::dialect::tuples::ColumnDefAttr>(attr)) {
+         set.insert(&defAttr.getColumn());
+      }
+   }
+   return set;
+}
+
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOpsInterfaces.cpp.inc"

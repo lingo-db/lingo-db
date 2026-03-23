@@ -1579,6 +1579,7 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
    SmallVector<Value> initStates;
    SmallVector<Type> stateTypes;
    SmallVector<SmallVector<subop::Member>> allMembers;
+   SmallVector<Type> valTypes;
 
    for (size_t i = 0; i < origInitArgs.size(); ++i) {
       Value origArg = origInitArgs[i];
@@ -1590,6 +1591,7 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
 
       MatrixMeta meta = state.get(origArg, ctx);
       Type valType = GraphAlgTypeConverter::convertSemiringType(meta.semiring);
+      valTypes.push_back(valType);
 
       SmallVector<Attribute> colsAttrVec;
       SmallVector<Attribute> columnsAttrVec;
@@ -1608,6 +1610,7 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
 
       allMembers.push_back(memberList);
 
+      // Use LocalTableType which relalg.materialize perfectly expects
       auto stateMembersAttr = subop::StateMembersAttr::get(ctx, memberList);
       Type localTableType = subop::LocalTableType::get(ctx, stateMembersAttr, rewriter.getArrayAttr(columnsAttrVec));
       stateTypes.push_back(localTableType);
@@ -1666,7 +1669,6 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
 
       auto mapOp = rewriter.create<relalg::MapOp>(loc, constRel);
 
-      // Reuse the exact validation column definition expected by downstream loop operations
       mapOp.setComputedColsAttr(rewriter.getArrayAttr({idxMeta.valDef}));
 
       auto* mapBlock = new Block;
@@ -1682,27 +1684,35 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
       state.set(origIdxRepl, idxMeta);
    }
 
+   // ----------------------------------------------------------------------------------
+   // LOOP STATE: Replace MapOp/SubOp Hack with relalg::LocalTableScanOp
+   // ----------------------------------------------------------------------------------
    SmallVector<Value> origStateRepls;
    for (size_t i = 0; i < newStates.size(); ++i) {
       Value loopState = newStates[i];
       Value origArg = op->getRegion(0).front().getArgument(i + 1);
-
-      // Extract the exact column constraints created for the nested block parameters
       MatrixMeta loopMeta = state.get(origArg, ctx);
 
-      SmallVector<std::pair<subop::Member, tuples::ColumnDefAttr>> mappingList;
+      SmallVector<std::pair<subop::Member, tuples::ColumnDefAttr>> scanMappingList;
+      SmallVector<Attribute> scanComputedCols;
       size_t memberIdx = 0;
 
-      if (loopMeta.hasRow()) {
-         mappingList.push_back({allMembers[i][memberIdx++], loopMeta.rowDef});
-      }
-      if (loopMeta.hasCol()) {
-         mappingList.push_back({allMembers[i][memberIdx++], loopMeta.colDef});
-      }
-      mappingList.push_back({allMembers[i][memberIdx++], loopMeta.valDef});
+      // We now map directly from the LocalTable member to the required Loop Meta Column Def!
+      auto processColumn = [&](tuples::ColumnDefAttr loopDef) {
+         scanMappingList.push_back({allMembers[i][memberIdx++], loopDef});
+         scanComputedCols.push_back(loopDef);
+      };
 
-      auto mappingAttr = subop::ColumnDefMemberMappingAttr::get(ctx, mappingList);
-      auto scanOp = rewriter.create<subop::ScanOp>(loc, tuples::TupleStreamType::get(ctx), loopState, mappingAttr);
+      if (loopMeta.hasRow()) processColumn(loopMeta.rowDef);
+      if (loopMeta.hasCol()) processColumn(loopMeta.colDef);
+      processColumn(loopMeta.valDef);
+
+      // Emit the pristine new leaf operator instead of subop.scan + relalg.map
+      auto scanOp = rewriter.create<relalg::LocalTableScanOp>(
+         loc,
+         tuples::TupleStreamType::get(ctx),
+         loopState,
+         rewriter.getArrayAttr(scanComputedCols));
 
       Value scanStream = scanOp.getResult();
       state.set(scanStream, loopMeta);
@@ -1728,6 +1738,7 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
       }
 
       MatrixMeta actualYieldMeta = state.get(yieldOperand, ctx);
+
       SmallVector<Attribute> colsAttrVec;
       SmallVector<Attribute> columnsAttrVec;
       size_t memberIdx = 0;
@@ -1749,27 +1760,34 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
    }
    rewriter.replaceOpWithNewOp<scf::YieldOp>(yieldOp, yieldArgs);
 
+   // ----------------------------------------------------------------------------------
+   // FINAL RESULTS: Replace MapOp/SubOp Hack with relalg::LocalTableScanOp
+   // ----------------------------------------------------------------------------------
    rewriter.setInsertionPointAfter(forOp);
    SmallVector<Value> finalResults;
    for (size_t i = 0; i < forOp.getNumResults(); ++i) {
       Value finalState = forOp.getResult(i);
 
-      // Reuse the exact metadata matching the final exported variables downstream
       MatrixMeta finalMeta = state.get(op->getResult(i), ctx);
 
-      SmallVector<std::pair<subop::Member, tuples::ColumnDefAttr>> mappingList;
+      SmallVector<std::pair<subop::Member, tuples::ColumnDefAttr>> scanMappingList;
+      SmallVector<Attribute> scanComputedCols;
       size_t memberIdx = 0;
 
-      if (finalMeta.hasRow()) {
-         mappingList.push_back({allMembers[i][memberIdx++], finalMeta.rowDef});
-      }
-      if (finalMeta.hasCol()) {
-         mappingList.push_back({allMembers[i][memberIdx++], finalMeta.colDef});
-      }
-      mappingList.push_back({allMembers[i][memberIdx++], finalMeta.valDef});
+      auto processColumn = [&](tuples::ColumnDefAttr loopDef) {
+         scanMappingList.push_back({allMembers[i][memberIdx++], loopDef});
+         scanComputedCols.push_back(loopDef);
+      };
 
-      auto mappingAttr = subop::ColumnDefMemberMappingAttr::get(ctx, mappingList);
-      auto scanOp = rewriter.create<subop::ScanOp>(loc, tuples::TupleStreamType::get(ctx), finalState, mappingAttr);
+      if (finalMeta.hasRow()) processColumn(finalMeta.rowDef);
+      if (finalMeta.hasCol()) processColumn(finalMeta.colDef);
+      processColumn(finalMeta.valDef);
+
+      // Same clean leaf operator instead of firewall
+      auto scanOp = rewriter.create<relalg::LocalTableScanOp>(
+         loc, tuples::TupleStreamType::get(ctx),
+         finalState,
+         rewriter.getArrayAttr(scanComputedCols));
 
       Value finalStream = scanOp.getResult();
       state.set(finalStream, finalMeta);
@@ -1818,6 +1836,7 @@ class ForDimOpConversion : public StatefulConversion<ForDimOp> {
       return convertLoop(op, op.getInitArgs(), adaptor.getInitArgs(), rewriter, startBoundVal, endBoundVal, stepBoundVal, memberManager, state);
    }
 };
+
 void GraphAlgToRelAlgPass::runOnOperation() {
    MLIRContext* context = &getContext();
    GraphAlgTypeConverter typeConverter(context);

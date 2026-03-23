@@ -540,5 +540,21 @@ def QueryReturnOp : RelAlg_Op<"query_return",[Terminator]> {
    let assemblyFormat = [{ ($inputs^ `:` type($inputs))? attr-dict-with-keyword }];
 }
 
+def LocalTableScanOp : RelAlg_Op<"local_table_scan", [Operator, NoMemoryEffect]> {
+  let summary = "Scans a materialized local table (e.g., from a loop state)";
+
+  let arguments = (ins
+      AnyType:$state,           // The SSA loopState (subop::LocalTableType)
+      ArrayAttr:$columns        // The relalg ColumnDefAttrs it produces
+  );
+
+  let results = (outs TupleStream:$result);
+
+  let assemblyFormat = "$state attr-dict `:` type($state)";
+
+  let extraClassDeclaration = [{
+      ColumnSet getCreatedColumns();
+  }];
+}
 
 #endif // LINGODB_DIALECT_RELALG_IR_OPS
