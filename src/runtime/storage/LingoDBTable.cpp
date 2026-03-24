@@ -1,6 +1,7 @@
 #include "lingodb/runtime/storage/LingoDBTable.h"
 #include "lingodb/catalog/Defs.h"
 #include "lingodb/runtime/ArrowView.h"
+#include "lingodb/runtime/storage/ExternalTableScan.h"
 #include "lingodb/runtime/storage/Restrictions.h"
 #include "lingodb/scheduler/Tasks.h"
 #include "lingodb/utility/Serialization.h"
@@ -28,7 +29,7 @@ static utility::Tracer::Event processMorsel("TableScan", "morsel", false);
 
 static utility::Tracer::Event processMorselSingle("TableScan", "single morsel", false);
 
-static constexpr size_t maxGeneratedScanMorselSize = std::numeric_limits<int16_t>().max();
+
 
 std::vector<lingodb::runtime::LingoDBTable::TableChunk> loadTable(std::string name) {
    auto inputFile = arrow::io::ReadableFile::Open(name).ValueOrDie();
@@ -542,120 +543,6 @@ class ScanBatchesSingleThreadedTask : public lingodb::scheduler::TaskWithImplici
       delete[] selVec2;
    }
    ~ScanBatchesSingleThreadedTask() {
-   }
-};
-
-/// Test Parquet Scan Task....
-class ScanParquetFileTask : public lingodb::scheduler::TaskWithImplicitContext {
-   std::string filePath;
-   std::function<void(lingodb::runtime::BatchView*)> cb;
-   std::unique_ptr<Restrictions> restrictions;
-   size_t numOfRowGroups;
-   std::shared_ptr<parquet::FileMetaData> metadata;
-
-   std::vector<std::unique_ptr<parquet::arrow::FileReader>> readers;
-
-   std::vector<size_t> colIds;
-
-   std::atomic<int> nextRowGroup = 0;
-
-   std::vector<size_t> localRowGroup;
-   std::vector<lingodb::runtime::BatchView> batchInfos;
-   std::vector<std::vector<const lingodb::runtime::ArrayView*>> arrayViewPtrs;
-
-   std::vector<std::deque<LingoDBTable::TableChunk>>* queryLifetimeChunks = nullptr;
-   std::vector<std::pair<uint16_t*, uint16_t*>> selVecs;
-
-   public:
-   ScanParquetFileTask(std::string filePath, std::vector<size_t> colids, std::function<void(lingodb::runtime::BatchView*)> cb, std::unique_ptr<Restrictions> restrictions) : filePath(std::move(filePath)), colIds(std::move(colids)), cb(cb), restrictions(std::move(restrictions)) {
-      init();
-   }
-   arrow::Status init() {
-      queryLifetimeChunks = new std::vector<std::deque<LingoDBTable::TableChunk>>(lingodb::scheduler::getNumWorkers());
-      lingodb::runtime::getCurrentExecutionContext()->registerState({queryLifetimeChunks, [](void* ptr) {
-                                                                        delete reinterpret_cast<std::vector<std::deque<LingoDBTable::TableChunk>>*>(ptr);
-                                                                     }});
-
-      for (size_t i = 0; i < lingodb::scheduler::getNumWorkers(); i++) {
-         localRowGroup.push_back(std::numeric_limits<int>::max());
-         batchInfos.emplace_back(lingodb::runtime::BatchView());
-         arrayViewPtrs.emplace_back(std::vector<const lingodb::runtime::ArrayView*>(colIds.size()));
-         batchInfos[i].arrays = arrayViewPtrs[i].data();
-         selVecs.emplace_back(std::make_pair(new uint16_t[maxGeneratedScanMorselSize], new uint16_t[maxGeneratedScanMorselSize]));
-
-         std::shared_ptr<arrow::io::RandomAccessFile> input;
-         ARROW_ASSIGN_OR_RAISE(input, arrow::io::ReadableFile::Open(filePath));
-         auto parquetFileReader = parquet::ParquetFileReader::Open(input);
-         metadata = parquetFileReader->metadata();
-         numOfRowGroups = metadata->num_row_groups();
-
-         std::unique_ptr<parquet::arrow::FileReader> reader;
-
-         ARROW_RETURN_NOT_OK(parquet::arrow::FileReader::Make(
-            arrow::default_memory_pool(), std::move(parquetFileReader), &reader));
-         readers.emplace_back(std::move(reader));
-      }
-
-      return arrow::Status::OK();
-   }
-
-   bool allocateWork() override {
-      int rgId = nextRowGroup.fetch_add(1);
-      if (rgId >= numOfRowGroups) {
-         workExhausted = true;
-         return false;
-      }
-      localRowGroup[lingodb::scheduler::currentWorkerId()] = rgId;
-
-      return true;
-   }
-   void performWork() override {
-      auto workerId = lingodb::scheduler::currentWorkerId();
-      int rgId = localRowGroup[workerId];
-      std::vector<int> rgIds = {rgId};
-
-      auto readStatus = readers[workerId]->GetRecordBatchReader(rgIds);
-
-      if (!readStatus.ok()) {
-         std::cerr << "Error reading row group " << rgId << ": " << readStatus.status().ToString() << "\n";
-
-         return;
-      }
-
-      lingodb::runtime::BatchView& batchView = batchInfos[workerId];
-      auto [selVec1, selVec2] = selVecs[workerId];
-      std::shared_ptr<arrow::RecordBatch> batch;
-      while (readStatus.ValueOrDie()->ReadNext(&batch).ok() && batch) {
-         auto& chunks = (*queryLifetimeChunks)[workerId];
-         LingoDBTable::TableChunk& chunk = chunks.emplace_back(batch, 0);
-         assert(batch->num_rows() <= BatchView::maxBatchSize);
-         utility::Tracer::Trace trace(processMorsel);
-         for (size_t start = 0; start < static_cast<size_t>(batch->num_rows()); start += maxGeneratedScanMorselSize) {
-            size_t len = std::min(maxGeneratedScanMorselSize, static_cast<size_t>(batch->num_rows()) - start);
-            batchView.offset = start;
-
-            batchView.length = len;
-            for (size_t i = 0; i < colIds.size(); i++) {
-               batchView.arrays[i] = chunk.getArrayView(colIds[i]);
-            }
-            auto [newLen, selVec] = restrictions->applyFilters(start, len, selVec1, selVec2, [&](size_t colId) { return chunk.getArrayView(colId); });
-            batchView.length = newLen;
-            batchView.selectionVector = selVec;
-
-            if (batchView.length > 0) {
-               assert(cb);
-               cb(&batchView);
-            }
-         }
-         trace.stop();
-      }
-   }
-
-   ~ScanParquetFileTask() {
-      for (auto& [selVec1, selVec2] : selVecs) {
-         delete[] selVec1;
-         delete[] selVec2;
-      }
    }
 };
 

@@ -37,6 +37,7 @@ add_library(runtime OBJECT
         Session.cpp
         storage/LingoDBTable.cpp
         storage/Restrictions.cpp
+        storage/ExternalTableScan.cpp
 )
 set(COMPILE_DEFS "")
 if (ENABLE_GPU_BACKEND)
