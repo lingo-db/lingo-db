@@ -186,6 +186,9 @@ class ConversionState {
    llvm::DenseMap<Value, MatrixMeta> metaMap;
 
    public:
+   // Maps original yield operations to the pre-calculated next iter state (nextIdx and cond).
+   llvm::DenseMap<Operation*, std::pair<Value, Value>> loopYieldData;
+
    void set(Value origVal, const MatrixMeta& meta) { metaMap[origVal] = meta; }
 
    MatrixMeta get(Value origVal, MLIRContext* ctx) {
@@ -751,9 +754,9 @@ class DeferredReduceConversion : public StatefulConversion<DeferredReduceOp> {
          ArrayAttr::get(rewriter.getContext(), {aggDefAttr}));
 
       {
+         OpBuilder::InsertionGuard guard(rewriter);
          Block* aggBlock = rewriter.createBlock(&aggOp.getAggrFunc());
          Value groupStream = aggBlock->addArgument(tuples::TupleStreamType::get(rewriter.getContext()), op.getLoc());
-         OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPointToStart(aggBlock);
 
          relalg::AggrFunc func = getAggrFuncForSemiring(resMatrixType.getSemiring());
@@ -1581,6 +1584,7 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
    SmallVector<SmallVector<subop::Member>> allMembers;
    SmallVector<Type> valTypes;
 
+   // 1. Materialize original arguments into SubOp LocalTables before the loop
    for (size_t i = 0; i < origInitArgs.size(); ++i) {
       Value origArg = origInitArgs[i];
       Value convArg = convInitArgs[i];
@@ -1610,7 +1614,6 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
 
       allMembers.push_back(memberList);
 
-      // Use LocalTableType which relalg.materialize perfectly expects
       auto stateMembersAttr = subop::StateMembersAttr::get(ctx, memberList);
       Type localTableType = subop::LocalTableType::get(ctx, stateMembersAttr, rewriter.getArrayAttr(columnsAttrVec));
       stateTypes.push_back(localTableType);
@@ -1622,17 +1625,30 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
       initStates.push_back(matOp.getResult());
    }
 
-   auto forOp = rewriter.create<scf::ForOp>(loc, startBoundVal, endBoundVal, stepBoundVal, initStates);
+   // 2. Setup SubOp Loop operands (Index comes first, followed by states)
+   SmallVector<Value> loopOperands;
+   loopOperands.push_back(startBoundVal);
+   loopOperands.append(initStates.begin(), initStates.end());
 
-   rewriter.eraseBlock(forOp.getBody());
+   SmallVector<Type> loopResultTypes;
+   for (Value v : loopOperands) {
+      loopResultTypes.push_back(v.getType());
+   }
 
-   Block* newBody = rewriter.createBlock(&forOp.getRegion());
-   Value newIdx = newBody->addArgument(rewriter.getIndexType(), loc);
+   // 3. Create subop.loop instead of scf.for
+   auto loopOp = rewriter.create<subop::LoopOp>(loc, loopResultTypes, loopOperands);
+   Block* newBody = rewriter.createBlock(&loopOp.getRegion());
+
+   // Add block arguments to the loop body
+   Value newIdx = newBody->addArgument(startBoundVal.getType(), loc);
    SmallVector<Value> newStates;
    for (Type t : stateTypes) {
       newStates.push_back(newBody->addArgument(t, loc));
    }
 
+   rewriter.setInsertionPointToStart(newBody);
+
+   // Map old loop index variable to new subop.loop index
    Value origIdxRepl;
    Value origArg0 = op->getRegion(0).front().getArgument(0);
    Type origArg0Type = origArg0.getType();
@@ -1649,18 +1665,18 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
       }
    } else if (auto matType = llvm::dyn_cast<MatrixType>(origArg0Type)) {
       MatrixMeta idxMeta = state.get(origArg0, ctx);
-      Type valType = GraphAlgTypeConverter::convertSemiringType(matType.getSemiring());
+      Type loopValType = GraphAlgTypeConverter::convertSemiringType(matType.getSemiring());
       Value valIdx;
-      if (valType.isInteger(64))
-         valIdx = rewriter.create<arith::IndexCastOp>(loc, valType, newIdx);
-      else if (valType.isF64()) {
+      if (loopValType.isInteger(64))
+         valIdx = rewriter.create<arith::IndexCastOp>(loc, loopValType, newIdx);
+      else if (loopValType.isF64()) {
          Value i64Idx = rewriter.create<arith::IndexCastOp>(loc, rewriter.getI64Type(), newIdx);
-         valIdx = rewriter.create<arith::SIToFPOp>(loc, valType, i64Idx);
+         valIdx = rewriter.create<arith::SIToFPOp>(loc, loopValType, i64Idx);
       } else
          valIdx = rewriter.create<arith::IndexCastOp>(loc, rewriter.getI64Type(), newIdx);
 
-      auto constDef = createColumnDef(ctx, AttributeGenerator::nextName("dummy"), valType);
-      Attribute zeroAttr = valType.isInteger(64) ? (Attribute) rewriter.getI64IntegerAttr(0) : (Attribute) rewriter.getFloatAttr(valType, 0.0);
+      auto constDef = createColumnDef(ctx, AttributeGenerator::nextName("dummy"), loopValType);
+      Attribute zeroAttr = loopValType.isInteger(64) ? (Attribute) rewriter.getI64IntegerAttr(0) : (Attribute) rewriter.getFloatAttr(loopValType, 0.0);
 
       Value constRel = rewriter.create<relalg::ConstRelationOp>(
                                   loc, rewriter.getArrayAttr({constDef}),
@@ -1684,30 +1700,18 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
       state.set(origIdxRepl, idxMeta);
    }
 
-   // ----------------------------------------------------------------------------------
-   // LOOP STATE: Replace MapOp/SubOp Hack with relalg::LocalTableScanOp
-   // ----------------------------------------------------------------------------------
+   // Map old loop state variables to LocalTableScans against the current iteration's state buffer
    SmallVector<Value> origStateRepls;
    for (size_t i = 0; i < newStates.size(); ++i) {
       Value loopState = newStates[i];
       Value origArg = op->getRegion(0).front().getArgument(i + 1);
       MatrixMeta loopMeta = state.get(origArg, ctx);
 
-      SmallVector<std::pair<subop::Member, tuples::ColumnDefAttr>> scanMappingList;
       SmallVector<Attribute> scanComputedCols;
-      size_t memberIdx = 0;
+      if (loopMeta.hasRow()) scanComputedCols.push_back(loopMeta.rowDef);
+      if (loopMeta.hasCol()) scanComputedCols.push_back(loopMeta.colDef);
+      scanComputedCols.push_back(loopMeta.valDef);
 
-      // We now map directly from the LocalTable member to the required Loop Meta Column Def!
-      auto processColumn = [&](tuples::ColumnDefAttr loopDef) {
-         scanMappingList.push_back({allMembers[i][memberIdx++], loopDef});
-         scanComputedCols.push_back(loopDef);
-      };
-
-      if (loopMeta.hasRow()) processColumn(loopMeta.rowDef);
-      if (loopMeta.hasCol()) processColumn(loopMeta.colDef);
-      processColumn(loopMeta.valDef);
-
-      // Emit the pristine new leaf operator instead of subop.scan + relalg.map
       auto scanOp = rewriter.create<relalg::LocalTableScanOp>(
          loc,
          tuples::TupleStreamType::get(ctx),
@@ -1723,67 +1727,36 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
    replValues.push_back(origIdxRepl);
    replValues.append(origStateRepls.begin(), origStateRepls.end());
 
+   // Splice the old loop body in
    Block& oldBody = op->getRegion(0).front();
    rewriter.mergeBlocks(&oldBody, newBody, replValues);
 
-   auto yieldOp = llvm::cast<YieldOp>(newBody->getTerminator());
+   // ----------------------------------------------------------------------------------
+   // Record nextIdx and cond for GraphAlgYieldOpConversion
+   // ----------------------------------------------------------------------------------
+   auto yieldOp = newBody->getTerminator();
    rewriter.setInsertionPoint(yieldOp);
-   SmallVector<Value> yieldArgs;
-   for (size_t i = 0; i < yieldOp.getOperands().size(); ++i) {
-      Value yieldOperand = yieldOp.getOperand(i);
 
-      Value streamOperand = yieldOperand;
-      if (!llvm::isa<tuples::TupleStreamType>(streamOperand.getType())) {
-         streamOperand = rewriter.create<UnrealizedConversionCastOp>(loc, tuples::TupleStreamType::get(ctx), streamOperand).getResult(0);
-      }
+   Value nextIdx = rewriter.create<arith::AddIOp>(loc, newIdx, stepBoundVal);
+   Value cond = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt, nextIdx, endBoundVal);
 
-      MatrixMeta actualYieldMeta = state.get(yieldOperand, ctx);
-
-      SmallVector<Attribute> colsAttrVec;
-      SmallVector<Attribute> columnsAttrVec;
-      size_t memberIdx = 0;
-
-      auto addMapping = [&](tuples::ColumnRefAttr colRef) {
-         colsAttrVec.push_back(colRef);
-         columnsAttrVec.push_back(rewriter.getStringAttr(memberManager.getName(allMembers[i][memberIdx++])));
-      };
-
-      if (actualYieldMeta.hasRow()) addMapping(actualYieldMeta.row);
-      if (actualYieldMeta.hasCol()) addMapping(actualYieldMeta.col);
-      addMapping(actualYieldMeta.val);
-
-      auto matOp = rewriter.create<relalg::MaterializeOp>(
-         loc, stateTypes[i], streamOperand,
-         rewriter.getArrayAttr(colsAttrVec),
-         rewriter.getArrayAttr(columnsAttrVec));
-      yieldArgs.push_back(matOp.getResult());
-   }
-   rewriter.replaceOpWithNewOp<scf::YieldOp>(yieldOp, yieldArgs);
+   state.loopYieldData[yieldOp] = {nextIdx, cond};
 
    // ----------------------------------------------------------------------------------
-   // FINAL RESULTS: Replace MapOp/SubOp Hack with relalg::LocalTableScanOp
+   // Expose Final Pipeline Result Streams
    // ----------------------------------------------------------------------------------
-   rewriter.setInsertionPointAfter(forOp);
+   rewriter.setInsertionPointAfter(loopOp);
    SmallVector<Value> finalResults;
-   for (size_t i = 0; i < forOp.getNumResults(); ++i) {
-      Value finalState = forOp.getResult(i);
+   for (size_t i = 0; i < op->getNumResults(); ++i) {
+      Value finalState = loopOp.getResult(i + 1); // + 1 because index 0 is our loop counter
 
       MatrixMeta finalMeta = state.get(op->getResult(i), ctx);
 
-      SmallVector<std::pair<subop::Member, tuples::ColumnDefAttr>> scanMappingList;
       SmallVector<Attribute> scanComputedCols;
-      size_t memberIdx = 0;
+      if (finalMeta.hasRow()) scanComputedCols.push_back(finalMeta.rowDef);
+      if (finalMeta.hasCol()) scanComputedCols.push_back(finalMeta.colDef);
+      scanComputedCols.push_back(finalMeta.valDef);
 
-      auto processColumn = [&](tuples::ColumnDefAttr loopDef) {
-         scanMappingList.push_back({allMembers[i][memberIdx++], loopDef});
-         scanComputedCols.push_back(loopDef);
-      };
-
-      if (finalMeta.hasRow()) processColumn(finalMeta.rowDef);
-      if (finalMeta.hasCol()) processColumn(finalMeta.colDef);
-      processColumn(finalMeta.valDef);
-
-      // Same clean leaf operator instead of firewall
       auto scanOp = rewriter.create<relalg::LocalTableScanOp>(
          loc, tuples::TupleStreamType::get(ctx),
          finalState,
@@ -1797,6 +1770,80 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
    rewriter.replaceOp(op, finalResults);
    return success();
 }
+
+class GraphAlgYieldOpConversion : public StatefulConversion<YieldOp> {
+   public:
+   using StatefulConversion::StatefulConversion;
+
+   LogicalResult matchAndRewrite(YieldOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto it = state.loopYieldData.find(op.getOperation());
+      if (it == state.loopYieldData.end()) return failure();
+
+      auto loopOp = llvm::dyn_cast_or_null<subop::LoopOp>(op->getParentOp());
+      if (!loopOp) return failure();
+
+      auto loc = op.getLoc();
+      auto* ctx = rewriter.getContext();
+      auto& memberManager = ctx->getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager();
+
+      Value nextIdx = it->second.first;
+      Value cond = it->second.second;
+
+      // Setup a simple_state to hold the dynamically evaluated condition member
+      subop::Member condMember = memberManager.createMember("loop_cond", rewriter.getI1Type());
+      auto condMembersAttr = subop::StateMembersAttr::get(ctx, {condMember});
+      Type simpleStateType = subop::SimpleStateType::get(ctx, condMembersAttr);
+
+      auto createStateOp = rewriter.create<subop::CreateSimpleStateOp>(loc, simpleStateType);
+      {
+         OpBuilder::InsertionGuard guard(rewriter);
+         Block* initBlock = rewriter.createBlock(&createStateOp.getInitFn());
+         rewriter.setInsertionPointToStart(initBlock);
+         rewriter.create<tuples::ReturnOp>(loc, ValueRange{cond});
+      }
+
+      SmallVector<Value> yieldArgs;
+      yieldArgs.push_back(nextIdx);
+
+      for (size_t i = 0; i < op.getNumOperands(); ++i) {
+         Value origYieldOperand = op.getOperand(i);
+         Value streamOperand = adaptor.getOperands()[i];
+
+         if (!llvm::isa<tuples::TupleStreamType>(streamOperand.getType())) {
+            streamOperand = rewriter.create<UnrealizedConversionCastOp>(loc, tuples::TupleStreamType::get(ctx), streamOperand).getResult(0);
+         }
+
+         MatrixMeta actualYieldMeta = state.get(origYieldOperand, ctx);
+
+         auto localTableType = llvm::cast<subop::LocalTableType>(loopOp.getOperand(i + 1).getType());
+         auto members = localTableType.getMembers().getMembers();
+
+         SmallVector<Attribute> colsAttrVec;
+         SmallVector<Attribute> columnsAttrVec;
+         size_t memberIdx = 0;
+
+         auto addMapping = [&](tuples::ColumnRefAttr colRef) {
+            colsAttrVec.push_back(colRef);
+            columnsAttrVec.push_back(rewriter.getStringAttr(memberManager.getName(members[memberIdx++])));
+         };
+
+         if (actualYieldMeta.hasRow()) addMapping(actualYieldMeta.row);
+         if (actualYieldMeta.hasCol()) addMapping(actualYieldMeta.col);
+         addMapping(actualYieldMeta.val);
+
+         auto matOp = rewriter.create<relalg::MaterializeOp>(
+            loc, localTableType, streamOperand,
+            rewriter.getArrayAttr(colsAttrVec),
+            rewriter.getArrayAttr(columnsAttrVec));
+         yieldArgs.push_back(matOp.getResult());
+      }
+
+      auto condMemberAttr = subop::MemberAttr::get(ctx, condMember);
+      rewriter.replaceOpWithNewOp<subop::LoopContinueOp>(op, createStateOp.getResult(), condMemberAttr, yieldArgs);
+
+      return success();
+   }
+};
 
 class ForConstOpConversion : public StatefulConversion<ForConstOp> {
    public:
@@ -1903,7 +1950,8 @@ void GraphAlgToRelAlgPass::runOnOperation() {
 
    patterns.add<
       ForConstOpConversion,
-      ForDimOpConversion>(typeConverter, context, state);
+      ForDimOpConversion,
+      GraphAlgYieldOpConversion>(typeConverter, context, state);
 
    if (failed(applyFullConversion(getOperation(), target, std::move(patterns)))) {
       signalPassFailure();
