@@ -29,8 +29,6 @@ static utility::Tracer::Event processMorsel("TableScan", "morsel", false);
 
 static utility::Tracer::Event processMorselSingle("TableScan", "single morsel", false);
 
-
-
 std::vector<lingodb::runtime::LingoDBTable::TableChunk> loadTable(std::string name) {
    auto inputFile = arrow::io::ReadableFile::Open(name).ValueOrDie();
    auto batchReader = arrow::ipc::RecordBatchFileReader::Open(inputFile).ValueOrDie();
@@ -201,6 +199,7 @@ std::shared_ptr<arrow::DataType> toPhysicalType(lingodb::catalog::Type t) {
    }
 }
 std::optional<size_t> countDistinctValues(std::shared_ptr<arrow::ChunkedArray> column) {
+   //todo: replace with approximate count in the future
    auto res = arrow::compute::CallFunction("count_distinct", {column});
    if (res.ok()) {
       return res.ValueOrDie().scalar_as<arrow::Int64Scalar>().value;
@@ -547,44 +546,34 @@ class ScanBatchesSingleThreadedTask : public lingodb::scheduler::TaskWithImplici
 };
 
 std::unique_ptr<scheduler::Task> LingoDBTable::createScanTask(const ScanConfig& scanConfig) {
-   std::cerr << "Create Scan Task for " << dbDir + "/" + fileName << " with filters: " << scanConfig.filters.size() << " and columns: " << scanConfig.columns.size() << "\n";
-   //Remove .arrow and replace with .parquet
-   std::string parquetFileName = fileName;
-   size_t lastDot = parquetFileName.find_last_of(".");
-
-   if (lastDot != std::string::npos) {
-      parquetFileName.replace(lastDot, std::string::npos, ".parquet");
-   } else {
-      // If there's no extension at all, just append it
-      parquetFileName += ".parquet";
+   std::vector<size_t> colIds;
+   for (const auto& c : scanConfig.columns) {
+      auto colId = schema->GetFieldIndex(c);
+      assert(colId >= 0);
+      colIds.push_back(colId);
    }
-   std::cerr << "Create parquet Scantask " << parquetFileName << "\n";
-   if (false) {
+   auto restrictions = lingodb::runtime::Restrictions::create(scanConfig.filters, *schema);
+   if (!useParquetScan) {
       ensureLoaded();
-      std::vector<size_t> colIds;
-      for (const auto& c : scanConfig.columns) {
-         auto colId = schema->GetFieldIndex(c);
-         assert(colId >= 0);
-         colIds.push_back(colId);
-      }
-      auto restrictions = lingodb::runtime::Restrictions::create(scanConfig.filters, *schema);
-      return std::make_unique<ScanBatchesSingleThreadedTask>(tableData, colIds, std::move(restrictions), scanConfig.cb);
+
       if (scanConfig.parallel) {
          return std::make_unique<ScanBatchesTask>(*this, tableData, colIds, std::move(restrictions), scanConfig.cb);
       } else {
          return std::make_unique<ScanBatchesSingleThreadedTask>(tableData, colIds, std::move(restrictions), scanConfig.cb);
       }
    } else {
-      std::vector<size_t> colIds;
-      for (const auto& c : scanConfig.columns) {
-         auto colId = schema->GetFieldIndex(c);
-         assert(colId >= 0);
-         colIds.push_back(colId);
+      //Remove .arrow and replace with .parquet
+      std::string parquetFileName = fileName;
+      size_t lastDot = parquetFileName.find_last_of(".");
+      if (lastDot != std::string::npos) {
+         parquetFileName.replace(lastDot, std::string::npos, ".parquet");
+      } else {
+         // If there's no extension at all, just append it
+         parquetFileName += ".parquet";
       }
-      auto restrictions = lingodb::runtime::Restrictions::create(scanConfig.filters, *schema);
-      std::cerr << "Schema: \n " << schema->ToString() << "\n";
-      auto parquetPath = dbDir + "/" + parquetFileName;
+      std::cerr << "Create parquet Scantask " << parquetFileName << "\n";
 
+      auto parquetPath = dbDir + "/" + parquetFileName;
       auto scanParquetFileTask = std::make_unique<ScanParquetFileTask>(parquetPath, colIds, scanConfig.cb, std::move(restrictions));
       return scanParquetFileTask;
    }

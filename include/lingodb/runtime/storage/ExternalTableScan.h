@@ -13,7 +13,7 @@
 static constexpr size_t maxGeneratedScanMorselSize = std::numeric_limits<int16_t>().max();
 
 namespace lingodb::runtime {
-class BatchesWorkerResvStateTest {
+class ParquetBatchesWorkerResvState {
    public:
    size_t rgId;
    size_t localChunkId{0};
@@ -50,7 +50,7 @@ class ScanParquetFileTask : public scheduler::TaskWithImplicitContext {
    std::vector<std::deque<LingoDBTable::TableChunk>>* queryLifetimeChunks = nullptr;
    std::vector<std::pair<uint16_t*, uint16_t*>> selVecs;
 
-   std::vector<std::unique_ptr<BatchesWorkerResvStateTest>> workerResvs;
+   std::vector<std::unique_ptr<ParquetBatchesWorkerResvState>> workerResvs;
    size_t splitSize{20000};
 
    public:

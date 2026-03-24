@@ -192,20 +192,15 @@ std::shared_ptr<Catalog> Catalog::create(std::string dbDir, bool eagerLoading) {
          std::vector<Column> columns;
          columns.reserve(parquetSchema->num_fields());
          for (const auto& field : parquetSchema->fields()) {
-            if (field->name() == "l_returnflag") {
-               std::cerr << std::endl;
-            } else {
-            }
             columns.emplace_back(field->name(), mapArrowTypeToCatalogType(field->type()), field->nullable());
          }
 
          CreateTableDef def{.name = parquetFile.stem().string(), .columns = std::move(columns), .primaryKey = {}};
-         auto tableEntry = LingoDBTableCatalogEntry::createFromCreateTable(def);
+         auto tableEntry = LingoDBTableCatalogEntry::createFromCreateTable(def, true);
          res->insertEntry(tableEntry);
       }
 
       return res;
-   } else {
    }
 
    if (!std::filesystem::exists(dbDir + "/db.lingodb")) {

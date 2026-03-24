@@ -9,12 +9,12 @@
 
 namespace lingodb::runtime {
 
-bool BatchesWorkerResvStateTest::hasMoreWork() {
+bool ParquetBatchesWorkerResvState::hasMoreWork() {
    std::shared_lock<std::shared_mutex> stateLock(this->mutex);
    return resvCursor < unitAmount;
 }
 
- std::pair<size_t, int> BatchesWorkerResvStateTest::fetchAndNextOwn(size_t splitSize, std::vector<std::deque<LingoDBTable::TableChunk>>* queryLifetimeChunks, std::atomic<int>& rgIdstartIndex, size_t numberOfRowGroups, std::unique_ptr<parquet::arrow::FileReader>& localReader) {
+std::pair<size_t, int> ParquetBatchesWorkerResvState::fetchAndNextOwn(size_t splitSize, std::vector<std::deque<LingoDBTable::TableChunk>>* queryLifetimeChunks, std::atomic<int>& rgIdstartIndex, size_t numberOfRowGroups, std::unique_ptr<parquet::arrow::FileReader>& localReader) {
    std::unique_lock<std::shared_mutex> stateLock(this->mutex);
    auto workerId = lingodb::scheduler::currentWorkerId();
    size_t curr = resvCursor++;
@@ -48,7 +48,7 @@ bool BatchesWorkerResvStateTest::hasMoreWork() {
       auto& localChunks = (*queryLifetimeChunks)[workerId];
       //New Chunk
       LingoDBTable::TableChunk& chunk = localChunks.emplace_back(batch, 0);
-      localChunkId = localChunks.size()-1;
+      localChunkId = localChunks.size() - 1;
       //TODO somehow give TableChunk back to caller
       unitAmount = (chunk.getNumRows() + splitSize - 1) / splitSize;
       resvCursor = 1;
@@ -78,7 +78,7 @@ bool BatchesWorkerResvStateTest::hasMoreWork() {
       //Load new chunk from new rowgroup
       auto& localChunks = (*queryLifetimeChunks)[workerId];
       LingoDBTable::TableChunk& chunk = localChunks.emplace_back(batch, 0);
-      localChunkId = localChunks.size()-1;
+      localChunkId = localChunks.size() - 1;
       //TODO somehow give TableChunk back to caller
       unitAmount = (chunk.getNumRows() + splitSize - 1) / splitSize;
       resvCursor = 1;
@@ -86,10 +86,10 @@ bool BatchesWorkerResvStateTest::hasMoreWork() {
       return {localChunkId, 0};
    }
 };
-std::pair<size_t, int> BatchesWorkerResvStateTest::fetchAndNext() {
+std::pair<size_t, int> ParquetBatchesWorkerResvState::fetchAndNext() {
    std::unique_lock<std::shared_mutex> resvLock(mutex);
    size_t cur = resvCursor++;
-   return {localChunkId ,cur >= unitAmount ? -1 : cur};
+   return {localChunkId, cur >= unitAmount ? -1 : cur};
 }
 
 //------------------------------------------------------
@@ -121,7 +121,7 @@ arrow::Status ScanParquetFileTask::init() {
          arrow::default_memory_pool(), std::move(parquetFileReader), &reader));
       readers.emplace_back(std::move(reader));
 
-      workerResvs.emplace_back(std::make_unique<BatchesWorkerResvStateTest>());
+      workerResvs.emplace_back(std::make_unique<ParquetBatchesWorkerResvState>());
    }
 
    return arrow::Status::OK();
@@ -164,7 +164,7 @@ bool ScanParquetFileTask::allocateWork() {
       if (other->hasMoreWork()) {
          auto [otherChunkId, id] = other->fetchAndNext();
          if (id != -1) {
-            // only current worker can modify its onw stealWorkerId. no need to lock
+            // only current worker can modify its own stealWorkerId. no need to lock
             state->stealWorkerId = idx;
             state->resvId = id;
             state->localChunkId = otherChunkId;
@@ -218,7 +218,7 @@ void ScanParquetFileTask::performWork() {
    }
 
    //Load batches
-  /* std::shared_ptr<arrow::RecordBatch> batch;
+   /* std::shared_ptr<arrow::RecordBatch> batch;
    while (reader->ReadNext(&batch).ok() && batch) {
       //Add batch to list, to keep it
       LingoDBTable::TableChunk& chunk = chunks.emplace_back(batch, 0);
