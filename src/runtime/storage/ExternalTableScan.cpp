@@ -86,10 +86,10 @@ bool BatchesWorkerResvStateTest::hasMoreWork() {
       return {localChunkId, 0};
    }
 };
-int BatchesWorkerResvStateTest::fetchAndNext() {
+std::pair<size_t, int> BatchesWorkerResvStateTest::fetchAndNext() {
    std::unique_lock<std::shared_mutex> resvLock(mutex);
    size_t cur = resvCursor++;
-   return cur >= unitAmount ? -1 : cur;
+   return {localChunkId ,cur >= unitAmount ? -1 : cur};
 }
 
 //------------------------------------------------------
@@ -138,18 +138,18 @@ bool ScanParquetFileTask::allocateWork() {
    if (id != -1) {
       //Found new work
       state->resvId = id;
-   } else {
-      //No new work found
-      //TODO work steal
-      return false;
+      state->localChunkId = localGroupId;
+      return true;
    }
 
+   //3. if the current worker has no more work locally and no more work globally, try to steal work from the worker we stole from last time
    if (state->stealWorkerId != std::numeric_limits<size_t>::max()) {
       auto* other = workerResvs[state->stealWorkerId].get();
       if (other->hasMoreWork()) {
-         auto id = other->fetchAndNext();
+         auto [otherChunkId, id] = other->fetchAndNext();
          if (id != -1) {
             state->resvId = id;
+            state->localChunkId = otherChunkId;
             return true;
          }
       }
@@ -162,11 +162,12 @@ bool ScanParquetFileTask::allocateWork() {
       auto idx = (lingodb::scheduler::currentWorkerId() + i) % workerResvs.size();
       auto* other = workerResvs[idx].get();
       if (other->hasMoreWork()) {
-         auto id = other->fetchAndNext();
+         auto [otherChunkId, id] = other->fetchAndNext();
          if (id != -1) {
             // only current worker can modify its onw stealWorkerId. no need to lock
             state->stealWorkerId = idx;
             state->resvId = id;
+            state->localChunkId = otherChunkId;
             return true;
          }
       }
@@ -205,12 +206,15 @@ void ScanParquetFileTask::performWork() {
    auto* state = workerResvs[workerId].get();
    if (state->stealWorkerId != std::numeric_limits<size_t>::max()) {
       auto* other = workerResvs[state->stealWorkerId].get();
+      auto& chunks = (*queryLifetimeChunks)[state->stealWorkerId];
+      auto& chunk = chunks[state->localChunkId];
+      unitRun(chunk);
 
    } else {
       auto& chunks = (*queryLifetimeChunks)[workerId];
-
       //Last chunk is our current working chunk right?
-      auto& chunk = chunks[chunks.size() - 1];
+      auto& chunk = chunks[state->localChunkId];
+      unitRun(chunk);
    }
 
    //Load batches

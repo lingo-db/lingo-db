@@ -29,7 +29,7 @@ class BatchesWorkerResvStateTest {
 
    bool hasMoreWork();
    std::pair<size_t, int> fetchAndNextOwn(size_t splitSize, std::vector<std::deque<LingoDBTable::TableChunk>>* queryLifetimeChunks, std::atomic<int>& rgIdstartIndex, size_t numberOfRowGroups, std::unique_ptr<parquet::arrow::FileReader>& localReader);
-   int fetchAndNext();
+   std::pair<size_t, int> fetchAndNext();
 };
 class ScanParquetFileTask : public scheduler::TaskWithImplicitContext {
    std::string filePath;
