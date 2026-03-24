@@ -22,7 +22,6 @@ struct ArrayView {
 struct BatchView {
    static std::array<uint16_t, 65536> defaultSelectionVector;
    static constexpr size_t maxBatchSize = 65536;
-   static void printColumn(BatchView& batch, size_t columnId);
    int64_t length;
    int64_t offset;
    uint16_t* selectionVector;

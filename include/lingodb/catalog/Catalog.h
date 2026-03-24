@@ -1,7 +1,5 @@
 #ifndef LINGODB_CATALOG_CATALOG_H
 #define LINGODB_CATALOG_CATALOG_H
-#include "Catalog.h"
-
 #include <array>
 #include <memory>
 #include <optional>
@@ -49,10 +47,10 @@ class Catalog {
    public:
    Catalog() : shouldPersist(false) {}
    std::string getDbDir() const { return dbDir; }
-   virtual void serialize(lingodb::utility::Serializer& serializer) const;
+   void serialize(lingodb::utility::Serializer& serializer) const;
    static Catalog deserialize(lingodb::utility::Deserializer& deSerializer);
 
-   virtual std::optional<std::shared_ptr<CatalogEntry>> getEntry(std::string name) {
+   std::optional<std::shared_ptr<CatalogEntry>> getEntry(std::string name) {
       if (entries.contains(name)) {
          return entries.at(name);
       } else {
@@ -73,8 +71,8 @@ class Catalog {
          return std::nullopt;
       }
    }
-   virtual void persist();
-   virtual void setShouldPersist(bool shouldPersist) {
+   void persist();
+   void setShouldPersist(bool shouldPersist) {
       this->shouldPersist = shouldPersist;
       for (auto& entry : entries) {
          entry.second->setShouldPersist(shouldPersist);
@@ -85,7 +83,7 @@ class Catalog {
    static std::shared_ptr<Catalog> create(std::string dbDir, bool eagerLoading);
    static std::shared_ptr<Catalog> createEmpty();
    ~Catalog() {
-      //persist();
+      persist();
    }
 
    private:
