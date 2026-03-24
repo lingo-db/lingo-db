@@ -40,6 +40,7 @@ void relalg::createQueryOptPipeline(mlir::OpPassManager& pm, lingodb::catalog::C
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createCombinePredicatesPass());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createEliminateNullableTypesPass());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createOptimizeImplementationsPass());
+   pm.addNestedPass<mlir::func::FuncOp>(relalg::createEliminateTrivialJoinPass());
    if (catalog) {
       pm.addNestedPass<mlir::func::FuncOp>(relalg::createDetachMetaDataPass());
    }
@@ -71,6 +72,9 @@ void relalg::registerQueryOptimizationPasses() {
    });
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return relalg::createOptimizeImplementationsPass();
+   });
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+      return relalg::createEliminateTrivialJoinPass();
    });
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return relalg::createIntroduceTmpPass();

@@ -11,6 +11,7 @@ add_mlir_dialect_library(MLIRRelAlg
         Transforms/DecomposeLambdas.cpp
         Transforms/CombinePredicates.cpp
         Transforms/OptimizeImplementations.cpp
+        Transforms/EliminateTrivialJoin.cpp
         Transforms/PropagateConstraints.cpp
         Transforms/IntroduceTmp.cpp
         Transforms/CommonSubtreeElimination.cpp
