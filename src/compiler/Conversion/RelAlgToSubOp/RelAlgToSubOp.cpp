@@ -3031,7 +3031,7 @@ class QueryReturnOpLowering : public OpConversionPattern<relalg::QueryReturnOp> 
    }
 };
 
-class LowerLocalTableScan : public OpConversionPattern<relalg::LocalTableScanOp> {
+class LocalTableScanLowering : public OpConversionPattern<relalg::LocalTableScanOp> {
    public:
    using OpConversionPattern::OpConversionPattern;
 
@@ -3127,7 +3127,7 @@ void RelalgToSubOpLoweringPass::runOnOperation() {
    patterns.insert<TrackTuplesLowering>(ctxt);
    patterns.insert<QueryOpLowering>(ctxt);
    patterns.insert<QueryReturnOpLowering>(ctxt);
-   patterns.insert<LowerLocalTableScan>(ctxt);
+   patterns.insert<LocalTableScanLowering>(ctxt);
 
    if (failed(applyFullConversion(module, target, std::move(patterns))))
       signalPassFailure();
