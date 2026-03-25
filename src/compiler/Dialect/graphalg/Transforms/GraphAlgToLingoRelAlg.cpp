@@ -1852,7 +1852,7 @@ class ForConstOpConversion : public StatefulConversion<ForConstOp> {
    LogicalResult matchAndRewrite(ForConstOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto loc = op.getLoc();
       auto* ctx = rewriter.getContext();
-      auto& memberManager = ctx->getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager();
+      auto& memberManager = ctx->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
 
       auto rangeBeginAttr = tryGetConstantInt(op.getRangeBegin());
       auto rangeEndAttr = tryGetConstantInt(op.getRangeEnd());
@@ -1874,7 +1874,7 @@ class ForDimOpConversion : public StatefulConversion<ForDimOp> {
    LogicalResult matchAndRewrite(ForDimOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto loc = op.getLoc();
       auto* ctx = rewriter.getContext();
-      auto& memberManager = ctx->getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager();
+      auto& memberManager = ctx->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
 
       Value startBoundVal = rewriter.create<arith::ConstantIndexOp>(loc, 0);
       Value endBoundVal = rewriter.create<arith::ConstantIndexOp>(loc, op.getDim().getConcreteDim());
