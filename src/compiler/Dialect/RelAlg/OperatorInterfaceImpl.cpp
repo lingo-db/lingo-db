@@ -1056,4 +1056,33 @@ ColumnSet LocalTableScanOp::getCreatedColumns() {
    return set;
 }
 
+ColumnSet BufferScanOp::getCreatedColumns() {
+   ColumnSet res;
+   for (auto attr : getColumns()) {
+      res.insert(&llvm::cast<ColumnDefAttr>(attr).getColumn());
+   }
+   return res;
+}
+
+ColumnSet BufferScanOp::getAvailableColumns(relalg::AvailabilityCache& cache) {
+   // For a base scan, available columns are exactly the created columns
+   return getCreatedColumns();
+}
+
+ColumnSet BufferScanOp::getUsedColumns() {
+   return {}; // Base scans do not consume columns from below
+}
+
+ColumnSet BufferScanOp::getFreeColumns() {
+   return {};
+}
+
+llvm::SmallVector<Operator, 4> BufferScanOp::getChildren() {
+   return {}; // Leaf node, no children
+}
+
+void BufferScanOp::setChildren(llvm::ArrayRef<Operator> children) {
+   assert(children.empty() && "BufferScanOp cannot have children");
+}
+
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOpsInterfaces.cpp.inc"

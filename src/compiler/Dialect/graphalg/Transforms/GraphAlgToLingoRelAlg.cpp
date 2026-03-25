@@ -73,10 +73,13 @@ static bool isTropical(Type t) {
 }
 
 static tuples::ColumnDefAttr createColumnDef(MLIRContext* ctx, StringRef name, Type type) {
-   auto column = std::make_shared<tuples::Column>();
-   column->type = type;
-   auto symName = SymbolRefAttr::get(ctx, "graphalg", {FlatSymbolRefAttr::get(ctx, name)});
-   return tuples::ColumnDefAttr::get(ctx, symName, column, Attribute());
+   auto& colManager = ctx->getOrLoadDialect<tuples::TupleStreamDialect>()->getColumnManager();
+   // 1. Get or create the underlying Column object managed by the dialect
+   auto col = colManager.get("graphalg", name);
+   col->type = type;
+
+   // 2. Safely create the Def attribute
+   return colManager.createDef("graphalg", name);
 }
 
 static tuples::ColumnRefAttr createColumnRef(tuples::ColumnDefAttr def) {
@@ -317,9 +320,17 @@ class LoadCastConversion : public ConversionPattern {
                   renameDefs.push_back(tuples::ColumnDefAttr::get(ctx, exp.getName(), exp.getColumnPtr(), ArrayAttr::get(ctx, {from})));
                }
             } else if (auto symRef = llvm::dyn_cast<SymbolRefAttr>(expAttr)) {
-               auto column = std::make_shared<tuples::Column>();
-               column->type = from.getColumnPtr()->type;
-               renameDefs.push_back(tuples::ColumnDefAttr::get(ctx, symRef, column, ArrayAttr::get(ctx, {from})));
+               auto& colManager = ctx->getOrLoadDialect<tuples::TupleStreamDialect>()->getColumnManager();
+               // Extract scope and name from the symbol
+               StringRef scope = symRef.getRootReference().getValue();
+               StringRef name = symRef.getLeafReference().getValue();
+
+               // Get the managed column and assign its type
+               auto col = colManager.get(scope, name);
+               col->type = from.getColumnPtr()->type;
+
+               // Create the definition with mapping
+               renameDefs.push_back(colManager.createDef(symRef, ArrayAttr::get(ctx, {from})));
             }
          };
 
@@ -1581,10 +1592,8 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
 
    SmallVector<Value> initStates;
    SmallVector<Type> stateTypes;
-   SmallVector<SmallVector<subop::Member>> allMembers;
-   SmallVector<Type> valTypes;
 
-   // 1. Materialize original arguments into SubOp LocalTables before the loop
+   // 1. Materialize original arguments into subop.buffers before the loop
    for (size_t i = 0; i < origInitArgs.size(); ++i) {
       Value origArg = origInitArgs[i];
       Value convArg = convInitArgs[i];
@@ -1595,56 +1604,46 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
 
       MatrixMeta meta = state.get(origArg, ctx);
       Type valType = GraphAlgTypeConverter::convertSemiringType(meta.semiring);
-      valTypes.push_back(valType);
 
-      SmallVector<Attribute> colsAttrVec;
-      SmallVector<Attribute> columnsAttrVec;
       SmallVector<subop::Member> memberList;
+      SmallVector<std::pair<subop::Member, tuples::ColumnRefAttr>> refMappingArgs;
 
       auto addMember = [&](StringRef name, Type type, tuples::ColumnRefAttr colRef) {
          subop::Member member = memberManager.createMember(name.str(), type);
          memberList.push_back(member);
-         colsAttrVec.push_back(colRef);
-         columnsAttrVec.push_back(rewriter.getStringAttr(memberManager.getName(member)));
+         refMappingArgs.push_back({member, colRef});
       };
 
       if (meta.hasRow()) addMember("row", rewriter.getI64Type(), meta.row);
       if (meta.hasCol()) addMember("col", rewriter.getI64Type(), meta.col);
       addMember("val", valType, meta.val);
 
-      allMembers.push_back(memberList);
-
       auto stateMembersAttr = subop::StateMembersAttr::get(ctx, memberList);
-      Type localTableType = subop::LocalTableType::get(ctx, stateMembersAttr, rewriter.getArrayAttr(columnsAttrVec));
-      stateTypes.push_back(localTableType);
+      auto bufferType = subop::BufferType::get(ctx, stateMembersAttr);
+      stateTypes.push_back(bufferType);
 
-      auto matOp = rewriter.create<relalg::MaterializeOp>(
-         loc, localTableType, convArg,
-         rewriter.getArrayAttr(colsAttrVec),
-         rewriter.getArrayAttr(columnsAttrVec));
-      initStates.push_back(matOp.getResult());
+      auto mappingAttr = subop::ColumnRefMemberMappingAttr::get(ctx, refMappingArgs);
+
+      Value bufferState = rewriter.create<subop::GenericCreateOp>(loc, bufferType);
+      rewriter.create<subop::MaterializeOp>(loc, convArg, bufferState, mappingAttr);
+      initStates.push_back(bufferState);
    }
 
-   // 2. Setup SubOp Loop operands (Index comes first, followed by states)
+   // 2. Setup SubOp Loop operands
    SmallVector<Value> loopOperands;
    loopOperands.push_back(startBoundVal);
    loopOperands.append(initStates.begin(), initStates.end());
 
    SmallVector<Type> loopResultTypes;
-   for (Value v : loopOperands) {
-      loopResultTypes.push_back(v.getType());
-   }
+   for (Value v : loopOperands) loopResultTypes.push_back(v.getType());
 
-   // 3. Create subop.loop instead of scf.for
+   // 3. Create subop.loop
    auto loopOp = rewriter.create<subop::LoopOp>(loc, loopResultTypes, loopOperands);
    Block* newBody = rewriter.createBlock(&loopOp.getRegion());
 
-   // Add block arguments to the loop body
    Value newIdx = newBody->addArgument(startBoundVal.getType(), loc);
    SmallVector<Value> newStates;
-   for (Type t : stateTypes) {
-      newStates.push_back(newBody->addArgument(t, loc));
-   }
+   for (Type t : stateTypes) newStates.push_back(newBody->addArgument(t, loc));
 
    rewriter.setInsertionPointToStart(newBody);
 
@@ -1672,8 +1671,9 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
       else if (loopValType.isF64()) {
          Value i64Idx = rewriter.create<arith::IndexCastOp>(loc, rewriter.getI64Type(), newIdx);
          valIdx = rewriter.create<arith::SIToFPOp>(loc, loopValType, i64Idx);
-      } else
+      } else {
          valIdx = rewriter.create<arith::IndexCastOp>(loc, rewriter.getI64Type(), newIdx);
+      }
 
       auto constDef = createColumnDef(ctx, AttributeGenerator::nextName("dummy"), loopValType);
       Attribute zeroAttr = loopValType.isInteger(64) ? (Attribute) rewriter.getI64IntegerAttr(0) : (Attribute) rewriter.getFloatAttr(loopValType, 0.0);
@@ -1684,7 +1684,6 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
                           .getResult();
 
       auto mapOp = rewriter.create<relalg::MapOp>(loc, constRel);
-
       mapOp.setComputedColsAttr(rewriter.getArrayAttr({idxMeta.valDef}));
 
       auto* mapBlock = new Block;
@@ -1700,7 +1699,7 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
       state.set(origIdxRepl, idxMeta);
    }
 
-   // Map old loop state variables to LocalTableScans against the current iteration's state buffer
+   // Map old loop state variables to BufferScanOps against the current iteration's state buffer
    SmallVector<Value> origStateRepls;
    for (size_t i = 0; i < newStates.size(); ++i) {
       Value loopState = newStates[i];
@@ -1708,15 +1707,27 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
       MatrixMeta loopMeta = state.get(origArg, ctx);
 
       SmallVector<Attribute> scanComputedCols;
-      if (loopMeta.hasRow()) scanComputedCols.push_back(loopMeta.rowDef);
-      if (loopMeta.hasCol()) scanComputedCols.push_back(loopMeta.colDef);
-      scanComputedCols.push_back(loopMeta.valDef);
+      SmallVector<Attribute> scanColumnMapping;
 
-      auto scanOp = rewriter.create<relalg::LocalTableScanOp>(
-         loc,
-         tuples::TupleStreamType::get(ctx),
+      auto bufferType = llvm::cast<subop::BufferType>(loopState.getType());
+      auto membersList = bufferType.getMembers().getMembers();
+      size_t mIdx = 0;
+
+      auto addGatherMapping = [&](tuples::ColumnDefAttr colDef) {
+         scanComputedCols.push_back(colDef);
+         scanColumnMapping.push_back(rewriter.getStringAttr(memberManager.getName(membersList[mIdx++])));
+      };
+
+      if (loopMeta.hasRow()) addGatherMapping(loopMeta.rowDef);
+      if (loopMeta.hasCol()) addGatherMapping(loopMeta.colDef);
+      addGatherMapping(loopMeta.valDef);
+
+      auto scanOp = rewriter.create<relalg::BufferScanOp>(
+         loc, tuples::TupleStreamType::get(ctx),
          loopState,
-         rewriter.getArrayAttr(scanComputedCols));
+         rewriter.getArrayAttr(scanComputedCols),
+         rewriter.getArrayAttr(scanColumnMapping));
+      scanOp->setAttr("rows", rewriter.getF64FloatAttr(100.0));
 
       Value scanStream = scanOp.getResult();
       state.set(scanStream, loopMeta);
@@ -1731,9 +1742,6 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
    Block& oldBody = op->getRegion(0).front();
    rewriter.mergeBlocks(&oldBody, newBody, replValues);
 
-   // ----------------------------------------------------------------------------------
-   // Record nextIdx and cond for GraphAlgYieldOpConversion
-   // ----------------------------------------------------------------------------------
    auto yieldOp = newBody->getTerminator();
    rewriter.setInsertionPoint(yieldOp);
 
@@ -1742,25 +1750,35 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
 
    state.loopYieldData[yieldOp] = {nextIdx, cond};
 
-   // ----------------------------------------------------------------------------------
-   // Expose Final Pipeline Result Streams
-   // ----------------------------------------------------------------------------------
+   // 4. Expose Final Pipeline Result Streams via BufferScanOps
    rewriter.setInsertionPointAfter(loopOp);
    SmallVector<Value> finalResults;
    for (size_t i = 0; i < op->getNumResults(); ++i) {
-      Value finalState = loopOp.getResult(i + 1); // + 1 because index 0 is our loop counter
-
+      Value finalState = loopOp.getResult(i + 1);
       MatrixMeta finalMeta = state.get(op->getResult(i), ctx);
 
       SmallVector<Attribute> scanComputedCols;
-      if (finalMeta.hasRow()) scanComputedCols.push_back(finalMeta.rowDef);
-      if (finalMeta.hasCol()) scanComputedCols.push_back(finalMeta.colDef);
-      scanComputedCols.push_back(finalMeta.valDef);
+      SmallVector<Attribute> scanColumnMapping;
 
-      auto scanOp = rewriter.create<relalg::LocalTableScanOp>(
+      auto bufferType = llvm::cast<subop::BufferType>(finalState.getType());
+      auto membersList = bufferType.getMembers().getMembers();
+      size_t mIdx = 0;
+
+      auto addGatherMapping = [&](tuples::ColumnDefAttr colDef) {
+         scanComputedCols.push_back(colDef);
+         scanColumnMapping.push_back(rewriter.getStringAttr(memberManager.getName(membersList[mIdx++])));
+      };
+
+      if (finalMeta.hasRow()) addGatherMapping(finalMeta.rowDef);
+      if (finalMeta.hasCol()) addGatherMapping(finalMeta.colDef);
+      addGatherMapping(finalMeta.valDef);
+
+      auto scanOp = rewriter.create<relalg::BufferScanOp>(
          loc, tuples::TupleStreamType::get(ctx),
          finalState,
-         rewriter.getArrayAttr(scanComputedCols));
+         rewriter.getArrayAttr(scanComputedCols),
+         rewriter.getArrayAttr(scanColumnMapping));
+      scanOp->setAttr("rows", rewriter.getF64FloatAttr(100.0));
 
       Value finalStream = scanOp.getResult();
       state.set(finalStream, finalMeta);
@@ -1770,7 +1788,6 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
    rewriter.replaceOp(op, finalResults);
    return success();
 }
-
 class GraphAlgYieldOpConversion : public StatefulConversion<YieldOp> {
    public:
    using StatefulConversion::StatefulConversion;
@@ -1789,7 +1806,6 @@ class GraphAlgYieldOpConversion : public StatefulConversion<YieldOp> {
       Value nextIdx = it->second.first;
       Value cond = it->second.second;
 
-      // Setup a simple_state to hold the dynamically evaluated condition member
       subop::Member condMember = memberManager.createMember("loop_cond", rewriter.getI1Type());
       auto condMembersAttr = subop::StateMembersAttr::get(ctx, {condMember});
       Type simpleStateType = subop::SimpleStateType::get(ctx, condMembersAttr);
@@ -1815,27 +1831,29 @@ class GraphAlgYieldOpConversion : public StatefulConversion<YieldOp> {
 
          MatrixMeta actualYieldMeta = state.get(origYieldOperand, ctx);
 
-         auto localTableType = llvm::cast<subop::LocalTableType>(loopOp.getOperand(i + 1).getType());
-         auto members = localTableType.getMembers().getMembers();
+         auto bufferType = llvm::cast<subop::BufferType>(loopOp.getOperand(i + 1).getType());
+         auto members = bufferType.getMembers().getMembers();
 
-         SmallVector<Attribute> colsAttrVec;
-         SmallVector<Attribute> columnsAttrVec;
+         SmallVector<std::pair<subop::Member, tuples::ColumnRefAttr>> refMappingArgs;
          size_t memberIdx = 0;
 
          auto addMapping = [&](tuples::ColumnRefAttr colRef) {
-            colsAttrVec.push_back(colRef);
-            columnsAttrVec.push_back(rewriter.getStringAttr(memberManager.getName(members[memberIdx++])));
+            refMappingArgs.push_back({members[memberIdx++], colRef});
          };
 
          if (actualYieldMeta.hasRow()) addMapping(actualYieldMeta.row);
          if (actualYieldMeta.hasCol()) addMapping(actualYieldMeta.col);
          addMapping(actualYieldMeta.val);
 
-         auto matOp = rewriter.create<relalg::MaterializeOp>(
-            loc, localTableType, streamOperand,
-            rewriter.getArrayAttr(colsAttrVec),
-            rewriter.getArrayAttr(columnsAttrVec));
-         yieldArgs.push_back(matOp.getResult());
+         auto mappingAttr = subop::ColumnRefMemberMappingAttr::get(ctx, refMappingArgs);
+ // 1. Create a NEW buffer state for the next iteration's data
+         Value newState = rewriter.create<subop::GenericCreateOp>(loc, bufferType);
+
+         // 2. Materialize the yielded stream into this new buffer
+         rewriter.create<subop::MaterializeOp>(loc, streamOperand, newState, mappingAttr);
+
+         // 3. Yield the newly populated buffer state
+         yieldArgs.push_back(newState);
       }
 
       auto condMemberAttr = subop::MemberAttr::get(ctx, condMember);
