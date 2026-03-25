@@ -534,18 +534,31 @@ class SubOpRewriter {
       auto outerMapping = executionStepContexts.top().outerMapping;
       auto executionStep = executionStepContexts.top().executionStep;
       llvm::SmallVector<mlir::Type> types;
+      llvm::SmallVector<mlir::Value> valuesToStore;
+
       for (auto [param, arg, isThreadLocal] : llvm::zip(executionStep.getInputs(), executionStep.getSubOps().front().getArguments(), executionStep.getIsThreadLocal())) {
          if (exclude && arg == exclude && arg.hasOneUse()) continue;
          mlir::Value input = outerMapping.lookup(param);
          types.push_back(input.getType());
+         valuesToStore.push_back(input);
       }
+
+      // NEW: Also capture locally generated values that were mapped during this step!
+      for (auto& op : executionStep.getSubOps().front().getOperations()) {
+         for (auto res : op.getResults()) {
+            mlir::Value mapped = getMapped(res);
+            if (mapped && mapped != res) {
+               types.push_back(mapped.getType());
+               valuesToStore.push_back(mapped);
+            }
+         }
+      }
+
       auto tupleType = mlir::TupleType::get(getContext(), types);
       mlir::Value contextPtr = create<util::AllocaOp>(builder.getUnknownLoc(), util::RefType::get(getContext(), tupleType), mlir::Value());
       size_t offset = 0;
-      for (auto [param, arg, isThreadLocal] : llvm::zip(executionStep.getInputs(), executionStep.getSubOps().front().getArguments(), executionStep.getIsThreadLocal())) {
-         if (exclude && arg == exclude && arg.hasOneUse()) continue;
-         mlir::Value input = outerMapping.lookup(param);
-         create<util::StoreElementOp>(builder.getUnknownLoc(), input, contextPtr, offset++);
+      for (auto val : valuesToStore) {
+         create<util::StoreElementOp>(builder.getUnknownLoc(), val, contextPtr, offset++);
       }
       contextPtr = create<util::GenericMemrefCastOp>(builder.getUnknownLoc(), barePtrType, contextPtr);
       return contextPtr;
@@ -570,30 +583,40 @@ class SubOpRewriter {
          rewriter.valueMapping.pop_back();
       }
    };
-   Guard loadStepRequirements(mlir::Value contextPtr, mlir::TypeConverter* typeConverter, mlir::Value exclude = {}) {
+   void loadStepRequirements(mlir::Value contextPtr, mlir::TypeConverter* typeConverter, mlir::Value exclude = {}) {
       auto outerMapping = executionStepContexts.top().outerMapping;
       auto executionStep = executionStepContexts.top().executionStep;
       llvm::SmallVector<mlir::Type> types;
+      llvm::SmallVector<std::pair<mlir::Value, bool>> targetsToMap;
+
       for (auto [param, arg, isThreadLocal] : llvm::zip(executionStep.getInputs(), executionStep.getSubOps().front().getArguments(), executionStep.getIsThreadLocal())) {
          if (exclude && arg == exclude && arg.hasOneUse()) continue;
          mlir::Value input = outerMapping.lookup(param);
          types.push_back(input.getType());
+         targetsToMap.push_back({arg, mlir::cast<mlir::BoolAttr>(isThreadLocal).getValue()});
       }
+      for (auto& op : executionStep.getSubOps().front().getOperations()) {
+         for (auto res : op.getResults()) {
+            mlir::Value mapped = getMapped(res);
+            if (mapped && mapped != res) {
+               types.push_back(mapped.getType());
+               targetsToMap.push_back({res, false});
+            }
+         }
+      }
+
       auto tupleType = mlir::TupleType::get(getContext(), types);
       contextPtr = create<util::GenericMemrefCastOp>(builder.getUnknownLoc(), util::RefType::get(getContext(), tupleType), contextPtr);
-      Guard guard(*this);
       size_t offset = 0;
-      for (auto [param, arg, isThreadLocal] : llvm::zip(executionStep.getInputs(), executionStep.getSubOps().front().getArguments(), executionStep.getIsThreadLocal())) {
-         if (exclude && arg == exclude && arg.hasOneUse()) continue;
-         mlir::Value input = outerMapping.lookup(param);
-         mlir::Value value = create<util::LoadElementOp>(builder.getUnknownLoc(), input.getType(), contextPtr, offset++);
-         if (mlir::cast<mlir::BoolAttr>(isThreadLocal).getValue()) {
+
+      for (auto target : targetsToMap) {
+         mlir::Value value = create<util::LoadElementOp>(builder.getUnknownLoc(), types[offset++], contextPtr, offset - 1);
+         if (target.second) {
             value = rt::ThreadLocal::getLocal(builder, builder.getUnknownLoc())({value})[0];
-            value = create<util::GenericMemrefCastOp>(builder.getUnknownLoc(), typeConverter->convertType(arg.getType()), value);
+            value = create<util::GenericMemrefCastOp>(builder.getUnknownLoc(), typeConverter->convertType(target.first.getType()), value);
          }
-         map(arg, value);
+         map(target.first, value);
       }
-      return guard;
    }
    class NestingGuard {
       SubOpRewriter& rewriter;
@@ -1194,7 +1217,8 @@ class ScanRefsTableLowering : public SubOpConversionPattern<subop::ScanRefsOp> {
       funcOp.getBody().push_back(funcBody);
       auto ptr = rewriter.storeStepRequirements(scanOp.getState());
       rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
-         auto guard = rewriter.loadStepRequirements(contextPtr, typeConverter, scanOp.getState());
+         SubOpRewriter::Guard guard(rewriter);
+         rewriter.loadStepRequirements(contextPtr, typeConverter, scanOp.getState());
          recordBatchPointer = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(getContext(), recordBatchInfoRepr), recordBatchPointer);
          mlir::Value end = rewriter.create<util::LoadElementOp>(loc, rewriter.getIndexType(), recordBatchPointer, 0);
          mlir::Value globalOffset = rewriter.create<util::LoadElementOp>(loc, rewriter.getIndexType(), recordBatchPointer, 1);
@@ -1491,7 +1515,8 @@ void implementBufferIterationRuntime(bool parallel, mlir::Value bufferIterator, 
    funcOp.getBody().push_back(funcBody);
    auto ptr = rewriter.storeStepRequirements();
    rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
-      auto guard = rewriter.loadStepRequirements(contextPtr, &typeConverter);
+      SubOpRewriter::Guard guard(rewriter);
+      rewriter.loadStepRequirements(contextPtr, &typeConverter);
       auto castedBuffer = rewriter.create<util::BufferCastOp>(loc, util::BufferType::get(rewriter.getContext(), entryType), buffer);
       auto start = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
       auto end = rewriter.create<util::BufferGetLen>(loc, rewriter.getIndexType(), castedBuffer);
@@ -2062,7 +2087,8 @@ class ScanRefsContinuousViewLowering : public SubOpConversionPattern<subop::Scan
       mlir::Value contextPtr = funcBody->addArgument(ptrType, loc);
       funcOp.getBody().push_back(funcBody);
       rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
-         auto guard = rewriter.loadStepRequirements(contextPtr, typeConverter);
+         SubOpRewriter::Guard guard(rewriter);
+         rewriter.loadStepRequirements(contextPtr, typeConverter);
          auto castedBuffer = rewriter.create<util::BufferCastOp>(loc, bufferType, buffer);
          startPos = rewriter.create<mlir::arith::IndexCastOp>(loc, rewriter.getIndexType(), startPos);
          endPos = rewriter.create<mlir::arith::IndexCastOp>(loc, rewriter.getIndexType(), endPos);
@@ -2213,7 +2239,8 @@ class ScanRefsLocalTableLowering : public SubOpConversionPattern<subop::ScanRefs
       funcOp.getBody().push_back(funcBody);
       auto ptr = rewriter.storeStepRequirements(scanOp.getState());
       rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
-         auto guard = rewriter.loadStepRequirements(contextPtr, typeConverter, scanOp.getState());
+         SubOpRewriter::Guard guard(rewriter);
+         rewriter.loadStepRequirements(contextPtr, typeConverter, scanOp.getState());
          recordBatchPointer = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(getContext(), recordBatchInfoRepr), recordBatchPointer);
          mlir::Value end = rewriter.create<util::LoadElementOp>(loc, rewriter.getIndexType(), recordBatchPointer, 0);
          mlir::Value globalOffset = rewriter.create<util::LoadElementOp>(loc, rewriter.getIndexType(), recordBatchPointer, 1);
@@ -4475,6 +4502,7 @@ PatternList getCPUPatternList(TypeConverter& typeConverter, mlir::MLIRContext* c
 void handleExecutionStepCPU(PatternList& patternList, subop::ExecutionStepOp step, subop::ExecutionGroupOp executionGroup, mlir::IRMapping& mapping, mlir::TypeConverter& typeConverter) {
    // llvm::dbgs() << "[CPU] HANDLING STEP " << step << "\n";
    SubOpRewriter rewriter(patternList, step, mapping);
+   rewriter.operator mlir::OpBuilder&().setInsertionPoint(executionGroup);
 
    for (auto [param, arg, isThreadLocal] : llvm::zip(step.getInputs(), step.getSubOps().front().getArguments(), step.getIsThreadLocal())) {
       mlir::Value input = mapping.lookup(param);
@@ -4494,7 +4522,6 @@ void handleExecutionStepCPU(PatternList& patternList, subop::ExecutionStepOp ste
       ops.push_back(&op);
    }
    for (auto* op : ops) {
-      rewriter.operator mlir::OpBuilder&().setInsertionPoint(executionGroup);
       op->remove();
       rewriter.insertAndRewrite(op);
    }
