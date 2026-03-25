@@ -10,6 +10,7 @@
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamDialect.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
 
+#include "llvm/ADT/SmallPtrSet.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
@@ -21,14 +22,22 @@ class FinalizePass : public mlir::PassWrapper<FinalizePass, mlir::OperationPass<
    public:
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(FinalizePass)
    virtual llvm::StringRef getArgument() const override { return "subop-finalize"; }
-   void cloneRec(mlir::Operation* op, mlir::IRMapping mapping, mlir::Value val, subop::ColumnMapping columnMapping) {
+
+   void cloneRec(mlir::Operation* op, mlir::IRMapping mapping, subop::ColumnMapping columnMapping) {
       mlir::OpBuilder builder(op->getContext());
-      builder.setInsertionPointAfter(mapping.lookup(val).getDefiningOp() ? mapping.lookup(val).getDefiningOp() : op);
+      // Insert right before the original operation to ensure all side-operands dominate the cloned operation.
+      builder.setInsertionPoint(op);
       mlir::cast<subop::SubOperator>(op).cloneSubOp(builder, mapping, columnMapping);
-      for (auto& use : op->getUses()) {
-         cloneRec(use.getOwner(), mapping, use.get(), columnMapping);
+
+      // Use unique users to prevent multiple cloning if an operation references multiple results from `op`.
+      llvm::SmallPtrSet<mlir::Operation*, 4> uniqueUsers;
+      for (auto* user : op->getUsers()) {
+         if (uniqueUsers.insert(user).second) {
+            cloneRec(user, mapping, columnMapping);
+         }
       }
    }
+
    void runOnOperation() override {
       auto module = getOperation();
       std::vector<subop::UnionOp> unionOps;
@@ -38,17 +47,22 @@ class FinalizePass : public mlir::PassWrapper<FinalizePass, mlir::OperationPass<
       for (size_t i = 0; i < unionOps.size(); i++) {
          auto currentUnion = unionOps[unionOps.size() - 1 - i];
          std::vector<mlir::Value> operands(currentUnion.getOperands().begin(), currentUnion.getOperands().end());
-         std::sort(operands.begin(), operands.end(), [&](mlir::Value a, mlir::Value b) {
-            return a.getDefiningOp() && b.getDefiningOp() && a.getDefiningOp()->getBlock() == b.getDefiningOp()->getBlock() && a.getDefiningOp()->isBeforeInBlock(b.getDefiningOp());
-         });
-         for (size_t i = 0; i + 1 < operands.size(); i++) {
+
+         // We do not need to sort operands because clones are inserted exactly before their original users,
+         // which correctly preserves any SSA dominance properties independently of the operand definition order.
+
+         for (size_t j = 0; j + 1 < operands.size(); j++) {
             mlir::IRMapping mapping;
-            mapping.map(currentUnion.getResult(), operands[i]);
+            mapping.map(currentUnion.getResult(), operands[j]);
+
+            llvm::SmallPtrSet<mlir::Operation*, 4> uniqueUsers;
             for (auto* user : currentUnion.getResult().getUsers()) {
-               cloneRec(user, mapping, currentUnion.getResult(), {});
+               if (uniqueUsers.insert(user).second) {
+                  cloneRec(user, mapping, {});
+               }
             }
          }
-         currentUnion->replaceAllUsesWith(mlir::ValueRange{operands[operands.size() - 1]});
+         currentUnion->replaceAllUsesWith(mlir::ValueRange{operands.back()});
          currentUnion->erase();
       }
 
