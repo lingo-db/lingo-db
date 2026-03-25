@@ -3102,6 +3102,7 @@ void RelalgToSubOpLoweringPass::runOnOperation() {
    target.addLegalDialect<util::UtilDialect>();
 
    TypeConverter typeConverter;
+   typeConverter.addConversion([](Type t) { return t; });
    typeConverter.addConversion([](tuples::TupleStreamType t) { return t; });
    auto* ctxt = &getContext();
 

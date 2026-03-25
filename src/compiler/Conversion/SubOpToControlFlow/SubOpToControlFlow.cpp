@@ -833,8 +833,21 @@ class SubOpRewriter {
    }
    void insertAndRewrite(mlir::Operation* op) {
       builder.insert(op);
-      if (op->getDialect()->getNamespace() == "subop") {
+      if (shouldRewrite(op)) {
          rewrite(op);
+      } else {
+         // Fix: If it's a non-subop (like arith.addi), we MUST update its operands
+         // to point to the mapped values, otherwise they will hold dangling references         // to block arguments that get erased, resulting in null operands.
+         op->walk([&](mlir::Operation* nestedOp) {
+            if (!shouldRewrite(nestedOp)) {
+               for (auto& operand : nestedOp->getOpOperands()) {
+                  mlir::Value mapped = getMapped(operand.get());
+                  if (mapped) {
+                     operand.set(mapped);
+                  }
+               }
+            }
+         });
       }
    }
 
@@ -4154,8 +4167,8 @@ class LoopLowering : public SubOpConversionPattern<subop::LoopOp> {
          mlir::IRMapping nestedGroupResultMapping;
 
          mlir::IRMapping outerMapping;
-         for (auto [i, b] : llvm::zip(nestedExecutionGroup.getInputs(), nestedExecutionGroup.getRegion().front().getArguments())) {
-            outerMapping.map(b, rewriter.getMapped(i));
+         for (auto [i, argB] : llvm::zip(nestedExecutionGroup.getInputs(), nestedExecutionGroup.getRegion().front().getArguments())) {
+            outerMapping.map(argB, rewriter.getMapped(i));
          }
          for (auto& op : nestedExecutionGroup.getRegion().front().getOperations()) {
             if (auto step = mlir::dyn_cast_or_null<subop::ExecutionStepOp>(&op)) {
@@ -4165,24 +4178,35 @@ class LoopLowering : public SubOpConversionPattern<subop::LoopOp> {
                   rewriter.map(arg, input);
                }
                llvm::SmallVector<mlir::Operation*> ops;
-               for (auto& op : step.getSubOps().front()) {
-                  if (&op == step.getSubOps().front().getTerminator())
+               for (auto& nestedOp : step.getSubOps().front()) {
+                  if (&nestedOp == step.getSubOps().front().getTerminator())
                      break;
-                  ops.push_back(&op);
+                  ops.push_back(&nestedOp);
                }
-               for (auto* op : ops) {
+               for (auto* opToMove : ops) {
                   rewriter.operator mlir::OpBuilder&().setInsertionPointToEnd(after);
-                  op->remove();
-                  rewriter.insertAndRewrite(op);
+                  opToMove->remove();
+                  rewriter.insertAndRewrite(opToMove);
                }
                auto returnOp = mlir::cast<subop::ExecutionStepReturnOp>(step.getSubOps().front().getTerminator());
                for (auto [i, o] : llvm::zip(returnOp.getInputs(), step.getResults())) {
                   auto mapped = rewriter.getMapped(i);
-                  outerMapping.map(o, mapped);
+                  // Safeguard: Ensure we never map to a null value in outerMapping
+                  if (mapped) {
+                     outerMapping.map(o, mapped);
+                  } else {
+                     outerMapping.map(o, i); // fallback to original SSA value
+                  }
                }
             } else if (auto returnOp = mlir::dyn_cast_or_null<subop::NestedExecutionGroupReturnOp>(&op)) {
                for (auto [i, o] : llvm::zip(returnOp.getInputs(), nestedExecutionGroup.getResults())) {
-                  nestedGroupResultMapping.map(o, outerMapping.lookup(i));
+                  mlir::Value mappedVal = outerMapping.lookupOrNull(i);
+                  // Safeguard: Ensure nestedGroupResultMapping never holds nullptr
+                  if (mappedVal) {
+                     nestedGroupResultMapping.map(o, mappedVal);
+                  } else {
+                     nestedGroupResultMapping.map(o, i); // fallback
+                  }
                }
             }
          }
@@ -4190,10 +4214,21 @@ class LoopLowering : public SubOpConversionPattern<subop::LoopOp> {
          llvm::SmallVector<mlir::Value> res;
          auto simpleStateType = mlir::cast<subop::SimpleStateType>(continueOp.getOperandTypes()[0]);
          EntryStorageHelper storageHelper(loopOp, simpleStateType.getMembers(), simpleStateType.hasLock(), typeConverter);
-         auto shouldContinueBool = storageHelper.getValueMap(nestedGroupResultMapping.lookup(continueOp.getOperand(0)), rewriter, loc).get(continueOp.getCondMember().getMember());
+
+         // Strong safety guard
+         auto getMappedValue = [&](mlir::Value v) {
+            if (nestedGroupResultMapping.contains(v)) {
+               mlir::Value mapped = nestedGroupResultMapping.lookupOrNull(v);
+               if (mapped) return mapped;
+            }
+            mlir::Value rewriterMapped = rewriter.getMapped(v);
+            return rewriterMapped ? rewriterMapped : v;
+         };
+
+         auto shouldContinueBool = storageHelper.getValueMap(getMappedValue(continueOp.getOperand(0)), rewriter, loc).get(continueOp.getCondMember().getMember());
          res.push_back(shouldContinueBool);
          for (auto operand : continueOp->getOperands().drop_front()) {
-            res.push_back(nestedGroupResultMapping.lookup(operand));
+            res.push_back(getMappedValue(operand));
          }
          rewriter.create<mlir::scf::YieldOp>(loc, res);
       });
@@ -4436,8 +4471,9 @@ void handleExecutionStepCPU(PatternList& patternList, subop::ExecutionStepOp ste
       ops.push_back(&op);
    }
    for (auto* op : ops) {
-      // llvm::dbgs() << "====OP: " << *op <<"\n";
-      rewriter.rewrite(op, executionGroup);
+      rewriter.operator mlir::OpBuilder&().setInsertionPoint(executionGroup);
+      op->remove();
+      rewriter.insertAndRewrite(op);
    }
    auto returnOp = mlir::cast<subop::ExecutionStepReturnOp>(step.getSubOps().front().getTerminator());
    for (auto [i, o] : llvm::zip(returnOp.getInputs(), step.getResults())) {
