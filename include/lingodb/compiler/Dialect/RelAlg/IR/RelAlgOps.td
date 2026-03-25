@@ -556,5 +556,30 @@ def LocalTableScanOp : RelAlg_Op<"local_table_scan", [Operator, NoMemoryEffect]>
       ColumnSet getCreatedColumns();
   }];
 }
+def BufferScanOp : RelAlg_Op<"buffer_scan", [DeclareOpInterfaceMethods<Operator>]> {
+  let summary = "Scans a subop.buffer into a tuple stream";
+  let description =[{
+    Scans a row-oriented buffer and materializes its members into relational columns.
+  }];
 
+  let arguments = (ins
+    AnyType:$buffer,
+    ArrayAttr:$columns,
+    ArrayAttr:$columnMapping
+  );
+
+  let results = (outs TupleStream:$result);
+
+  let assemblyFormat = "$buffer `,` $columns `,` $columnMapping attr-dict `:` type($buffer)";
+
+  // Add the C++ declarations here:
+  let extraClassDeclaration =[{
+    ColumnSet getCreatedColumns();
+    ColumnSet getAvailableColumns(AvailabilityCache& cache);
+    ColumnSet getUsedColumns();
+    ColumnSet getFreeColumns();
+    llvm::SmallVector<Operator, 4> getChildren();
+    void setChildren(llvm::ArrayRef<Operator> children);
+  }];
+}
 #endif // LINGODB_DIALECT_RELALG_IR_OPS
