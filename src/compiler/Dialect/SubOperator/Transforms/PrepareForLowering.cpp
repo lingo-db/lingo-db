@@ -119,133 +119,144 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
                }
             };
 
-            for (auto operand : op->getOperands()) {
-               checkStreamOperand(operand);
-            }
+            for (auto operand : op->getOperands()) checkStreamOperand(operand);
             op->walk([&](mlir::Operation* nestedOp) {
                if (nestedOp == op) return;
-               for (auto operand : nestedOp->getOperands()) {
-                  checkStreamOperand(operand);
-               }
+               for (auto operand : nestedOp->getOperands()) checkStreamOperand(operand);
             });
          }
 
          llvm::DenseMap<mlir::Operation*, std::vector<mlir::Operation*>> steps; // {startPipelineOp, pipelineOps}
          llvm::DenseMap<mlir::Operation*, mlir::Operation*> opToStep; // {pipelineOp, startPipelineOp}
-         for (auto* op : originalOrder) {
-            mlir::Operation* root = find(op);
-            steps[root].push_back(op);
-            opToStep[op] = root;
-         }
-
-         // Step 2: collect required/produced state for each step
-         // -> also deal with GetLocal operations (that do belong to the same step that accesses the state)
          llvm::DenseMap<mlir::Operation*, std::vector<std::tuple<mlir::Value, mlir::Value, bool>>> requiredState;
          llvm::DenseMap<mlir::Operation*, std::vector<mlir::Value>> producedState;
          std::unordered_set<mlir::Operation*> getLocals;
+         llvm::DenseMap<mlir::Operation*, std::unordered_set<mlir::Operation*>> dependencies;
 
-         enum Kind {
-            READ,
-            WRITE
-         };
+         const int READ = 0;
+         const int WRITE = 1;
 
-         llvm::DenseMap<subop::Member, std::vector<std::tuple<subop::SubOperator, mlir::Operation*, Kind>>> memberUsage;
+         // Wrap Step dependency generation in a loop to detect cyclic pipelines and merge them
+         bool hasCycles = true;
+         while (hasCycles) {
+            hasCycles = false;
+            steps.clear();
+            opToStep.clear();
+            for (auto* op : originalOrder) {
+               mlir::Operation* root = find(op);
+               steps[root].push_back(op);
+               opToStep[op] = root;
+            }
 
-         for (auto& step : steps) {
-            for (auto* op : step.second) {
-               // collect produced state of nested operations that are currently investigated
-               for (auto result : op->getResults()) {
-                  if (!mlir::isa<tuples::TupleStreamType>(result.getType())) {
-                     producedState[step.first].push_back(result);
+            requiredState.clear();
+            producedState.clear();
+            llvm::DenseMap<subop::Member, std::vector<std::tuple<subop::SubOperator, mlir::Operation*, int>>> memberUsage;
+
+            for (auto& step : steps) {
+               for (auto* op : step.second) {
+                  for (auto result : op->getResults()) {
+                     if (!mlir::isa<tuples::TupleStreamType>(result.getType())) {
+                        producedState[step.first].push_back(result);
+                     }
                   }
-               }
-               //check how states are used
-               op->walk([&](mlir::Operation* nestedOp) {
-                  if (subop::SubOperator potentialSubOp = mlir::dyn_cast_or_null<subop::SubOperator>(nestedOp)) {
-                     auto readMembers = potentialSubOp.getReadMembers();
-                     auto writtenMembers = potentialSubOp.getWrittenMembers();
-                     for (auto member : readMembers) {
-                        memberUsage[member].push_back({potentialSubOp, op, READ});
-                     }
-                     for (auto member : writtenMembers) {
-                        memberUsage[member].push_back({potentialSubOp, op, WRITE});
-                     }
-                  }
-                  for (auto operand : nestedOp->getOperands()) {
-                     if (mlir::isa<tuples::TupleStreamType>(operand.getType())) {
-                        continue;
-                     }
-
-                     bool definedInCurrentStep = false;
-                     if (auto* defOp = operand.getDefiningOp()) {
-                        for (auto* stepOp : step.second) {
-                           if (stepOp->isAncestor(defOp)) {
-                              definedInCurrentStep = true;
-                              break;
-                           }
+                  op->walk([&](mlir::Operation* nestedOp) {
+                     if (subop::SubOperator potentialSubOp = mlir::dyn_cast_or_null<subop::SubOperator>(nestedOp)) {
+                        for (auto member : potentialSubOp.getReadMembers()) {
+                           memberUsage[member].push_back({potentialSubOp, op, READ});
                         }
-                     } else {
-                        mlir::Block* defBlock = mlir::cast<mlir::BlockArgument>(operand).getOwner();
-                        if (mlir::Operation* parentOp = defBlock->getParentOp()) {
+                        for (auto member : potentialSubOp.getWrittenMembers()) {
+                           memberUsage[member].push_back({potentialSubOp, op, WRITE});
+                        }
+                     }
+                     for (auto operand : nestedOp->getOperands()) {
+                        if (mlir::isa<tuples::TupleStreamType>(operand.getType())) continue;
+
+                        bool definedInCurrentStep = false;
+                        if (auto* defOp = operand.getDefiningOp()) {
                            for (auto* stepOp : step.second) {
-                              if (stepOp->isAncestor(parentOp)) {
+                              if (stepOp->isAncestor(defOp)) {
                                  definedInCurrentStep = true;
                                  break;
                               }
                            }
+                        } else {
+                           mlir::Block* defBlock = mlir::cast<mlir::BlockArgument>(operand).getOwner();
+                           if (mlir::Operation* parentOp = defBlock->getParentOp()) {
+                              for (auto* stepOp : step.second) {
+                                 if (stepOp->isAncestor(parentOp)) {
+                                    definedInCurrentStep = true;
+                                    break;
+                                 }
+                              }
+                           }
+                        }
+                        if (!definedInCurrentStep) {
+                           requiredState[step.first].push_back({operand, operand, false});
                         }
                      }
-
-                     if (!definedInCurrentStep) {
-                        requiredState[step.first].push_back({operand, operand, false});
-                     }
-                  }
-               });
+                  });
+               }
             }
-         }
-         llvm::DenseMap<mlir::Operation*, std::unordered_set<mlir::Operation*>> dependencies;
-         for (auto& [step, vals] : requiredState) {
-            for (auto val : vals) {
-               if (auto* producer = std::get<0>(val).getDefiningOp()) {
-                  if (producer->getBlock() == step->getBlock()) {
-                     auto* producerStep = opToStep[producer];
-                     if (producerStep != step) {
-                        dependencies[step].insert(producerStep);
+
+            dependencies.clear();
+            for (auto& [step, vals] : requiredState) {
+               for (auto val : vals) {
+                  if (auto* producer = std::get<0>(val).getDefiningOp()) {
+                     if (producer->getBlock() == block) {
+                        if (auto* producerStep = opToStep[producer]; producerStep != step) {
+                           dependencies[step].insert(producerStep);
+                        }
                      }
                   }
                }
             }
-         }
 
-         // Step 3: determine correct order of steps
-         for (auto [member, ops] : memberUsage) {
-            for (size_t i = 0; i < ops.size(); i++) {
-               for (size_t j = i + 1; j < ops.size(); j++) {
-                  auto* pipelineOp1 = std::get<1>(ops[i]);
-                  auto* pipelineOp2 = std::get<1>(ops[j]);
-                  auto kind1 = std::get<2>(ops[i]);
-                  auto kind2 = std::get<2>(ops[j]);
-                  auto addConflict = [&]() {
-                     auto* step1 = opToStep[pipelineOp1];
-                     auto* step2 = opToStep[pipelineOp2];
-                     assert(step1);
-                     assert(step2);
-                     if (step1 == step2) {
-                        return;
-                     }
-                     if (pipelineOp1->isBeforeInBlock(pipelineOp2)) {
-                        dependencies[step2].insert(step1);
-                     } else {
-                        dependencies[step1].insert(step2);
-                     }
-                  };
-                  if (kind1 == WRITE && kind2 == WRITE) {
-                     addConflict();
-                  }
-                  if ((kind1 == WRITE && kind2 == READ) || (kind1 == READ && kind2 == WRITE)) {
-                     addConflict();
+            for (auto& [member, ops] : memberUsage) {
+               for (size_t i = 0; i < ops.size(); i++) {
+                  for (size_t j = i + 1; j < ops.size(); j++) {
+                     auto* pipelineOp1 = std::get<1>(ops[i]);
+                     auto* pipelineOp2 = std::get<1>(ops[j]);
+                     auto kind1 = std::get<2>(ops[i]);
+                     auto kind2 = std::get<2>(ops[j]);
+                     auto addConflict = [&]() {
+                        auto* step1 = opToStep[pipelineOp1];
+                        auto* step2 = opToStep[pipelineOp2];
+                        if (step1 == step2) return;
+                        if (pipelineOp1->isBeforeInBlock(pipelineOp2)) {
+                           dependencies[step2].insert(step1);
+                        } else {
+                           dependencies[step1].insert(step2);
+                        }
+                     };
+                     if (kind1 == WRITE && kind2 == WRITE) addConflict();
+                     if ((kind1 == WRITE && kind2 == READ) || (kind1 == READ && kind2 == WRITE)) addConflict();
                   }
                }
+            }
+
+            // Execute Transitive Closure to spot Circular Dependencies in execution steps
+            llvm::DenseMap<mlir::Operation*, std::unordered_set<mlir::Operation*>> reach = dependencies;
+            bool tcChanged = true;
+            while (tcChanged) {
+               tcChanged = false;
+               for (auto& [a, deps] : dependencies) {
+                  for (auto* b : deps) {
+                     for (auto* c : reach[b]) {
+                        if (reach[a].insert(c).second) tcChanged = true;
+                     }
+                  }
+               }
+            }
+
+            for (auto& [a, deps] : dependencies) {
+               for (auto* b : deps) {
+                  if (reach[b].count(a)) {
+                     merge(a, b);
+                     hasCycles = true;
+                     break;
+                  }
+               }
+               if (hasCycles) break;
             }
          }
 
@@ -341,18 +352,7 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
                stateMapping[s1] = s2;
             }
          }
-         for (auto [root, c] : dependCount) {
-            if (c != 0) {
-               root->dump();
-               llvm::dbgs() << "dependencies:\n";
-               for (auto* dep : dependencies[root]) {
-                  if (dependCount[dep] > 0) {
-                     dep->dump();
-                  }
-               }
-               llvm::dbgs() << "-----------------------------------------------\n";
-            }
-         }
+
          auto* terminator = containsNestedSubOps.getBody()->getTerminator();
          b.setInsertionPoint(terminator);
          std::vector<mlir::Value> toReturn;

@@ -485,6 +485,7 @@ class AbstractSubOpConversionPattern {
 struct InFlightTupleStream {
    subop::InFlightOp inFlightOp;
    ColumnMapping columnMapping;
+   llvm::SmallVector<mlir::IRMapping> mappingStack;
 };
 
 struct PatternList {
@@ -674,7 +675,7 @@ class SubOpRewriter {
    void replaceOp(Operation* op, ValueRange newValues) {
       assert(op->getNumResults() == newValues.size());
       for (auto z : llvm::zip(op->getResults(), newValues)) {
-         valueMapping[0].map(std::get<0>(z), std::get<1>(z));
+         valueMapping.back().map(std::get<0>(z), std::get<1>(z));
       }
       eraseOp(op);
    }
@@ -693,7 +694,7 @@ class SubOpRewriter {
       return clonedBlock;
    }
    void map(mlir::Value v, mlir::Value mapped) {
-      valueMapping[0].map(v, mapped);
+      valueMapping.back().map(v, mapped);
    }
    mlir::Operation* clone(mlir::Operation* op, IRMapping& mapping) {
       auto* cloned = op->cloneWithoutRegions(mapping);
@@ -710,13 +711,13 @@ class SubOpRewriter {
    }
    subop::InFlightOp createInFlight(ColumnMapping mapping) {
       auto newInFlight = mapping.createInFlight(builder);
-      inFlightTupleStreams[newInFlight] = InFlightTupleStream{mlir::cast<subop::InFlightOp>(newInFlight.getDefiningOp()), mapping};
+      inFlightTupleStreams[newInFlight] = InFlightTupleStream{mlir::cast<subop::InFlightOp>(newInFlight.getDefiningOp()), mapping, valueMapping};
       return mlir::cast<subop::InFlightOp>(newInFlight.getDefiningOp());
    }
    void replaceTupleStream(mlir::Value tupleStream, ColumnMapping& mapping) {
       mlir::Value newInFlight = builder.create<subop::InFlightOp>(builder.getUnknownLoc(), mlir::ValueRange{}, mlir::ArrayAttr::get(getContext(), {}));
       eraseOp(newInFlight.getDefiningOp());
-      inFlightTupleStreams[tupleStream] = InFlightTupleStream{mlir::cast<subop::InFlightOp>(newInFlight.getDefiningOp()), std::move(mapping)};
+      inFlightTupleStreams[tupleStream] = InFlightTupleStream{mlir::cast<subop::InFlightOp>(newInFlight.getDefiningOp()), std::move(mapping), valueMapping};
       if (auto* definingOp = tupleStream.getDefiningOp()) {
          eraseOp(definingOp);
       }
@@ -867,7 +868,12 @@ class SubOpRewriter {
       mlir::OpBuilder::InsertionGuard guard(builder);
       currentStreamLoc = streamInfo.inFlightOp.getOperation();
       builder.setInsertionPoint(streamInfo.inFlightOp);
+
+      auto oldStack = std::move(valueMapping);
+      valueMapping = streamInfo.mappingStack;
       mlir::LogicalResult res = impl(*this, mapping);
+      valueMapping = std::move(oldStack);
+
       currentStreamLoc = nullptr;
       return res;
    }
@@ -1188,7 +1194,7 @@ class ScanRefsTableLowering : public SubOpConversionPattern<subop::ScanRefsOp> {
       funcOp.getBody().push_back(funcBody);
       auto ptr = rewriter.storeStepRequirements(scanOp.getState());
       rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
-         rewriter.loadStepRequirements(contextPtr, typeConverter, scanOp.getState());
+         auto guard = rewriter.loadStepRequirements(contextPtr, typeConverter, scanOp.getState());
          recordBatchPointer = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(getContext(), recordBatchInfoRepr), recordBatchPointer);
          mlir::Value end = rewriter.create<util::LoadElementOp>(loc, rewriter.getIndexType(), recordBatchPointer, 0);
          mlir::Value globalOffset = rewriter.create<util::LoadElementOp>(loc, rewriter.getIndexType(), recordBatchPointer, 1);
@@ -2207,7 +2213,7 @@ class ScanRefsLocalTableLowering : public SubOpConversionPattern<subop::ScanRefs
       funcOp.getBody().push_back(funcBody);
       auto ptr = rewriter.storeStepRequirements(scanOp.getState());
       rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
-         rewriter.loadStepRequirements(contextPtr, typeConverter, scanOp.getState());
+         auto guard = rewriter.loadStepRequirements(contextPtr, typeConverter, scanOp.getState());
          recordBatchPointer = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(getContext(), recordBatchInfoRepr), recordBatchPointer);
          mlir::Value end = rewriter.create<util::LoadElementOp>(loc, rewriter.getIndexType(), recordBatchPointer, 0);
          mlir::Value globalOffset = rewriter.create<util::LoadElementOp>(loc, rewriter.getIndexType(), recordBatchPointer, 1);
@@ -4107,7 +4113,13 @@ class NestedMapLowering : public SubOpTupleStreamConsumerConversionPattern<subop
             auto guard = rewriter.nest(outerMapping, step);
             for (auto [param, arg, isThreadLocal] : llvm::zip(step.getInputs(), step.getSubOps().front().getArguments(), step.getIsThreadLocal())) {
                mlir::Value input = outerMapping.lookup(param);
-               rewriter.map(arg, input);
+               if (!mlir::cast<mlir::BoolAttr>(isThreadLocal).getValue()) {
+                  rewriter.map(arg, input);
+               } else {
+                  mlir::Value threadLocal = rt::ThreadLocal::getLocal(rewriter, step.getLoc())({input})[0];
+                  threadLocal = rewriter.create<util::GenericMemrefCastOp>(step.getLoc(), typeConverter->convertType(arg.getType()), threadLocal);
+                  rewriter.map(arg, threadLocal);
+               }
             }
             llvm::SmallVector<mlir::Operation*> ops;
             auto returnOp = mlir::cast<subop::ExecutionStepReturnOp>(step.getSubOps().front().getTerminator());
@@ -4189,7 +4201,13 @@ class LoopLowering : public SubOpConversionPattern<subop::LoopOp> {
                auto guard = rewriter.nest(outerMapping, step);
                for (auto [param, arg, isThreadLocal] : llvm::zip(step.getInputs(), step.getSubOps().front().getArguments(), step.getIsThreadLocal())) {
                   mlir::Value input = outerMapping.lookup(param);
-                  rewriter.map(arg, input);
+                  if (!mlir::cast<mlir::BoolAttr>(isThreadLocal).getValue()) {
+                     rewriter.map(arg, input);
+                  } else {
+                     mlir::Value threadLocal = rt::ThreadLocal::getLocal(rewriter, step.getLoc())({input})[0];
+                     threadLocal = rewriter.create<util::GenericMemrefCastOp>(step.getLoc(), typeConverter->convertType(arg.getType()), threadLocal);
+                     rewriter.map(arg, threadLocal);
+                  }
                }
                llvm::SmallVector<mlir::Operation*> ops;
                for (auto& nestedOp : step.getSubOps().front()) {
@@ -4271,7 +4289,13 @@ class NestedExecutionGroupLowering : public SubOpConversionPattern<subop::Nested
             auto guard = rewriter.nest(outerMapping, step);
             for (auto [param, arg, isThreadLocal] : llvm::zip(step.getInputs(), step.getSubOps().front().getArguments(), step.getIsThreadLocal())) {
                mlir::Value input = outerMapping.lookup(param);
-               rewriter.map(arg, input);
+               if (!mlir::cast<mlir::BoolAttr>(isThreadLocal).getValue()) {
+                  rewriter.map(arg, input);
+               } else {
+                  mlir::Value threadLocal = rt::ThreadLocal::getLocal(rewriter, step.getLoc())({input})[0];
+                  threadLocal = rewriter.create<util::GenericMemrefCastOp>(step.getLoc(), typeConverter->convertType(arg.getType()), threadLocal);
+                  rewriter.map(arg, threadLocal);
+               }
             }
             llvm::SmallVector<mlir::Operation*> ops;
             for (auto& op : step.getSubOps().front()) {
@@ -4471,9 +4495,8 @@ void handleExecutionStepCPU(PatternList& patternList, subop::ExecutionStepOp ste
       if (!mlir::cast<mlir::BoolAttr>(isThreadLocal).getValue()) {
          rewriter.map(arg, input);
       } else {
-         mlir::OpBuilder b(executionGroup);
-         mlir::Value threadLocal = rt::ThreadLocal::getLocal(b, b.getUnknownLoc())({mapping.lookup(param)})[0];
-         threadLocal = b.create<util::GenericMemrefCastOp>(threadLocal.getLoc(), typeConverter.convertType(arg.getType()), threadLocal);
+         mlir::Value threadLocal = rt::ThreadLocal::getLocal(rewriter, step.getLoc())({input})[0];
+         threadLocal = rewriter.create<util::GenericMemrefCastOp>(step.getLoc(), typeConverter.convertType(arg.getType()), threadLocal);
          rewriter.map(arg, threadLocal);
       }
    }
