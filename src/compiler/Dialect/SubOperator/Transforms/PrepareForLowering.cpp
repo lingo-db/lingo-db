@@ -13,6 +13,7 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include <functional>
 #include <queue>
 namespace {
 using namespace lingodb::compiler::dialect;
@@ -29,30 +30,114 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
       for (auto containsNestedSubOps : opsWithNesting) {
          llvm::DenseMap<mlir::Value, size_t> valueToNestedExecutionGroupOperand;
 
-         llvm::DenseMap<mlir::Operation*, std::vector<mlir::Operation*>> steps; // {startPipelineOp, pipelineOps}
-         llvm::DenseMap<mlir::Operation*, mlir::Operation*> opToStep; // {pipelineOp, startPipelineOp}
-         for (mlir::Operation& op : *containsNestedSubOps.getBody()) {
-            if (&op == containsNestedSubOps.getBody()->getTerminator()) {
-               continue;
+         mlir::Block* block = containsNestedSubOps.getBody();
+
+         // Sink tuple stream producers from outside the block into the block.
+         llvm::DenseMap<mlir::Value, mlir::Value> clonedStreams;
+         std::function<mlir::Value(mlir::Value, mlir::Operation*)> cloneStreamProducers = [&](mlir::Value streamVal, mlir::Operation* consumerOp) -> mlir::Value {
+            auto producerOp = streamVal.getDefiningOp();
+            if (!producerOp) return streamVal;
+
+            // We want to sink it if the producer is OUTSIDE 'block'
+            // If producerOp's block is 'block' or some block inside 'block', it's already inside.
+            if (block->getParentOp()->isAncestor(producerOp)) {
+               return streamVal;
             }
-            mlir::Operation* beforeInStream = nullptr;
-            for (auto operand : op.getOperands()) {
-               if (mlir::isa<tuples::TupleStreamType>(operand.getType())) {
-                  if (auto* producer = operand.getDefiningOp()) {
-                     assert(!beforeInStream);
-                     beforeInStream = producer; // we expect only one tuple-stream per op in *containsNestedSubOps.getBody()
-                  }
+
+            if (clonedStreams.count(streamVal)) return clonedStreams[streamVal];
+
+            // Clone the producer just before consumerOp (consumerOp is strictly an operation in 'block')
+            mlir::OpBuilder builder(consumerOp);
+            mlir::Operation* clonedOp = builder.clone(*producerOp);
+            // Recursively update its stream operands
+            for (auto& opOperand : clonedOp->getOpOperands()) {
+               if (mlir::isa<tuples::TupleStreamType>(opOperand.get().getType())) {
+                  opOperand.set(cloneStreamProducers(opOperand.get(), clonedOp));
                }
             }
-            if (beforeInStream) {
-               steps[opToStep[beforeInStream]].push_back(&op);
-               opToStep[&op] = opToStep[beforeInStream];
 
-            } else {
-               opToStep[&op] = &op;
-               steps[&op].push_back(&op);
+            mlir::Value newResult = clonedOp->getResult(mlir::cast<mlir::OpResult>(streamVal).getResultNumber());
+            clonedStreams[streamVal] = newResult;
+            return newResult;
+         };
+
+         std::vector<mlir::Operation*> originalOrderInitial;
+         for (mlir::Operation& op : *block) {
+            if (&op != block->getTerminator()) {
+               originalOrderInitial.push_back(&op);
             }
          }
+
+         for (auto* op : originalOrderInitial) {
+            for (auto& opOperand : op->getOpOperands()) {
+               if (mlir::isa<tuples::TupleStreamType>(opOperand.get().getType())) {
+                  opOperand.set(cloneStreamProducers(opOperand.get(), op));
+               }
+            }
+            op->walk([&](mlir::Operation* nestedOp) {
+               if (nestedOp == op) return;
+               for (auto& opOperand : nestedOp->getOpOperands()) {
+                  if (mlir::isa<tuples::TupleStreamType>(opOperand.get().getType())) {
+                     // Pass 'op' as the insertion point because we want to clone it into 'block'
+                     opOperand.set(cloneStreamProducers(opOperand.get(), op));
+                  }
+               }
+            });
+         }
+
+         std::vector<mlir::Operation*> originalOrder;
+         for (mlir::Operation& op : *block) {
+            if (&op != block->getTerminator()) {
+               originalOrder.push_back(&op);
+            }
+         }
+
+         llvm::DenseMap<mlir::Operation*, mlir::Operation*> rep;
+         for (auto* op : originalOrder) rep[op] = op;
+
+         std::function<mlir::Operation*(mlir::Operation*)> find = [&](mlir::Operation* op) {
+            if (rep[op] == op) return op;
+            return rep[op] = find(rep[op]);
+         };
+
+         auto merge = [&](mlir::Operation* a, mlir::Operation* b) {
+            mlir::Operation* rootA = find(a);
+            mlir::Operation* rootB = find(b);
+            if (rootA != rootB) {
+               rep[rootB] = rootA;
+            }
+         };
+
+         for (auto* op : originalOrder) {
+            auto checkStreamOperand = [&](mlir::Value operand) {
+               if (mlir::isa<tuples::TupleStreamType>(operand.getType())) {
+                  if (auto* producer = operand.getDefiningOp()) {
+                     if (producer->getBlock() == block) {
+                        merge(op, producer);
+                     }
+                  }
+               }
+            };
+
+            for (auto operand : op->getOperands()) {
+               checkStreamOperand(operand);
+            }
+            op->walk([&](mlir::Operation* nestedOp) {
+               if (nestedOp == op) return;
+               for (auto operand : nestedOp->getOperands()) {
+                  checkStreamOperand(operand);
+               }
+            });
+         }
+
+         llvm::DenseMap<mlir::Operation*, std::vector<mlir::Operation*>> steps; // {startPipelineOp, pipelineOps}
+         llvm::DenseMap<mlir::Operation*, mlir::Operation*> opToStep; // {pipelineOp, startPipelineOp}
+         for (auto* op : originalOrder) {
+            mlir::Operation* root = find(op);
+            steps[root].push_back(op);
+            opToStep[op] = root;
+         }
+
          // Step 2: collect required/produced state for each step
          // -> also deal with GetLocal operations (that do belong to the same step that accesses the state)
          llvm::DenseMap<mlir::Operation*, std::vector<std::tuple<mlir::Value, mlir::Value, bool>>> requiredState;
@@ -87,11 +172,31 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
                      }
                   }
                   for (auto operand : nestedOp->getOperands()) {
-                     auto* opProducingOperand = operand.getDefiningOp() ? operand.getDefiningOp() : mlir::cast<mlir::BlockArgument>(operand).getOwner()->getParentOp();
-                     if (opProducingOperand->isProperAncestor(op) || (operand.getDefiningOp() && operand.getDefiningOp()->getBlock()->getParentOp()->isAncestor(op->getBlock()->getParentOp()))) {
-                        if (mlir::isa<tuples::TupleStreamType>(operand.getType())) {
-                           continue;
+                     if (mlir::isa<tuples::TupleStreamType>(operand.getType())) {
+                        continue;
+                     }
+
+                     bool definedInCurrentStep = false;
+                     if (auto* defOp = operand.getDefiningOp()) {
+                        for (auto* stepOp : step.second) {
+                           if (stepOp->isAncestor(defOp)) {
+                              definedInCurrentStep = true;
+                              break;
+                           }
                         }
+                     } else {
+                        mlir::Block* defBlock = mlir::cast<mlir::BlockArgument>(operand).getOwner();
+                        if (mlir::Operation* parentOp = defBlock->getParentOp()) {
+                           for (auto* stepOp : step.second) {
+                              if (stepOp->isAncestor(parentOp)) {
+                                 definedInCurrentStep = true;
+                                 break;
+                              }
+                           }
+                        }
+                     }
+
+                     if (!definedInCurrentStep) {
                         requiredState[step.first].push_back({operand, operand, false});
                      }
                   }
@@ -190,12 +295,12 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
             std::vector<mlir::Value> inputs;
             std::vector<mlir::Value> blockArgs;
             llvm::SmallVector<bool> threadLocal;
-            auto* block = new mlir::Block;
+            auto* innerBlock = new mlir::Block;
             llvm::DenseMap<mlir::Value, size_t> availableStates;
 
             for (auto [required, local, isThreadLocal] : requiredState[currRoot]) {
                if (availableStates.contains(required)) {
-                  blockArgs.push_back(block->getArgument(availableStates[required]));
+                  blockArgs.push_back(innerBlock->getArgument(availableStates[required]));
                   continue;
                }
                if (stateMapping.count(required) == 0) {
@@ -211,12 +316,12 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
                   assert(stateMapping.count(required));
                   inputs.push_back(stateMapping[required]);
                }
-               blockArgs.push_back(block->addArgument(local.getType(), local.getLoc()));
+               blockArgs.push_back(innerBlock->addArgument(local.getType(), local.getLoc()));
                threadLocal.push_back(isThreadLocal);
-               availableStates[required] = block->getNumArguments() - 1;
+               availableStates[required] = innerBlock->getNumArguments() - 1;
             }
             mlir::OpBuilder builder(&getContext());
-            builder.setInsertionPointToStart(block);
+            builder.setInsertionPointToStart(innerBlock);
             for (auto* op : steps[currRoot]) {
                op->remove();
                for (auto [o, n] : llvm::zip(requiredState[currRoot], blockArgs)) {
@@ -231,7 +336,7 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
             builder.create<subop::ExecutionStepReturnOp>(currRoot->getLoc(), producedState[currRoot]);
             auto executionStepOp = outerBuilder.create<subop::ExecutionStepOp>(currRoot->getLoc(), returnTypes, inputs, outerBuilder.getBoolArrayAttr(threadLocal));
 
-            executionStepOp.getSubOps().getBlocks().push_back(block);
+            executionStepOp.getSubOps().getBlocks().push_back(innerBlock);
             for (auto [s1, s2] : llvm::zip(producedState[currRoot], executionStepOp.getResults())) {
                stateMapping[s1] = s2;
             }
