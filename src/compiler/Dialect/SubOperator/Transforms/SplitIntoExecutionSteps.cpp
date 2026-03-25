@@ -7,6 +7,7 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/IRMapping.h"
 
+#include <functional>
 #include <queue>
 namespace {
 using namespace lingodb::compiler::dialect;
@@ -19,29 +20,60 @@ class SplitIntoExecutionSteps : public mlir::PassWrapper<SplitIntoExecutionSteps
    void runOnOperation() override {
       // Step 1: split into different streams
       getOperation()->walk([&](subop::ExecutionGroupOp executionGroup) {
-         llvm::DenseMap<mlir::Operation*, std::vector<mlir::Operation*>> steps;
-         llvm::DenseMap<mlir::Operation*, mlir::Operation*> opToStep;
-         for (mlir::Operation& op : executionGroup.getSubOps().front()) {
-            if (mlir::isa<subop::ExecutionGroupReturnOp>(op)) {
-               continue;
+         mlir::Block* topBlock = &executionGroup.getSubOps().front();
+         std::vector<mlir::Operation*> originalOrder;
+         for (mlir::Operation& op : *topBlock) {
+            if (!mlir::isa<subop::ExecutionGroupReturnOp>(op)) {
+               originalOrder.push_back(&op);
             }
-            mlir::Operation* beforeInStream = nullptr;
-            for (auto operand : op.getOperands()) {
+         }
+
+         llvm::DenseMap<mlir::Operation*, mlir::Operation*> rep;
+         for (auto* op : originalOrder) rep[op] = op;
+
+         std::function<mlir::Operation*(mlir::Operation*)> find = [&](mlir::Operation* op) {
+            if (rep[op] == op) return op;
+            return rep[op] = find(rep[op]);
+         };
+
+         auto merge = [&](mlir::Operation* a, mlir::Operation* b) {
+            mlir::Operation* rootA = find(a);
+            mlir::Operation* rootB = find(b);
+            if (rootA != rootB) {
+               rep[rootB] = rootA;
+            }
+         };
+
+         for (auto* op : originalOrder) {
+            auto checkStreamOperand = [&](mlir::Value operand) {
                if (mlir::isa<tuples::TupleStreamType>(operand.getType())) {
                   if (auto* producer = operand.getDefiningOp()) {
-                     assert(!beforeInStream);
-                     beforeInStream = producer;
+                     // Check if producer is in the ExecutionGroup block
+                     if (producer->getBlock() == topBlock) {
+                        merge(op, producer);
+                     }
                   }
                }
+            };
+            // Check direct operands
+            for (auto operand : op->getOperands()) {
+               checkStreamOperand(operand);
             }
-            if (beforeInStream) {
-               steps[opToStep[beforeInStream]].push_back(&op);
-               opToStep[&op] = opToStep[beforeInStream];
+            // Check implicitly captured operands in nested regions
+            op->walk([&](mlir::Operation* nestedOp) {
+               if (nestedOp == op) return;
+               for (auto operand : nestedOp->getOperands()) {
+                  checkStreamOperand(operand);
+               }
+            });
+         }
 
-            } else {
-               opToStep[&op] = &op;
-               steps[&op].push_back(&op);
-            }
+         llvm::DenseMap<mlir::Operation*, std::vector<mlir::Operation*>> steps;
+         llvm::DenseMap<mlir::Operation*, mlir::Operation*> opToStep;
+         for (auto* op : originalOrder) {
+            mlir::Operation* root = find(op);
+            steps[root].push_back(op);
+            opToStep[op] = root;
          }
          // Step 2: collect required/produced state for each step
          // -> also deal with GetLocal operations (that do belong to the same step that accesses the state)

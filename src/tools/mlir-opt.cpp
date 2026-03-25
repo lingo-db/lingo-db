@@ -10,6 +10,8 @@
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorDialect.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/Passes.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamDialect.h"
+#include "lingodb/compiler/Dialect/graphalg/GraphAlgDialect.h"
+#include "lingodb/compiler/Dialect/graphalg/GraphAlgPasses.h"
 #include "lingodb/compiler/Dialect/util/UtilDialect.h"
 #include "lingodb/compiler/mlir-support/eval.h"
 #include "lingodb/execution/BackendPasses.h"
@@ -53,6 +55,10 @@ int main(int argc, char** argv) {
    }
    mlir::registerAllPasses();
 
+   graphalg::registerPasses();
+   graphalg::registerGraphAlgToGraphAlgCoreConversionPasses();
+   graphalg::registerGraphAlgCoreToRelAlgConversionPasses();
+
    relalg::registerRelAlgToSubOpConversionPasses();
    relalg::registerQueryOptimizationPasses();
    db::registerDBConversionPasses();
@@ -85,6 +91,8 @@ int main(int argc, char** argv) {
    registry.insert<mlir::async::AsyncDialect>();
    registry.insert<mlir::gpu::GPUDialect>();
    registry.insert<mlir::scf::SCFDialect>();
+
+   registry.insert<graphalg::GraphAlgDialect>();
    mlir::registerAllExtensions(registry);
    mlir::NVVM::registerNVVMTargetInterfaceExternalModels(registry);
    mlir::registerAllToLLVMIRTranslations(registry);

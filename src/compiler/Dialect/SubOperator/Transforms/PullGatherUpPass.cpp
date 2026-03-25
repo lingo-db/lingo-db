@@ -102,11 +102,18 @@ class PullGatherUpPass : public mlir::PassWrapper<PullGatherUpPass, mlir::Operat
                }
             }
          }
+
          if (!remaining.empty() && currStream) {
             mlir::OpBuilder builder(currStream.getContext());
-            builder.setInsertionPointAfter(currStream.getDefiningOp());
+            // Safely locate insertion point, preventing crashes if the stream is a block argument
+            if (auto* defOp = currStream.getDefiningOp()) {
+               builder.setInsertionPointAfter(defOp);
+            } else if (auto blockArg = mlir::dyn_cast<mlir::BlockArgument>(currStream)) {
+               builder.setInsertionPointToStart(blockArg.getOwner());
+            }
+
             if (!currStream.getUsers().empty()) {
-               auto newGatherOp = builder.create<subop::GatherOp>(gatherOp->getLoc(), currStream, gatherOp.getRef(), gatherOp.getMapping());
+               auto newGatherOp = builder.create<subop::GatherOp>(gatherOp->getLoc(), currStream, gatherOp.getRef(), subop::ColumnDefMemberMappingAttr::get(&getContext(), remaining));
                currStream.replaceAllUsesWith(newGatherOp.getResult());
                newGatherOp->setOperand(0, currStream);
             }
