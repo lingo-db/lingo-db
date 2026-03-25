@@ -3076,53 +3076,40 @@ class BufferScanLowering : public OpConversionPattern<relalg::BufferScanOp> {
    using OpConversionPattern<relalg::BufferScanOp>::OpConversionPattern;
 
    LogicalResult matchAndRewrite(relalg::BufferScanOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto loc = op.getLoc();
       auto ctx = rewriter.getContext();
 
+      // 1. Get the members from the BufferType
       auto bufferType = llvm::cast<subop::BufferType>(adaptor.getBuffer().getType());
       auto members = bufferType.getMembers().getMembers();
 
-      // 1. Create the reference column definition explicitly using ColumnManager
-      auto& colManager = ctx->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
-      // Use the built-in uniqueness generator
-      std::string scope = colManager.getUniqueScope("subop");
-      std::string colName = "buf_ref";
-
-      // Get the managed column and set its type
-      auto col = colManager.get(scope, colName);
-      auto refType = subop::EntryRefType::get(ctx, bufferType);
-      col->type = refType;
-
-      // Create the Def and Ref attributes
-      auto refDef = colManager.createDef(scope, colName);
-      auto refCol = colManager.createRef(scope, colName);
-
-      // 2. Scan the buffer for pointers
-      auto scanRefsOp = rewriter.create<subop::ScanRefsOp>(loc, tuples::TupleStreamType::get(ctx), adaptor.getBuffer(), refDef);
-
-      // 3. Map the names back to the specific subop::Members
-      SmallVector<std::pair<subop::Member, tuples::ColumnDefAttr>> defMappingArgs;
+      // 2. Extract column definitions and their mapped string names
       auto columns = op.getColumns();
       auto columnMapping = op.getColumnMapping();
       auto& memberManager = ctx->getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager();
 
+      // 3. Match the string names to the actual subop::Members
+      SmallVector<std::pair<subop::Member, tuples::ColumnDefAttr>> mappingList;
       for (size_t i = 0; i < columns.size(); ++i) {
          auto colDef = llvm::cast<tuples::ColumnDefAttr>(columns[i]);
          auto memberName = llvm::cast<StringAttr>(columnMapping[i]).str();
 
          for (auto m : members) {
             if (memberManager.getName(m) == memberName) {
-               defMappingArgs.push_back({m, colDef});
+               mappingList.push_back({m, colDef});
                break;
             }
          }
       }
 
-      // 4. Gather the actual data into the stream
-      auto gatherMappingAttr = subop::ColumnDefMemberMappingAttr::get(ctx, defMappingArgs);
-      auto gatherOp = rewriter.create<subop::GatherOp>(loc, tuples::TupleStreamType::get(ctx), scanRefsOp.getResult(), refCol, gatherMappingAttr);
+      // 4. Create the mapping attribute natively for SubOp
+      auto mappingAttr = subop::ColumnDefMemberMappingAttr::get(ctx, mappingList);
 
-      rewriter.replaceOp(op, gatherOp.getResult());
+      // 5. Replace with a direct subop.scan
+      rewriter.replaceOpWithNewOp<subop::ScanOp>(
+         op,         tuples::TupleStreamType::get(ctx),
+         adaptor.getBuffer(),
+         mappingAttr);
+
       return success();
    }
 };
