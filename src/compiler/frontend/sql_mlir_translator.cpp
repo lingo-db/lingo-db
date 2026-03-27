@@ -948,7 +948,7 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
          if (upperCaseFName == "DATE_TRUNC") {
             auto part = translateExpression(builder, function->arguments[0], context);
             auto arg2 = translateExpression(builder, function->arguments[1], context);
-            return builder.create<db::RuntimeCall>(exprLocation, wrapNullableType(mlirContext, builder.getI64Type(), {part, arg2}), "DateTrunc", mlir::ValueRange({part, arg2})).getRes();
+            return builder.create<db::RuntimeCall>(exprLocation, wrapNullableType(mlirContext, arg2.getType(), {part, arg2}), "DateTrunc", mlir::ValueRange({part, arg2})).getRes();
          }
          if (upperCaseFName == "HASH") {
             std::vector<mlir::Value> values;

@@ -313,7 +313,7 @@ std::shared_ptr<db::RuntimeFunctionRegistry> db::RuntimeFunctionRegistry::getBui
     * DateDiff and ExtractFromDate are special, as no implementation is provided through .implementedAs()
     * Instead during the pass OptimizeRuntimeFunctions they are optimized to call the function with the correct unit (e.g. Extract*Year*FromDate)
     */
-   builtinRegistry->add("DateTrunc").matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::dateLike}, resTypeIsI64).implementedAs(DateRuntime::dateTrunc);
+   builtinRegistry->add("DateTrunc").matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::dateLike}, RuntimeFunction::matchesArgument(1)).implementedAs(DateRuntime::dateTrunc);
    builtinRegistry->add("DateDiff").matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::dateLike, RuntimeFunction::dateLike}, resTypeIsI64).needsWrapping();
    builtinRegistry->add("DateDiffDay").matchesTypes({RuntimeFunction::dateLike, RuntimeFunction::dateLike}, resTypeIsI64).implementedAs(DateRuntime::dateDiffDay);
    builtinRegistry->add("DateDiffHour").matchesTypes({RuntimeFunction::dateLike, RuntimeFunction::dateLike}, resTypeIsI64).implementedAs(DateRuntime::dateDiffHour);
