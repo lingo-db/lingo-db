@@ -38,8 +38,8 @@ struct RuntimeFunction {
    static inline auto anyNumber = [](mlir::Type t) { return intLike(t) || anyDecimal(t) || getBaseType(t).isF64(); };
    static inline auto noReturnType = [](mlir::Type t, mlir::TypeRange) { return !t; };
    static ResTypeMatcher matchesArgument(size_t argIdx = 0) {
-      return [](mlir::Type resType, mlir::TypeRange types) {
-         return resType == types[0];
+      return [argIdx](mlir::Type resType, mlir::TypeRange types) {
+         return resType == types[argIdx];
       };
    }
    std::function<bool(mlir::TypeRange types, mlir::Type resType)> verifyFn;
