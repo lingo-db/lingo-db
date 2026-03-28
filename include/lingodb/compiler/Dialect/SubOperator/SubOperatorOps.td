@@ -692,7 +692,7 @@ def CreateHeapOp : SubOperator_Op<"create_heap", [Pure]> {
     let hasCustomAssemblyFormat = 1;
 }
 
-def GenericCreateOp : SubOperator_Op<"create", [Pure,StateCreator]> {
+def MemoryEffects<[MemAlloc]> : SubOperator_Op<"create", [MemoryEffects<[MemAlloc]>,StateCreator]> {
     let summary = "create new state";
     let results = (outs AnyType : $res);
     let assemblyFormat = [{ type($res) attr-dict }];
