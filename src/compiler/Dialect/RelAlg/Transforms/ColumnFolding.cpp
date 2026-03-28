@@ -4,6 +4,9 @@
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOpsInterfaces.h"
 #include "lingodb/compiler/Dialect/RelAlg/Passes.h"
 
+// ADDED: Give RelAlg awareness of SubOperator custom mapping attributes
+#include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
+
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Pass/Pass.h"
 
