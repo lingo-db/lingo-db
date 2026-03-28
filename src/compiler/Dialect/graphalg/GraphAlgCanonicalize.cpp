@@ -29,13 +29,20 @@ mlir::OpFoldResult TransposeOp::fold(FoldAdaptor adaptor) {
       return constInput;
    }
 
-   if (getType().isScalar()) {
-      return getInput();
+   // 1. Safely extract untyped operands to avoid TypedValue assert crashes
+   // when MLIR's dialect conversion framework evaluates folds on partially-converted IR.
+   mlir::Value inputVal = getOperation()->getOperand(0);
+
+   // 2. Gracefully handle type mutations (it might already be a TupleStreamType here)
+   if (auto matType = llvm::dyn_cast<MatrixType>(getResult().getType())) {
+      if (matType.isScalar()) {
+         return inputVal;
+      }
    }
 
-   // e.T.T => e
-   if (auto childTransOp = getInput().getDefiningOp<TransposeOp>()) {
-      return childTransOp.getInput();
+   // 3. e.T.T => e
+   if (auto childTransOp = inputVal.getDefiningOp<TransposeOp>()) {
+      return childTransOp->getOperand(0);
    }
 
    return nullptr;

@@ -242,25 +242,17 @@ class LoadCastConversion : public ConversionPattern {
    static tuples::ColumnRefAttr resolveColumnRef(Operation* contextOp, Attribute attr) {
       if (auto colRef = llvm::dyn_cast<tuples::ColumnRefAttr>(attr)) return colRef;
       if (auto symRef = llvm::dyn_cast<SymbolRefAttr>(attr)) {
-         tuples::ColumnRefAttr resolved;
-         contextOp->getParentOfType<ModuleOp>()->walk([&](Operation* child) {
-            if (resolved) return WalkResult::interrupt();
-            for (auto namedAttr : child->getAttrs()) {
-               if (auto arrayAttr = llvm::dyn_cast<ArrayAttr>(namedAttr.getValue())) {
-                  for (auto item : arrayAttr) {
-                     if (auto def = llvm::dyn_cast<tuples::ColumnDefAttr>(item)) {
-                        if (def.getName() == symRef) {
-                           resolved = createColumnRef(def);
-                           return WalkResult::interrupt();
-                        }
-                     }
-                  }
-               }
-            }
-            return WalkResult::advance();
-         });
-         return resolved;
+         auto& colManager = contextOp->getContext()->getOrLoadDialect<tuples::TupleStreamDialect>()->getColumnManager();
+
+         // Extract scope and name safely
+         StringRef scope = symRef.getNestedReferences().empty() ? "" : symRef.getRootReference().getValue();
+         StringRef name = symRef.getLeafReference().getValue();
+
+         // O(1) global lookup via LingoDB's column manager
+         auto col = colManager.get(scope, name);
+         return colManager.createRef(col.get());
       }
+
       return nullptr;
    }
 
@@ -787,7 +779,8 @@ class TransposeOpConversion : public StatefulConversion<TransposeOp> {
    public:
    using StatefulConversion::StatefulConversion;
    LogicalResult matchAndRewrite(TransposeOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto info = state.get(op.getInput(), rewriter.getContext());
+      // Use untyped getOperand(0) instead of op.getInput()
+      auto info = state.get(op->getOperand(0), rewriter.getContext());
 
       MatrixMeta resMeta = info;
       resMeta.row = info.col;
@@ -800,67 +793,70 @@ class TransposeOpConversion : public StatefulConversion<TransposeOp> {
       return success();
    }
 };
-
 class DiagOpConversion : public StatefulConversion<DiagOp> {
    public:
    using StatefulConversion::StatefulConversion;
    LogicalResult matchAndRewrite(DiagOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto info = state.get(op.getInput(), rewriter.getContext());
-      auto loc = op.getLoc();
-      auto ctx = rewriter.getContext();
+      // Use untyped getOperand(0) instead of op.getInput()
+      auto info = state.get(op->getOperand(0), rewriter.getContext());
 
       MatrixMeta resMeta = info;
-      auto mapOp = rewriter.create<relalg::MapOp>(loc, adaptor.getInput());
 
       if (info.hasRow() && !info.hasCol()) {
-         auto colDef = createColumnDef(ctx, AttributeGenerator::nextName("diag_col"), rewriter.getI64Type());
-         mapOp.setComputedColsAttr(ArrayAttr::get(ctx, {colDef}));
-         resMeta.colDef = colDef;
-         resMeta.col = createColumnRef(colDef);
-
-         auto* mapBlock = new Block;
-         mapOp.getPredicate().push_back(mapBlock);
-         {
-            OpBuilder::InsertionGuard guard(rewriter);
-            rewriter.setInsertionPointToStart(mapBlock);
-
-            auto tupleArg = mapBlock->addArgument(tuples::TupleType::get(ctx), loc);
-            auto rowVal = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), info.row, tupleArg);
-            rewriter.create<tuples::ReturnOp>(loc, ValueRange{rowVal});
-         }
+         resMeta.colDef = info.rowDef;
+         resMeta.col = info.row;
       } else if (!info.hasRow() && info.hasCol()) {
-         auto rowDef = createColumnDef(ctx, AttributeGenerator::nextName("diag_row"), rewriter.getI64Type());
-         mapOp.setComputedColsAttr(ArrayAttr::get(ctx, {rowDef}));
-         resMeta.rowDef = rowDef;
-         resMeta.row = createColumnRef(rowDef);
-
-         auto* mapBlock = new Block;
-         mapOp.getPredicate().push_back(mapBlock);
-
-         {
-            OpBuilder::InsertionGuard guard(rewriter);
-            rewriter.setInsertionPointToStart(mapBlock);
-            auto tupleArg = mapBlock->addArgument(tuples::TupleType::get(ctx), loc);
-            auto colVal = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), info.col, tupleArg);
-            rewriter.create<tuples::ReturnOp>(loc, ValueRange{colVal});
-         }
-      } else {
-         rewriter.replaceOp(op, adaptor.getInput());
-         return success();
+         resMeta.rowDef = info.colDef;
+         resMeta.row = info.col;
       }
 
       state.set(op.getResult(), resMeta);
-      rewriter.replaceOp(op, mapOp.getResult());
+      rewriter.replaceOp(op, adaptor.getInput());
       return success();
    }
 };
 
+class TrilOpConversion : public StatefulConversion<TrilOp> {
+   public:
+   using StatefulConversion::StatefulConversion;
+   LogicalResult matchAndRewrite(TrilOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      // Use untyped getOperand(0) instead of op.getInput()
+      auto info = state.get(op->getOperand(0), rewriter.getContext());
+      auto loc = op.getLoc();
+      auto ctx = rewriter.getContext();
+
+      if (!info.hasRow() || !info.hasCol()) {
+         rewriter.replaceOp(op, adaptor.getInput());
+         return success();
+      }
+
+      auto selOp = rewriter.create<relalg::SelectionOp>(loc, adaptor.getInput());
+      auto* selBlock = new Block;
+      selOp.getPredicate().push_back(selBlock);
+      {
+         OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(selBlock);
+
+         auto tupleArg = selBlock->addArgument(tuples::TupleType::get(ctx), loc);
+         auto colVal = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), info.col, tupleArg);
+         auto rowVal = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), info.row, tupleArg);
+         auto cmp = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt, colVal, rowVal);
+
+         rewriter.create<tuples::ReturnOp>(loc, ValueRange{cmp});
+      }
+
+      state.set(op.getResult(), info);
+      rewriter.replaceOp(op, selOp.getResult());
+      return success();
+   }
+};
 class BroadcastOpConversion : public StatefulConversion<BroadcastOp> {
    public:
    using StatefulConversion::StatefulConversion;
 
    LogicalResult matchAndRewrite(BroadcastOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto info = state.get(op.getInput(), rewriter.getContext());
+      // Use untyped getOperand(0) instead of op.getInput()
+      auto info = state.get(op->getOperand(0), rewriter.getContext());
       auto loc = op.getLoc();
       auto ctx = rewriter.getContext();
 
@@ -925,45 +921,12 @@ class BroadcastOpConversion : public StatefulConversion<BroadcastOp> {
    }
 };
 
-class TrilOpConversion : public StatefulConversion<TrilOp> {
-   public:
-   using StatefulConversion::StatefulConversion;
-   LogicalResult matchAndRewrite(TrilOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto info = state.get(op.getInput(), rewriter.getContext());
-      auto loc = op.getLoc();
-      auto ctx = rewriter.getContext();
-
-      if (!info.hasRow() || !info.hasCol()) {
-         rewriter.replaceOp(op, adaptor.getInput());
-         return success();
-      }
-
-      auto selOp = rewriter.create<relalg::SelectionOp>(loc, adaptor.getInput());
-      auto* selBlock = new Block;
-      selOp.getPredicate().push_back(selBlock);
-      {
-         OpBuilder::InsertionGuard guard(rewriter);
-         rewriter.setInsertionPointToStart(selBlock);
-
-         auto tupleArg = selBlock->addArgument(tuples::TupleType::get(ctx), loc);
-         auto colVal = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), info.col, tupleArg);
-         auto rowVal = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), info.row, tupleArg);
-         auto cmp = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt, colVal, rowVal);
-
-         rewriter.create<tuples::ReturnOp>(loc, ValueRange{cmp});
-      }
-
-      state.set(op.getResult(), info);
-      rewriter.replaceOp(op, selOp.getResult());
-      return success();
-   }
-};
-
 class PickAnyOpConversion : public StatefulConversion<PickAnyOp> {
    public:
    using StatefulConversion::StatefulConversion;
    LogicalResult matchAndRewrite(PickAnyOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto info = state.get(op.getInput(), rewriter.getContext());
+      // Use untyped getOperand(0) instead of op.getInput()
+      auto info = state.get(op->getOperand(0), rewriter.getContext());
       auto loc = op.getLoc();
       auto* ctx = rewriter.getContext();
       Type valType = GraphAlgTypeConverter::convertSemiringType(op.getType().getSemiring());
@@ -1335,7 +1298,8 @@ class CastScalarOpConversion : public OpConversionPattern<CastScalarOp> {
    using OpConversionPattern::OpConversionPattern;
    LogicalResult matchAndRewrite(CastScalarOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto outRing = op.getType();
-      auto inRing = op.getInput().getType();
+      // Use untyped getOperand(0) instead of op.getInput()
+      auto inRing = op->getOperand(0).getType();
       auto outType = GraphAlgTypeConverter::convertSemiringType(outRing);
       auto inType = adaptor.getInput().getType();
 
@@ -1480,15 +1444,21 @@ static mlir::IntegerAttr tryGetConstantInt(mlir::Value v) {
 class MaskOpConversion : public StatefulConversion<MaskOp> {
    public:
    using StatefulConversion::StatefulConversion;
+
    LogicalResult matchAndRewrite(MaskOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto loc = op.getLoc();
       auto* ctx = rewriter.getContext();
 
-      Value inputRel = adaptor.getOperands()[2];
+      // 1. Get the CONVERTED operands from the conversion framework's adaptor
+      Value inputRel = adaptor.getOperands()[2]; // (You can use adaptor.getInput() if it's named in ODS)
       Value maskRel = adaptor.getMask();
 
-      auto inputMeta = state.get(op.getOperand(2), ctx);
-      auto maskMeta = state.get(op.getMask(), ctx);
+      // 2. Create a fresh adaptor over the ORIGINAL operands to safely access untyped values by name!
+      OpAdaptor origAdaptor(op->getOperands(), op->getAttrDictionary());
+
+      // 3. Look up metadata using the safe, original operands
+      auto inputMeta = state.get(op->getOperand(2), ctx); // (Or origAdaptor.getInput() if named)
+      auto maskMeta = state.get(origAdaptor.getMask(), ctx);
 
       Type sring = maskMeta.semiring;
       if (Type maskValType = GraphAlgTypeConverter::convertSemiringType(sring); maskValType.isInteger(1)) {
@@ -1585,15 +1555,70 @@ class MaskOpConversion : public StatefulConversion<MaskOp> {
       return success();
    }
 };
-
 static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRange convInitArgs, ConversionPatternRewriter& rewriter, Value startBoundVal, Value endBoundVal, Value stepBoundVal, subop::MemberManager& memberManager, ConversionState& state) {
    auto loc = op->getLoc();
    auto* ctx = rewriter.getContext();
+   auto& colManager = ctx->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
 
+   // --------------------------------------------------------------------------
+   // 0. Intercept externally captured MatrixType values (single-use streams)
+   //    and materialize them into buffers OUTSIDE the loop so they can be re-scanned.
+   // --------------------------------------------------------------------------
+   llvm::SmallSetVector<Value, 4> capturedMatrices;
+   Region& oldRegion = op->getRegion(0);
+   oldRegion.walk([&](Operation* nestedOp) {
+      for (Value operand : nestedOp->getOperands()) {
+         if (llvm::isa<MatrixType>(operand.getType())) {
+            Region* defRegion = operand.getParentRegion();
+            // If defined outside the loop entirely, it's a captured stream
+            if (!defRegion || !oldRegion.isAncestor(defRegion)) {
+               capturedMatrices.insert(operand);
+            }
+         }
+      }
+   });
+
+   llvm::DenseMap<Value, Value> capturedToScan;
+   for (Value origArg : capturedMatrices) {
+      Value convArg = rewriter.getRemappedValue(origArg);
+      if (!convArg) {
+         convArg = rewriter.create<UnrealizedConversionCastOp>(loc, tuples::TupleStreamType::get(ctx), origArg).getResult(0);
+      } else if (!llvm::isa<tuples::TupleStreamType>(convArg.getType())) {
+         convArg = rewriter.create<UnrealizedConversionCastOp>(loc, tuples::TupleStreamType::get(ctx), convArg).getResult(0);
+      }
+
+      MatrixMeta meta = state.get(origArg, ctx);
+      Type valType = GraphAlgTypeConverter::convertSemiringType(meta.semiring);
+
+      SmallVector<subop::Member> memberList;
+      SmallVector<std::pair<subop::Member, tuples::ColumnRefAttr>> refMappingArgs;
+
+      auto addMember = [&](StringRef name, Type type, tuples::ColumnRefAttr colRef) {
+         subop::Member member = memberManager.createMember(name.str(), type);
+         memberList.push_back(member);
+         refMappingArgs.push_back({member, colRef});
+      };
+
+      if (meta.hasRow()) addMember("row", rewriter.getI64Type(), meta.row);
+      if (meta.hasCol()) addMember("col", rewriter.getI64Type(), meta.col);
+      addMember("val", valType, meta.val);
+
+      auto stateMembersAttr = subop::StateMembersAttr::get(ctx, memberList);
+      auto bufferType = subop::BufferType::get(ctx, stateMembersAttr);
+
+      Value bufferState = rewriter.create<subop::GenericCreateOp>(loc, bufferType);
+      auto mappingAttr = subop::ColumnRefMemberMappingAttr::get(ctx, refMappingArgs);
+      rewriter.create<subop::MaterializeOp>(loc, convArg, bufferState, mappingAttr);
+
+      capturedToScan[origArg] = bufferState;
+   }
+
+   // --------------------------------------------------------------------------
+   // 1. Materialize loop-carried arguments into subop.buffers OUTSIDE the loop
+   // --------------------------------------------------------------------------
    SmallVector<Value> initStates;
    SmallVector<Type> stateTypes;
 
-   // 1. Materialize original arguments into subop.buffers before the loop
    for (size_t i = 0; i < origInitArgs.size(); ++i) {
       Value origArg = origInitArgs[i];
       Value convArg = convInitArgs[i];
@@ -1629,7 +1654,9 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
       initStates.push_back(bufferState);
    }
 
+   // --------------------------------------------------------------------------
    // 2. Setup SubOp Loop operands
+   // --------------------------------------------------------------------------
    SmallVector<Value> loopOperands;
    loopOperands.push_back(startBoundVal);
    loopOperands.append(initStates.begin(), initStates.end());
@@ -1637,7 +1664,9 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
    SmallVector<Type> loopResultTypes;
    for (Value v : loopOperands) loopResultTypes.push_back(v.getType());
 
+   // --------------------------------------------------------------------------
    // 3. Create subop.loop
+   // --------------------------------------------------------------------------
    auto loopOp = rewriter.create<subop::LoopOp>(loc, loopResultTypes, loopOperands);
    Block* newBody = rewriter.createBlock(&loopOp.getRegion());
 
@@ -1647,7 +1676,51 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
 
    rewriter.setInsertionPointToStart(newBody);
 
-   // Map old loop index variable to new subop.loop index
+   // --------------------------------------------------------------------------
+   // 3a. Emit fresh buffer scans for the externally captured matrices
+   // --------------------------------------------------------------------------
+   llvm::DenseMap<Value, Value> capturedScans;
+   for (auto& pair : capturedToScan) {
+      Value origArg = pair.first;
+      Value bufferState = pair.second;
+
+      MatrixMeta loopMeta = state.get(origArg, ctx);
+      auto bufferType = llvm::cast<subop::BufferType>(bufferState.getType());
+      auto membersList = bufferType.getMembers().getMembers();
+      size_t mIdx = 0;
+
+      SmallVector<Attribute> scanComputedCols;
+      SmallVector<Attribute> scanColumnMapping;
+
+      // Safely synthesize a ColumnDefAttr from the exact same ColumnPtr
+      // via the ColumnManager to ensure structural equivalence in downstream passes.
+      auto addGatherMapping = [&](tuples::ColumnRefAttr ref, tuples::ColumnDefAttr def) {
+         if (!def) {
+            def = colManager.createDef(&ref.getColumn());
+         }
+         scanComputedCols.push_back(def);
+         scanColumnMapping.push_back(rewriter.getStringAttr(memberManager.getName(membersList[mIdx++])));
+      };
+
+      if (loopMeta.hasRow()) addGatherMapping(loopMeta.row, loopMeta.rowDef);
+      if (loopMeta.hasCol()) addGatherMapping(loopMeta.col, loopMeta.colDef);
+      addGatherMapping(loopMeta.val, loopMeta.valDef);
+
+      auto scanOp = rewriter.create<relalg::BufferScanOp>(
+         loc, tuples::TupleStreamType::get(ctx),
+         bufferState,
+         rewriter.getArrayAttr(scanComputedCols),
+         rewriter.getArrayAttr(scanColumnMapping));
+      scanOp->setAttr("rows", rewriter.getF64FloatAttr(100.0));
+
+      Value scanStream = scanOp.getResult();
+      state.set(scanStream, loopMeta);
+      capturedScans[origArg] = scanStream;
+   }
+
+   // --------------------------------------------------------------------------
+   // 3b. Map old loop index variable
+   // --------------------------------------------------------------------------
    Value origIdxRepl;
    Value origArg0 = op->getRegion(0).front().getArgument(0);
    Type origArg0Type = origArg0.getType();
@@ -1676,7 +1749,16 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
       }
 
       auto constDef = createColumnDef(ctx, AttributeGenerator::nextName("dummy"), loopValType);
-      Attribute zeroAttr = loopValType.isInteger(64) ? (Attribute) rewriter.getI64IntegerAttr(0) : (Attribute) rewriter.getFloatAttr(loopValType, 0.0);
+
+      // Handle boolean 0 strictly as an IntegerAttr
+      Attribute zeroAttr;
+      if (loopValType.isInteger(1)) {
+         zeroAttr = rewriter.getIntegerAttr(rewriter.getI1Type(), 0);
+      } else if (loopValType.isInteger(64)) {
+         zeroAttr = rewriter.getI64IntegerAttr(0);
+      } else {
+         zeroAttr = rewriter.getFloatAttr(loopValType, 0.0);
+      }
 
       Value constRel = rewriter.create<relalg::ConstRelationOp>(
                                   loc, rewriter.getArrayAttr({constDef}),
@@ -1699,7 +1781,9 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
       state.set(origIdxRepl, idxMeta);
    }
 
-   // Map old loop state variables to BufferScanOps against the current iteration's state buffer
+   // --------------------------------------------------------------------------
+   // 3c. Map old loop state variables to BufferScanOps
+   // --------------------------------------------------------------------------
    SmallVector<Value> origStateRepls;
    for (size_t i = 0; i < newStates.size(); ++i) {
       Value loopState = newStates[i];
@@ -1713,14 +1797,18 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
       auto membersList = bufferType.getMembers().getMembers();
       size_t mIdx = 0;
 
-      auto addGatherMapping = [&](tuples::ColumnDefAttr colDef) {
-         scanComputedCols.push_back(colDef);
+      // Safely synthesize a ColumnDefAttr from the exact same ColumnPtr
+      auto addGatherMapping = [&](tuples::ColumnRefAttr ref, tuples::ColumnDefAttr def) {
+         if (!def) {
+            def = colManager.createDef(&ref.getColumn());
+         }
+         scanComputedCols.push_back(def);
          scanColumnMapping.push_back(rewriter.getStringAttr(memberManager.getName(membersList[mIdx++])));
       };
 
-      if (loopMeta.hasRow()) addGatherMapping(loopMeta.rowDef);
-      if (loopMeta.hasCol()) addGatherMapping(loopMeta.colDef);
-      addGatherMapping(loopMeta.valDef);
+      if (loopMeta.hasRow()) addGatherMapping(loopMeta.row, loopMeta.rowDef);
+      if (loopMeta.hasCol()) addGatherMapping(loopMeta.col, loopMeta.colDef);
+      addGatherMapping(loopMeta.val, loopMeta.valDef);
 
       auto scanOp = rewriter.create<relalg::BufferScanOp>(
          loc, tuples::TupleStreamType::get(ctx),
@@ -1738,9 +1826,20 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
    replValues.push_back(origIdxRepl);
    replValues.append(origStateRepls.begin(), origStateRepls.end());
 
-   // Splice the old loop body in
+   // --------------------------------------------------------------------------
+   // 3d. Splice the old loop body in
+   // --------------------------------------------------------------------------
    Block& oldBody = op->getRegion(0).front();
    rewriter.mergeBlocks(&oldBody, newBody, replValues);
+
+   // --------------------------------------------------------------------------
+   // 3e. Replace uses of captured matrices with the fresh scans inside the loop
+   // --------------------------------------------------------------------------
+   newBody->walk([&](Operation* nestedOp) {
+      for (auto& pair : capturedScans) {
+         nestedOp->replaceUsesOfWith(pair.first, pair.second);
+      }
+   });
 
    auto yieldOp = newBody->getTerminator();
    rewriter.setInsertionPoint(yieldOp);
@@ -1750,7 +1849,9 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
 
    state.loopYieldData[yieldOp] = {nextIdx, cond};
 
+   // --------------------------------------------------------------------------
    // 4. Expose Final Pipeline Result Streams via BufferScanOps
+   // --------------------------------------------------------------------------
    rewriter.setInsertionPointAfter(loopOp);
    SmallVector<Value> finalResults;
    for (size_t i = 0; i < op->getNumResults(); ++i) {
@@ -1764,14 +1865,18 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
       auto membersList = bufferType.getMembers().getMembers();
       size_t mIdx = 0;
 
-      auto addGatherMapping = [&](tuples::ColumnDefAttr colDef) {
-         scanComputedCols.push_back(colDef);
+      // Safely synthesize a ColumnDefAttr from the exact same ColumnPtr
+      auto addGatherMapping = [&](tuples::ColumnRefAttr ref, tuples::ColumnDefAttr def) {
+         if (!def) {
+            def = colManager.createDef(&ref.getColumn());
+         }
+         scanComputedCols.push_back(def);
          scanColumnMapping.push_back(rewriter.getStringAttr(memberManager.getName(membersList[mIdx++])));
       };
 
-      if (finalMeta.hasRow()) addGatherMapping(finalMeta.rowDef);
-      if (finalMeta.hasCol()) addGatherMapping(finalMeta.colDef);
-      addGatherMapping(finalMeta.valDef);
+      if (finalMeta.hasRow()) addGatherMapping(finalMeta.row, finalMeta.rowDef);
+      if (finalMeta.hasCol()) addGatherMapping(finalMeta.col, finalMeta.colDef);
+      addGatherMapping(finalMeta.val, finalMeta.valDef);
 
       auto scanOp = rewriter.create<relalg::BufferScanOp>(
          loc, tuples::TupleStreamType::get(ctx),
@@ -1788,6 +1893,7 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
    rewriter.replaceOp(op, finalResults);
    return success();
 }
+
 class GraphAlgYieldOpConversion : public StatefulConversion<YieldOp> {
    public:
    using StatefulConversion::StatefulConversion;
@@ -1846,13 +1952,12 @@ class GraphAlgYieldOpConversion : public StatefulConversion<YieldOp> {
          addMapping(actualYieldMeta.val);
 
          auto mappingAttr = subop::ColumnRefMemberMappingAttr::get(ctx, refMappingArgs);
- // 1. Create a NEW buffer state for the next iteration's data
-         Value newState = rewriter.create<subop::GenericCreateOp>(loc, bufferType);
 
-         // 2. Materialize the yielded stream into this new buffer
+         // Use highly-efficient internal buffer creation!
+         Value newState = rewriter.create<subop::GenericCreateOp>(loc, bufferType);
          rewriter.create<subop::MaterializeOp>(loc, streamOperand, newState, mappingAttr);
 
-         // 3. Yield the newly populated buffer state
+         // Yield the newly populated buffer state
          yieldArgs.push_back(newState);
       }
 
