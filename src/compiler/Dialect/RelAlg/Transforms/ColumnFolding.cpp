@@ -40,27 +40,34 @@ class ColumnFoldingPass : public mlir::PassWrapper<ColumnFoldingPass, mlir::Oper
             }
          }
       });
-      relalg::ColumnSet usedColumns;
-      getOperation()->walk([&](Operator op) {
-         usedColumns.insert(op.getUsedColumns());
-      });
-      getOperation()->walk([&](relalg::MaterializeOp op) {
-         usedColumns.insert(relalg::ColumnSet::fromArrayAttr(op.getCols()));
-      });
-      getOperation()->walk([&](ColumnFoldable columnFoldable) {
-         if (columnFoldable->getNumResults() != 1) {
-            return;
-         }
-         mlir::Value v = columnFoldable->getResult(0);
-         if (!mlir::isa<tuples::TupleStreamType>(v.getType())) {
-            return;
-         }
-         if (columnFoldable.eliminateDeadColumns(usedColumns, v).succeeded()) {
-            if (v != columnFoldable->getResult(0)) {
-               columnFoldable->getResult(0).replaceAllUsesWith(v);
+      while (true) {
+         relalg::ColumnSet usedColumns;
+         getOperation()->walk([&](Operator op) {
+            usedColumns.insert(op.getUsedColumns());
+         });
+         getOperation()->walk([&](relalg::MaterializeOp op) {
+            usedColumns.insert(relalg::ColumnSet::fromArrayAttr(op.getCols()));
+         });
+         bool existsSucceed = false;
+         getOperation()->walk([&](ColumnFoldable columnFoldable) {
+            if (columnFoldable->getNumResults() != 1) {
+               return;
             }
+            mlir::Value v = columnFoldable->getResult(0);
+            if (!mlir::isa<tuples::TupleStreamType>(v.getType())) {
+               return;
+            }
+            if (columnFoldable.eliminateDeadColumns(usedColumns, v).succeeded()) {
+               existsSucceed = true;
+               if (v != columnFoldable->getResult(0)) {
+                  columnFoldable->getResult(0).replaceAllUsesWith(v);
+               }
+            }
+         });
+         if (!existsSucceed) {
+            break;
          }
-      });
+      }
    }
 };
 } // end anonymous namespace

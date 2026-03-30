@@ -22,15 +22,15 @@ class ExtractNestedOperators : public mlir::PassWrapper<ExtractNestedOperators, 
    }
    void runOnOperation() override {
       getOperation().walk([&](Operator innerOperator) {
-         if (auto o = mlir::dyn_cast_or_null<TupleLamdaOperator>(innerOperator->getParentOfType<Operator>().getOperation())) {
+         if (auto o = mlir::dyn_cast_or_null<TupleLambdaOperator>(innerOperator->getParentOfType<Operator>().getOperation())) {
             mlir::IRMapping mapping;
-            TupleLamdaOperator toMoveBefore;
+            TupleLambdaOperator toMoveBefore;
             while (o) {
-               if (auto innerLambda = mlir::dyn_cast_or_null<TupleLamdaOperator>(innerOperator.getOperation())) {
+               if (auto innerLambda = mlir::dyn_cast_or_null<TupleLambdaOperator>(innerOperator.getOperation())) {
                   mapping.map(o.getLambdaArgument(), innerLambda.getLambdaArgument());
                }
                toMoveBefore = o;
-               o = mlir::dyn_cast_or_null<TupleLamdaOperator>(o->getParentOfType<Operator>().getOperation());
+               o = mlir::dyn_cast_or_null<TupleLambdaOperator>(o->getParentOfType<Operator>().getOperation());
             }
             innerOperator->walk([&](mlir::Operation* op) {
                if (!mlir::isa<Operator>(op) && op->getParentOp() == innerOperator.getOperation()) {
