@@ -20,7 +20,7 @@ class ParquetBatchesWorkerResvState {
       public:
       size_t ownChunkId; //The current chunk the work is alloacated to
       long currentMorsel; //The current morsel inside the chunk
-      std::optional<arrow::Future<>> ioFinished = std::nullopt; //Future to indicate whether the prefetching is finished
+      bool buffering = false;
    };
    size_t rgId{0};
    // Chunk id currently owned by this worker/state. Other workers may read this when stealing.
@@ -41,6 +41,7 @@ class ParquetBatchesWorkerResvState {
    size_t unitAmount{0};
 
    std::unique_ptr<arrow::RecordBatchReader> rowGroupRecordBatchReader;
+   arrow::Future<> buffering = arrow::Future<>::MakeFinished();
 
    bool hasMoreWork();
    /**
@@ -49,14 +50,15 @@ class ParquetBatchesWorkerResvState {
     * @param queryLifetimeChunks
     * @param rgIdstartIndex atomic next rowgroup counter
     * @param numberOfRowGroups overall number of rowgroups
+    * @param colIds
     * @param localReader reader of the current thread
     * @return pair of local chunk id and reservation id. reservation id is -1 if no more work could be found, otherwise it is the id of the reservation
     */
-   WorkInfo fetchAndNextOwn(size_t splitSize, std::vector<std::deque<LingoDBTable::TableChunk>>* queryLifetimeChunks, std::atomic<int>& rgIdstartIndex, size_t numberOfRowGroups, std::unique_ptr<parquet::arrow::FileReader>& localReader);
+   WorkInfo fetchAndNextOwn(size_t splitSize, std::vector<std::deque<LingoDBTable::TableChunk>>* queryLifetimeChunks, std::atomic<int>& rgIdstartIndex, size_t numberOfRowGroups, std::vector<int>& colIds, std::unique_ptr<parquet::arrow::FileReader>& localReader);
    std::pair<size_t, int> fetchAndNext();
 
    private:
-   void initNewRowGroup(int rowGroup, std::unique_ptr<parquet::arrow::FileReader>& localReader);
+   void initNewRowGroup(int rowGroup, std::vector<int>& colIds, std::unique_ptr<parquet::arrow::FileReader>& localReader);
 };
 class ScanParquetFileTask : public scheduler::TaskWithImplicitContext {
    std::string filePath;
@@ -66,7 +68,7 @@ class ScanParquetFileTask : public scheduler::TaskWithImplicitContext {
 
    std::vector<std::unique_ptr<parquet::arrow::FileReader>> readers;
 
-   std::vector<size_t> colIds;
+   std::vector<int> colIds;
 
    std::atomic<int> nextRowGroup = 0;
 
@@ -81,7 +83,7 @@ class ScanParquetFileTask : public scheduler::TaskWithImplicitContext {
    size_t splitSize{20000};
 
    public:
-   ScanParquetFileTask(std::string filePath, std::vector<size_t> colids, std::function<void(BatchView*)> cb, std::unique_ptr<Restrictions> restrictions);
+   ScanParquetFileTask(std::string filePath, std::vector<int> colids, std::function<void(BatchView*)> cb, std::unique_ptr<Restrictions> restrictions);
    arrow::Status init();
 
    void unitRun(LingoDBTable::TableChunk& chunk);
