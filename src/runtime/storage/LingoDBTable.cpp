@@ -546,14 +546,15 @@ class ScanBatchesSingleThreadedTask : public lingodb::scheduler::TaskWithImplici
 };
 
 std::unique_ptr<scheduler::Task> LingoDBTable::createScanTask(const ScanConfig& scanConfig) {
-   std::vector<size_t> colIds;
-   for (const auto& c : scanConfig.columns) {
-      auto colId = schema->GetFieldIndex(c);
-      assert(colId >= 0);
-      colIds.push_back(colId);
-   }
+
    auto restrictions = lingodb::runtime::Restrictions::create(scanConfig.filters, *schema);
    if (!useParquetScan) {
+      std::vector<size_t> colIds;
+      for (const auto& c : scanConfig.columns) {
+         auto colId = schema->GetFieldIndex(c);
+         assert(colId >= 0);
+         colIds.push_back(colId);
+      }
       ensureLoaded();
 
       if (scanConfig.parallel) {
@@ -562,6 +563,12 @@ std::unique_ptr<scheduler::Task> LingoDBTable::createScanTask(const ScanConfig& 
          return std::make_unique<ScanBatchesSingleThreadedTask>(tableData, colIds, std::move(restrictions), scanConfig.cb);
       }
    } else {
+      std::vector<int> colIds;
+      for (const auto& c : scanConfig.columns) {
+         auto colId = schema->GetFieldIndex(c);
+         assert(colId >= 0);
+         colIds.push_back(colId);
+      }
       //Remove .arrow and replace with .parquet
       std::string parquetFileName = fileName;
       size_t lastDot = parquetFileName.find_last_of(".");
