@@ -17,10 +17,10 @@ namespace lingodb::runtime {
 class ParquetBatchesWorkerResvState {
    public:
    class WorkInfo {
-      size_t localChunkId; //The current chunk the work is alloacated to
-      size_t curr; //The current morsel inside the chunk
-      arrow::Future<> ioFinished; //Future to indicate whether the prefetching is finished
-
+      public:
+      size_t ownChunkId; //The current chunk the work is alloacated to
+      long currentMorsel; //The current morsel inside the chunk
+      std::optional<arrow::Future<>> ioFinished = std::nullopt; //Future to indicate whether the prefetching is finished
    };
    size_t rgId{0};
    // Chunk id currently owned by this worker/state. Other workers may read this when stealing.
@@ -52,8 +52,11 @@ class ParquetBatchesWorkerResvState {
     * @param localReader reader of the current thread
     * @return pair of local chunk id and reservation id. reservation id is -1 if no more work could be found, otherwise it is the id of the reservation
     */
-   std::pair<size_t, int> fetchAndNextOwn(size_t splitSize, std::vector<std::deque<LingoDBTable::TableChunk>>* queryLifetimeChunks, std::atomic<int>& rgIdstartIndex, size_t numberOfRowGroups, std::unique_ptr<parquet::arrow::FileReader>& localReader);
+   WorkInfo fetchAndNextOwn(size_t splitSize, std::vector<std::deque<LingoDBTable::TableChunk>>* queryLifetimeChunks, std::atomic<int>& rgIdstartIndex, size_t numberOfRowGroups, std::unique_ptr<parquet::arrow::FileReader>& localReader);
    std::pair<size_t, int> fetchAndNext();
+
+   private:
+   void initNewRowGroup(int rowGroup, std::unique_ptr<parquet::arrow::FileReader>& localReader);
 };
 class ScanParquetFileTask : public scheduler::TaskWithImplicitContext {
    std::string filePath;
