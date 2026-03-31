@@ -20,12 +20,14 @@ std::pair<size_t, int> ParquetBatchesWorkerResvState::fetchAndNextOwn(size_t spl
    size_t curr = resvCursor++;
    //Has more work localy on the "current" TableChunk!
    if (curr < unitAmount) {
-      return {localChunkId, curr};
+      return {ownChunkId, curr};
    }
    if (!rowGroupRecordBatchReader) {
       int newRgId = rgIdstartIndex.fetch_add(1);
       if (newRgId >= numberOfRowGroups) {
-         return {localChunkId, -1};
+         //No (new) rowgroup to work on
+         fullyExhausted.store(true, std::memory_order_release);
+         return {ownChunkId, -1};
       }
       std::vector<int> newRgIds = {newRgId};
       auto newlocalRowGroupReaderUncertain = localReader->GetRecordBatchReader(newRgIds);
@@ -48,19 +50,21 @@ std::pair<size_t, int> ParquetBatchesWorkerResvState::fetchAndNextOwn(size_t spl
       auto& localChunks = (*queryLifetimeChunks)[workerId];
       //New Chunk
       LingoDBTable::TableChunk& chunk = localChunks.emplace_back(batch, 0);
-      localChunkId = localChunks.size() - 1;
+      ownChunkId = localChunks.size() - 1;
       //TODO somehow give TableChunk back to caller
       unitAmount = (chunk.getNumRows() + splitSize - 1) / splitSize;
       resvCursor = 1;
       resvId = 0;
       //TODO assign batch id
 
-      return {localChunkId, 0};
+      return {ownChunkId, 0};
    } else {
       //No additional work found for current rowGroup, try to increase rowGroup to find new work
       int newRgId = rgIdstartIndex.fetch_add(1);
       if (newRgId >= numberOfRowGroups) {
-         return {localChunkId, -1};
+         //Now work found
+         fullyExhausted.store(true, std::memory_order_release);
+         return {ownChunkId, -1};
       }
       std::vector<int> newRgIds = {newRgId};
       auto newlocalRowGroupReaderUncertain = localReader->GetRecordBatchReader(newRgIds);
@@ -78,18 +82,18 @@ std::pair<size_t, int> ParquetBatchesWorkerResvState::fetchAndNextOwn(size_t spl
       //Load new chunk from new rowgroup
       auto& localChunks = (*queryLifetimeChunks)[workerId];
       LingoDBTable::TableChunk& chunk = localChunks.emplace_back(batch, 0);
-      localChunkId = localChunks.size() - 1;
+      ownChunkId = localChunks.size() - 1;
       //TODO somehow give TableChunk back to caller
       unitAmount = (chunk.getNumRows() + splitSize - 1) / splitSize;
       resvCursor = 1;
       resvId = 0;
-      return {localChunkId, 0};
+      return {ownChunkId, 0};
    }
 };
 std::pair<size_t, int> ParquetBatchesWorkerResvState::fetchAndNext() {
    std::unique_lock<std::shared_mutex> resvLock(mutex);
    size_t cur = resvCursor++;
-   return {localChunkId, cur >= unitAmount ? -1 : cur};
+   return {ownChunkId, cur >= unitAmount ? -1 : cur};
 }
 
 //------------------------------------------------------
@@ -138,7 +142,7 @@ bool ScanParquetFileTask::allocateWork() {
    if (id != -1) {
       //Found new work
       state->resvId = id;
-      state->localChunkId = localGroupId;
+      state->reservedChunkId = localGroupId;
       return true;
    }
 
@@ -149,7 +153,7 @@ bool ScanParquetFileTask::allocateWork() {
          auto [otherChunkId, id] = other->fetchAndNext();
          if (id != -1) {
             state->resvId = id;
-            state->localChunkId = otherChunkId;
+            state->reservedChunkId = otherChunkId;
             return true;
          }
       }
@@ -167,13 +171,25 @@ bool ScanParquetFileTask::allocateWork() {
             // only current worker can modify its own stealWorkerId. no need to lock
             state->stealWorkerId = idx;
             state->resvId = id;
-            state->localChunkId = otherChunkId;
+            state->reservedChunkId = otherChunkId;
             return true;
          }
       }
    }
 
-   workExhausted.store(true);
+   // No work found right now. Only mark the whole task as exhausted once all workers
+   // reported that they can never produce more work.
+   bool allFullyExhausted = true;
+   for (auto& s : workerResvs) {
+      if (!s->fullyExhausted.load(std::memory_order_acquire)) {
+         allFullyExhausted = false;
+         break;
+      }
+   }
+   if (allFullyExhausted) {
+      workExhausted.store(true);
+   }
+
 
    return false;
 }
@@ -205,39 +221,19 @@ void ScanParquetFileTask::performWork() {
    auto workerId = lingodb::scheduler::currentWorkerId();
    auto* state = workerResvs[workerId].get();
    if (state->stealWorkerId != std::numeric_limits<size_t>::max()) {
+      //Perform stolen work
       auto* other = workerResvs[state->stealWorkerId].get();
+
       auto& chunks = (*queryLifetimeChunks)[state->stealWorkerId];
-      auto& chunk = chunks[state->localChunkId];
+      auto& chunk = chunks[state->reservedChunkId];
       unitRun(chunk);
 
    } else {
       auto& chunks = (*queryLifetimeChunks)[workerId];
-      //Last chunk is our current working chunk right?
-      auto& chunk = chunks[state->localChunkId];
+      auto& chunk = chunks[state->reservedChunkId];
       unitRun(chunk);
    }
 
-   //Load batches
-   /* std::shared_ptr<arrow::RecordBatch> batch;
-   while (reader->ReadNext(&batch).ok() && batch) {
-      //Add batch to list, to keep it
-      LingoDBTable::TableChunk& chunk = chunks.emplace_back(batch, 0);
-      for (size_t start = 0; start < static_cast<size_t>(batch->num_rows()); start += maxGeneratedScanMorselSize) {
-         size_t len = std::min(maxGeneratedScanMorselSize, static_cast<size_t>(batch->num_rows()) - start);
-         batchView.offset = start;
-         batchView.length = len;
-         for (size_t i = 0; i < colIds.size(); i++) {
-            batchView.arrays[i] = chunk.getArrayView(colIds[i]);
-         }
-         auto [newLen, selVec] = restrictions->applyFilters(start, len, selVec1, selVec2, [&](size_t colId) { return chunk.getArrayView(colId); });
-         batchView.length = newLen;
-         batchView.selectionVector = selVec;
-         if (batchView.length > 0) {
-            assert(cb);
-            cb(&batchView);
-         }
-      }
-   }*/
 }
 ScanParquetFileTask::~ScanParquetFileTask() {
    for (auto& [selVec1, selVec2] : selVecs) {
