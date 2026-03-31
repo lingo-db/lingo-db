@@ -29,10 +29,11 @@ void relalg::createQueryOptPipeline(mlir::OpPassManager& pm, lingodb::catalog::C
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createUnnestingPass());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createColumnFoldingPass());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createDecomposeLambdasPass());
-   pm.addNestedPass<mlir::func::FuncOp>(relalg::createPushdownPass());
    if (catalog) {
       pm.addNestedPass<mlir::func::FuncOp>(relalg::createAttachMetaDataPass(*catalog));
    }
+   pm.addNestedPass<mlir::func::FuncOp>(relalg::createEliminateTrivialJoinPass());
+   pm.addNestedPass<mlir::func::FuncOp>(relalg::createPushdownPass());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createReduceGroupByKeysPass());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createExpandTransitiveEqualities());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createOptimizeJoinOrderPass());
@@ -71,6 +72,9 @@ void relalg::registerQueryOptimizationPasses() {
    });
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return relalg::createOptimizeImplementationsPass();
+   });
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+      return relalg::createEliminateTrivialJoinPass();
    });
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return relalg::createIntroduceTmpPass();
