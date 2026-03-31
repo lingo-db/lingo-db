@@ -29,10 +29,11 @@ void relalg::createQueryOptPipeline(mlir::OpPassManager& pm, lingodb::catalog::C
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createUnnestingPass());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createColumnFoldingPass());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createDecomposeLambdasPass());
-   pm.addNestedPass<mlir::func::FuncOp>(relalg::createPushdownPass());
    if (catalog) {
       pm.addNestedPass<mlir::func::FuncOp>(relalg::createAttachMetaDataPass(*catalog));
    }
+   pm.addNestedPass<mlir::func::FuncOp>(relalg::createEliminateTrivialJoinPass());
+   pm.addNestedPass<mlir::func::FuncOp>(relalg::createPushdownPass());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createReduceGroupByKeysPass());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createExpandTransitiveEqualities());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createOptimizeJoinOrderPass());
@@ -40,7 +41,6 @@ void relalg::createQueryOptPipeline(mlir::OpPassManager& pm, lingodb::catalog::C
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createCombinePredicatesPass());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createEliminateNullableTypesPass());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createOptimizeImplementationsPass());
-   pm.addNestedPass<mlir::func::FuncOp>(relalg::createEliminateTrivialJoinPass());
    if (catalog) {
       pm.addNestedPass<mlir::func::FuncOp>(relalg::createDetachMetaDataPass());
    }
