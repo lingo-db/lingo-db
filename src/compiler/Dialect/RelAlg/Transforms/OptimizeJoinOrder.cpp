@@ -47,8 +47,7 @@ class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::Oper
          return true;
       }
       //reason two: result of operation is accessed by non-operator
-      if (llvm::any_of(op->getUsers(),
-                       [](mlir::OpOperand user) { return !mlir::isa<Operator>(user.getOwner()); })) {
+      if (llvm::any_of(op->getUsers(), [](mlir::OpOperand user) { return !mlir::isa<Operator>(user.getOwner()); })) {
          return true;
       }
       return isUnsupportedOp(op);
@@ -134,10 +133,51 @@ class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::Oper
          //first: collect all operators that are reachable now
          llvm::SmallVector<Operator, 4> before = op.getAllSubOperators();
          llvm::SmallPtrSet<mlir::Operation*, 8> prevUsers{op->user_begin(), op->user_end()};
+
+         // Safely record positions of already optimized leaf ops to prevent them from being dominantly orphaned
+         llvm::DenseMap<mlir::Block*, llvm::DenseMap<mlir::Operation*, int>> blockPositions;
+         llvm::DenseMap<mlir::Block*, llvm::SmallVector<mlir::Operation*, 4>> leavesByBlock;
+         llvm::DenseMap<mlir::Operation*, mlir::Operation*> prevNodeMap;
+         llvm::SmallPtrSet<mlir::Operation*, 16> seenLeaves;
+
+         for (auto subOp : before) {
+            mlir::Operation* subOpNode = subOp.getOperation();
+            if (alreadyOptimized.count(subOpNode) && seenLeaves.insert(subOpNode).second) {
+               mlir::Block* b = subOpNode->getBlock();
+               if (!blockPositions.count(b)) {
+                  int pos = 0;
+                  for (auto& blockOp : *b) {
+                     blockPositions[b][&blockOp] = pos++;
+                  }
+               }
+               leavesByBlock[b].push_back(subOpNode);
+               prevNodeMap[subOpNode] = subOpNode->getPrevNode();
+            }
+         }
+
          //realize plan
          Operator realized = solution->realizePlan();
+
          //second: collect all operators that are reachable now
          llvm::SmallVector<Operator, 4> after = realized.getAllSubOperators();
+
+         // Restore leaves back to their exact original block positions to solve SSA dominance breaks
+         for (auto& pair : leavesByBlock) {
+            mlir::Block* b = pair.first;
+            auto& leaves = pair.second;
+            // Strict sort preserves their relative topological order
+            std::sort(leaves.begin(), leaves.end(), [&](mlir::Operation* a, mlir::Operation* bOp) {
+               return blockPositions[b][a] < blockPositions[b][bOp];
+            });
+            for (auto leaf : leaves) {
+               mlir::Operation* pNode = prevNodeMap[leaf];
+               if (pNode) {
+                  leaf->moveAfter(pNode);
+               } else {
+                  leaf->moveBefore(&b->front());
+               }
+            }
+         }
 
          //maybe op is now somewhere deep in the subtree -> replace all "relevant" uses with the new subtree root
          if (realized != op) {
@@ -147,17 +187,32 @@ class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::Oper
          }
          //cleanup: make sure that all operators that are not reachable any more are cleaned up
          llvm::SmallPtrSet<mlir::Operation*, 8> afterHt;
-         for (auto op : after) {
-            afterHt.insert(op.getOperation());
+         for (auto aop : after) {
+            afterHt.insert(aop.getOperation());
          }
-         for (auto op : before) {
-            if (!afterHt.contains(op.getOperation())) {
-               op->dropAllUses();
-               op->dropAllReferences();
-               op->remove();
-               op->erase();
+
+         llvm::SmallVector<mlir::Operation*, 8> toDelete;
+         for (auto bop : before) {
+            if (!afterHt.contains(bop.getOperation())) {
+               toDelete.push_back(bop.getOperation());
             }
          }
+
+         // Run strict/safe DCE replacing the crash-prone dropAllUses
+         bool changed = true;
+         while (changed) {
+            changed = false;
+            for (auto it = toDelete.begin(); it != toDelete.end();) {
+               if ((*it)->use_empty()) {
+                  (*it)->erase();
+                  it = toDelete.erase(it);
+                  changed = true;
+               } else {
+                  ++it;
+               }
+            }
+         }
+
          //mark subtree as already optimized
          alreadyOptimized.insert(realized);
          return realized;
