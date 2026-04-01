@@ -149,7 +149,11 @@ class GraphAlgTypeConverter : public TypeConverter {
 
       addConversion([](Type type) -> std::optional<Type> {
          if (llvm::isa<SemiringTypeInterface>(type)) {
-            return convertSemiringType(type);
+            Type converted = convertSemiringType(type);
+            if (converted == type) {
+               return std::nullopt;
+            }
+            return converted;
          }
          return std::nullopt;
       });
@@ -1450,15 +1454,48 @@ class MaskOpConversion : public StatefulConversion<MaskOp> {
       auto* ctx = rewriter.getContext();
 
       // 1. Get the CONVERTED operands from the conversion framework's adaptor
-      Value inputRel = adaptor.getOperands()[2]; // (You can use adaptor.getInput() if it's named in ODS)
+      Value inputRel = adaptor.getOperands()[2];
       Value maskRel = adaptor.getMask();
 
       // 2. Create a fresh adaptor over the ORIGINAL operands to safely access untyped values by name!
       OpAdaptor origAdaptor(op->getOperands(), op->getAttrDictionary());
 
       // 3. Look up metadata using the safe, original operands
-      auto inputMeta = state.get(op->getOperand(2), ctx); // (Or origAdaptor.getInput() if named)
+      auto inputMeta = state.get(op->getOperand(2), ctx);
       auto maskMeta = state.get(origAdaptor.getMask(), ctx);
+
+      auto isConflict = [&](tuples::ColumnRefAttr c) {
+         if (!c) return false;
+         return c == inputMeta.row || c == inputMeta.col || c == inputMeta.val;
+      };
+
+      SmallVector<Attribute> renameDefs;
+      MatrixMeta renamedMaskMeta = maskMeta;
+      StringRef prefix = "mask";
+
+      if (maskMeta.hasRow() && isConflict(maskMeta.row)) {
+         auto newDef = createColumnDef(ctx, AttributeGenerator::nextName(prefix.str() + "_row"), rewriter.getI64Type());
+         renameDefs.push_back(tuples::ColumnDefAttr::get(ctx, newDef.getName(), newDef.getColumnPtr(), ArrayAttr::get(ctx, {maskMeta.row})));
+         renamedMaskMeta.rowDef = newDef;
+         renamedMaskMeta.row = createColumnRef(newDef);
+      }
+      if (maskMeta.hasCol() && isConflict(maskMeta.col)) {
+         auto newDef = createColumnDef(ctx, AttributeGenerator::nextName(prefix.str() + "_col"), rewriter.getI64Type());
+         renameDefs.push_back(tuples::ColumnDefAttr::get(ctx, newDef.getName(), newDef.getColumnPtr(), ArrayAttr::get(ctx, {maskMeta.col})));
+         renamedMaskMeta.colDef = newDef;
+         renamedMaskMeta.col = createColumnRef(newDef);
+      }
+      if (maskMeta.val && isConflict(maskMeta.val)) {
+         Type maskValType = GraphAlgTypeConverter::convertSemiringType(maskMeta.semiring);
+         auto newDef = createColumnDef(ctx, AttributeGenerator::nextName(prefix.str() + "_val"), maskValType);
+         renameDefs.push_back(tuples::ColumnDefAttr::get(ctx, newDef.getName(), newDef.getColumnPtr(), ArrayAttr::get(ctx, {maskMeta.val})));
+         renamedMaskMeta.valDef = newDef;
+         renamedMaskMeta.val = createColumnRef(newDef);
+      }
+
+      if (!renameDefs.empty()) {
+         maskRel = rewriter.create<relalg::RenamingOp>(loc, tuples::TupleStreamType::get(ctx), maskRel, ArrayAttr::get(ctx, renameDefs)).getResult();
+      }
 
       Type sring = maskMeta.semiring;
       if (Type maskValType = GraphAlgTypeConverter::convertSemiringType(sring); maskValType.isInteger(1)) {
@@ -1475,7 +1512,8 @@ class MaskOpConversion : public StatefulConversion<MaskOp> {
          OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPointToStart(joinBlock);
          auto tupleArg = joinBlock->addArgument(tuples::TupleType::get(ctx), loc);
-         auto valA = rewriter.create<tuples::GetColumnOp>(loc, maskValType, maskMeta.val, tupleArg);
+
+         auto valA = rewriter.create<tuples::GetColumnOp>(loc, maskValType, renamedMaskMeta.val, tupleArg);
          auto valB = rewriter.create<tuples::GetColumnOp>(loc, maskValType, constValRef, tupleArg);
          auto cmp = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, valA, valB);
 
@@ -1490,7 +1528,7 @@ class MaskOpConversion : public StatefulConversion<MaskOp> {
             rewriter.setInsertionPointToStart(selBlock);
 
             auto tupleArgSel = selBlock->addArgument(tuples::TupleType::get(ctx), loc);
-            auto val = rewriter.create<tuples::GetColumnOp>(loc, maskValType, maskMeta.val, tupleArgSel);
+            auto val = rewriter.create<tuples::GetColumnOp>(loc, maskValType, renamedMaskMeta.val, tupleArgSel);
 
             Value zero;
             if (sring.isInteger(64) || sring == SemiringTypes::forInt(ctx))
@@ -1523,14 +1561,14 @@ class MaskOpConversion : public StatefulConversion<MaskOp> {
          OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPointToStart(joinBlock);
 
-         if (inputMeta.hasRow() && maskMeta.hasRow()) {
+         if (inputMeta.hasRow() && renamedMaskMeta.hasRow()) {
             auto valA = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), inputMeta.row, tupleArg);
-            auto valB = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), maskMeta.row, tupleArg);
+            auto valB = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), renamedMaskMeta.row, tupleArg);
             cmpAcc = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, valA, valB);
          }
-         if (inputMeta.hasCol() && maskMeta.hasCol()) {
+         if (inputMeta.hasCol() && renamedMaskMeta.hasCol()) {
             auto valA = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), inputMeta.col, tupleArg);
-            auto valB = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), maskMeta.col, tupleArg);
+            auto valB = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), renamedMaskMeta.col, tupleArg);
             auto cmp = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, valA, valB);
             if (cmpAcc)
                cmpAcc = rewriter.create<arith::AndIOp>(loc, cmpAcc, cmp);
