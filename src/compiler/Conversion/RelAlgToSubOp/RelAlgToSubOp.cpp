@@ -92,6 +92,10 @@ static relalg::ColumnSet getRequired(Operator op, llvm::DenseMap<Operator, relal
       }
       if (auto materializeOp = mlir::dyn_cast_or_null<relalg::MaterializeOp>(user)) {
          required.insert(relalg::ColumnSet::fromArrayAttr(materializeOp.getCols()));
+      } else if (auto subOpMat = mlir::dyn_cast_or_null<subop::MaterializeOp>(user)) {
+         for (auto x : subOpMat.getMapping().getMapping()) {
+            required.insert(&x.second.getColumn());
+         }
       }
    }
    auto res = available.intersect(required);
