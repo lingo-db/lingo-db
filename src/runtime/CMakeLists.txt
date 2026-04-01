@@ -51,9 +51,9 @@ target_compile_definitions(runtime PUBLIC ${COMPILE_DEFS})
 
 #todo: should not be necessary, but it is for Arrow 23
 if("abslAlt" IN_LIST ARROW_SYSTEM_DEPENDENCIES)
-    target_link_libraries(runtime PRIVATE Arrow::arrow_static parquet_static arrow_dataset_static arrow_acero_static absl::strings absl::time absl::bad_optional_access)
+    target_link_libraries(runtime PRIVATE Arrow::arrow_static parquet_static absl::strings absl::time absl::bad_optional_access)
 else()
-    target_link_libraries(runtime PRIVATE Arrow::arrow_static parquet_static arrow_dataset_static arrow_acero_static)
+    target_link_libraries(runtime PRIVATE Arrow::arrow_static parquet_static)
 endif()
 
 add_subdirectory(GPU)

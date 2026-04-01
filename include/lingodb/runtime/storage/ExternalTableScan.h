@@ -1,4 +1,6 @@
-#pragma once
+#ifndef LINGODB_RUNTIME_STORAGE_EXTERNALTABLESCAN_H
+#define LINGODB_RUNTIME_STORAGE_EXTERNALTABLESCAN_H
+
 #include <atomic>
 #include <cstdint>
 #include <limits>
@@ -6,12 +8,11 @@
 #include "lingodb/runtime/ArrowView.h"
 #include "lingodb/runtime/storage/LingoDBTable.h"
 #include "lingodb/runtime/storage/Restrictions.h"
-#include "lingodb/scheduler/Scheduler.h"
 #include "lingodb/scheduler/Tasks.h"
 
-#include <shared_mutex>
 #include <arrow/dataset/file_parquet.h>
-static constexpr size_t maxGeneratedScanMorselSize = std::numeric_limits<int16_t>().max();
+
+#include <shared_mutex>
 
 namespace lingodb::runtime {
 class ParquetBatchesWorkerResvState {
@@ -29,7 +30,7 @@ class ParquetBatchesWorkerResvState {
    // Only accessed by the owning worker.
    size_t reservedChunkId{0};
    std::shared_mutex mutex;
-   size_t resvCursor{0};
+   long resvCursor{0};
    size_t resvId{0};
    // worker id steal tasks from
    size_t stealWorkerId{std::numeric_limits<size_t>::max()};
@@ -38,7 +39,7 @@ class ParquetBatchesWorkerResvState {
    // Used for global termination detection in the scan task.
    std::atomic<bool> fullyExhausted{false};
 
-   size_t unitAmount{0};
+   long unitAmount{0};
 
    std::unique_ptr<arrow::RecordBatchReader> rowGroupRecordBatchReader;
    arrow::Future<> buffering = arrow::Future<>::MakeFinished();
@@ -54,7 +55,7 @@ class ParquetBatchesWorkerResvState {
     * @param localReader reader of the current thread
     * @return pair of local chunk id and reservation id. reservation id is -1 if no more work could be found, otherwise it is the id of the reservation
     */
-   WorkInfo fetchAndNextOwn(size_t splitSize, std::vector<std::deque<LingoDBTable::TableChunk>>* queryLifetimeChunks, std::atomic<int>& rgIdstartIndex, size_t numberOfRowGroups, std::vector<int>& colIds, std::unique_ptr<parquet::arrow::FileReader>& localReader);
+   WorkInfo fetchAndNextOwn(size_t splitSize, std::vector<std::deque<LingoDBTable::TableChunk>>* queryLifetimeChunks, std::atomic<int>& rgIdstartIndex, int numberOfRowGroups, std::vector<int>& colIds, std::unique_ptr<parquet::arrow::FileReader>& localReader);
    std::pair<size_t, int> fetchAndNext();
 
    private:
@@ -92,4 +93,5 @@ class ScanParquetFileTask : public scheduler::TaskWithImplicitContext {
    void performWork() override;
    ~ScanParquetFileTask();
 };
-}
+} // namespace lingodb::runtime
+#endif
