@@ -792,9 +792,6 @@ size_t currentWorkerId() {
 SystemContext& getSystemContext() {
    return scheduler->getSystemContext();
 }
-Worker* getCurrentWorker() {
-   return currentWorker;
-}
 void yieldCurrentTask() {
    if (currentWorker) {
       currentWorker->yieldIfRunning();

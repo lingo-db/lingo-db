@@ -43,7 +43,6 @@ class TableCatalogEntry : public CatalogEntry, public TableMetaDataProvider {
 
 class LingoDBTableCatalogEntry : public TableCatalogEntry {
    std::unique_ptr<runtime::LingoDBTable> impl;
-   bool useParquetScan = false;
 
    public:
    LingoDBTableCatalogEntry(std::string name, std::vector<Column> columns, std::vector<std::string> primaryKey, std::vector<std::string> indices, std::unique_ptr<runtime::LingoDBTable> impl);
