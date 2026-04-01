@@ -4,7 +4,6 @@
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOpsInterfaces.h"
 #include "lingodb/compiler/Dialect/RelAlg/Passes.h"
 
-// ADDED: Give RelAlg awareness of SubOperator custom mapping attributes
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -51,6 +50,28 @@ class ColumnFoldingPass : public mlir::PassWrapper<ColumnFoldingPass, mlir::Oper
          getOperation()->walk([&](relalg::MaterializeOp op) {
             usedColumns.insert(relalg::ColumnSet::fromArrayAttr(op.getCols()));
          });
+
+         getOperation()->walk([&](mlir::Operation* op) {
+            if (mlir::isa<Operator>(op) || mlir::isa<relalg::MaterializeOp>(op)) return;
+
+            for (auto namedAttr : op->getAttrs()) {
+               auto attr = namedAttr.getValue();
+               if (auto colRef = mlir::dyn_cast<tuples::ColumnRefAttr>(attr)) {
+                  usedColumns.insert(&colRef.getColumn());
+               } else if (auto arrayAttr = mlir::dyn_cast<mlir::ArrayAttr>(attr)) {
+                  for (auto a : arrayAttr) {
+                     if (auto colRef = mlir::dyn_cast<tuples::ColumnRefAttr>(a)) {
+                        usedColumns.insert(&colRef.getColumn());
+                     }
+                  }
+               } else if (auto mappingAttr = mlir::dyn_cast<subop::ColumnRefMemberMappingAttr>(attr)) {
+                  for (auto& pair : mappingAttr.getMapping()) {
+                     usedColumns.insert(&pair.second.getColumn());
+                  }
+               }
+            }
+         });
+
          bool existsSucceed = false;
          getOperation()->walk([&](ColumnFoldable columnFoldable) {
             if (columnFoldable->getNumResults() != 1) {
