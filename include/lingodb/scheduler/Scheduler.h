@@ -8,8 +8,6 @@ class MLIRContext;
 } //end namespace mlir
 namespace lingodb::scheduler {
 
-class Worker;
-
 struct SystemContext {
    std::mutex contextStackMutex;
    std::stack<mlir::MLIRContext*> llvmContextStack;
@@ -40,8 +38,6 @@ void enqueueTask(std::unique_ptr<Task> task);
 size_t getNumWorkers();
 //returns the id of the current worker thread
 size_t currentWorkerId();
-//returns the current worker (nullptr if not in a worker thread)
-Worker* getCurrentWorker();
 //yields the current task if running in a fiber context (safe to call from any context)
 void yieldCurrentTask();
 
