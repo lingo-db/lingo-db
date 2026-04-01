@@ -14,15 +14,11 @@
 #include <arrow/table.h>
 
 #include <algorithm>
-#include <deque>
 #include <filesystem>
 #include <iostream>
 #include <random>
 #include <ranges>
 #include <shared_mutex>
-#include <arrow/dataset/file_parquet.h>
-#include <parquet/arrow/reader.h>
-#include <parquet/file_reader.h>
 namespace {
 namespace utility = lingodb::utility;
 static utility::Tracer::Event processMorsel("TableScan", "morsel", false);
@@ -546,7 +542,6 @@ class ScanBatchesSingleThreadedTask : public lingodb::scheduler::TaskWithImplici
 };
 
 std::unique_ptr<scheduler::Task> LingoDBTable::createScanTask(const ScanConfig& scanConfig) {
-
    auto restrictions = lingodb::runtime::Restrictions::create(scanConfig.filters, *schema);
    if (!useParquetScan) {
       std::vector<size_t> colIds;
@@ -578,8 +573,6 @@ std::unique_ptr<scheduler::Task> LingoDBTable::createScanTask(const ScanConfig& 
          // If there's no extension at all, just append it
          parquetFileName += ".parquet";
       }
-      std::cerr << "Create parquet Scantask " << parquetFileName << "\n";
-
       auto parquetPath = dbDir + "/" + parquetFileName;
       auto scanParquetFileTask = std::make_unique<ScanParquetFileTask>(parquetPath, colIds, scanConfig.cb, std::move(restrictions));
       return scanParquetFileTask;

@@ -6,13 +6,12 @@
 #include "lingodb/catalog/TableCatalogEntry.h"
 #include "lingodb/catalog/Types.h"
 #include "lingodb/utility/Serialization.h"
+
 #include <arrow/io/api.h>
+#include <arrow/type.h>
 
 #include <filesystem>
-#include <iostream>
-#include <arrow/type.h>
 #include <parquet/arrow/reader.h>
-#include <parquet/file_reader.h>
 
 namespace {
 using lingodb::catalog::Column;
