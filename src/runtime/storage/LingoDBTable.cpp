@@ -193,14 +193,6 @@ std::shared_ptr<arrow::DataType> toPhysicalType(lingodb::catalog::Type t) {
          throw std::runtime_error("unsupported type");
    }
 }
-std::optional<size_t> countDistinctValues(std::shared_ptr<arrow::ChunkedArray> column) {
-   //todo: replace with approximate count in the future
-   auto res = arrow::compute::CallFunction("count_distinct", {column});
-   if (res.ok()) {
-      return res.ValueOrDie().scalar_as<arrow::Int64Scalar>().value;
-   }
-   return {};
-}
 
 } // namespace
 

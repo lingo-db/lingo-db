@@ -1,7 +1,7 @@
 #include "lingodb/catalog/MetaData.h"
 
-#include "lingodb/utility/Serialization.h"
 #include "lingodb/runtime/Hash.h"
+#include "lingodb/utility/Serialization.h"
 
 #include <arrow/buffer.h>
 #include <arrow/io/api.h>
@@ -10,6 +10,14 @@
 
 namespace lingodb::catalog {
 
+namespace {
+std::vector<uint64_t> hashArray(std::shared_ptr<arrow::Array> array) {
+   std::vector<uint64_t> result(array->length(), 0);
+   lingodb::runtime::dbHashApplyColumn(result, *array, true);
+   return result;
+}
+} //namespace
+
 ColumnStatistics ColumnStatistics::deserialize(utility::Deserializer& deserializer) {
    auto hllSketch = deserializer.readProperty<std::optional<utility::HyperLogLogSketch>>(1);
    return {hllSketch};
@@ -17,15 +25,10 @@ ColumnStatistics ColumnStatistics::deserialize(utility::Deserializer& deserializ
 void ColumnStatistics::serialize(utility::Serializer& serializer) const {
    serializer.writeProperty(1, hllSketch);
 }
-std::vector<uint64_t> hashArray(std::shared_ptr<arrow::Array> array) {
-   std::vector<uint64_t> result(array->length(), 0);
-   lingodb::runtime::dbHashApplyColumn(result, *array, true);
-   return result;
-}
 void ColumnStatistics::merge(std::shared_ptr<arrow::Array> newSegment) {
    if (hllSketch.has_value()) {
       auto hashes = hashArray(newSegment);
-      for (auto hash : hashes)  {
+      for (auto hash : hashes) {
          hllSketch.value().add(hash);
       }
    }
