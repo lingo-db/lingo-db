@@ -40,7 +40,7 @@ void dbHashFoldPiece(uint64_t& acc, uint64_t piece, bool isFirstColumn) {
 }
 
 template <typename TArrowArray>
-void dbHashCombineIntArrowBatch(uint64_t* running, const arrow::Array& array, int64_t num_rows, bool isFirstColumn) {
+void dbHashCombineIntArrowBatch(std::vector<uint64_t>& running, const arrow::Array& array, int64_t num_rows, bool isFirstColumn) {
    const auto& a = static_cast<const TArrowArray&>(array);
    for (int64_t i = 0; i < num_rows; ++i) {
       if (array.IsNull(i)) {
@@ -63,7 +63,7 @@ uint64_t dbHashVarLen32(VarLen32 v) {
    return dbHashCombineUtil(fHash, lHash);
 }
 
-void hashColumnPieceBatchRuntime(const arrow::Array& array, int64_t num_rows, uint64_t* running, bool isFirstColumn) {
+void hashColumnPieceBatchRuntime(const arrow::Array& array, int64_t num_rows, std::vector<uint64_t>& running, bool isFirstColumn) {
    switch (array.type_id()) {
       case arrow::Type::type::BOOL: {
          const auto& a = static_cast<const arrow::BooleanArray&>(array);
@@ -251,9 +251,9 @@ void hashColumnPieceBatchRuntime(const arrow::Array& array, int64_t num_rows, ui
 
 
 
-void dbHashApplyColumn(std::vector<uint64_t>& running, const arrow::Array& arr, int64_t num_rows, bool isFirstColumn) {
-   assert(static_cast<int64_t>(running.size()) == num_rows);
-   hashColumnPieceBatchRuntime(arr, num_rows, running.data(), isFirstColumn);
+void dbHashApplyColumn(std::vector<uint64_t>& running, const arrow::Array& arr, bool isFirstColumn) {
+   assert(static_cast<int64_t>(running.size()) == arr.length());
+   hashColumnPieceBatchRuntime(arr, arr.length(), running, isFirstColumn);
 }
 
 } // namespace lingodb::runtime
