@@ -1,4 +1,4 @@
-#include "lingodb/utility/Sketches.h"
+#include "lingodb/utility/HyperLogLog.h"
 
 #include "lingodb/utility/Serialization.h"
 #include <cmath>
@@ -38,14 +38,14 @@ double tau(double x) {
    return z / 3;
 }
 
-} //namespace
-double HyperLogLogSketch::estimate() {
-   //first compute the multiplicity vector
+} // namespace
+double HyperLogLog::estimate() {
+   // first compute the multiplicity vector
    std::array<uint32_t, q + 2> c = {0};
    for (uint64_t i = 0; i < m; i++) {
       c[registers[i]]++;
    }
-   //compute the estimate
+   // compute the estimate
    double z = m * tau(static_cast<double>(m - c[q + 1]) / static_cast<double>(m));
    for (int k = q; k >= 1; k--) {
       z += c[k];
@@ -54,13 +54,13 @@ double HyperLogLogSketch::estimate() {
    z += m * sigma(static_cast<double>(c[0]) / static_cast<double>(m));
    return (static_cast<double>(m) * m / (2.0 * std::log(2))) / z;
 }
-void HyperLogLogSketch::serialize(lingodb::utility::Serializer& serializer) const {
+void HyperLogLog::serialize(lingodb::utility::Serializer& serializer) const {
    for (uint64_t i = 0; i < m; i++) {
       serializer.writeProperty(i, registers[i]);
    }
 }
-HyperLogLogSketch HyperLogLogSketch::deserialize(lingodb::utility::Deserializer& deserializer) {
-   HyperLogLogSketch hll;
+HyperLogLog HyperLogLog::deserialize(lingodb::utility::Deserializer& deserializer) {
+   HyperLogLog hll;
    for (uint64_t i = 0; i < m; i++) {
       hll.registers[i] = deserializer.readProperty<uint8_t>(i);
    }

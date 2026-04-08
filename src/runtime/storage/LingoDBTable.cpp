@@ -234,7 +234,7 @@ std::unique_ptr<LingoDBTable> LingoDBTable::create(const catalog::CreateTableDef
 }
 LingoDBTable::LingoDBTable(std::string fileName, std::shared_ptr<arrow::Schema> arrowSchema) : persist(false), fileName(std::move(fileName)), sample(arrowSchema), schema(std::move(arrowSchema)), tableData(), numRows(0) {
    for (auto c : schema->fields()) {
-      columnStatistics[c->name()] = catalog::ColumnStatistics(utility::HyperLogLogSketch());
+      columnStatistics[c->name()] = catalog::ColumnStatistics(utility::HyperLogLog());
    }
 }
 void LingoDBTable::append(const std::shared_ptr<arrow::Table>& table) {

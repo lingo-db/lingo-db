@@ -4,7 +4,7 @@
 
 #ifndef LINGODB_CATALOG_METADATA_H
 #define LINGODB_CATALOG_METADATA_H
-#include "lingodb/utility/Sketches.h"
+#include "lingodb/utility/HyperLogLog.h"
 
 #include <arrow/type_fwd.h>
 
@@ -28,14 +28,14 @@ class Sample {
    }
 };
 class ColumnStatistics {
-   std::optional<utility::HyperLogLogSketch> hllSketch;
+   std::optional<utility::HyperLogLog> hll;
 
    public:
    ColumnStatistics() = default;
-   ColumnStatistics(std::optional<utility::HyperLogLogSketch> hllSketch) : hllSketch(hllSketch) {}
+   ColumnStatistics(std::optional<utility::HyperLogLog> hll) : hll(hll) {}
    std::optional<size_t> getNumDistinctValues() {
-      if (hllSketch.has_value()) {
-         return hllSketch.value().estimate();
+      if (hll.has_value()) {
+         return hll.value().estimate();
       }
       return std::nullopt;
    }

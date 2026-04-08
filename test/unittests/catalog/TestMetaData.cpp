@@ -29,7 +29,7 @@ TEST_CASE("MetaData:Column") {
 }
 
 TEST_CASE("MetaData:ColumnStatistics") {
-   ColumnStatistics stats((lingodb::utility::HyperLogLogSketch()));
+   ColumnStatistics stats((lingodb::utility::HyperLogLog()));
    ColumnStatistics stats2(std::nullopt);
 
    arrow::Int32Builder builder;
@@ -128,7 +128,7 @@ TEST_CASE("MetaData:TableMetaDataProvider") {
    std::vector<std::string> primaryKey{"a"};
    std::vector<std::string> columnNames{"a", "b"};
    std::vector<std::unique_ptr<ColumnStatistics>> columnStatistics;
-   columnStatistics.push_back(std::make_unique<ColumnStatistics>(lingodb::utility::HyperLogLogSketch()));
+   columnStatistics.push_back(std::make_unique<ColumnStatistics>(lingodb::utility::HyperLogLog()));
    columnStatistics.back()->merge(batch->column(0));
    columnStatistics.push_back(std::make_unique<ColumnStatistics>(std::nullopt));
    std::vector<std::pair<std::string, std::vector<std::string>>> indices{{"index1", {"a"}}};
