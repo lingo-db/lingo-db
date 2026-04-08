@@ -242,7 +242,7 @@ std::unique_ptr<LingoDBTable> LingoDBTable::create(const catalog::CreateTableDef
 }
 LingoDBTable::LingoDBTable(std::string fileName, std::shared_ptr<arrow::Schema> arrowSchema) : persist(false), fileName(std::move(fileName)), sample(arrowSchema), schema(std::move(arrowSchema)), tableData(), numRows(0) {
    for (auto c : schema->fields()) {
-      columnStatistics[c->name()] = catalog::ColumnStatistics(std::nullopt);
+      columnStatistics[c->name()] = catalog::ColumnStatistics(utility::HyperLogLogSketch());
    }
 }
 void LingoDBTable::append(const std::shared_ptr<arrow::Table>& table) {
@@ -270,12 +270,11 @@ void LingoDBTable::append(const std::vector<std::shared_ptr<arrow::RecordBatch>>
          std::cout << "schema of table: " << schema->ToString() << std::endl;
          throw std::runtime_error("schema mismatch");
       }
+      for (auto c : schema->fields()) {
+         columnStatistics[c->name()].merge(batch->GetColumnByName(c->name()));
+      }
    }
    sample = createSample(tableData);
-   auto tableView = arrow::Table::FromRecordBatches(toAppend).ValueOrDie();
-   for (auto c : schema->fields()) {
-      columnStatistics[c->name()] = catalog::ColumnStatistics(countDistinctValues(tableView->GetColumnByName(c->name())));
-   }
    flush();
 }
 const catalog::ColumnStatistics& LingoDBTable::getColumnStatistics(std::string_view column) const {

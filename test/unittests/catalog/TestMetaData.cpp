@@ -29,8 +29,19 @@ TEST_CASE("MetaData:Column") {
 }
 
 TEST_CASE("MetaData:ColumnStatistics") {
-   ColumnStatistics stats(10);
+   ColumnStatistics stats((lingodb::utility::HyperLogLogSketch()));
    ColumnStatistics stats2(std::nullopt);
+
+   arrow::Int32Builder builder;
+   REQUIRE(builder.Append(1).ok());
+   REQUIRE(builder.Append(2).ok());
+   REQUIRE(builder.Append(1).ok());
+   auto array = builder.Finish().ValueOrDie();
+
+   stats.merge(array);
+   auto estimation = stats.getNumDistinctValues();
+   REQUIRE(estimation.has_value());
+
    SimpleByteWriter writer;
    Serializer serializer(writer);
    serializer.writeProperty(1, stats);
@@ -39,7 +50,7 @@ TEST_CASE("MetaData:ColumnStatistics") {
    Deserializer deserializer(reader);
    auto stats3 = deserializer.readProperty<ColumnStatistics>(1);
    auto stats4 = deserializer.readProperty<ColumnStatistics>(2);
-   REQUIRE(stats3.getNumDistinctValues().value() == 10);
+   REQUIRE(stats3.getNumDistinctValues() == estimation);
    REQUIRE(!stats4.getNumDistinctValues());
 }
 
@@ -115,7 +126,8 @@ TEST_CASE("MetaData:TableMetaDataProvider") {
    std::vector<std::string> primaryKey{"a"};
    std::vector<std::string> columnNames{"a", "b"};
    std::vector<std::unique_ptr<ColumnStatistics>> columnStatistics;
-   columnStatistics.push_back(std::make_unique<ColumnStatistics>(10));
+   columnStatistics.push_back(std::make_unique<ColumnStatistics>(lingodb::utility::HyperLogLogSketch()));
+   columnStatistics.back()->merge(batch->column(0));
    columnStatistics.push_back(std::make_unique<ColumnStatistics>(std::nullopt));
    std::vector<std::pair<std::string, std::vector<std::string>>> indices{{"index1", {"a"}}};
 

@@ -10,11 +10,22 @@
 namespace lingodb::catalog {
 
 ColumnStatistics ColumnStatistics::deserialize(utility::Deserializer& deserializer) {
-   auto numDistinctValues = deserializer.readProperty<std::optional<size_t>>(1);
-   return {numDistinctValues};
+   auto hllSketch = deserializer.readProperty<std::optional<utility::HyperLogLogSketch>>(1);
+   return {hllSketch};
 }
 void ColumnStatistics::serialize(utility::Serializer& serializer) const {
-   serializer.writeProperty(1, numDistinctValues);
+   serializer.writeProperty(1, hllSketch);
+}
+std::vector<uint64_t> hashArray(std::shared_ptr<arrow::Array> array) {
+   return {};
+}
+void ColumnStatistics::merge(std::shared_ptr<arrow::Array> newSegment) {
+   if (hllSketch.has_value()) {
+      auto hashes = hashArray(newSegment);
+      for (auto hash : hashes)  {
+         hllSketch.value().add(hash);
+      }
+   }
 }
 
 void TableMetaDataProvider::serialize(utility::Serializer& serializer) const {
