@@ -5,6 +5,7 @@
 #include <arrow/array/builder_decimal.h>
 #include <arrow/array/builder_primitive.h>
 #include <arrow/builder.h>
+#include <arrow/type.h>
 #include <lingodb/runtime/ExecutionContext.h>
 
 using namespace lingodb::runtime;
@@ -16,6 +17,9 @@ std::shared_ptr<arrow::Array> cast(std::shared_ptr<arrow::Array> array, std::sha
 }
 //todo: avoid this
 std::shared_ptr<arrow::DataType> physicalType(std::shared_ptr<arrow::DataType> t) {
+   if (t->id() == arrow::Type::INTERVAL_DAY_TIME) {
+      return t;
+   }
    auto byteWidth = t->byte_width();
    //non-fixed-width, or fixed-width< 1 byte (e.g., boolean)
    if (byteWidth <= 0) {
@@ -159,6 +163,22 @@ void ArrowColumnBuilder::addFixedSized(bool isValid, uint8_t* value) {
       handleStatus(typedBuilder->Append(value));
    }
 }
+
+void ArrowColumnBuilder::addIntervalDaytime(bool isValid, int64_t nanos) {
+   next();
+   auto* typedBuilder = reinterpret_cast<arrow::DayTimeIntervalBuilder*>(builder);
+   if (!isValid) {
+      handleStatus(typedBuilder->AppendNull());
+      return;
+   }
+   constexpr int64_t kNanosPerDay = 86400000000000ll;
+   constexpr int64_t kNanosPerMilli = 1000000ll;
+   const int64_t days = nanos / kNanosPerDay;
+   const int64_t rem = nanos % kNanosPerDay;
+   const int64_t millis = rem / kNanosPerMilli;
+   handleStatus(typedBuilder->Append(arrow::DayTimeIntervalType::DayMilliseconds(days, millis)));
+}
+
 void ArrowColumnBuilder::addBinary(bool isValid, lingodb::runtime::VarLen32 string) {
    next();
    auto* typedBuilder = reinterpret_cast<arrow::BinaryBuilder*>(builder);

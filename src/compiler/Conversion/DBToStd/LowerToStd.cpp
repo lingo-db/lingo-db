@@ -166,6 +166,12 @@ class LoadArrowOpLowering : public OpConversionPattern<db::LoadArrowOp> {
             auto loadVarBinary = rewriter.create<lingodb::compiler::dialect::arrow::LoadVariableSizeBinaryOp>(loc, array, offset);
             loaded = rewriter.create<util::CreateVarLen>(loc, util::VarLen32Type::get(rewriter.getContext()), loadVarBinary.getPtr(), loadVarBinary.getLength());
          }
+      } else if (auto intervalType = mlir::dyn_cast_or_null<db::IntervalType>(baseType)) {
+         if (intervalType.getUnit() == db::IntervalUnitAttr::months) {
+            loaded = rewriter.create<lingodb::compiler::dialect::arrow::LoadFixedSizedOp>(loc, rewriter.getI32Type(), array, offset);
+         } else {
+            loaded = rewriter.create<lingodb::compiler::dialect::arrow::LoadIntervalDaytimeOp>(loc, array, offset);
+         }
       } else {
          return mlir::failure();
       }
@@ -231,6 +237,12 @@ class AppendArrowLowering : public OpConversionPattern<db::AppendArrowOp> {
          mlir::Value multiplierConst = rewriter.create<mlir::arith::ConstantIntOp>(loc, multiplier, 64);
          value = rewriter.create<mlir::arith::DivSIOp>(loc, value, multiplierConst);
          rewriter.create<lingodb::compiler::dialect::arrow::AppendFixedSizedOp>(loc, builder, value, valid);
+      } else if (auto intervalType = mlir::dyn_cast_or_null<db::IntervalType>(baseType)) {
+         if (intervalType.getUnit() == db::IntervalUnitAttr::months) {
+            rewriter.create<lingodb::compiler::dialect::arrow::AppendFixedSizedOp>(loc, builder, value, valid);
+         } else {
+            rewriter.create<lingodb::compiler::dialect::arrow::AppendIntervalDaytimeOp>(loc, builder, value, valid);
+         }
       } else if (mlir::isa<db::StringType>(baseType)) {
          rewriter.create<lingodb::compiler::dialect::arrow::AppendVariableSizeBinaryOp>(loc, builder, value, valid);
       } else if (auto charType = mlir::dyn_cast_or_null<db::CharType>(baseType)) {
