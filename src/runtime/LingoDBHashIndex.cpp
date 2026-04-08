@@ -52,22 +52,12 @@ void LingoDBHashIndex::rawInsert(size_t startRowId, std::shared_ptr<arrow::Table
    }
    auto batch = t->CombineChunksToBatch().ValueOrDie();
    const int64_t num_rows = batch->num_rows();
-   const auto& catalogColumns = table->getColumns();
-   auto findColumn = [&](std::string_view name) -> const catalog::Column& {
-      for (const auto& c : catalogColumns) {
-         if (c.getColumnName() == name) {
-            return c;
-         }
-      }
-      throw std::runtime_error("indexed column not found in table catalog");
-   };
 
    std::vector<uint64_t> totalHash(static_cast<size_t>(num_rows), 0);
    bool isFirstColumn = true;
    for (const auto& colName : indexedColumns) {
-      const auto& col = findColumn(colName);
       auto arr = batch->GetColumnByName(std::string(colName));
-      dbHashApplyColumn(totalHash, col, *arr, num_rows, isFirstColumn);
+      dbHashApplyColumn(totalHash, *arr, num_rows, isFirstColumn);
       isFirstColumn = false;
    }
    for (int64_t row = 0; row < num_rows; ++row) {
