@@ -1,15 +1,11 @@
 #include "lingodb/runtime/Hash.h"
 
-#include "lingodb/catalog/Defs.h"
-#include "lingodb/catalog/Types.h"
-#include "lingodb/catalog/TableCatalogEntry.h"
-#include "lingodb/runtime/storage/TableStorage.h"
-
 #include "llvm/Support/xxhash.h"
 
 #include <arrow/array/array_binary.h>
 #include <arrow/array/array_decimal.h>
 #include <arrow/table.h>
+#include <arrow/type.h>
 #include <arrow/util/decimal.h>
 
 #include <cassert>
@@ -67,11 +63,9 @@ uint64_t dbHashVarLen32(VarLen32 v) {
    return dbHashCombineUtil(fHash, lHash);
 }
 
-void hashColumnPieceBatchRuntime(const catalog::Column& column, const arrow::Array& array, int64_t num_rows, uint64_t* running, bool isFirstColumn) {
-   using catalog::LogicalTypeId;
-   auto logicalType = column.getLogicalType();
-   switch (logicalType.getTypeId()) {
-      case LogicalTypeId::BOOLEAN: {
+void hashColumnPieceBatchRuntime(const arrow::Array& array, int64_t num_rows, uint64_t* running, bool isFirstColumn) {
+   switch (array.type_id()) {
+      case arrow::Type::type::BOOL: {
          const auto& a = static_cast<const arrow::BooleanArray&>(array);
          for (int64_t i = 0; i < num_rows; ++i) {
             if (array.IsNull(i)) {
@@ -82,27 +76,23 @@ void hashColumnPieceBatchRuntime(const catalog::Column& column, const arrow::Arr
          }
          return;
       }
-      case LogicalTypeId::INT: {
-         auto intInfo = logicalType.getInfo<catalog::IntTypeInfo>();
-         const size_t w = intInfo->getBitWidth();
-         switch (w) {
-            case 8:
-               dbHashCombineIntArrowBatch<arrow::Int8Array>(running, array, num_rows, isFirstColumn);
-               return;
-            case 16:
-               dbHashCombineIntArrowBatch<arrow::Int16Array>(running, array, num_rows, isFirstColumn);
-               return;
-            case 32:
-               dbHashCombineIntArrowBatch<arrow::Int32Array>(running, array, num_rows, isFirstColumn);
-               return;
-            case 64:
-               dbHashCombineIntArrowBatch<arrow::Int64Array>(running, array, num_rows, isFirstColumn);
-               return;
-            default:
-               throw std::runtime_error("hashColumnPieceBatchRuntime: unsupported integer width");
-         }
+      case arrow::Type::type::INT8: {
+         dbHashCombineIntArrowBatch<arrow::Int8Array>(running, array, num_rows, isFirstColumn);
+         return;
       }
-      case LogicalTypeId::FLOAT: {
+      case arrow::Type::type::INT16: {
+         dbHashCombineIntArrowBatch<arrow::Int16Array>(running, array, num_rows, isFirstColumn);
+         return;
+      }
+      case arrow::Type::type::INT32: {
+         dbHashCombineIntArrowBatch<arrow::Int32Array>(running, array, num_rows, isFirstColumn);
+         return;
+      }
+      case arrow::Type::type::INT64: {
+         dbHashCombineIntArrowBatch<arrow::Int64Array>(running, array, num_rows, isFirstColumn);
+         return;
+      }
+      case arrow::Type::type::FLOAT: {
          const auto& a = static_cast<const arrow::FloatArray&>(array);
          for (int64_t i = 0; i < num_rows; ++i) {
             if (array.IsNull(i)) {
@@ -114,7 +104,7 @@ void hashColumnPieceBatchRuntime(const catalog::Column& column, const arrow::Arr
          }
          return;
       }
-      case LogicalTypeId::DOUBLE: {
+      case arrow::Type::type::DOUBLE: {
          const auto& a = static_cast<const arrow::DoubleArray&>(array);
          for (int64_t i = 0; i < num_rows; ++i) {
             if (array.IsNull(i)) {
@@ -126,9 +116,10 @@ void hashColumnPieceBatchRuntime(const catalog::Column& column, const arrow::Arr
          }
          return;
       }
-      case LogicalTypeId::DECIMAL: {
+      case arrow::Type::type::DECIMAL128: {
+         const auto& type = static_cast<const arrow::Decimal128Type&>(*array.type());
+         auto precision = type.precision();
          const auto& a = static_cast<const arrow::Decimal128Array&>(array);
-         const uint32_t precision = static_cast<uint32_t>(logicalType.getInfo<catalog::DecimalTypeInfo>()->getPrecision());
          // Match compilation/lowering:
          // - precision <= 18: decimal is represented as int64
          // - precision > 18: decimal is represented as int128 and hashed as two 64-bit parts (high then low)
@@ -154,46 +145,46 @@ void hashColumnPieceBatchRuntime(const catalog::Column& column, const arrow::Arr
          }
          return;
       }
-      case LogicalTypeId::DATE: {
-         auto unit = logicalType.getInfo<catalog::DateTypeInfo>()->getUnit();
-         if (unit == catalog::DateTypeInfo::DateUnit::DAY) {
-            const auto& a = static_cast<const arrow::Date32Array&>(array);
-            constexpr int64_t kNanosPerDay = 86400000000000ll;
-            for (int64_t i = 0; i < num_rows; ++i) {
-               if (array.IsNull(i)) {
-                  continue;
-               }
-               const int64_t nanos = static_cast<int64_t>(a.Value(i)) * kNanosPerDay;
-               dbHashFoldPiece(running[i], dbHash64(nanos), isFirstColumn);
+      case arrow::Type::type::DATE32: {
+         const auto& a = static_cast<const arrow::Date32Array&>(array);
+         constexpr int64_t kNanosPerDay = 86400000000000ll;
+         for (int64_t i = 0; i < num_rows; ++i) {
+            if (array.IsNull(i)) {
+               continue;
             }
-         } else {
-            const auto& a = static_cast<const arrow::Date64Array&>(array);
-            constexpr int64_t kNanosPerMilli = 1000000ll;
-            for (int64_t i = 0; i < num_rows; ++i) {
-               if (array.IsNull(i)) {
-                  continue;
-               }
-               const int64_t nanos = static_cast<int64_t>(a.Value(i)) * kNanosPerMilli;
-               dbHashFoldPiece(running[i], dbHash64(nanos), isFirstColumn);
-            }
+            const int64_t nanos = static_cast<int64_t>(a.Value(i)) * kNanosPerDay;
+            dbHashFoldPiece(running[i], dbHash64(nanos), isFirstColumn);
          }
          return;
       }
-      case LogicalTypeId::TIMESTAMP: {
+      case arrow::Type::type::DATE64: {
+         const auto& a = static_cast<const arrow::Date64Array&>(array);
+         constexpr int64_t kNanosPerMilli = 1000000ll;
+         for (int64_t i = 0; i < num_rows; ++i) {
+            if (array.IsNull(i)) {
+               continue;
+            }
+            const int64_t nanos = static_cast<int64_t>(a.Value(i)) * kNanosPerMilli;
+            dbHashFoldPiece(running[i], dbHash64(nanos), isFirstColumn);
+         }
+         return;
+      }
+      case arrow::Type::type::TIMESTAMP: {
+         const auto& type = static_cast<const arrow::TimestampType&>(*array.type());
+         auto unit = type.unit();
          const auto& a = static_cast<const arrow::TimestampArray&>(array);
          int64_t multiplier = 1;
-         auto unit = logicalType.getInfo<catalog::TimestampTypeInfo>()->getUnit();
          switch (unit) {
-            case catalog::TimestampTypeInfo::TimestampUnit::SECONDS:
+            case arrow::TimeUnit::SECOND:
                multiplier = 1000000000ll;
                break;
-            case catalog::TimestampTypeInfo::TimestampUnit::MILLIS:
+            case arrow::TimeUnit::MILLI:
                multiplier = 1000000ll;
                break;
-            case catalog::TimestampTypeInfo::TimestampUnit::MICROS:
+            case arrow::TimeUnit::MICRO:
                multiplier = 1000ll;
                break;
-            case catalog::TimestampTypeInfo::TimestampUnit::NANOS:
+            case arrow::TimeUnit::NANO:
                multiplier = 1;
                break;
          }
@@ -206,44 +197,39 @@ void hashColumnPieceBatchRuntime(const catalog::Column& column, const arrow::Arr
          }
          return;
       }
-      case LogicalTypeId::INTERVAL: {
-         auto unit = logicalType.getInfo<catalog::IntervalTypeInfo>()->getUnit();
-         if (unit == catalog::IntervalTypeInfo::IntervalUnit::MONTH) {
-            dbHashCombineIntArrowBatch<arrow::MonthIntervalArray>(running, array, num_rows, isFirstColumn);
-            return;
-         } else {
-            const auto& a = static_cast<const arrow::DayTimeIntervalArray&>(array);
-            constexpr int64_t kNanosPerDay = 86400000000000ll;
-            constexpr int64_t kNanosPerMilli = 1000000ll;
-            for (int64_t i = 0; i < num_rows; ++i) {
-               if (array.IsNull(i)) {
-                  continue;
-               }
-               auto v = a.Value(i);
-               const int64_t nanos = static_cast<int64_t>(v.days) * kNanosPerDay + static_cast<int64_t>(v.milliseconds) * kNanosPerMilli;
-               dbHashFoldPiece(running[i], dbHash64(nanos), isFirstColumn);
+      case arrow::Type::type::INTERVAL_MONTHS: {
+         dbHashCombineIntArrowBatch<arrow::MonthIntervalArray>(running, array, num_rows, isFirstColumn);
+         return;
+      }
+      case arrow::Type::type::INTERVAL_DAY_TIME: {
+         const auto& a = static_cast<const arrow::DayTimeIntervalArray&>(array);
+         constexpr int64_t kNanosPerDay = 86400000000000ll;
+         constexpr int64_t kNanosPerMilli = 1000000ll;
+         for (int64_t i = 0; i < num_rows; ++i) {
+            if (array.IsNull(i)) {
+               continue;
             }
+            auto v = a.Value(i);
+            const int64_t nanos = static_cast<int64_t>(v.days) * kNanosPerDay + static_cast<int64_t>(v.milliseconds) * kNanosPerMilli;
+            dbHashFoldPiece(running[i], dbHash64(nanos), isFirstColumn);
          }
          return;
       }
-      case LogicalTypeId::CHAR: {
-         if (logicalType.getInfo<catalog::CharTypeInfo>()->getLength() == 1) {
-            const auto& a = static_cast<const arrow::FixedSizeBinaryArray&>(array);
-            assert(a.byte_width() == 4);
-            for (int64_t i = 0; i < num_rows; ++i) {
-               if (array.IsNull(i)) {
-                  continue;
-               }
-               const uint8_t* ptr = a.GetValue(i);
-               const uint32_t u = (static_cast<uint32_t>(ptr[3]) << 24) | (static_cast<uint32_t>(ptr[2]) << 16) | (static_cast<uint32_t>(ptr[1]) << 8) | static_cast<uint32_t>(ptr[0]);
-               int32_t ext = static_cast<int32_t>(u);
-               dbHashFoldPiece(running[i], dbHash64(ext), isFirstColumn);
+      case arrow::Type::type::FIXED_SIZE_BINARY: {
+         const auto& a = static_cast<const arrow::FixedSizeBinaryArray&>(array);
+         assert(a.byte_width() == 4);
+         for (int64_t i = 0; i < num_rows; ++i) {
+            if (array.IsNull(i)) {
+               continue;
             }
-            return;
+            const uint8_t* ptr = a.GetValue(i);
+            const uint32_t u = (static_cast<uint32_t>(ptr[3]) << 24) | (static_cast<uint32_t>(ptr[2]) << 16) | (static_cast<uint32_t>(ptr[1]) << 8) | static_cast<uint32_t>(ptr[0]);
+            int32_t ext = static_cast<int32_t>(u);
+            dbHashFoldPiece(running[i], dbHash64(ext), isFirstColumn);
          }
-         [[fallthrough]];
+         return;
       }
-      case LogicalTypeId::STRING: {
+      case arrow::Type::type::STRING: {
          const auto& a = static_cast<const arrow::StringArray&>(array);
          for (int64_t i = 0; i < num_rows; ++i) {
             if (array.IsNull(i)) {
@@ -257,7 +243,7 @@ void hashColumnPieceBatchRuntime(const catalog::Column& column, const arrow::Arr
          return;
       }
       default:
-         throw std::runtime_error("hashColumnPieceBatchRuntime: unsupported logical type for hash index");
+         throw std::runtime_error("hashColumnPieceBatchRuntime: unsupported arrow type for hash index");
    }
 }
 
@@ -265,9 +251,9 @@ void hashColumnPieceBatchRuntime(const catalog::Column& column, const arrow::Arr
 
 
 
-void dbHashApplyColumn(std::vector<uint64_t>& running, const catalog::Column& col, const arrow::Array& arr, int64_t num_rows, bool isFirstColumn) {
+void dbHashApplyColumn(std::vector<uint64_t>& running, const arrow::Array& arr, int64_t num_rows, bool isFirstColumn) {
    assert(static_cast<int64_t>(running.size()) == num_rows);
-   hashColumnPieceBatchRuntime(col, arr, num_rows, running.data(), isFirstColumn);
+   hashColumnPieceBatchRuntime(arr, num_rows, running.data(), isFirstColumn);
 }
 
 } // namespace lingodb::runtime
