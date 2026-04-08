@@ -12,6 +12,7 @@ add_executable(tester
         runtime/DateRuntime.cpp
         storage/TestStorage.cpp
         utility/TestSerialization.cpp
+        utility/TestSketches.cpp
         execution/TestBaselineUtils.cpp
 )
 target_link_libraries(tester PRIVATE Catch2::Catch2WithMain ${LIBS} utility catalog MLIRSQLFrontend runtime runner)
