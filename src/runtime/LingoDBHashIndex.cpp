@@ -57,7 +57,8 @@ void LingoDBHashIndex::rawInsert(size_t startRowId, std::shared_ptr<arrow::Table
    bool isFirstColumn = true;
    for (const auto& colName : indexedColumns) {
       auto arr = batch->GetColumnByName(std::string(colName));
-      dbHashApplyColumn(totalHash, *arr, num_rows, isFirstColumn);
+      assert(arr->length() == num_rows);
+      dbHashApplyColumn(totalHash, *arr, isFirstColumn);
       isFirstColumn = false;
    }
    for (int64_t row = 0; row < num_rows; ++row) {
