@@ -37,7 +37,7 @@ class ColumnStatistics {
       if (hllSketch.has_value()) {
          return hllSketch.value().estimate();
       }
-      return std::nullopt; 
+      return std::nullopt;
    }
    void merge(std::shared_ptr<arrow::Array> newSegment);
    void serialize(utility::Serializer& serializer) const;

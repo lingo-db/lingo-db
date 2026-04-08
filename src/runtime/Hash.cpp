@@ -40,9 +40,9 @@ void dbHashFoldPiece(uint64_t& acc, uint64_t piece, bool isFirstColumn) {
 }
 
 template <typename TArrowArray>
-void dbHashCombineIntArrowBatch(std::vector<uint64_t>& running, const arrow::Array& array, int64_t num_rows, bool isFirstColumn) {
+void dbHashCombineIntArrowBatch(std::vector<uint64_t>& running, const arrow::Array& array, int64_t numRows, bool isFirstColumn) {
    const auto& a = static_cast<const TArrowArray&>(array);
-   for (int64_t i = 0; i < num_rows; ++i) {
+   for (int64_t i = 0; i < numRows; ++i) {
       if (array.IsNull(i)) {
          continue;
       }
@@ -63,11 +63,11 @@ uint64_t dbHashVarLen32(VarLen32 v) {
    return dbHashCombineUtil(fHash, lHash);
 }
 
-void hashColumnPieceBatchRuntime(const arrow::Array& array, int64_t num_rows, std::vector<uint64_t>& running, bool isFirstColumn) {
+void hashColumnPieceBatchRuntime(const arrow::Array& array, int64_t numRows, std::vector<uint64_t>& running, bool isFirstColumn) {
    switch (array.type_id()) {
       case arrow::Type::type::BOOL: {
          const auto& a = static_cast<const arrow::BooleanArray&>(array);
-         for (int64_t i = 0; i < num_rows; ++i) {
+         for (int64_t i = 0; i < numRows; ++i) {
             if (array.IsNull(i)) {
                continue;
             }
@@ -77,24 +77,24 @@ void hashColumnPieceBatchRuntime(const arrow::Array& array, int64_t num_rows, st
          return;
       }
       case arrow::Type::type::INT8: {
-         dbHashCombineIntArrowBatch<arrow::Int8Array>(running, array, num_rows, isFirstColumn);
+         dbHashCombineIntArrowBatch<arrow::Int8Array>(running, array, numRows, isFirstColumn);
          return;
       }
       case arrow::Type::type::INT16: {
-         dbHashCombineIntArrowBatch<arrow::Int16Array>(running, array, num_rows, isFirstColumn);
+         dbHashCombineIntArrowBatch<arrow::Int16Array>(running, array, numRows, isFirstColumn);
          return;
       }
       case arrow::Type::type::INT32: {
-         dbHashCombineIntArrowBatch<arrow::Int32Array>(running, array, num_rows, isFirstColumn);
+         dbHashCombineIntArrowBatch<arrow::Int32Array>(running, array, numRows, isFirstColumn);
          return;
       }
       case arrow::Type::type::INT64: {
-         dbHashCombineIntArrowBatch<arrow::Int64Array>(running, array, num_rows, isFirstColumn);
+         dbHashCombineIntArrowBatch<arrow::Int64Array>(running, array, numRows, isFirstColumn);
          return;
       }
       case arrow::Type::type::FLOAT: {
          const auto& a = static_cast<const arrow::FloatArray&>(array);
-         for (int64_t i = 0; i < num_rows; ++i) {
+         for (int64_t i = 0; i < numRows; ++i) {
             if (array.IsNull(i)) {
                continue;
             }
@@ -106,7 +106,7 @@ void hashColumnPieceBatchRuntime(const arrow::Array& array, int64_t num_rows, st
       }
       case arrow::Type::type::DOUBLE: {
          const auto& a = static_cast<const arrow::DoubleArray&>(array);
-         for (int64_t i = 0; i < num_rows; ++i) {
+         for (int64_t i = 0; i < numRows; ++i) {
             if (array.IsNull(i)) {
                continue;
             }
@@ -124,7 +124,7 @@ void hashColumnPieceBatchRuntime(const arrow::Array& array, int64_t num_rows, st
          // - precision <= 18: decimal is represented as int64
          // - precision > 18: decimal is represented as int128 and hashed as two 64-bit parts (high then low)
          if (precision <= 18) {
-            for (int64_t i = 0; i < num_rows; ++i) {
+            for (int64_t i = 0; i < numRows; ++i) {
                if (array.IsNull(i)) {
                   continue;
                }
@@ -132,7 +132,7 @@ void hashColumnPieceBatchRuntime(const arrow::Array& array, int64_t num_rows, st
                dbHashFoldPiece(running[i], dbHash64(d.low_bits()), isFirstColumn);
             }
          } else {
-            for (int64_t i = 0; i < num_rows; ++i) {
+            for (int64_t i = 0; i < numRows; ++i) {
                if (array.IsNull(i)) {
                   continue;
                }
@@ -148,7 +148,7 @@ void hashColumnPieceBatchRuntime(const arrow::Array& array, int64_t num_rows, st
       case arrow::Type::type::DATE32: {
          const auto& a = static_cast<const arrow::Date32Array&>(array);
          constexpr int64_t kNanosPerDay = 86400000000000ll;
-         for (int64_t i = 0; i < num_rows; ++i) {
+         for (int64_t i = 0; i < numRows; ++i) {
             if (array.IsNull(i)) {
                continue;
             }
@@ -160,7 +160,7 @@ void hashColumnPieceBatchRuntime(const arrow::Array& array, int64_t num_rows, st
       case arrow::Type::type::DATE64: {
          const auto& a = static_cast<const arrow::Date64Array&>(array);
          constexpr int64_t kNanosPerMilli = 1000000ll;
-         for (int64_t i = 0; i < num_rows; ++i) {
+         for (int64_t i = 0; i < numRows; ++i) {
             if (array.IsNull(i)) {
                continue;
             }
@@ -188,7 +188,7 @@ void hashColumnPieceBatchRuntime(const arrow::Array& array, int64_t num_rows, st
                multiplier = 1;
                break;
          }
-         for (int64_t i = 0; i < num_rows; ++i) {
+         for (int64_t i = 0; i < numRows; ++i) {
             if (array.IsNull(i)) {
                continue;
             }
@@ -198,14 +198,14 @@ void hashColumnPieceBatchRuntime(const arrow::Array& array, int64_t num_rows, st
          return;
       }
       case arrow::Type::type::INTERVAL_MONTHS: {
-         dbHashCombineIntArrowBatch<arrow::MonthIntervalArray>(running, array, num_rows, isFirstColumn);
+         dbHashCombineIntArrowBatch<arrow::MonthIntervalArray>(running, array, numRows, isFirstColumn);
          return;
       }
       case arrow::Type::type::INTERVAL_DAY_TIME: {
          const auto& a = static_cast<const arrow::DayTimeIntervalArray&>(array);
          constexpr int64_t kNanosPerDay = 86400000000000ll;
          constexpr int64_t kNanosPerMilli = 1000000ll;
-         for (int64_t i = 0; i < num_rows; ++i) {
+         for (int64_t i = 0; i < numRows; ++i) {
             if (array.IsNull(i)) {
                continue;
             }
@@ -218,7 +218,7 @@ void hashColumnPieceBatchRuntime(const arrow::Array& array, int64_t num_rows, st
       case arrow::Type::type::FIXED_SIZE_BINARY: {
          const auto& a = static_cast<const arrow::FixedSizeBinaryArray&>(array);
          assert(a.byte_width() == 4);
-         for (int64_t i = 0; i < num_rows; ++i) {
+         for (int64_t i = 0; i < numRows; ++i) {
             if (array.IsNull(i)) {
                continue;
             }
@@ -231,7 +231,7 @@ void hashColumnPieceBatchRuntime(const arrow::Array& array, int64_t num_rows, st
       }
       case arrow::Type::type::STRING: {
          const auto& a = static_cast<const arrow::StringArray&>(array);
-         for (int64_t i = 0; i < num_rows; ++i) {
+         for (int64_t i = 0; i < numRows; ++i) {
             if (array.IsNull(i)) {
                dbHashFoldPiece(running[i], dbHashVarLen32(VarLen32()), isFirstColumn);
             } else {
@@ -248,8 +248,6 @@ void hashColumnPieceBatchRuntime(const arrow::Array& array, int64_t num_rows, st
 }
 
 } // namespace
-
-
 
 void dbHashApplyColumn(std::vector<uint64_t>& running, const arrow::Array& arr, bool isFirstColumn) {
    assert(static_cast<int64_t>(running.size()) == arr.length());

@@ -5,6 +5,8 @@
 #include "lingodb/utility/Sketches.h"
 
 using namespace lingodb::utility;
+
+namespace {
 uint64_t murmur64(uint64_t h) {
    h ^= h >> 33;
    h *= 0xff51afd7ed558ccdull;
@@ -13,6 +15,8 @@ uint64_t murmur64(uint64_t h) {
    h ^= h >> 33;
    return h;
 }
+} // namespace
+
 TEST_CASE("HyperLogLog:Basic") {
    HyperLogLogSketch hll;
    for (uint64_t i = 1; i <= 500; i++) {
