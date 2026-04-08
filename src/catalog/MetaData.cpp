@@ -1,6 +1,7 @@
 #include "lingodb/catalog/MetaData.h"
 
 #include "lingodb/utility/Serialization.h"
+#include "lingodb/runtime/Hash.h"
 
 #include <arrow/buffer.h>
 #include <arrow/io/api.h>
@@ -17,7 +18,9 @@ void ColumnStatistics::serialize(utility::Serializer& serializer) const {
    serializer.writeProperty(1, hllSketch);
 }
 std::vector<uint64_t> hashArray(std::shared_ptr<arrow::Array> array) {
-   return {};
+   std::vector<uint64_t> result(array->length(), 0);
+   lingodb::runtime::dbHashApplyColumn(result, *array, true);
+   return result;
 }
 void ColumnStatistics::merge(std::shared_ptr<arrow::Array> newSegment) {
    if (hllSketch.has_value()) {

@@ -41,6 +41,8 @@ TEST_CASE("MetaData:ColumnStatistics") {
    stats.merge(array);
    auto estimation = stats.getNumDistinctValues();
    REQUIRE(estimation.has_value());
+   REQUIRE(*estimation > 0);
+   REQUIRE(*estimation < 5);
 
    SimpleByteWriter writer;
    Serializer serializer(writer);
