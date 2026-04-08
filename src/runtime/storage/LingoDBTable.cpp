@@ -254,7 +254,7 @@ void LingoDBTable::append(const std::shared_ptr<arrow::Table>& table) {
 void LingoDBTable::append(const std::vector<std::shared_ptr<arrow::RecordBatch>>& toAppend) {
    ensureLoaded();
    for (auto& batch : toAppend) {
-      if (batch->schema()->Equals(*schema, true)) {
+      if (batch->schema()->Equals(*schema)) {
          tableData.push_back(TableChunk{batch, numRows});
          numRows += batch->num_rows();
       } else {
