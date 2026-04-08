@@ -1,6 +1,6 @@
 
-#ifndef LINGODB_UTILITY_SKETCHES_H
-#define LINGODB_UTILITY_SKETCHES_H
+#ifndef LINGODB_UTILITY_HYPERLOGLOG_H
+#define LINGODB_UTILITY_HYPERLOGLOG_H
 #include <array>
 #include <cstdint>
 #include <limits>
@@ -8,7 +8,7 @@
 namespace lingodb::utility {
 class Serializer;
 class Deserializer;
-class HyperLogLogSketch {
+class HyperLogLog {
    //number of hash bits used to determine the register
    static constexpr uint64_t p = 6;
    //number of registers
@@ -27,7 +27,7 @@ class HyperLogLogSketch {
       //update the register
       registers[index] = std::max(registers[index], leadingZeros);
    }
-   void merge(const HyperLogLogSketch& other) {
+   void merge(const HyperLogLog& other) {
       for (uint64_t i = 0; i < m; i++) {
          registers[i] = std::max(registers[i], other.registers[i]);
       }
@@ -35,8 +35,8 @@ class HyperLogLogSketch {
    double estimate();
 
    void serialize(Serializer& serializer) const;
-   static HyperLogLogSketch deserialize(Deserializer& deserializer);
+   static HyperLogLog deserialize(Deserializer& deserializer);
 };
 } // namespace lingodb::utility
 
-#endif //LINGODB_UTILITY_SKETCHES_H
+#endif //LINGODB_UTILITY_HYPERLOGLOG_H

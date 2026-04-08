@@ -1,8 +1,8 @@
 
 #include "catch2/catch_all.hpp"
 
+#include "lingodb/utility/HyperLogLog.h"
 #include "lingodb/utility/Serialization.h"
-#include "lingodb/utility/Sketches.h"
 
 using namespace lingodb::utility;
 
@@ -18,7 +18,7 @@ uint64_t murmur64(uint64_t h) {
 } // namespace
 
 TEST_CASE("HyperLogLog:Basic") {
-   HyperLogLogSketch hll;
+   HyperLogLog hll;
    for (uint64_t i = 1; i <= 500; i++) {
       hll.add(murmur64(i));
    }
@@ -29,11 +29,11 @@ TEST_CASE("HyperLogLog:Basic") {
    REQUIRE((estimate > 900 && estimate < 1100));
 }
 TEST_CASE("HyperLogLog:Merge") {
-   HyperLogLogSketch hll1;
+   HyperLogLog hll1;
    for (uint64_t i = 1; i <= 500; i++) {
       hll1.add(murmur64(i));
    }
-   HyperLogLogSketch hll2;
+   HyperLogLog hll2;
    for (uint64_t i = 200; i <= 1000; i++) {
       hll2.add(murmur64(i));
    }
@@ -42,7 +42,7 @@ TEST_CASE("HyperLogLog:Merge") {
    REQUIRE((estimate > 900 && estimate < 1100));
 }
 TEST_CASE("HyperLogLog: Serialization") {
-   HyperLogLogSketch hll;
+   HyperLogLog hll;
    for (uint64_t i = 1; i <= 500; i++) {
       hll.add(murmur64(i));
    }
@@ -54,7 +54,7 @@ TEST_CASE("HyperLogLog: Serialization") {
    serializer.writeProperty(1, hll);
    SimpleByteReader reader(writer.data(), writer.size());
    Deserializer deserializer(reader);
-   HyperLogLogSketch hll2 = deserializer.readProperty<HyperLogLogSketch>(1);
+   HyperLogLog hll2 = deserializer.readProperty<HyperLogLog>(1);
    auto estimate = hll2.estimate();
    REQUIRE((estimate > 900 && estimate < 1100));
 }

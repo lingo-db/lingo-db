@@ -19,17 +19,17 @@ std::vector<uint64_t> hashArray(std::shared_ptr<arrow::Array> array) {
 } //namespace
 
 ColumnStatistics ColumnStatistics::deserialize(utility::Deserializer& deserializer) {
-   auto hllSketch = deserializer.readProperty<std::optional<utility::HyperLogLogSketch>>(1);
-   return {hllSketch};
+   auto hll = deserializer.readProperty<std::optional<utility::HyperLogLog>>(1);
+   return {hll};
 }
 void ColumnStatistics::serialize(utility::Serializer& serializer) const {
-   serializer.writeProperty(1, hllSketch);
+   serializer.writeProperty(1, hll);
 }
 void ColumnStatistics::merge(std::shared_ptr<arrow::Array> newSegment) {
-   if (hllSketch.has_value()) {
+   if (hll.has_value()) {
       auto hashes = hashArray(newSegment);
       for (auto hash : hashes) {
-         hllSketch.value().add(hash);
+         hll.value().add(hash);
       }
    }
 }
