@@ -111,7 +111,7 @@ void hashColumnPieceBatchRuntime(const arrow::Array& array, int64_t numRows, std
                continue;
             }
             double d = a.Value(i);
-            int32_t& dAsInt = reinterpret_cast<int32_t&>(d);
+            int64_t& dAsInt = reinterpret_cast<int64_t&>(d);
             dbHashFoldPiece(running[i], dbHash64(dAsInt), isFirstColumn);
          }
          return;
@@ -223,8 +223,7 @@ void hashColumnPieceBatchRuntime(const arrow::Array& array, int64_t numRows, std
                continue;
             }
             const uint8_t* ptr = a.GetValue(i);
-            const uint32_t u = (static_cast<uint32_t>(ptr[3]) << 24) | (static_cast<uint32_t>(ptr[2]) << 16) | (static_cast<uint32_t>(ptr[1]) << 8) | static_cast<uint32_t>(ptr[0]);
-            int32_t ext = static_cast<int32_t>(u);
+            int32_t ext = *reinterpret_cast<const int32_t*>(ptr);
             dbHashFoldPiece(running[i], dbHash64(ext), isFirstColumn);
          }
          return;
