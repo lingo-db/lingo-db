@@ -120,8 +120,7 @@ arrow::Status ScanParquetFileTask::init() {
 
       auto parquetFileReader = parquet::ParquetFileReader::Open(input);
       std::unique_ptr<parquet::arrow::FileReader> reader;
-      ARROW_RETURN_NOT_OK(parquet::arrow::FileReader::Make(
-         arrow::default_memory_pool(), std::move(parquetFileReader), &reader));
+      ARROW_ASSIGN_OR_RAISE(reader, parquet::arrow::OpenFile(input, arrow::default_memory_pool()));
       readers[i] = std::move(reader);
       workerResvs[i] = std::make_unique<ParquetBatchesWorkerResvState>();
    }
