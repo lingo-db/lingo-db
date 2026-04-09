@@ -73,12 +73,14 @@ auto createMultiColumnTableEntry() {
       Column("d32", Type::decimal(32, 4), true),
       Column("dt", Type(LogicalTypeId::DATE, std::make_shared<DateTypeInfo>(DateTypeInfo::DateUnit::DAY)), true),
       Column("dtms", Type(LogicalTypeId::DATE, std::make_shared<DateTypeInfo>(DateTypeInfo::DateUnit::MILLIS)), true),
+      Column("f32", Type::f32(), true),
+      Column("f64", Type::f64(), true),
    };
-   createTableDef.primaryKey = {"c10", "i", "u", "s", "t", "b", "c1", "im", "idt", "d18", "d32", "dt", "dtms"};
+   createTableDef.primaryKey = {"c10", "i", "u", "s", "t", "b", "c1", "im", "idt", "d18", "d32", "dt", "dtms", "f32", "f64"};
    return LingoDBTableCatalogEntry::createFromCreateTable(createTableDef);
 }
 auto createMultiColumnIndexEntry() {
-   return LingoDBHashIndexEntry::createForPrimaryKey("test_table_multi", {"c10", "i", "u", "s", "t", "b", "c1", "im", "idt", "d18", "d32", "dt", "dtms"});
+   return LingoDBHashIndexEntry::createForPrimaryKey("test_table_multi", {"c10", "i", "u", "s", "t", "b", "c1", "im", "idt", "d32", "d18", "dt", "dtms", "f32", "f64"});
 }
 auto createMultiColumnTableData() {
    auto schema = arrow::schema({
@@ -95,6 +97,8 @@ auto createMultiColumnTableData() {
       arrow::field("d32", arrow::decimal128(32, 4)),
       arrow::field("dt", arrow::date32()),
       arrow::field("dtms", arrow::date64()),
+      arrow::field("f32", arrow::float32()),
+      arrow::field("f64", arrow::float64()),
    });
 
    arrow::StringBuilder c10Builder;
@@ -136,10 +140,9 @@ auto createMultiColumnTableData() {
    arrow::FixedSizeBinaryBuilder c1Builder(arrow::fixed_size_binary(4), arrow::default_memory_pool());
    const uint8_t c1r0[] = {0, 0, 0, static_cast<uint8_t>('x')};
    const uint8_t c1r1[] = {155, 156, 157, 159};
-   const uint8_t c1r2[] = {0, 0, 0, static_cast<uint8_t>('z')};
    REQUIRE(c1Builder.Append(c1r0).ok());
    REQUIRE(c1Builder.Append(c1r1).ok());
-   REQUIRE(c1Builder.Append(c1r2).ok());
+   REQUIRE(c1Builder.AppendNull().ok());
    auto c1Arr = c1Builder.Finish().ValueOrDie();
 
    arrow::MonthIntervalBuilder imBuilder(arrow::default_memory_pool());
@@ -178,7 +181,19 @@ auto createMultiColumnTableData() {
    REQUIRE(dtmsBuilder.Append(1).ok());
    auto dtmsArr = dtmsBuilder.Finish().ValueOrDie();
 
-   return arrow::RecordBatch::Make(schema, 3, std::vector<std::shared_ptr<arrow::Array>>{c10Arr, iArr, uArr, sArr, tArr, bArr, c1Arr, imArr, idtArr, d18Arr, d32Arr, dtArr, dtmsArr});
+   arrow::FloatBuilder f32Builder(arrow::default_memory_pool());
+   REQUIRE(f32Builder.Append(1.0).ok());
+   REQUIRE(f32Builder.AppendNull().ok());
+   REQUIRE(f32Builder.Append(3.1415).ok());
+   auto f32Arr = f32Builder.Finish().ValueOrDie();
+
+   arrow::DoubleBuilder f64Builder(arrow::default_memory_pool());
+   REQUIRE(f64Builder.Append(553.654568).ok());
+   REQUIRE(f64Builder.AppendNull().ok());
+   REQUIRE(f64Builder.Append(3.1415).ok());
+   auto f64Arr = f64Builder.Finish().ValueOrDie();
+
+   return arrow::RecordBatch::Make(schema, 3, std::vector<std::shared_ptr<arrow::Array>>{c10Arr, iArr, uArr, sArr, tArr, bArr, c1Arr, imArr, idtArr, d18Arr, d32Arr, dtArr, dtmsArr, f32Arr, f64Arr});
 }
 auto createMultiColumnTableDataAsTable() {
    return arrow::Table::FromRecordBatches({createMultiColumnTableData()}).ValueOrDie();
@@ -329,14 +344,14 @@ TEST_CASE("Storage:HashIndexMultiColumnWithNulls") {
       auto& index3 = indexEntry3.value()->getIndex();
       auto* hashIndex3 = dynamic_cast<lingodb::runtime::LingoDBHashIndex*>(&index3);
       REQUIRE(hashIndex3 != nullptr);
-      lingodb::runtime::HashIndexAccess access(*hashIndex3, {"c10", "i", "u", "s", "t", "b", "c1", "im", "idt", "d18", "d32", "dt", "dtms"});
+      lingodb::runtime::HashIndexAccess access(*hashIndex3, {"c10", "i", "u", "s", "t", "b", "c1", "im", "idt", "d32", "d18", "dt", "dtms", "f32", "f64"});
 
       auto tmpSession = lingodb::runtime::Session::createSession();
       auto createTableDef = lingodb::catalog::CreateTableDef{"tmp", tableEntry->getColumns(), {}};
       tmpSession->getCatalog()->insertEntry(lingodb::catalog::LingoDBTableCatalogEntry::createFromCreateTable(createTableDef));
       tmpSession->getCatalog()->getTypedEntry<lingodb::catalog::LingoDBTableCatalogEntry>("tmp").value()->getTableStorage().append(createMultiColumnTableDataAsTable());
 
-      std::string query = "select row_number() over() -1 as rowid, hash(c10,i,u,s,t,b,c1,im,idt,d18,d32,dt,dtms) as hash from tmp";
+      std::string query = "select row_number() over() -1 as rowid, hash(c10,i,u,s,t,b,c1,im,idt,d32,d18,dt,dtms,f32,f64) as hash from tmp";
       auto queryExecutionConfig = lingodb::execution::createQueryExecutionConfig(lingodb::execution::ExecutionMode::SPEED, true);
       queryExecutionConfig->parallel = false;
       std::shared_ptr<arrow::Table> result;
