@@ -175,15 +175,26 @@ std::shared_ptr<Catalog> Catalog::create(std::string dbDir, bool eagerLoading) {
       res->dbDir = dbDir;
       for (const auto& parquetFile : parquetFiles) {
          auto inputFile = arrow::io::ReadableFile::Open(parquetFile.string()).ValueOrDie();
-         auto parquetFileReader = parquet::ParquetFileReader::Open(inputFile);
-         std::unique_ptr<parquet::arrow::FileReader> parquetArrowReader;
-         auto status = parquet::arrow::FileReader::Make(arrow::default_memory_pool(), std::move(parquetFileReader), &parquetArrowReader);
-         if (!status.ok()) {
-            throw std::runtime_error("Catalog parquet bootstrap: failed to open parquet file " + parquetFile.string() + ": " + status.ToString());
+
+
+         std::shared_ptr<arrow::io::RandomAccessFile> parquetFileReader;
+         auto parquetFileReaderUncertain =  arrow::io::ReadableFile::Open(parquetFile.string());
+         if (!parquetFileReaderUncertain.ok()) {
+            throw std::runtime_error("Catalog parquet: failed to open parquet file " + parquetFile.string() + ": " + parquetFileReaderUncertain.status().ToString());
          }
+         parquetFileReader = parquetFileReaderUncertain.ValueOrDie();
+
+
+         std::unique_ptr<parquet::arrow::FileReader> parquetArrowReader;
+         auto parquetArrowReaderUncertain = parquet::arrow::OpenFile(std::move(parquetFileReader), arrow::default_memory_pool());
+         if (!parquetArrowReaderUncertain.ok()) {
+            throw std::runtime_error("Catalog parquet: failed to open parquet file " + parquetFile.string() + ": " + parquetArrowReaderUncertain.status().ToString());
+         }
+         parquetArrowReader = std::move(parquetArrowReaderUncertain).ValueOrDie();
+
 
          std::shared_ptr<arrow::Schema> parquetSchema;
-         status = parquetArrowReader->GetSchema(&parquetSchema);
+         auto status = parquetArrowReader->GetSchema(&parquetSchema);
          if (!status.ok()) {
             throw std::runtime_error("Catalog parquet bootstrap: failed to read schema for " + parquetFile.string() + ": " + status.ToString());
          }
