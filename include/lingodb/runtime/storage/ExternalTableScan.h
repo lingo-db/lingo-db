@@ -1,7 +1,6 @@
 #ifndef LINGODB_RUNTIME_STORAGE_EXTERNALTABLESCAN_H
 #define LINGODB_RUNTIME_STORAGE_EXTERNALTABLESCAN_H
 
-#pragma once
 #include <atomic>
 #include <cstdint>
 #include <limits>

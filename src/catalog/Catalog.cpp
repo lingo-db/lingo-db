@@ -176,14 +176,12 @@ std::shared_ptr<Catalog> Catalog::create(std::string dbDir, bool eagerLoading) {
       for (const auto& parquetFile : parquetFiles) {
          auto inputFile = arrow::io::ReadableFile::Open(parquetFile.string()).ValueOrDie();
 
-
          std::shared_ptr<arrow::io::RandomAccessFile> parquetFileReader;
-         auto parquetFileReaderUncertain =  arrow::io::ReadableFile::Open(parquetFile.string());
+         auto parquetFileReaderUncertain = arrow::io::ReadableFile::Open(parquetFile.string());
          if (!parquetFileReaderUncertain.ok()) {
             throw std::runtime_error("Catalog parquet: failed to open parquet file " + parquetFile.string() + ": " + parquetFileReaderUncertain.status().ToString());
          }
          parquetFileReader = parquetFileReaderUncertain.ValueOrDie();
-
 
          std::unique_ptr<parquet::arrow::FileReader> parquetArrowReader;
          auto parquetArrowReaderUncertain = parquet::arrow::OpenFile(std::move(parquetFileReader), arrow::default_memory_pool());
@@ -191,7 +189,6 @@ std::shared_ptr<Catalog> Catalog::create(std::string dbDir, bool eagerLoading) {
             throw std::runtime_error("Catalog parquet: failed to open parquet file " + parquetFile.string() + ": " + parquetArrowReaderUncertain.status().ToString());
          }
          parquetArrowReader = std::move(parquetArrowReaderUncertain).ValueOrDie();
-
 
          std::shared_ptr<arrow::Schema> parquetSchema;
          auto status = parquetArrowReader->GetSchema(&parquetSchema);
