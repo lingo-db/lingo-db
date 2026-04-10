@@ -37,6 +37,7 @@ add_library(runtime OBJECT
         Session.cpp
         storage/LingoDBTable.cpp
         storage/Restrictions.cpp
+        storage/ExternalTableScan.cpp
 )
 set(COMPILE_DEFS "")
 if (ENABLE_GPU_BACKEND)
@@ -49,11 +50,10 @@ target_compile_definitions(runtime PUBLIC ${COMPILE_DEFS})
 
 #todo: should not be necessary, but it is for Arrow 23
 if("abslAlt" IN_LIST ARROW_SYSTEM_DEPENDENCIES)
-    target_link_libraries(runtime PRIVATE Arrow::arrow_static absl::strings absl::time absl::bad_optional_access)
+    target_link_libraries(runtime PRIVATE Arrow::arrow_static parquet_static absl::strings absl::time absl::bad_optional_access)
 else()
-    target_link_libraries(runtime PRIVATE Arrow::arrow_static)
+    target_link_libraries(runtime PRIVATE Arrow::arrow_static parquet_static)
 endif()
-
 
 add_subdirectory(GPU)
 target_link_libraries(runtime PUBLIC GPU-rt scheduler)
