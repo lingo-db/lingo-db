@@ -15,34 +15,43 @@
 #include <shared_mutex>
 
 namespace lingodb::runtime {
-class ParquetBatchesWorkerResvState {
+struct alignas(64) ParquetBatchesWorkerResvState {
    public:
+   ///Describes the Work
    class WorkInfo {
       public:
       size_t ownChunkId; //The current chunk the work is alloacated to
       long currentMorsel; //The current morsel inside the chunk
       bool buffering = false;
    };
+
+   std::shared_mutex mutex;
+
+   /// Current rowGroup
    size_t rgId{0};
-   // Chunk id currently owned by this worker/state. Other workers may read this when stealing.
+   /// Chunk id currently owned by this worker/state
    size_t ownChunkId{0};
-   // Chunk id reserved for the current morsel on this worker (may refer to own or stolen chunk).
+   // Chunk id reserved for the current morsel on this worker (may not refer to own or stolen chunk).
    // Only accessed by the owning worker.
    size_t reservedChunkId{0};
-   std::shared_mutex mutex;
+
    long resvCursor{0};
    size_t resvId{0};
-   // worker id steal tasks from
+   /// worker id steal tasks from
    size_t stealWorkerId{std::numeric_limits<size_t>::max()};
-
-   // Set to true once this worker/state can never produce more work.
-   // Used for global termination detection in the scan task.
-   std::atomic<bool> fullyExhausted{false};
+   /// resvId gotten from @stealWorkerId
+   size_t stolenResvId{0};
+   /// chunkId gotten from @stealWorkerId
+   size_t stolenResvChunkId{0};
 
    long unitAmount{0};
 
    std::unique_ptr<arrow::RecordBatchReader> rowGroupRecordBatchReader;
    arrow::Future<> buffering = arrow::Future<>::MakeFinished();
+
+   // Set to true once this worker/state can never produce more work.
+   // Used for global termination detection in the scan task.
+   std::atomic<bool> fullyExhausted{false};
 
    bool hasMoreWork();
    /**
