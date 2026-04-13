@@ -59,9 +59,11 @@ ParquetBatchesWorkerResvState::WorkInfo ParquetBatchesWorkerResvState::fetchAndN
       //New Chunk
       LingoDBTable::TableChunk& chunk = localChunks.emplace_back(batch, 0);
       ownChunkId = localChunks.size() - 1;
+      //TODO somehow give TableChunk back to caller
       unitAmount = (chunk.getNumRows() + splitSize - 1) / splitSize;
       resvCursor = 1;
       resvId = 0;
+      //TODO assign batch id
 
       return {.ownChunkId = ownChunkId, .currentMorsel = 0};
    } else {
@@ -95,9 +97,9 @@ arrow::Status ScanParquetFileTask::init() {
    queryLifetimeChunks = new std::vector<std::deque<LingoDBTable::TableChunk>>(numWorkers);
    //Keep in memory until query is finished
    //Joins for instance do not copy data and only refernces them and therefore the lifetime of the TableChunks has to exceed this table scan
-   lingodb::runtime::getCurrentExecutionContext()->registerState({queryLifetimeChunks, [](void* ptr) {
+   /* lingodb::runtime::getCurrentExecutionContext()->registerState({queryLifetimeChunks, [](void* ptr) {
                                                                      delete reinterpret_cast<std::vector<std::deque<LingoDBTable::TableChunk>>*>(ptr);
-                                                                  }});
+                                                                  }});*/
    std::shared_ptr<arrow::io::RandomAccessFile> input;
    ARROW_ASSIGN_OR_RAISE(input, arrow::io::ReadableFile::Open(filePath));
    {
@@ -131,72 +133,73 @@ bool ScanParquetFileTask::allocateWork() {
    if (workExhausted) {
       return false;
    }
-   while (true) {
-      bool skipExhaustTest = false;
-      //1. if the current worker has more work locally, do it
-      auto* state = workerResvs[lingodb::scheduler::currentWorkerId()].get();
-      auto workInfo = state->fetchAndNextOwn(splitSize, queryLifetimeChunks, nextRowGroup, numOfRowGroups, colIds, readers[lingodb::scheduler::currentWorkerId()]);
-      if (!workInfo.buffering && workInfo.currentMorsel != -1) {
-         //Found new work
-         state->resvId = workInfo.currentMorsel;
-         state->reservedChunkId = workInfo.ownChunkId;
-         state->stealWorkerId = std::numeric_limits<size_t>::max();
-         return true;
-      } else if (workInfo.buffering) {
-         skipExhaustTest = true;
+   //1. if the current worker has more work locally, do it
+   auto* state = workerResvs[lingodb::scheduler::currentWorkerId()].get();
+   auto workInfo = state->fetchAndNextOwn(splitSize, queryLifetimeChunks, nextRowGroup, numOfRowGroups, colIds, readers[lingodb::scheduler::currentWorkerId()]);
+   if (workInfo.buffering) {
+      while (state->buffering.is_finished() == false) {
+         lingodb::scheduler::yieldCurrentTask();
       }
-
-      //3. if the current worker has no more work locally and no more work globally, try to steal work from the worker we stole from last time
-      if (state->stealWorkerId != std::numeric_limits<size_t>::max()) {
-         auto* other = workerResvs[state->stealWorkerId].get();
-         if (other->hasMoreWork() && other->buffering.is_finished()) {
-            auto [otherChunkId, id] = other->fetchAndNext();
-            if (id != -1) {
-               state->stolenResvId = id;
-               state->stolenResvChunkId = otherChunkId;
-               return true;
-            }
-         }
-         state->stealWorkerId = std::numeric_limits<size_t>::max();
-      }
-
-      //4. if the current worker has no more work locally and no more work globally, try to steal work from other workers
-      for (size_t i = 1; i < workerResvs.size(); i++) {
-         // make sure index of worker to steal never exceed worker number limits
-         auto idx = (lingodb::scheduler::currentWorkerId() + i) % workerResvs.size();
-         auto* other = workerResvs[idx].get();
-         if (other->hasMoreWork() && other->buffering.is_finished()) {
-            auto [otherChunkId, id] = other->fetchAndNext();
-            if (id != -1) {
-               // only current worker can modify its own stealWorkerId. no need to lock
-               state->stealWorkerId = idx;
-               state->stolenResvId = id;
-               state->stolenResvChunkId = otherChunkId;
-               return true;
-            }
-         }
-      }
-
-      // No work found right now. Only mark the whole task as exhausted once all workers
-      // reported that they can never produce more work.
-      if (!skipExhaustTest) {
-         bool allFullyExhausted = true;
-         for (auto& s : workerResvs) {
-            if (!s->fullyExhausted.load(std::memory_order_acquire)) {
-               allFullyExhausted = false;
-               break;
-            }
-         }
-         if (allFullyExhausted) {
-            workExhausted.store(true);
-            return false;
-         }
-      }
-      if (state->buffering.is_finished()) {
-         continue;
-      }
-      lingodb::scheduler::yieldCurrentTask();
+      workInfo = state->fetchAndNextOwn(splitSize, queryLifetimeChunks, nextRowGroup, numOfRowGroups, colIds, readers[lingodb::scheduler::currentWorkerId()]);
    }
+   if (workInfo.currentMorsel != -1) {
+      //Found new work
+      state->resvId = workInfo.currentMorsel;
+      state->reservedChunkId = workInfo.ownChunkId;
+      return true;
+   }
+
+   //3. if the current worker has no more work locally and no more work globally, try to steal work from the worker we stole from last time
+   if (state->stealWorkerId != std::numeric_limits<size_t>::max()) {
+      auto* other = workerResvs[state->stealWorkerId].get();
+      if (other->hasMoreWork()) {
+         while (other->buffering.is_finished() == false) {
+            lingodb::scheduler::yieldCurrentTask();
+         }
+         auto [otherChunkId, id] = other->fetchAndNext();
+         if (id != -1) {
+            state->resvId = id;
+            state->reservedChunkId = otherChunkId;
+            return true;
+         }
+      }
+      state->stealWorkerId = std::numeric_limits<size_t>::max();
+   }
+
+   //4. if the current worker has no more work locally and no more work globally, try to steal work from other workers
+   for (size_t i = 1; i < workerResvs.size(); i++) {
+      // make sure index of worker to steal never exceed worker number limits
+      auto idx = (lingodb::scheduler::currentWorkerId() + i) % workerResvs.size();
+      auto* other = workerResvs[idx].get();
+      if (other->hasMoreWork()) {
+         while (other->buffering.is_finished() == false) {
+            lingodb::scheduler::yieldCurrentTask();
+         }
+         auto [otherChunkId, id] = other->fetchAndNext();
+         if (id != -1) {
+            // only current worker can modify its own stealWorkerId. no need to lock
+            state->stealWorkerId = idx;
+            state->resvId = id;
+            state->reservedChunkId = otherChunkId;
+            return true;
+         }
+      }
+   }
+
+   // No work found right now. Only mark the whole task as exhausted once all workers
+   // reported that they can never produce more work.
+   bool allFullyExhausted = true;
+   for (auto& s : workerResvs) {
+      if (!s->fullyExhausted.load(std::memory_order_acquire)) {
+         allFullyExhausted = false;
+         break;
+      }
+   }
+   if (allFullyExhausted) {
+      workExhausted.store(true);
+   }
+
+   return false;
 }
 void ScanParquetFileTask::unitRun(LingoDBTable::TableChunk& chunk) {
    auto workerId = lingodb::scheduler::currentWorkerId();
@@ -204,11 +207,12 @@ void ScanParquetFileTask::unitRun(LingoDBTable::TableChunk& chunk) {
    lingodb::runtime::BatchView& batchView = batchInfos[workerId];
    auto [selVec1, selVec2] = selVecs[workerId];
 
-   size_t begin = splitSize * (state->stealWorkerId != std::numeric_limits<size_t>::max() ? state->stolenResvId : state->resvId);
+   size_t begin = splitSize * state->resvId;
    size_t len = std::min(begin + splitSize, chunk.getNumRows()) - begin;
    batchView.offset = begin;
    batchView.selectionVector = BatchView::defaultSelectionVector.data();
    batchView.length = std::min(static_cast<size_t>(chunk.getNumRows() - begin), len);
+   //TODO trace
    for (size_t i = 0; i < colIds.size(); i++) {
       batchView.arrays[i] = chunk.getArrayView(colIds[i]);
    }
@@ -227,7 +231,7 @@ void ScanParquetFileTask::performWork() {
    if (state->stealWorkerId != std::numeric_limits<size_t>::max()) {
       //Perform stolen work
       auto& chunks = (*queryLifetimeChunks)[state->stealWorkerId];
-      auto& chunk = chunks[state->stolenResvChunkId];
+      auto& chunk = chunks[state->reservedChunkId];
       unitRun(chunk);
 
    } else {
