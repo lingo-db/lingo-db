@@ -253,7 +253,7 @@ class VarLen32FilterIn : public lingodb::runtime::Filter {
          std::string_view strView(reinterpret_cast<const char*>(data + offset0), nextOffset0 - offset0);
          //We will use linear search for small IN lists,
          //and for larger IN lists we will use an unordered_set for O(1) lookups
-         //Note: The values.size()<=10 if clause can be changed or removed after testing.
+         //Note: The values.size()<=10 can be changed or removed after testing.
          if(values.size() <= 10){
             for (const auto& value : values) {
                if (value == strView) {
@@ -380,7 +380,9 @@ std::pair<size_t, uint16_t*> lingodb::runtime::Restrictions::applyFilters(size_t
       currentLen = filter->filter(currentLen, first ? lingodb::runtime::BatchView::defaultSelectionVector.data() : currentSelVec, nextSelVec, arrayView, offset);
       std::swap(currentSelVec, nextSelVec);
       //early exit if no values are selected.
-      if(currentLen == 0 )return;
+       if (currentLen == 0) {
+         return {0, currentSelVec};
+      }
       assert(currentLen <= length);
       first = false;
    }
