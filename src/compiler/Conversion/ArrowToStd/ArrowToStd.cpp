@@ -293,7 +293,30 @@ class BuilderAppendIntervalDaytimeLowering : public OpConversionPattern<arrow::A
       if (!isValid) {
          isValid = rewriter.create<mlir::arith::ConstantIntOp>(loc, 1, 1);
       }
-      rt::ArrowColumnBuilder::addIntervalDaytime(rewriter, loc)({builderVal, isValid, adaptor.getNanos()});
+      auto nanos = adaptor.getNanos();
+      auto i64Type = rewriter.getI64Type();
+      auto i32Type = rewriter.getI32Type();
+      Value nanosPerDay = rewriter.create<arith::ConstantIntOp>(loc, 86400000000000ll, 64);
+      Value nanosPerMilli = rewriter.create<arith::ConstantIntOp>(loc, 1000000ll, 64);
+      Value daysI64 = rewriter.create<arith::DivSIOp>(loc, i64Type, nanos, nanosPerDay);
+      Value rem = rewriter.create<arith::RemSIOp>(loc, i64Type, nanos, nanosPerDay);
+      Value millisI64 = rewriter.create<arith::DivSIOp>(loc, i64Type, rem, nanosPerMilli);
+      Value daysI32 = rewriter.create<arith::TruncIOp>(loc, i32Type, daysI64);
+      Value millisI32 = rewriter.create<arith::TruncIOp>(loc, i32Type, millisI64);
+
+      auto tupleType = mlir::TupleType::get(rewriter.getContext(), {i32Type, i32Type});
+      auto funcParent = op->getParentOfType<func::FuncOp>();
+      mlir::Value stackSlot;
+      {
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(&funcParent.getBody().front());
+         stackSlot = rewriter.create<util::AllocaOp>(loc, util::RefType::get(tupleType), mlir::Value{});
+      }
+      Value daysPtr = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(i32Type), stackSlot, rewriter.getI32IntegerAttr(0));
+      Value millisPtr = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(i32Type), stackSlot, rewriter.getI32IntegerAttr(1));
+      rewriter.create<util::StoreOp>(loc, daysI32, daysPtr, mlir::Value{});
+      rewriter.create<util::StoreOp>(loc, millisI32, millisPtr, mlir::Value{});
+      rt::ArrowColumnBuilder::addFixedSized(rewriter, loc)({builderVal, isValid, stackSlot});
       rewriter.eraseOp(op);
       return success();
    }

@@ -28,7 +28,6 @@ class ArrowColumnBuilder {
    ArrowColumnBuilder* getChildBuilder();
    void addBool(bool isValid, bool value);
    void addFixedSized(bool isValid, uint8_t* value);
-   void addIntervalDaytime(bool isValid, int64_t nanos);
 
    void addList(bool isValid);
    void addBinary(bool isValid, runtime::VarLen32);
