@@ -13,7 +13,14 @@
 #include <arrow/dataset/file_parquet.h>
 
 #include <shared_mutex>
+#ifndef KEEP_IN_MEMEORY
+#define KEEP_IN_MEMEORY 0
+#endif
 
+// Backward-compatible alias.
+#ifndef KEEP_IN_MEMORY
+#define KEEP_IN_MEMORY KEEP_IN_MEMEORY
+#endif
 namespace lingodb::runtime {
 class ParquetBatchesWorkerResvState {
    public:
@@ -39,6 +46,8 @@ class ParquetBatchesWorkerResvState {
    // Set to true once this worker/state can never produce more work.
    // Used for global termination detection in the scan task.
    std::atomic<bool> fullyExhausted{false};
+   // Number of processed morsels for the currently active chunk.
+   std::atomic<long> completedMorsels{0};
 
    long unitAmount{0};
 
@@ -57,12 +66,12 @@ class ParquetBatchesWorkerResvState {
     * @param localReader reader of the current thread
     * @return pair of local chunk id and reservation id. reservation id is -1 if no more work could be found, otherwise it is the id of the reservation
     */
-   WorkInfo fetchAndNextOwn(size_t splitSize, std::vector<std::deque<LingoDBTable::TableChunk>>* queryLifetimeChunks, std::atomic<int>& rgIdstartIndex, int numberOfRowGroups, std::vector<int>& colIds, std::unique_ptr<parquet::arrow::FileReader>& localReader);
+   WorkInfo fetchAndNextOwn(size_t splitSize, std::vector<std::deque<std::shared_ptr<LingoDBTable::TableChunk>>>* queryLifetimeChunks, std::atomic<int>& rgIdstartIndex, int numberOfRowGroups, std::vector<int>& colIds, std::unique_ptr<parquet::arrow::FileReader>& localReader);
 
    std::pair<size_t, int> fetchAndNext();
 
    private:
-   void initNewRowGroup(int rowGroup, size_t splitSize, std::vector<std::deque<LingoDBTable::TableChunk>>* queryLifetimeChunks, std::atomic<int>& rgIdstartIndex, int numberOfRowGroups, std::vector<int>& colIds, std::unique_ptr<parquet::arrow::FileReader>& localReader);
+   void initNewRowGroup(int rowGroup, size_t splitSize, std::vector<std::deque<std::shared_ptr<LingoDBTable::TableChunk>>>* queryLifetimeChunks, std::atomic<int>& rgIdstartIndex, int numberOfRowGroups, std::vector<int>& colIds, std::unique_ptr<parquet::arrow::FileReader>& localReader);
    /**
     *
     * @param splitSize
@@ -74,7 +83,7 @@ class ParquetBatchesWorkerResvState {
     * @return
     * This method loads the next record batch. It should only be called when no buffering is ongoing. If the current row group is exhausted, it initializes and prefetches the next one.
     */
-   WorkInfo tryFetchNextRecordBatch(size_t splitSize, std::vector<std::deque<LingoDBTable::TableChunk>>* queryLifetimeChunks, std::atomic<int>& rgIdstartIndex, int numberOfRowGroups, std::vector<int>& colIds, std::unique_ptr<parquet::arrow::FileReader>& localReader);
+   WorkInfo tryFetchNextRecordBatch(size_t splitSize, std::vector<std::deque<std::shared_ptr<LingoDBTable::TableChunk>>>* queryLifetimeChunks, std::atomic<int>& rgIdstartIndex, int numberOfRowGroups, std::vector<int>& colIds, std::unique_ptr<parquet::arrow::FileReader>& localReader);
 };
 class ScanParquetFileTask : public scheduler::TaskWithImplicitContext {
    std::string filePath;
@@ -92,7 +101,7 @@ class ScanParquetFileTask : public scheduler::TaskWithImplicitContext {
    std::vector<BatchView> batchInfos;
    std::vector<std::vector<const ArrayView*>> arrayViewPtrs;
 
-   std::vector<std::deque<LingoDBTable::TableChunk>>* queryLifetimeChunks = nullptr;
+   std::vector<std::deque<std::shared_ptr<LingoDBTable::TableChunk>>>* queryLifetimeChunks = nullptr;
    std::vector<std::pair<uint16_t*, uint16_t*>> selVecs;
 
    std::vector<std::unique_ptr<ParquetBatchesWorkerResvState>> workerResvs;
