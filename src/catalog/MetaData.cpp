@@ -13,7 +13,7 @@ namespace lingodb::catalog {
 namespace {
 std::vector<uint64_t> hashArray(std::shared_ptr<arrow::Array> array) {
    std::vector<uint64_t> result(array->length(), 0);
-   lingodb::runtime::dbHashApplyColumn(result, *array, true);
+   lingodb::runtime::dbHashApplyColumn(result, *array);
    return result;
 }
 } //namespace
