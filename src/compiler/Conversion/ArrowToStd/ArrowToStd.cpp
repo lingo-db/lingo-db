@@ -102,6 +102,47 @@ static Value getBit(OpBuilder builder, Location loc, Value bits, Value pos) {
    Value res = builder.create<arith::CmpIOp>(loc, i1Type, mlir::arith::CmpIPredicate::eq, anded, const1Byte);
    return res;
 }
+
+class ArrayLoadIntervalDaytimeLowering : public OpConversionPattern<arrow::LoadIntervalDaytimeOp> {
+   public:
+   using OpConversionPattern<arrow::LoadIntervalDaytimeOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(arrow::LoadIntervalDaytimeOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op.getLoc();
+      auto idxType = rewriter.getIndexType();
+      auto i64Type = rewriter.getI64Type();
+      auto i32Type = rewriter.getI32Type();
+      mlir::Value valueBytes;
+      mlir::Value arrayOffset;
+      createAtArrayCreation(rewriter, adaptor.getArray(), [&](mlir::ConversionPatternRewriter& rewriter) {
+         arrayOffset = rewriter.create<util::LoadElementOp>(loc, idxType, adaptor.getArray(), 2);
+         auto bufferArray = rewriter.create<util::LoadElementOp>(loc, util::RefType::get(util::RefType::get(rewriter.getI8Type())), adaptor.getArray(), 5);
+         auto c1 = rewriter.create<arith::ConstantIndexOp>(loc, 1);
+         valueBytes = rewriter.create<util::LoadOp>(loc, bufferArray, c1);
+      });
+
+      Value i32Buffer = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(i32Type), valueBytes);
+      Value elementIndex = rewriter.create<arith::AddIOp>(loc, idxType, arrayOffset, adaptor.getOffset());
+      Value c2 = rewriter.create<arith::ConstantIndexOp>(loc, 2);
+      Value i32BaseIndex = rewriter.create<arith::MulIOp>(loc, idxType, elementIndex, c2);
+      Value dayMsBase = rewriter.create<util::ArrayElementPtrOp>(loc, util::RefType::get(i32Type), i32Buffer, i32BaseIndex);
+      Value daysI32 = rewriter.create<util::LoadOp>(loc, dayMsBase);
+      Value c1 = rewriter.create<arith::ConstantIndexOp>(loc, 1);
+      Value msPtr = rewriter.create<util::ArrayElementPtrOp>(loc, util::RefType::get(i32Type), dayMsBase, c1);
+      Value msI32 = rewriter.create<util::LoadOp>(loc, msPtr);
+
+      Value daysI64 = rewriter.create<arith::ExtSIOp>(loc, i64Type, daysI32);
+      Value msI64 = rewriter.create<arith::ExtSIOp>(loc, i64Type, msI32);
+
+      Value nanosPerDay = rewriter.create<arith::ConstantIntOp>(loc, 86400000000000ll, 64);
+      Value nanosPerMilli = rewriter.create<arith::ConstantIntOp>(loc, 1000000ll, 64);
+      Value dayNanos = rewriter.create<arith::MulIOp>(loc, i64Type, daysI64, nanosPerDay);
+      Value msNanos = rewriter.create<arith::MulIOp>(loc, i64Type, msI64, nanosPerMilli);
+      Value nanos = rewriter.create<arith::AddIOp>(loc, i64Type, dayNanos, msNanos);
+
+      rewriter.replaceOp(op, nanos);
+      return success();
+   }
+};
 class ArrayLoadBoolLowering : public OpConversionPattern<arrow::LoadBoolOp> {
    public:
    using OpConversionPattern<arrow::LoadBoolOp>::OpConversionPattern;
@@ -241,6 +282,45 @@ class BuilderAppendVariableSizeBinaryLowering : public OpConversionPattern<arrow
       return success();
    }
 };
+
+class BuilderAppendIntervalDaytimeLowering : public OpConversionPattern<arrow::AppendIntervalDaytimeOp> {
+   public:
+   using OpConversionPattern<arrow::AppendIntervalDaytimeOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(arrow::AppendIntervalDaytimeOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op.getLoc();
+      auto builderVal = adaptor.getBuilder();
+      auto isValid = adaptor.getValid();
+      if (!isValid) {
+         isValid = rewriter.create<mlir::arith::ConstantIntOp>(loc, 1, 1);
+      }
+      auto nanos = adaptor.getNanos();
+      auto i64Type = rewriter.getI64Type();
+      auto i32Type = rewriter.getI32Type();
+      Value nanosPerDay = rewriter.create<arith::ConstantIntOp>(loc, 86400000000000ll, 64);
+      Value nanosPerMilli = rewriter.create<arith::ConstantIntOp>(loc, 1000000ll, 64);
+      Value daysI64 = rewriter.create<arith::DivSIOp>(loc, i64Type, nanos, nanosPerDay);
+      Value rem = rewriter.create<arith::RemSIOp>(loc, i64Type, nanos, nanosPerDay);
+      Value millisI64 = rewriter.create<arith::DivSIOp>(loc, i64Type, rem, nanosPerMilli);
+      Value daysI32 = rewriter.create<arith::TruncIOp>(loc, i32Type, daysI64);
+      Value millisI32 = rewriter.create<arith::TruncIOp>(loc, i32Type, millisI64);
+
+      auto tupleType = mlir::TupleType::get(rewriter.getContext(), {i32Type, i32Type});
+      auto funcParent = op->getParentOfType<func::FuncOp>();
+      mlir::Value stackSlot;
+      {
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(&funcParent.getBody().front());
+         stackSlot = rewriter.create<util::AllocaOp>(loc, util::RefType::get(tupleType), mlir::Value{});
+      }
+      Value daysPtr = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(i32Type), stackSlot, rewriter.getI32IntegerAttr(0));
+      Value millisPtr = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(i32Type), stackSlot, rewriter.getI32IntegerAttr(1));
+      rewriter.create<util::StoreOp>(loc, daysI32, daysPtr, mlir::Value{});
+      rewriter.create<util::StoreOp>(loc, millisI32, millisPtr, mlir::Value{});
+      rt::ArrowColumnBuilder::addFixedSized(rewriter, loc)({builderVal, isValid, stackSlot});
+      rewriter.eraseOp(op);
+      return success();
+   }
+};
 } // end anonymous namespace
 template <class Op>
 class SimpleTypeConversionPattern : public ConversionPattern {
@@ -333,10 +413,12 @@ void ArrowToStdLoweringPass::runOnOperation() {
    patterns.insert<ArrayLoadFixedSizedLowering>(typeConverter, &getContext());
    patterns.insert<ArrayLoadVariableSizeBinaryLowering>(typeConverter, &getContext());
    patterns.insert<ArrayLoadBoolLowering>(typeConverter, &getContext());
+   patterns.insert<ArrayLoadIntervalDaytimeLowering>(typeConverter, &getContext());
    patterns.insert<BuilderFromPtrLowering>(typeConverter, &getContext());
    patterns.insert<BuilderAppendFixedSizedLowering>(typeConverter, &getContext());
    patterns.insert<BuilderAppendBoolLowering>(typeConverter, &getContext());
    patterns.insert<BuilderAppendVariableSizeBinaryLowering>(typeConverter, &getContext());
+   patterns.insert<BuilderAppendIntervalDaytimeLowering>(typeConverter, &getContext());
    if (failed(applyFullConversion(module, target, std::move(patterns))))
       signalPassFailure();
 }

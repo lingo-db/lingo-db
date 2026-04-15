@@ -1,5 +1,6 @@
 #include "lingodb/catalog/MetaData.h"
 
+#include "lingodb/runtime/Hash.h"
 #include "lingodb/utility/Serialization.h"
 
 #include <arrow/buffer.h>
@@ -9,12 +10,28 @@
 
 namespace lingodb::catalog {
 
+namespace {
+std::vector<uint64_t> hashArray(std::shared_ptr<arrow::Array> array) {
+   std::vector<uint64_t> result(array->length(), 0);
+   lingodb::runtime::dbHashApplyColumn(result, *array);
+   return result;
+}
+} //namespace
+
 ColumnStatistics ColumnStatistics::deserialize(utility::Deserializer& deserializer) {
-   auto numDistinctValues = deserializer.readProperty<std::optional<size_t>>(1);
-   return {numDistinctValues};
+   auto hll = deserializer.readProperty<std::optional<utility::HyperLogLog>>(1);
+   return {hll};
 }
 void ColumnStatistics::serialize(utility::Serializer& serializer) const {
-   serializer.writeProperty(1, numDistinctValues);
+   serializer.writeProperty(1, hll);
+}
+void ColumnStatistics::merge(std::shared_ptr<arrow::Array> newSegment) {
+   if (hll.has_value()) {
+      auto hashes = hashArray(newSegment);
+      for (auto hash : hashes) {
+         hll.value().add(hash);
+      }
+   }
 }
 
 void TableMetaDataProvider::serialize(utility::Serializer& serializer) const {

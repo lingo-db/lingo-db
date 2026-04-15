@@ -1285,6 +1285,12 @@ class CreateTableLowering : public SubOpConversionPattern<subop::GenericCreateOp
          return dateType.getUnit() == db::DateUnitAttr::day ? "date[32]" : "date[64]";
       } else if (auto timestampType = mlir::dyn_cast_or_null<db::TimestampType>(type)) {
          return "timestamp[" + std::to_string(static_cast<uint32_t>(timestampType.getUnit())) + "]";
+      } else if (auto intervalType = mlir::dyn_cast_or_null<db::IntervalType>(type)) {
+         if (intervalType.getUnit() == db::IntervalUnitAttr::months) {
+            return "interval_months";
+         } else {
+            return "interval_daytime";
+         }
       } else if (mlir::isa<db::StringType>(type)) {
          return "string";
       } else if (auto charType = mlir::dyn_cast_or_null<db::CharType>(type)) {

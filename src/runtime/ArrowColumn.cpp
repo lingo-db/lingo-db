@@ -5,6 +5,7 @@
 #include <arrow/array/builder_decimal.h>
 #include <arrow/array/builder_primitive.h>
 #include <arrow/builder.h>
+#include <arrow/type.h>
 #include <lingodb/runtime/ExecutionContext.h>
 
 using namespace lingodb::runtime;
@@ -159,6 +160,7 @@ void ArrowColumnBuilder::addFixedSized(bool isValid, uint8_t* value) {
       handleStatus(typedBuilder->Append(value));
    }
 }
+
 void ArrowColumnBuilder::addBinary(bool isValid, lingodb::runtime::VarLen32 string) {
    next();
    auto* typedBuilder = reinterpret_cast<arrow::BinaryBuilder*>(builder);

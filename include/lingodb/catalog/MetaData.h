@@ -4,6 +4,8 @@
 
 #ifndef LINGODB_CATALOG_METADATA_H
 #define LINGODB_CATALOG_METADATA_H
+#include "lingodb/utility/HyperLogLog.h"
+
 #include <arrow/type_fwd.h>
 
 #include <optional>
@@ -26,12 +28,18 @@ class Sample {
    }
 };
 class ColumnStatistics {
-   std::optional<size_t> numDistinctValues;
+   std::optional<utility::HyperLogLog> hll;
 
    public:
    ColumnStatistics() = default;
-   ColumnStatistics(std::optional<size_t> numDistinctValues) : numDistinctValues(numDistinctValues) {}
-   std::optional<size_t> getNumDistinctValues() { return numDistinctValues; }
+   ColumnStatistics(std::optional<utility::HyperLogLog> hll) : hll(hll) {}
+   std::optional<size_t> getNumDistinctValues() {
+      if (hll.has_value()) {
+         return hll.value().estimate();
+      }
+      return std::nullopt;
+   }
+   void merge(std::shared_ptr<arrow::Array> newSegment);
    void serialize(utility::Serializer& serializer) const;
    static ColumnStatistics deserialize(utility::Deserializer& deserializer);
 };

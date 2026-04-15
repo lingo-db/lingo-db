@@ -2,12 +2,12 @@
 
 #include "lingodb/catalog/Defs.h"
 #include "lingodb/catalog/TableCatalogEntry.h"
-#include "lingodb/execution/Execution.h"
-#include "lingodb/runtime/helpers.h"
+#include "lingodb/runtime/Hash.h"
 #include "lingodb/runtime/storage/LingoDBTable.h"
 
 #include <filesystem>
 #include <fstream>
+#include <vector>
 
 #include <arrow/api.h>
 #include <arrow/array/array_primitive.h>
@@ -47,43 +47,24 @@ void LingoDBHashIndex::rawBuild() {
 }
 
 void LingoDBHashIndex::rawInsert(size_t startRowId, std::shared_ptr<arrow::Table> t) {
-#ifndef MLIR_DISABLED
    if (t->num_rows() == 0) {
       throw std::runtime_error("empty table");
-   } else {
-      std::string query = "select row_number() over() -1 as rowid, hash(";
-      for (auto c : indexedColumns) {
-         if (!query.ends_with("(")) {
-            query += ",";
-         }
-         query += c;
-      }
-      query += ") as hash from tmp";
-      auto tmpSession = Session::createSession();
-      auto createTableDef = catalog::CreateTableDef{"tmp", table->getColumns(), {}};
-      tmpSession->getCatalog()->insertEntry(catalog::LingoDBTableCatalogEntry::createFromCreateTable(createTableDef));
-      tmpSession->getCatalog()->getTypedEntry<catalog::LingoDBTableCatalogEntry>("tmp").value()->getTableStorage().append(t);
-      auto queryExecutionConfig = execution::createQueryExecutionConfig(execution::ExecutionMode::SPEED, true);
-      queryExecutionConfig->parallel = false;
-      std::shared_ptr<arrow::Table> result;
-      queryExecutionConfig->resultProcessor = execution::createTableRetriever(result);
-
-      auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), *tmpSession);
-      executer->fromData(query);
-      scheduler::awaitChildTask(std::make_unique<execution::QueryExecutionTask>(std::move(executer)));
-      auto asBatch = result->CombineChunksToBatch().ValueOrDie();
-      auto hashColumn = std::static_pointer_cast<arrow::Int64Array>(asBatch->GetColumnByName("hash"));
-      auto rowIdColumn = std::static_pointer_cast<arrow::Int64Array>(asBatch->GetColumnByName("rowid"));
-      for (auto i = 0ll; i < asBatch->num_rows(); i++) {
-         Entry* entry = (Entry*) buffer.insert();
-         entry->rowId = rowIdColumn->Value(i) + startRowId;
-         entry->hash = hashColumn->Value(i);
-         entry->next = nullptr;
-      }
    }
-#else
-   assert(false && "LingoDBHashIndex::rawInsert not supported without MLIR");
-#endif
+   auto batch = t->CombineChunksToBatch().ValueOrDie();
+   const int64_t numRows = batch->num_rows();
+
+   std::vector<uint64_t> totalHash(static_cast<size_t>(numRows), 0);
+   for (const auto& colName : indexedColumns) {
+      auto arr = batch->GetColumnByName(std::string(colName));
+      assert(arr->length() == numRows);
+      dbHashApplyColumn(totalHash, *arr);
+   }
+   for (int64_t row = 0; row < numRows; ++row) {
+      Entry* entry = (Entry*) buffer.insert();
+      entry->rowId = static_cast<size_t>(row) + startRowId;
+      entry->hash = totalHash[static_cast<size_t>(row)];
+      entry->next = nullptr;
+   }
 }
 
 void LingoDBHashIndex::flush() {
