@@ -13,7 +13,7 @@ bool ParquetBatchesWorkerResvState::hasMoreWork() {
    std::shared_lock<std::shared_mutex> stateLock(this->mutex);
    return resvCursor < unitAmount;
 }
-void ParquetBatchesWorkerResvState::initNewRowGroup(int rowGroup, size_t splitSize, std::vector<std::deque<LingoDBTable::TableChunk>>* queryLifetimeChunks, std::atomic<int>& rgIdstartIndex, int numberOfRowGroups, std::vector<int>& colIds, std::unique_ptr<parquet::arrow::FileReader>& localReader) {
+void ParquetBatchesWorkerResvState::initNewRowGroup(int rowGroup, size_t splitSize, std::vector<std::deque<std::shared_ptr<ChunkWorkEntry>>>* queryLifetimeChunks, std::atomic<int>& rgIdstartIndex, int numberOfRowGroups, std::vector<int>& colIds, std::unique_ptr<parquet::arrow::FileReader>& localReader) {
    std::vector<int> newRgIds = {rowGroup};
    auto newlocalRowGroupReaderUncertain = localReader->GetRecordBatchReader(newRgIds);
    if (!newlocalRowGroupReaderUncertain.ok()) {
@@ -60,7 +60,7 @@ void ParquetBatchesWorkerResvState::initNewRowGroup(int rowGroup, size_t splitSi
       isBuffering = false;
    });
 }
-ParquetBatchesWorkerResvState::WorkInfo ParquetBatchesWorkerResvState::fetchAndNextOwn(size_t splitSize, std::vector<std::deque<LingoDBTable::TableChunk>>* queryLifetimeChunks, std::atomic<int>& rgIdstartIndex, int numberOfRowGroups, std::vector<int>& colIds, std::unique_ptr<parquet::arrow::FileReader>& localReader) {
+ParquetBatchesWorkerResvState::WorkInfo ParquetBatchesWorkerResvState::fetchAndNextOwn(size_t splitSize, std::vector<std::deque<std::shared_ptr<ChunkWorkEntry>>>* queryLifetimeChunks, std::atomic<int>& rgIdstartIndex, int numberOfRowGroups, std::vector<int>& colIds, std::unique_ptr<parquet::arrow::FileReader>& localReader) {
    std::unique_lock<std::shared_mutex> stateLock(this->mutex);
 
    auto workerId = lingodb::scheduler::currentWorkerId();
@@ -89,7 +89,7 @@ ParquetBatchesWorkerResvState::WorkInfo ParquetBatchesWorkerResvState::fetchAndN
    return tryFetchNextRecordBatch(splitSize, queryLifetimeChunks, rgIdstartIndex, numberOfRowGroups, colIds, localReader);
 }
 
-ParquetBatchesWorkerResvState::WorkInfo ParquetBatchesWorkerResvState::tryFetchNextRecordBatch(size_t splitSize, std::vector<std::deque<LingoDBTable::TableChunk>>* queryLifetimeChunks, std::atomic<int>& rgIdstartIndex, int numberOfRowGroups, std::vector<int>& colIds, std::unique_ptr<parquet::arrow::FileReader>& localReader) {
+ParquetBatchesWorkerResvState::WorkInfo ParquetBatchesWorkerResvState::tryFetchNextRecordBatch(size_t splitSize, std::vector<std::deque<std::shared_ptr<ChunkWorkEntry>>>* queryLifetimeChunks, std::atomic<int>& rgIdstartIndex, int numberOfRowGroups, std::vector<int>& colIds, std::unique_ptr<parquet::arrow::FileReader>& localReader) {
    std::shared_ptr<arrow::RecordBatch> batch;
    //If correctly buffered this call should not block
    auto status = rowGroupRecordBatchReader->ReadNext(&batch);
@@ -100,9 +100,12 @@ ParquetBatchesWorkerResvState::WorkInfo ParquetBatchesWorkerResvState::tryFetchN
       //new work found for current rowGroup
       auto& localChunks = (*queryLifetimeChunks)[workerId];
       //New Chunk
-      LingoDBTable::TableChunk& chunk = localChunks.emplace_back(batch, 0);
+      auto entry = std::make_shared<ChunkWorkEntry>();
+      entry->chunk = std::make_shared<LingoDBTable::TableChunk>(batch, 0);
+      entry->totalMorsels = (entry->chunk->getNumRows() + splitSize - 1) / splitSize;
+      localChunks.push_back(entry);
       ownChunkId = localChunks.size() - 1;
-      unitAmount = (chunk.getNumRows() + splitSize - 1) / splitSize;
+      unitAmount = entry->totalMorsels;
       resvCursor = 1;
       resvId = 0;
 
@@ -143,7 +146,7 @@ ScanParquetFileTask::ScanParquetFileTask(std::string filePath, std::vector<int> 
 }
 arrow::Status ScanParquetFileTask::init() {
    const size_t numWorkers = lingodb::scheduler::getNumWorkers();
-   queryLifetimeChunks = new std::vector<std::deque<LingoDBTable::TableChunk>>(numWorkers);
+   queryLifetimeChunks = new std::vector<std::deque<std::shared_ptr<ParquetBatchesWorkerResvState::ChunkWorkEntry>>>(numWorkers);
    //Keep in memory until query is finished
    //Joins for instance do not copy data and only refernces them and therefore the lifetime of the TableChunks has to exceed this table scan
    /* lingodb::runtime::getCurrentExecutionContext()->registerState({queryLifetimeChunks, [](void* ptr) {
@@ -269,26 +272,49 @@ void ScanParquetFileTask::unitRun(LingoDBTable::TableChunk& chunk) {
 void ScanParquetFileTask::performWork() {
    auto workerId = lingodb::scheduler::currentWorkerId();
    auto* state = workerResvs[workerId].get();
-   if (state->stealWorkerId != std::numeric_limits<size_t>::max()) {
-      //Perform stolen work
-      auto& chunks = (*queryLifetimeChunks)[state->stealWorkerId];
-      auto& chunk = chunks[state->reservedChunkId];
-      unitRun(chunk);
-
-   } else {
+   if (state->stealWorkerId == std::numeric_limits<size_t>::max()) {
       while (state->isBuffering == true) {
          lingodb::scheduler::yieldCurrentTask();
       }
-      auto& chunks = (*queryLifetimeChunks)[workerId];
-      auto& chunk = chunks[state->reservedChunkId];
-      unitRun(chunk);
    }
+
+   const size_t ownerWorkerId = state->stealWorkerId == std::numeric_limits<size_t>::max() ? workerId : state->stealWorkerId;
+   auto* ownerState = workerResvs[ownerWorkerId].get();
+   auto& chunks = (*queryLifetimeChunks)[ownerWorkerId];
+
+   std::shared_ptr<ParquetBatchesWorkerResvState::ChunkWorkEntry> entry;
+   {
+      std::shared_lock<std::shared_mutex> ownerLock(ownerState->mutex);
+      if (state->reservedChunkId >= chunks.size()) {
+         return;
+      }
+      entry = chunks[state->reservedChunkId];
+   }
+   if (!entry || !entry->chunk) {
+      return;
+   }
+
+   unitRun(*entry->chunk);
+
+#if !KEEP_IN_MEMEORY
+   long finishedMorsels = entry->completedMorsels.fetch_add(1, std::memory_order_acq_rel) + 1;
+   if (finishedMorsels >= entry->totalMorsels) {
+      std::unique_lock<std::shared_mutex> ownerLock(ownerState->mutex);
+      if (state->reservedChunkId < chunks.size() && chunks[state->reservedChunkId] == entry) {
+         chunks[state->reservedChunkId].reset();
+      }
+   }
+#endif
 }
 ScanParquetFileTask::~ScanParquetFileTask() {
    for (auto& [selVec1, selVec2] : selVecs) {
       delete[] selVec1;
       delete[] selVec2;
    }
+#if !KEEP_IN_MEMEORY
+   delete queryLifetimeChunks;
+#endif
+
 }
 
 } // namespace lingodb::runtime
