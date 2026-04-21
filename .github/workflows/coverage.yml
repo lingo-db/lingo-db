@@ -10,7 +10,7 @@ on:
 jobs:
   coverage:
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-dev:e3e4ce05ae1c45664a8e9d38d1f89d54103a7951
+    container: ghcr.io/lingo-db/lingodb-dev:00724db81da57873a65818cc8dfe7e3e2a1090b3
     steps:
       - name: Checkout
         uses: actions/checkout@v2
