@@ -43,7 +43,7 @@ RUN cd /apache-arrow-23.0.1/cpp && cmake -B build -DCMAKE_BUILD_TYPE=Release -DC
       -DARROW_BUILD_SHARED="OFF" \
     && cmake --build build --target install -j$(nproc) && cd .. && rm  -r /apache-arrow-23.0.1
 RUN wget https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.0-rc1/llvm-project-20.1.0-rc1.src.tar.xz && tar -xf llvm-project-20.1.0-rc1.src.tar.xz && mv /llvm-project-20.1.0-rc1.src /llvm-src
-RUN wget https://archives.boost.io/release/1.83.0/source/boost_1_83_0.tar.gz && tar -xf boost_1_83_0.tar.gz && cd boost_1_83_0 && ./bootstrap.sh --prefix=/usr && ./b2 install --with-context && cd .. && rm -rf boost_1_83_0
+RUN wget https://archives.boost.io/release/1.83.0/source/boost_1_83_0.tar.gz && tar -xf boost_1_83_0.tar.gz && cd boost_1_83_0 && ./bootstrap.sh --prefix=/usr && ./b2 install --with-context && cp -r boost/math /usr/include/boost/ && cd .. && rm -rf boost_1_83_0
 
 FROM devimg AS build
 WORKDIR /repo
