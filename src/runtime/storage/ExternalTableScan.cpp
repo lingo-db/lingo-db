@@ -7,7 +7,175 @@
 
 #include <parquet/arrow/reader.h>
 #include <parquet/file_reader.h>
+#include <parquet/metadata.h>
+#include <parquet/statistics.h>
+
+#include <arrow/util/decimal.h>
+
+#include <cstring>
+#include <optional>
 namespace lingodb::runtime {
+
+namespace {
+std::optional<int64_t> decimalFilterValueToInt64(const std::variant<std::string, int64_t, double>& filterValue, int32_t targetScale) {
+   __int128 decimalValue = 0;
+   if (std::holds_alternative<std::string>(filterValue)) {
+      int32_t parsedPrecision;
+      int32_t parsedScale;
+      arrow::Decimal128 parsed;
+      if (!arrow::Decimal128::FromString(std::get<std::string>(filterValue), &parsed, &parsedPrecision, &parsedScale).ok()) {
+         return std::nullopt;
+      }
+      auto rescaled = parsed.Rescale(parsedScale, targetScale);
+      if (!rescaled.ok()) {
+         return std::nullopt;
+      }
+      std::memcpy(&decimalValue, rescaled.ValueUnsafe().native_endian_bytes(), sizeof(decimalValue));
+   } else if (std::holds_alternative<int64_t>(filterValue)) {
+      decimalValue = static_cast<__int128>(std::get<int64_t>(filterValue));
+      int32_t scale = targetScale;
+      while (scale > 0) {
+         if (decimalValue > std::numeric_limits<int64_t>::max() / 10 || decimalValue < std::numeric_limits<int64_t>::min() / 10) {
+            return std::nullopt;
+         }
+         decimalValue *= 10;
+         scale--;
+      }
+   } else {
+      return std::nullopt;
+   }
+
+   if (decimalValue > std::numeric_limits<int64_t>::max() || decimalValue < std::numeric_limits<int64_t>::min()) {
+      return std::nullopt;
+   }
+   return static_cast<int64_t>(decimalValue);
+}
+} // namespace
+template <class T>
+bool MinMaxMetadataFilter<T>::apply(std::shared_ptr<parquet::Statistics> stats) const {
+   if (!stats || !stats->HasMinMax()) {
+      return true;
+   }
+   bool comparable = true;
+   T rowGroupMin{};
+   T rowGroupMax{};
+   if constexpr (std::is_integral_v<T>) {
+      switch (stats->physical_type()) {
+         case parquet::Type::INT32: {
+            auto intStats = std::dynamic_pointer_cast<parquet::Int32Statistics>(stats);
+            if (!intStats) {
+               comparable = false;
+               break;
+            }
+            rowGroupMin = static_cast<T>(intStats->min());
+            rowGroupMax = static_cast<T>(intStats->max());
+            break;
+         }
+         case parquet::Type::INT64: {
+            auto intStats = std::dynamic_pointer_cast<parquet::Int64Statistics>(stats);
+            if (!intStats) {
+               comparable = false;
+               break;
+            }
+            rowGroupMin = static_cast<T>(intStats->min());
+            rowGroupMax = static_cast<T>(intStats->max());
+            break;
+         }
+         default:
+            comparable = false;
+            break;
+      }
+   } else if constexpr (std::is_same_v<T, std::string>) {
+      if (stats->physical_type() != parquet::Type::BYTE_ARRAY) {
+         comparable = false;
+      } else {
+         auto strStats = std::dynamic_pointer_cast<parquet::ByteArrayStatistics>(stats);
+         if (!strStats) {
+            comparable = false;
+         } else {
+            const auto& minVal = strStats->min();
+            const auto& maxVal = strStats->max();
+            rowGroupMin = std::string(reinterpret_cast<const char*>(minVal.ptr), minVal.len);
+            rowGroupMax = std::string(reinterpret_cast<const char*>(maxVal.ptr), maxVal.len);
+         }
+      }
+   } else {
+      comparable = false;
+   }
+   if (!comparable) {
+      return true;
+   }
+   if (min.has_value() && (minInclusive ? (rowGroupMax < min) : (rowGroupMax <= min))) {
+      return false;
+   }
+   if (max.has_value() && (maxInclusive ? (rowGroupMin > max) : (rowGroupMin >= max))) {
+      return false;
+   }
+
+   return true;
+}
+bool NotNullFilter::apply(std::shared_ptr<parquet::Statistics> stats) const {
+   return stats->num_values() > 0;
+}
+bool NullFilter::apply(std::shared_ptr<parquet::Statistics> stats) const {
+   if (!stats || !stats->HasNullCount()) {
+      return true;
+   }
+   return stats->null_count() > 0;
+}
+
+bool ParquetBatchesWorkerResvState::rowGroupPassesMetadataFilters(int rowGroup, std::unique_ptr<parquet::arrow::FileReader>& localReader) const {
+   if (metadataFilters.empty()) {
+      return true;
+   }
+
+   parquet::ParquetFileReader* parquetReader = localReader->parquet_reader();
+   if (!parquetReader) {
+      return true;
+   }
+
+   std::shared_ptr<parquet::FileMetaData> fileMetadata = parquetReader->metadata();
+   if (!fileMetadata || rowGroup < 0 || rowGroup >= fileMetadata->num_row_groups()) {
+      return true;
+   }
+
+   std::unique_ptr<parquet::RowGroupMetaData> rowGroupMetadata = fileMetadata->RowGroup(rowGroup);
+   if (!rowGroupMetadata) {
+      return true;
+   }
+
+   for (const auto& [columnId, filter] : metadataFilters) {
+      if (columnId < 0 || columnId >= rowGroupMetadata->num_columns()) {
+         continue;
+      }
+
+      std::unique_ptr<parquet::ColumnChunkMetaData> columnMetadata = rowGroupMetadata->ColumnChunk(columnId);
+      if (!columnMetadata || !columnMetadata->is_stats_set()) {
+         continue;
+      }
+
+      std::shared_ptr<parquet::Statistics> stats = columnMetadata->statistics();
+      if (!filter || !filter->apply(stats)) {
+         std::cerr << "Filter\n";
+         return false;
+      }
+   }
+
+   return true;
+}
+
+int ParquetBatchesWorkerResvState::fetchNextMatchingRowGroup(std::atomic<int>& rgIdstartIndex, int numberOfRowGroups, std::unique_ptr<parquet::arrow::FileReader>& localReader) const {
+   while (true) {
+      int nextRgId = rgIdstartIndex.fetch_add(1);
+      if (nextRgId >= numberOfRowGroups) {
+         return -1;
+      }
+
+      if (rowGroupPassesMetadataFilters(nextRgId, localReader)) {
+         return nextRgId;
+      }
+   }
+}
 
 bool ParquetBatchesWorkerResvState::hasMoreWork() {
    std::shared_lock<std::shared_mutex> stateLock(this->mutex);
@@ -26,10 +194,7 @@ void ParquetBatchesWorkerResvState::initNewRowGroup(int rowGroup, size_t splitSi
    resvId = 0;
 
    if (prefetchedRgId == -1) {
-      int nextRgId = rgIdstartIndex.fetch_add(1);
-      if (nextRgId < numberOfRowGroups) {
-         prefetchedRgId = nextRgId;
-      }
+      prefetchedRgId = fetchNextMatchingRowGroup(rgIdstartIndex, numberOfRowGroups, localReader);
    }
 
    std::vector<int> bufferRgIds = {rowGroup};
@@ -49,6 +214,7 @@ void ParquetBatchesWorkerResvState::initNewRowGroup(int rowGroup, size_t splitSi
    buffering.AddCallback([this, queryLifetimeChunksPtr, rgIdstartIndexPtr, capturedNumberOfRowGroups, colIdsPtr, localReaderPtr, capturedSplitSize, capturedRowGroup](const arrow::Status& status) {
       if (!status.ok()) {
          std::cerr << "PreBuffer failed for row group " << capturedRowGroup << ": " << status.ToString() << std::endl;
+         isBuffering = false;
          return;
       }
 
@@ -75,9 +241,9 @@ ParquetBatchesWorkerResvState::WorkInfo ParquetBatchesWorkerResvState::fetchAndN
          newRgId = prefetchedRgId;
          prefetchedRgId = -1;
       } else {
-         newRgId = rgIdstartIndex.fetch_add(1);
+         newRgId = fetchNextMatchingRowGroup(rgIdstartIndex, numberOfRowGroups, localReader);
       }
-      if (newRgId >= numberOfRowGroups) {
+      if (newRgId < 0 || newRgId >= numberOfRowGroups) {
          //No (new) rowgroup to work on
          fullyExhausted.store(true, std::memory_order_release);
          return {.ownChunkId = ownChunkId, .currentMorsel = -1};
@@ -117,9 +283,9 @@ ParquetBatchesWorkerResvState::WorkInfo ParquetBatchesWorkerResvState::tryFetchN
          newRgId = prefetchedRgId;
          prefetchedRgId = -1;
       } else {
-         newRgId = rgIdstartIndex.fetch_add(1);
+         newRgId = fetchNextMatchingRowGroup(rgIdstartIndex, numberOfRowGroups, localReader);
       }
-      if (newRgId >= numberOfRowGroups) {
+      if (newRgId < 0 || newRgId >= numberOfRowGroups) {
          //No work found
          fullyExhausted.store(true, std::memory_order_release);
          return {.ownChunkId = ownChunkId, .currentMorsel = -1};
@@ -133,18 +299,18 @@ ParquetBatchesWorkerResvState::WorkInfo ParquetBatchesWorkerResvState::tryFetchN
 std::pair<size_t, int> ParquetBatchesWorkerResvState::fetchAndNext() {
    std::unique_lock<std::shared_mutex> resvLock(mutex);
    long cur = resvCursor++;
-   return {ownChunkId, cur >= unitAmount  ? -1 : cur};
+   return {ownChunkId, cur >= unitAmount ? -1 : cur};
 }
 
 //------------------------------------------------------
-ScanParquetFileTask::ScanParquetFileTask(std::string filePath, std::vector<int> colids, std::function<void(BatchView*)> cb, std::unique_ptr<Restrictions> restrictions) : filePath(std::move(filePath)), cb(cb), restrictions(std::move(restrictions)), colIds(std::move(colids)) {
-   auto status = init();
+ScanParquetFileTask::ScanParquetFileTask(std::string filePath, std::vector<int> colids, std::function<void(BatchView*)> cb, std::unique_ptr<Restrictions> restrictions, std::vector<FilterDescription> filterDescriptions) : filePath(std::move(filePath)), cb(cb), restrictions(std::move(restrictions)), colIds(std::move(colids)) {
+   auto status = init(filterDescriptions);
    if (!status.ok()) {
       std::cerr << "Error while loading ScanParquetFileTask: Should not happen " << std::endl;
       std::cerr << status.ToString() << std::endl;
    }
 }
-arrow::Status ScanParquetFileTask::init() {
+arrow::Status ScanParquetFileTask::init(std::vector<FilterDescription>& filterDescriptions) {
    const size_t numWorkers = lingodb::scheduler::getNumWorkers();
    queryLifetimeChunks = new std::vector<std::deque<std::shared_ptr<ParquetBatchesWorkerResvState::ChunkWorkEntry>>>(numWorkers);
    //Keep in memory until query is finished
@@ -154,6 +320,85 @@ arrow::Status ScanParquetFileTask::init() {
                                                                   }});*/
    std::shared_ptr<arrow::io::RandomAccessFile> input;
    ARROW_ASSIGN_OR_RAISE(input, arrow::io::ReadableFile::Open(filePath));
+   std::shared_ptr<arrow::Schema> parquetSchema;
+   {
+      std::unique_ptr<parquet::arrow::FileReader> schemaReader;
+      ARROW_ASSIGN_OR_RAISE(schemaReader, parquet::arrow::OpenFile(input, arrow::default_memory_pool()));
+      ARROW_RETURN_NOT_OK(schemaReader->GetSchema(&parquetSchema));
+   }
+
+   for (const auto& filter : filterDescriptions) {
+      int metadataColumnId = parquetSchema->GetFieldIndex(filter.columnName);
+      if (metadataColumnId < 0) {
+         continue;
+      }
+      if (filter.op == FilterOp::NOTNULL) {
+         metadataFilters.emplace_back(metadataColumnId, std::make_shared<NotNullFilter>());
+         continue;
+      }
+      auto field = parquetSchema->field(metadataColumnId);
+      if (!field) {
+         continue;
+      }
+      auto typeId = field->type()->id();
+      std::variant<std::string, int64_t, double> comparableValue;
+      bool hasComparableValue = false;
+      if (typeId == arrow::Type::INT32 || typeId == arrow::Type::INT64) {
+         if (!std::holds_alternative<int64_t>(filter.value)) {
+            continue;
+         }
+         comparableValue = std::get<int64_t>(filter.value);
+         hasComparableValue = true;
+      } else if (typeId == arrow::Type::DECIMAL32 || typeId == arrow::Type::DECIMAL64 || typeId == arrow::Type::DECIMAL128) {
+         auto decimalType = std::dynamic_pointer_cast<arrow::DecimalType>(field->type());
+         if (!decimalType) {
+            continue;
+         }
+         auto converted = decimalFilterValueToInt64(filter.value, decimalType->scale());
+         if (converted.has_value()) {
+            comparableValue = *converted;
+            hasComparableValue = true;
+         }
+      } else if (typeId == arrow::Type::STRING || typeId == arrow::Type::LARGE_STRING) {
+         if (!std::holds_alternative<std::string>(filter.value)) {
+            continue;
+         }
+         comparableValue = std::get<std::string>(filter.value);
+         hasComparableValue = true;
+      }
+      if (!hasComparableValue) {
+         continue;
+      }
+      std::visit(
+         [&](const auto& value) {
+            using ValueType = std::decay_t<decltype(value)>;
+            if constexpr (std::is_same_v<ValueType, double>) {
+               return;
+            } else {
+               switch (filter.op) {
+                  case FilterOp::EQ:
+                     metadataFilters.emplace_back(metadataColumnId, std::make_shared<MinMaxMetadataFilter<ValueType>>(value, value, true, true));
+                     break;
+                  case FilterOp::GT:
+                     metadataFilters.emplace_back(metadataColumnId, std::make_shared<MinMaxMetadataFilter<ValueType>>(value, std::nullopt, false));
+                     break;
+                  case FilterOp::GTE:
+                     metadataFilters.emplace_back(metadataColumnId, std::make_shared<MinMaxMetadataFilter<ValueType>>(value, std::nullopt, true));
+                     break;
+                  case FilterOp::LT:
+                     metadataFilters.emplace_back(metadataColumnId, std::make_shared<MinMaxMetadataFilter<ValueType>>(std::nullopt, value, false, false));
+                     break;
+                  case FilterOp::LTE:
+                     metadataFilters.emplace_back(metadataColumnId, std::make_shared<MinMaxMetadataFilter<ValueType>>(std::nullopt, value, false, true));
+                     break;
+                  default:
+                     break;
+               }
+            }
+         },
+         comparableValue);
+   }
+
    {
       auto metadataReader = parquet::ParquetFileReader::Open(input);
       numOfRowGroups = metadataReader->metadata()->num_row_groups();
@@ -171,10 +416,13 @@ arrow::Status ScanParquetFileTask::init() {
       selVecs[i] = std::make_pair(new uint16_t[splitSize], new uint16_t[splitSize]);
 
       auto parquetFileReader = parquet::ParquetFileReader::Open(input);
+
       std::unique_ptr<parquet::arrow::FileReader> reader;
+
       ARROW_ASSIGN_OR_RAISE(reader, parquet::arrow::OpenFile(input, arrow::default_memory_pool()));
       readers[i] = std::move(reader);
       workerResvs[i] = std::make_unique<ParquetBatchesWorkerResvState>();
+      workerResvs[i]->metadataFilters = metadataFilters;
       workerResvs[i]->workerId = i;
    }
 
@@ -314,7 +562,6 @@ ScanParquetFileTask::~ScanParquetFileTask() {
 #if !KEEP_IN_MEMEORY
    delete queryLifetimeChunks;
 #endif
-
 }
 
 } // namespace lingodb::runtime
