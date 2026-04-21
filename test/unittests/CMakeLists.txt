@@ -7,6 +7,7 @@ add_executable(tester
         catalog/TestTypes.cpp
         catalog/TestMetaData.cpp
         catalog/TestCatalogEntries.cpp
+        compiler/TestBetaEstimator.cpp
         runtime/TestUTF8.cpp
         runtime/StringRuntime.cpp
         runtime/DateRuntime.cpp

@@ -36,6 +36,7 @@ message("Using Python3: ${Python3_EXECUTABLE}")
 
 find_package(Arrow 23 REQUIRED)
 find_package(ArrowCompute 23 REQUIRED)
+find_package(Boost REQUIRED)
 option(ENABLE_GPU_BACKEND "enable GPU backend" OFF)
 option(ENABLE_BASELINE_BACKEND "enable tpde baseline backend" OFF)
 option(ENABLE_TESTS "enable tests" ON)

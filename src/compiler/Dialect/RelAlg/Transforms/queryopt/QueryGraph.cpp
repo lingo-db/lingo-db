@@ -1,5 +1,6 @@
 #include "lingodb/compiler/Dialect/RelAlg/Transforms/queryopt/QueryGraph.h"
 
+#include "lingodb/compiler/Dialect/RelAlg/Transforms/queryopt/BetaEstimator.h"
 #include "lingodb/compiler/mlir-support/eval.h"
 #include "lingodb/compiler/mlir-support/parsing.h"
 
@@ -263,38 +264,80 @@ void appendRestrictions(relalg::BaseTableOp baseTableOp, std::vector<std::unique
 }
 std::optional<double> estimateUsingSample(QueryGraph::Node& n) {
    if (!n.op) return {};
-   // Check if we have filters (either in datasource property or additional predicates)
-   bool hasFilters = false;
-   if (auto baseTableOp = mlir::dyn_cast_or_null<BaseTableOp>(n.op.getOperation())) {
-      hasFilters = !baseTableOp.getRestriction().filterDescription.empty();
-   }
+   auto baseTableOp = mlir::dyn_cast_or_null<BaseTableOp>(n.op.getOperation());
+   if (!baseTableOp) return {};
+   bool hasFilters = !baseTableOp.getRestriction().filterDescription.empty();
    if (n.additionalPredicates.empty() && !hasFilters) return {};
-   if (auto baseTableOp = mlir::dyn_cast_or_null<BaseTableOp>(n.op.getOperation())) {
-      llvm::DenseMap<const tuples::Column*, std::string> mapping;
-      std::unordered_map<std::string, mlir::Type> typeMapping;
-      for (auto c : baseTableOp.getColumns()) {
-         mapping[&mlir::cast<tuples::ColumnDefAttr>(c.getValue()).getColumn()] = c.getName().str();
-      }
-      auto meta = mlir::dyn_cast_or_null<TableMetaDataAttr>(baseTableOp->getAttr("meta"));
-      if (!meta) return {};
-      auto sample = meta.getMeta()->getSample();
-      if (!sample) return {};
-      std::vector<std::unique_ptr<lingodb::compiler::support::eval::expr>> expressions;
-      appendRestrictions(baseTableOp, expressions);
-      for (auto pred : n.additionalPredicates) {
-         if (auto selOp = mlir::dyn_cast_or_null<SelectionOp>(pred.getOperation())) {
-            auto v = mlir::cast<tuples::ReturnOp>(selOp.getPredicateBlock().getTerminator()).getResults()[0];
-            expressions.push_back(buildEvalExpr(v, mapping)); //todo: ignore failing ones?
-         }
-      }
-      auto optionalCount = lingodb::compiler::support::eval::countResults(sample.getSampleData(), lingodb::compiler::support::eval::createAnd(expressions));
-      if (!optionalCount.has_value()) return {};
-      auto count = optionalCount.value();
-      if (count == 0) count = 1;
-      return static_cast<double>(count) / static_cast<double>(sample.getSampleData()->num_rows());
+
+   auto meta = mlir::dyn_cast_or_null<TableMetaDataAttr>(baseTableOp->getAttr("meta"));
+   if (!meta) return {};
+   auto sample = meta.getMeta()->getSample();
+   if (!sample) return {};
+   auto batch = sample.getSampleData();
+   if (!batch || batch->num_rows() == 0) return {};
+   size_t m = batch->num_rows();
+
+   llvm::DenseMap<const tuples::Column*, std::string> mapping;
+   for (auto c : baseTableOp.getColumns()) {
+      mapping[&mlir::cast<tuples::ColumnDefAttr>(c.getValue()).getColumn()] = c.getName().str();
    }
 
-   return {};
+   // Individual predicate builders. Each thunk reconstructs the expression tree
+   // fresh because lingodb::compiler::support::eval::expr is move-only and gets
+   // consumed by countResults.
+   using Thunk = std::function<std::unique_ptr<lingodb::compiler::support::eval::expr>()>;
+   std::vector<Thunk> thunks;
+   if (hasFilters) {
+      thunks.push_back([baseTableOp]() -> std::unique_ptr<lingodb::compiler::support::eval::expr> {
+         std::vector<std::unique_ptr<lingodb::compiler::support::eval::expr>> exprs;
+         appendRestrictions(baseTableOp, exprs);
+         if (exprs.empty()) return nullptr;
+         if (exprs.size() == 1) return std::move(exprs[0]);
+         return lingodb::compiler::support::eval::createAnd(exprs);
+      });
+   }
+   for (auto pred : n.additionalPredicates) {
+      auto selOp = mlir::dyn_cast_or_null<SelectionOp>(pred.getOperation());
+      if (!selOp) continue;
+      auto v = mlir::cast<tuples::ReturnOp>(selOp.getPredicateBlock().getTerminator()).getResults()[0];
+      thunks.push_back([v, &mapping]() {
+         return buildEvalExpr(v, mapping);
+      });
+   }
+   if (thunks.empty()) return {};
+
+   auto oracle = [&](llvm::ArrayRef<size_t> positive, llvm::ArrayRef<size_t> negatedGroup) -> std::optional<size_t> {
+      namespace eval = lingodb::compiler::support::eval;
+      std::vector<std::unique_ptr<eval::expr>> conjuncts;
+      for (size_t idx : positive) {
+         auto e = thunks[idx]();
+         if (!e) return std::nullopt;
+         conjuncts.push_back(std::move(e));
+      }
+      if (!negatedGroup.empty()) {
+         std::vector<std::unique_ptr<eval::expr>> negGroup;
+         for (size_t idx : negatedGroup) {
+            auto e = thunks[idx]();
+            if (!e) return std::nullopt;
+            negGroup.push_back(std::move(e));
+         }
+         std::unique_ptr<eval::expr> inner = (negGroup.size() == 1)
+            ? std::move(negGroup[0])
+            : eval::createAnd(negGroup);
+         if (!inner) return std::nullopt;
+         auto negated = eval::createNot(std::move(inner));
+         if (!negated) return std::nullopt;
+         conjuncts.push_back(std::move(negated));
+      }
+      if (conjuncts.empty()) return m;
+      std::unique_ptr<eval::expr> finalExpr = (conjuncts.size() == 1)
+         ? std::move(conjuncts[0])
+         : eval::createAnd(conjuncts);
+      if (!finalExpr) return std::nullopt;
+      return eval::countResults(batch, std::move(finalExpr));
+   };
+
+   return betaestimator::estimateSelectivity(thunks.size(), m, oracle);
 }
 double getRows(QueryGraph::Node& n) {
    if (auto baseTableOp = mlir::dyn_cast_or_null<BaseTableOp>(n.op.getOperation())) {
