@@ -36,7 +36,7 @@ cmake  --build build --target install  -- --quiet -j$(nproc) && cd .. && rm -rf 
 
 FROM baseimg AS devimg
 COPY --from=buildllvm /built-llvm /built-llvm
-RUN wget https://dlcdn.apache.org/arrow/arrow-23.0.1/apache-arrow-23.0.1.tar.gz && tar -xf apache-arrow-23.0.1.tar.gz && rm apache-arrow-23.0.1.tar.gz
+RUN wget https://archive.apache.org/dist/arrow/arrow-23.0.1/apache-arrow-23.0.1.tar.gz && tar -xf apache-arrow-23.0.1.tar.gz && rm apache-arrow-23.0.1.tar.gz
 RUN mkdir /built-arrow
 RUN cd /apache-arrow-23.0.1/cpp && cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/built-arrow -DARROW_DEPENDENCY_SOURCE=AUTO -DARROW_BUILD_STATIC=ON -DARROW_CSV=ON -DARROW_COMPUTE=ON  \
       -DARROW_ENABLE_TIMING_TESTS="OFF" \

@@ -30,7 +30,7 @@ if [ ! -d "$ARROW_INSTALL_DIR" ] || [ ! -f "$ARROW_INSTALL_DIR/lib/cmake/Arrow/A
   echo "Arrow not found or incorrect version. Building Arrow..."
   mkdir -p $ARROW_BUILD_DIR
   cd $ARROW_BUILD_DIR
-  wget -nc https://dlcdn.apache.org/arrow/arrow-23.0.1/apache-arrow-23.0.1.tar.gz
+  wget -nc https://archive.apache.org/dist/arrow/arrow-23.0.1/apache-arrow-23.0.1.tar.gz
   tar -xf apache-arrow-23.0.1.tar.gz
   rm apache-arrow-23.0.1.tar.gz
   cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$ARROW_INSTALL_DIR -DARROW_DEPENDENCY_SOURCE=BUNDLED -DARROW_BUILD_STATIC=ON -DARROW_CSV=ON -DARROW_COMPUTE=ON -DCMAKE_PREFIX_PATH=/opt/homebrew/ -DCMAKE_CXX_COMPILER=/opt/homebrew/opt/llvm@20/bin/clang++ -DCMAKE_C_COMPILER=/opt/homebrew/opt/llvm@20/bin/clang apache-arrow-23.0.1/cpp
