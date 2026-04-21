@@ -4,17 +4,20 @@
 #include <atomic>
 #include <cstdint>
 #include <limits>
+#include <memory>
+#include <optional>
+#include <utility>
 
 #include "lingodb/runtime/ArrowView.h"
 #include "lingodb/runtime/storage/LingoDBTable.h"
 #include "lingodb/runtime/storage/Restrictions.h"
 #include "lingodb/scheduler/Tasks.h"
 
-#include <arrow/dataset/file_parquet.h>
-
 #include <shared_mutex>
+#include <arrow/dataset/file_parquet.h>
+#include <parquet/statistics.h>
 #ifndef KEEP_IN_MEMEORY
-#define KEEP_IN_MEMEORY 0
+#define KEEP_IN_MEMEORY 1
 #endif
 
 // Backward-compatible alias.
@@ -22,6 +25,43 @@
 #define KEEP_IN_MEMORY KEEP_IN_MEMEORY
 #endif
 namespace lingodb::runtime {
+struct MetadataFilter {
+   virtual ~MetadataFilter() = default;
+   virtual bool apply(std::shared_ptr<parquet::Statistics> stats) const = 0;
+};
+template <class T>
+struct MinMaxMetadataFilter : public MetadataFilter {
+   public:
+   MinMaxMetadataFilter(std::optional<T> min, std::optional<T> max, bool minInclusive = false, bool maxInclusive = false) : min(std::move(min)), max(std::move(max)), minInclusive(minInclusive), maxInclusive(maxInclusive) {
+   }
+   std::optional<T> min;
+   std::optional<T> max;
+   bool minInclusive = false;
+   bool maxInclusive = false;
+   bool apply(std::shared_ptr<parquet::Statistics> stats) const override;
+};
+
+struct NotNullFilter : public MetadataFilter {
+   public:
+   NotNullFilter() {
+   }
+   /**
+    *
+    * @param stats
+    * @return true if there are no null values inside - false if there are only null values
+    */
+   bool apply(std::shared_ptr<parquet::Statistics> stats) const override;
+};
+struct NullFilter : public MetadataFilter {
+   public:
+   NullFilter() {
+   }
+   /**
+    * @param stats
+    * @return true if there are null values inside - false if there are no null values
+    */
+   bool apply(std::shared_ptr<parquet::Statistics> stats) const override;
+};
 class ParquetBatchesWorkerResvState {
    public:
    struct ChunkWorkEntry {
@@ -38,6 +78,7 @@ class ParquetBatchesWorkerResvState {
    };
    size_t workerId;
    size_t rgId{0};
+   std::vector<std::pair<int, std::shared_ptr<MetadataFilter>>> metadataFilters;
    // Chunk id currently owned by this worker/state. Other workers may read this when stealing.
    size_t ownChunkId{0};
    // Chunk id reserved for the current morsel on this worker (may refer to own or stolen chunk).
@@ -75,6 +116,8 @@ class ParquetBatchesWorkerResvState {
    std::pair<size_t, int> fetchAndNext();
 
    private:
+   bool rowGroupPassesMetadataFilters(int rowGroup, std::unique_ptr<parquet::arrow::FileReader>& localReader) const;
+   int fetchNextMatchingRowGroup(std::atomic<int>& rgIdstartIndex, int numberOfRowGroups, std::unique_ptr<parquet::arrow::FileReader>& localReader) const;
    void initNewRowGroup(int rowGroup, size_t splitSize, std::vector<std::deque<std::shared_ptr<ChunkWorkEntry>>>* queryLifetimeChunks, std::atomic<int>& rgIdstartIndex, int numberOfRowGroups, std::vector<int>& colIds, std::unique_ptr<parquet::arrow::FileReader>& localReader);
    /**
     *
@@ -93,6 +136,11 @@ class ScanParquetFileTask : public scheduler::TaskWithImplicitContext {
    std::string filePath;
    std::function<void(BatchView*)> cb;
    std::unique_ptr<Restrictions> restrictions;
+   /**
+    * .first columnId
+    * .second filter definition
+    */
+   std::vector<std::pair<int, std::shared_ptr<MetadataFilter>>> metadataFilters;
    size_t numOfRowGroups;
 
    std::vector<std::unique_ptr<parquet::arrow::FileReader>> readers;
@@ -112,8 +160,8 @@ class ScanParquetFileTask : public scheduler::TaskWithImplicitContext {
    size_t splitSize{20000};
 
    public:
-   ScanParquetFileTask(std::string filePath, std::vector<int> colids, std::function<void(BatchView*)> cb, std::unique_ptr<Restrictions> restrictions);
-   arrow::Status init();
+   ScanParquetFileTask(std::string filePath, std::vector<int> colids, std::function<void(BatchView*)> cb, std::unique_ptr<Restrictions> restrictions, std::vector<FilterDescription> filterDescriptions);
+   arrow::Status init(std::vector<FilterDescription>& filterDescriptions);
 
    void unitRun(LingoDBTable::TableChunk& chunk);
 

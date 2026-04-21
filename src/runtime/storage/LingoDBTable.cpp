@@ -565,7 +565,7 @@ std::unique_ptr<scheduler::Task> LingoDBTable::createScanTask(const ScanConfig& 
          parquetFileName += ".parquet";
       }
       auto parquetPath = dbDir + "/" + parquetFileName;
-      auto scanParquetFileTask = std::make_unique<ScanParquetFileTask>(parquetPath, colIds, scanConfig.cb, std::move(restrictions));
+      auto scanParquetFileTask = std::make_unique<ScanParquetFileTask>(parquetPath, colIds, scanConfig.cb, std::move(restrictions), scanConfig.filters);
       return scanParquetFileTask;
    }
 }
