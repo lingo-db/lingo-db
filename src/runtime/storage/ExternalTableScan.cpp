@@ -325,11 +325,14 @@ ScanParquetFileTask::ScanParquetFileTask(std::string filePath, std::vector<int> 
 arrow::Status ScanParquetFileTask::init(std::vector<FilterDescription>& filterDescriptions) {
    const size_t numWorkers = lingodb::scheduler::getNumWorkers();
    queryLifetimeChunks = new std::vector<std::deque<std::shared_ptr<ParquetBatchesWorkerResvState::ChunkWorkEntry>>>(numWorkers);
+#if KEEP_IN_MEMEORY
    //Keep in memory until query is finished
-   //Joins for instance do not copy data and only refernces them and therefore the lifetime of the TableChunks has to exceed this table scan
-   /* lingodb::runtime::getCurrentExecutionContext()->registerState({queryLifetimeChunks, [](void* ptr) {
-                                                                     delete reinterpret_cast<std::vector<std::deque<LingoDBTable::TableChunk>>*>(ptr);
-                                                                  }});*/
+   //Joins for instance do not copy data and only references them, and therefore the lifetime of the TableChunks has to exceed this table scan
+   getCurrentExecutionContext()->registerState({queryLifetimeChunks, [](void* ptr) {
+                                                   delete reinterpret_cast<std::vector<std::deque<std::shared_ptr<ParquetBatchesWorkerResvState::ChunkWorkEntry>>>*>(ptr);
+                                                }});
+#endif
+
    std::shared_ptr<arrow::io::RandomAccessFile> input;
    ARROW_ASSIGN_OR_RAISE(input, arrow::io::ReadableFile::Open(filePath));
    std::shared_ptr<arrow::Schema> parquetSchema;
