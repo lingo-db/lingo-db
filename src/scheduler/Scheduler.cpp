@@ -502,6 +502,12 @@ class Worker {
       }
    }
 
+   void yieldIfRunning() {
+      if (currentFiber) {
+         currentFiber->yield();
+      }
+   }
+
    void awaitChildTask(std::unique_ptr<Task> task) {
       auto taskWrapper = std::make_shared<TaskWrapper>();
       taskWrapper->task = std::move(task);
@@ -785,6 +791,11 @@ size_t currentWorkerId() {
 }
 SystemContext& getSystemContext() {
    return scheduler->getSystemContext();
+}
+void yieldCurrentTask() {
+   if (currentWorker) {
+      currentWorker->yieldIfRunning();
+   }
 }
 SystemContext::~SystemContext() {
 #ifndef MLIR_DISABLED
