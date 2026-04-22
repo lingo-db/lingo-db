@@ -2,10 +2,10 @@
 #include "lingodb/runtime/ArrowView.h"
 #include "lingodb/utility/Tracer.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstring>
 #include <regex>
-#include <algorithm>
 #include <unordered_set>
 
 #include <arrow/table.h>
@@ -197,7 +197,7 @@ class SimpleTypeInFilter : public lingodb::runtime::Filter {
    public:
    SimpleTypeInFilter(std::vector<T> values) : values(values) {
       ////We will sort the IN values to preforme binary search.
-      //The reason why we sorted values here, to avoid the overhead of sorting for every batch in filter function, 
+      //The reason why we sorted values here, to avoid the overhead of sorting for every batch in filter function,
       //as the filter function will be called for every batch.
       std::sort(this->values.begin(), this->values.end());
    }
@@ -206,7 +206,7 @@ class SimpleTypeInFilter : public lingodb::runtime::Filter {
       auto* writer = nextSelVec;
       //For small IN lists we will just do linear search,
       //as the binary search overhead is higher than the saved comparisons
-      if (values.size() <= 10) { 
+      if (values.size() <= 10) {
          for (size_t i = 0; i < len; i++) {
             size_t index0 = currSelVec[i];
             for (auto value : values) {
@@ -217,16 +217,15 @@ class SimpleTypeInFilter : public lingodb::runtime::Filter {
                }
             }
          }
-      }
-      else {
-            for (size_t i = 0; i < len; i++) {
-               size_t index0 = currSelVec[i];
-               bool found=std::binary_search(values.begin(), values.end(), data[index0]);
-               if(found){
-                  *writer = index0;
-                  writer++;
-               }
+      } else {
+         for (size_t i = 0; i < len; i++) {
+            size_t index0 = currSelVec[i];
+            bool found = std::binary_search(values.begin(), values.end(), data[index0]);
+            if (found) {
+               *writer = index0;
+               writer++;
             }
+         }
       }
       return writer - nextSelVec;
    }
@@ -254,7 +253,7 @@ class VarLen32FilterIn : public lingodb::runtime::Filter {
          //We will use linear search for small IN lists,
          //and for larger IN lists we will use an unordered_set for O(1) lookups
          //Note: The values.size()<=10 can be changed or removed after testing.
-         if(values.size() <= 10){
+         if (values.size() <= 10) {
             for (const auto& value : values) {
                if (value == strView) {
                   *writer = index0;
@@ -262,9 +261,8 @@ class VarLen32FilterIn : public lingodb::runtime::Filter {
                   break;
                }
             }
-         }
-         else{
-            if(valuesSet.find(strView) != valuesSet.end()){
+         } else {
+            if (valuesSet.find(strView) != valuesSet.end()) {
                *writer = index0;
                writer++;
             }
@@ -380,7 +378,7 @@ std::pair<size_t, uint16_t*> lingodb::runtime::Restrictions::applyFilters(size_t
       currentLen = filter->filter(currentLen, first ? lingodb::runtime::BatchView::defaultSelectionVector.data() : currentSelVec, nextSelVec, arrayView, offset);
       std::swap(currentSelVec, nextSelVec);
       //early exit if no values are selected.
-       if (currentLen == 0) {
+      if (currentLen == 0) {
          return {0, currentSelVec};
       }
       assert(currentLen <= length);
