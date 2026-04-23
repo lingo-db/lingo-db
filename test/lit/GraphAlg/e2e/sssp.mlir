@@ -1,4 +1,4 @@
-// RUN: mlir-db-opt %s  --graphalg-set-dimensions='func=SSSP args=10x10,10x1' --lower-graphalg-to-graphalg-core --lower-graphalg-core-to-relalg > %t.mlir
+// RUN: mlir-db-opt %s --lower-graphalg-to-graphalg-core --lower-graphalg-core-to-relalg > %t.mlir
 // RUN: run-mlir %t.mlir | FileCheck %s
 
 #dim = #graphalg.dim<distinct[0]<>>
