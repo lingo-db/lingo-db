@@ -5,6 +5,7 @@
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
 #include "lingodb/compiler/helper.h"
 
+#include "mlir/IR/AttrTypeSubElements.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
@@ -25,12 +26,31 @@ class PushRenamingUp : public mlir::RewritePattern {
       auto* user = *renamingOp->getUsers().begin();
       if (auto columnFoldable = mlir::dyn_cast_or_null<subop::ColumnFoldable>(user)) {
          subop::ColumnMapping columnFoldInfo;
+         llvm::DenseMap<const tuples::Column*, const tuples::Column*> foldMap;
          for (auto c : renamingOp.getColumns()) {
             auto* newColumn = &mlir::cast<tuples::ColumnDefAttr>(c).getColumn();
             auto* prevColumn = &mlir::cast<tuples::ColumnRefAttr>(mlir::cast<mlir::ArrayAttr>(mlir::cast<tuples::ColumnDefAttr>(c).getFromExisting())[0]).getColumn();
             columnFoldInfo.mapRaw(newColumn, prevColumn);
+            foldMap[newColumn] = prevColumn;
          }
+
          if (columnFoldable.foldColumns(columnFoldInfo).succeeded()) {
+            // SubElementInterface-based traversal ensures resilient attribute rewriting
+            // across opaque dialect boundaries without requiring manual unpacking implementations.
+            mlir::AttrTypeReplacer replacer;
+            auto& colManager = rewriter.getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+            replacer.addReplacement([&](tuples::ColumnRefAttr refAttr) -> mlir::Attribute {
+               auto* col = &refAttr.getColumn();
+               if (foldMap.count(col)) {
+                  return colManager.createRef(foldMap[col]);
+               }
+               return refAttr;
+            });
+
+            rewriter.modifyOpInPlace(user, [&]() {
+               replacer.replaceElementsIn(user);
+            });
+
             rewriter.replaceOp(op, renamingOp.getStream());
             if (user->getNumResults() == 1) {
                rewriter.setInsertionPointAfter(columnFoldable);

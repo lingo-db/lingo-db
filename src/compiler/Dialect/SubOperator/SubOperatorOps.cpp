@@ -774,20 +774,29 @@ ParseResult subop::LoopOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationS
    return success();
 }
 void subop::LoopOp::print(::mlir::OpAsmPrinter& p) {
+   p << " ";
    if (!getArgs().empty()) {
+      // ColonTypeList does NOT require parentheses in MLIR
       p << getArgs() << " : " << getArgs().getTypes();
    }
-   p << " (";
+ p << " (";
    for (size_t i = 0; i < getRegion().getNumArguments(); i++) {
       if (i != 0) {
-         p << " ,";
+         p << ", ";
       }
       p << getRegion().getArguments()[i];
    }
-   p << ")";
+   p << ") ";
+
    if (!getResultTypes().empty()) {
-      p << "-> " << getResultTypes();
+      p << "-> ";
+      // ArrowTypeList STRICTLY REQUIRES parentheses for multiple types
+      if (getResultTypes().size() > 1) p << "(";
+      p << getResultTypes();
+      if (getResultTypes().size() > 1) p << ")";
+      p << " ";
    }
+
    p.printRegion(getRegion(), false, true);
    p.printOptionalAttrDict(getOperation()->getAttrs());
 }

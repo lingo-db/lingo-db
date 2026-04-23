@@ -1,5 +1,6 @@
 
 #include "lingodb/compiler/Dialect/DB/IR/DBOps.h"
+#include "lingodb/compiler/Dialect/SubOperator/SubOperatorDialect.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/Passes.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
@@ -81,7 +82,7 @@ class AvoidUnnecessaryMaterialization : public mlir::RewritePattern {
                   auto currentMember = curr.first;
                   auto otherColumnDef = colManager.createDef(&materializeOp.getMapping().getColumnRef(currentMember).getColumn());
                   auto otherMember = scanOp2.getMapping().getMember(otherColumnDef);
-                  newMapping.push_back({otherMember, otherColumnDef});
+                  newMapping.push_back({otherMember, curr.second});
                }
                rewriter.modifyOpInPlace(op, [&] {
                   scanOp.setOperand(scanOp2.getState());
@@ -353,6 +354,55 @@ class ReuseHashtable : public mlir::RewritePattern {
       return mlir::failure();
    }
 };
+
+class BufferUnion : public mlir::RewritePattern {
+   public:
+   BufferUnion(mlir::MLIRContext* context)
+      : RewritePattern(subop::UnionOp::getOperationName(), 1, context) {}
+
+   mlir::LogicalResult matchAndRewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
+      auto unionOp = mlir::cast<subop::UnionOp>(op);
+      auto loc = unionOp.getLoc();
+      auto& memberManager = getContext()->getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager();
+      auto& colManager = getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+
+      auto* firstOperand = unionOp.getOperands()[0].getDefiningOp();
+      if (!firstOperand) return mlir::failure();
+
+      auto mapOp = mlir::dyn_cast_or_null<subop::MapOp>(firstOperand);
+      if (!mapOp) return mlir::failure(); // Fallback to FinalizePass cloning if not mapped natively
+
+      llvm::SmallVector<subop::Member> members;
+      llvm::SmallVector<subop::DefMappingPairT> defMapping;
+      llvm::SmallVector<subop::RefMappingPairT> refMapping;
+
+      for (auto m : mapOp.getComputedCols()) {
+         auto colDef = mlir::cast<tuples::ColumnDefAttr>(m);
+         auto* column = &colDef.getColumn();
+         auto member = memberManager.createMember("tmp_union", column->type);
+         members.push_back(member);
+         defMapping.push_back({member, colDef});
+         refMapping.push_back({member, colManager.createRef(column)});
+      }
+
+      auto bufferType = subop::BufferType::get(rewriter.getContext(), subop::StateMembersAttr::get(rewriter.getContext(), members));
+      mlir::Value tmpBuffer = rewriter.create<subop::GenericCreateOp>(loc, bufferType);
+
+      for (auto stream : unionOp.getOperands()) {
+         rewriter.create<subop::MaterializeOp>(loc, stream, tmpBuffer, subop::ColumnRefMemberMappingAttr::get(rewriter.getContext(), refMapping));
+      }
+
+      auto scanRefDef = colManager.createDef(colManager.getUniqueScope("tmp_union"), "scan_ref");
+      scanRefDef.getColumn().type = subop::EntryRefType::get(rewriter.getContext(), mlir::cast<subop::State>(tmpBuffer.getType()));
+      auto scan = rewriter.create<subop::ScanRefsOp>(loc, tmpBuffer, scanRefDef);
+      mlir::Value loaded = rewriter.create<subop::GatherOp>(loc, scan, colManager.createRef(&scanRefDef.getColumn()),
+                                                            subop::ColumnDefMemberMappingAttr::get(rewriter.getContext(), defMapping));
+
+      rewriter.replaceOp(unionOp, loaded);
+      return mlir::success();
+   }
+};
+
 class ReuseLocalPass : public mlir::PassWrapper<ReuseLocalPass, mlir::OperationPass<mlir::ModuleOp>> {
    public:
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(ReuseLocalPass)
@@ -366,6 +416,7 @@ class ReuseLocalPass : public mlir::PassWrapper<ReuseLocalPass, mlir::OperationP
       patterns.insert<AvoidArrayMaterialization>(&getContext(), columnUsageAnalysis);
       patterns.insert<AvoidDeadMaterialization>(&getContext());
       patterns.insert<ReuseHashtable>(&getContext(), columnUsageAnalysis);
+      patterns.insert<BufferUnion>(&getContext());
       if (lingodb::compiler::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
          signalPassFailure();
       }

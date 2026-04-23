@@ -6,9 +6,11 @@
 #include "lingodb/compiler/Conversion/DBToStd/DBToStd.h"
 #include "lingodb/compiler/Conversion/RelAlgToSubOp/RelAlgToSubOpPass.h"
 #include "lingodb/compiler/Conversion/SubOpToControlFlow/SubOpToControlFlowPass.h"
+
 #include "lingodb/compiler/Dialect/RelAlg/Passes.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/Passes.h"
+#include "lingodb/compiler/Dialect/graphalg/GraphAlgPasses.h"
 #include "lingodb/compiler/helper.h"
 #include "lingodb/execution/BaselineBackend.h"
 #include "lingodb/execution/CBackend.h"
@@ -33,6 +35,8 @@ utility::GlobalSetting<std::string> subopOptPassesSetting("system.subop.opt", "R
 utility::GlobalSetting<bool> cleanupAfterSubOp("system.opt.cleanup_after_subop", false);
 utility::GlobalSetting<bool> cleanupAfterImperative("system.opt.cleanup_after_imperative", false);
 utility::Tracer::Event queryOptimizationEvent("Compilation", "Query Opt.");
+utility::Tracer::Event lowerGraphAlgHighEvent("Compilation", "Lower GraphAlg");
+utility::Tracer::Event lowerGraphAlgCoreEvent("Compilation", "Lower GraphAlg Core");
 utility::Tracer::Event lowerRelalgEvent("Compilation", "Lower RelAlg");
 utility::Tracer::Event lowerSubOpEvent("Compilation", "Lower SubOp");
 utility::Tracer::Event lowerImperativeEvent("Compilation", "Lower DB");
@@ -57,6 +61,41 @@ class DefaultQueryOptimizer : public QueryOptimizer {
       timing["QOpt"] = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000.0;
    }
 };
+
+class GraphAlgToCoreLoweringStep : public LoweringStep {
+   std::string getShortName() const override {
+      return "graphalg-to-core";
+   }
+   void implement(mlir::ModuleOp& moduleOp) override {
+      auto startLowerGraphAlgHigh = std::chrono::high_resolution_clock::now();
+      utility::Tracer::Trace trace(lowerGraphAlgHighEvent);
+      mlir::PassManager graphalgToCorePM(moduleOp->getContext());
+      graphalg::buildGraphAlgToCorePipeline(graphalgToCorePM);
+      if (mlir::failed(graphalgToCorePM.run(moduleOp))) {
+         error.emit() << "Lowering of GraphAlg to GraphAlg Core failed";
+      }
+      auto endLowerGraphAlgHigh = std::chrono::high_resolution_clock::now();
+      timing["lowerGraphAlgHigh"] = std::chrono::duration_cast<std::chrono::microseconds>(endLowerGraphAlgHigh - startLowerGraphAlgHigh).count() / 1000.0;
+   }
+};
+class GraphAlgToRelAlgLoweringStep : public LoweringStep {
+   std::string getShortName() const override {
+      return "graphalg-to-relalg";
+   }
+   void implement(mlir::ModuleOp& moduleOp) override {
+      auto startLowerGraphAlgCore = std::chrono::high_resolution_clock::now();
+      utility::Tracer::Trace trace(lowerGraphAlgCoreEvent);
+      mlir::PassManager graphalgToRelAlgPM(moduleOp->getContext());
+      graphalg::createLowerGraphAlgCoreToRelAlgPipeline(graphalgToRelAlgPM);
+      if (mlir::failed(graphalgToRelAlgPM.run(moduleOp))) {
+         error.emit() << "Lowering of GraphAlg Core to RelAlg failed";
+      }
+
+      auto endLowerGraphAlgCore = std::chrono::high_resolution_clock::now();
+      timing["lowerGraphAlgCore"] = std::chrono::duration_cast<std::chrono::microseconds>(endLowerGraphAlgCore - startLowerGraphAlgCore).count() / 1000.0;
+   }
+};
+
 class RelAlgLoweringStep : public LoweringStep {
    std::string getShortName() const override {
       return "subop";
@@ -137,7 +176,7 @@ class SubOpLoweringStep : public LoweringStep {
       }
       optSubOpPm.addPass(subop::createPrepareLoweringPass());
       if (mlir::failed(optSubOpPm.run(moduleOp))) {
-         error.emit() << "Lowering of Sub-Operators to imperative operations failed";
+         error.emit() << "Lowering of Sub-Operators to imperative operations failed1";
          return;
       }
       snapshotImportantStep("subop-opt", moduleOp, getSerializationState());
@@ -153,7 +192,7 @@ class SubOpLoweringStep : public LoweringStep {
          lowerSubOpPm.addPass(mlir::createCSEPass());
       }
       if (mlir::failed(lowerSubOpPm.run(moduleOp))) {
-         error.emit() << "Lowering of Sub-Operators to imperative operations failed";
+         error.emit() << "Lowering of Sub-Operators to imperative operations failed2";
          return;
       }
       auto endLowerSubOp = std::chrono::high_resolution_clock::now();
@@ -404,6 +443,8 @@ std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(execution::Exec
       config->frontend = createMLIRFrontend();
    }
    config->queryOptimizer = std::make_unique<DefaultQueryOptimizer>();
+   config->loweringSteps.emplace_back(std::make_unique<GraphAlgToCoreLoweringStep>());
+   config->loweringSteps.emplace_back(std::make_unique<GraphAlgToRelAlgLoweringStep>());
    config->loweringSteps.emplace_back(std::make_unique<RelAlgLoweringStep>());
    config->loweringSteps.emplace_back(std::make_unique<SubOpLoweringStep>());
    config->loweringSteps.emplace_back(std::make_unique<DefaultImperativeLowering>());

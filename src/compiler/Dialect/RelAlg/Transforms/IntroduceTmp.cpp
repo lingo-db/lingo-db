@@ -3,6 +3,8 @@
 
 #include "llvm/ADT/TypeSwitch.h"
 
+#include <lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h>
+
 namespace {
 using namespace lingodb::compiler::dialect;
 
@@ -20,6 +22,13 @@ class IntroduceTmp : public mlir::PassWrapper<IntroduceTmp, mlir::OperationPass<
          return cols;
       } else if (auto matOp = mlir::dyn_cast_or_null<relalg::MaterializeOp>(op)) {
          return relalg::ColumnSet::fromArrayAttr(matOp.getCols());
+      } else if (auto subOpMatOp = mlir::dyn_cast_or_null<subop::MaterializeOp>(op)) {
+         // Special case for subop.materialize: extract columns from the mapping pairs
+         relalg::ColumnSet cols;
+         for (auto x : subOpMatOp.getMapping().getMapping()) {
+            cols.insert(&x.second.getColumn()); // x.second is the tuples::ColumnRefAttr
+         }
+         return cols;
       }
       return {};
    }

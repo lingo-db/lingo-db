@@ -69,6 +69,9 @@ class MultiMapAsHashIndexedView : public mlir::RewritePattern {
             otherUses.push_back(u);
          }
       }
+      if (!insertOp) {
+         return mlir::failure();
+      }
       auto linkType = util::RefType::get(rewriter.getContext(), rewriter.getI8Type());
       auto hashType = rewriter.getIndexType();
 
