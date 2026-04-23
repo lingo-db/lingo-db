@@ -107,8 +107,12 @@ class SQLFrontend : public lingodb::execution::Frontend {
    mlir::MLIRContext* context;
    mlir::OwningOpRef<mlir::ModuleOp> module;
    bool isFile = false;
+   std::vector<std::shared_ptr<lingodb::ast::Value>> parameterValues;
    void setContext(mlir::MLIRContext* ctx) override {
       context = ctx;
+   }
+   void setParameters(std::vector<std::shared_ptr<lingodb::ast::Value>> values) override {
+      parameterValues = std::move(values);
    }
    void load(std::string fileOrDirect) {
       Driver drv;
@@ -120,8 +124,18 @@ class SQLFrontend : public lingodb::execution::Frontend {
                error.emit() << "Error during parsing: Only one statement allowed";
                return;
             }
+            // A query may contain up to nextParamIndex-1 placeholders; extra
+            // bound values are OK (ignored), too few are caught at analysis.
+            size_t placeholdersSeen = drv.nextParamIndex - 1;
+            if (placeholdersSeen > parameterValues.size()) {
+               error.emit() << "SQL has " << placeholdersSeen
+                            << " placeholder(s) but only " << parameterValues.size()
+                            << " parameter value(s) were supplied";
+               return;
+            }
             auto sqlContext = std::make_shared<lingodb::analyzer::SQLContext>();
             sqlContext->catalog = catalog;
+            sqlContext->parameterValues = parameterValues;
             lingodb::analyzer::SQLQueryAnalyzer analyzer{catalog};
             drv.result[0] = analyzer.canonicalizeAndAnalyze(drv.result[0], sqlContext);
 

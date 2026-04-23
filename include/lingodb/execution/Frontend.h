@@ -2,10 +2,16 @@
 #define LINGODB_EXECUTION_FRONTEND_H
 #include "Error.h"
 #include "lingodb/catalog/Catalog.h"
+
+#include <memory>
+#include <vector>
 namespace mlir {
 class ModuleOp;
 class MLIRContext;
 } // namespace mlir
+namespace lingodb::ast {
+class Value;
+} // namespace lingodb::ast
 namespace lingodb::execution {
 class Frontend {
    protected:
@@ -28,6 +34,10 @@ class Frontend {
    Error& getError() { return error; }
    virtual void loadFromFile(std::string fileName) = 0;
    virtual void loadFromString(std::string data) = 0;
+   /// Bind values for `?` placeholders in the SQL. Values are 1-indexed as
+   /// they appear in the text. Default is a no-op (e.g. MLIR frontend has no
+   /// placeholders). Must be called before `loadFromString` / `loadFromFile`.
+   virtual void setParameters(std::vector<std::shared_ptr<ast::Value>> /*values*/) {}
    virtual bool isParallelismAllowed() { return true; }
    virtual mlir::ModuleOp* getModule() = 0;
    virtual ~Frontend() {}

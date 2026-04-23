@@ -90,7 +90,7 @@
 
 
 %token <std::string>	        UIDENT SCONST USCONST BCONST XCONST Op
-%token 	        PARAM
+%token <uint64_t>	        PARAM
 %token			TYPECAST DOT_DOT COLON_EQUALS
 
 /* 
@@ -1594,7 +1594,7 @@ b_expr:
 c_expr:
     columnref {$$ = $columnref;}
     | AexprConst {$$=$1;}
-    //TODO | PARAM opt_indirection
+    | PARAM { $$ = mkNode<lingodb::ast::ParameterExpression>(@$, $1); }
     | LP a_expr RP {$$=$2;}//opt_indirection
     | case_expr
     {

@@ -6,6 +6,7 @@ Driver::Driver()
 int Driver::parse(const std::string& f, bool isFile) {
    file = f;
    location.initialize(&file);
+   nextParamIndex = 1;
    scanBegin(isFile);
    lingodb::parser parse(*this);
    parse.set_debug_level(traceParsing);

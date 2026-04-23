@@ -23,5 +23,10 @@ class Driver {
    bool traceScanning;
    bool traceParsing;
    lingodb::ast::NodeFactory nf;
+
+   /// Next index to hand out for a `?` placeholder (1-based). Bumped by the
+   /// lexer for every `?` it encounters, consumed by the parser to build
+   /// `ParameterExpression` nodes. Reset in `parse()`.
+   size_t nextParamIndex = 1;
 };
 #endif

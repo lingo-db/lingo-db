@@ -152,6 +152,20 @@ bool ConstantExpression::operator==(ParsedExpression& other) {
    // Compare the actual values
    return *value == *otherConst.value;
 }
+
+/// ParameterExpression
+ParameterExpression::ParameterExpression(size_t index)
+   : ParsedExpression(ExpressionType::VALUE_PARAMETER, cType), index(index) {}
+
+size_t ParameterExpression::hash() {
+   return ParsedExpression::hash() * 31 + std::hash<size_t>{}(index);
+}
+
+bool ParameterExpression::operator==(ParsedExpression& other) {
+   if (!ParsedExpression::operator==(other)) return false;
+   const auto& otherParam = static_cast<const ParameterExpression&>(other);
+   return index == otherParam.index;
+}
 /// FunctionExpression
 FunctionExpression::FunctionExpression(std::string catalog, std::string schema, std::string functionName, bool isOperator, bool distinct, bool exportState) : ParsedExpression(ExpressionType::FUNCTION, cType), catalog(catalog), schema(schema), functionName(functionName), isOperator(isOperator), distinct(distinct), exportState(exportState) {
    auto found = std::find(aggregationFunctions.begin(), aggregationFunctions.end(), functionName);

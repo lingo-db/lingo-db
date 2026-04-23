@@ -84,6 +84,11 @@ class SQLContext {
    };
 
    catalog::Catalog* catalog;
+   /// Values bound to `?` placeholders, indexed by (1-based) parameter index.
+   /// Populated by `SQLFrontend::setParameters` before analysis. The analyzer
+   /// replaces each `ParameterExpression` with a `ConstantExpression`
+   /// carrying the matching value.
+   std::vector<std::shared_ptr<ast::Value>> parameterValues;
    std::vector<std::shared_ptr<SQLScope>> scopes;
    std::shared_ptr<SQLScope> currentScope;
 

@@ -1,11 +1,13 @@
 #include "features.h"
 
+#include "lingodb/compiler/frontend/ast/constant_value.h"
 #include "lingodb/compiler/mlir-support/eval.h"
 #include "lingodb/execution/Execution.h"
 #include "lingodb/execution/ResultProcessing.h"
 #include "lingodb/scheduler/Scheduler.h"
 #include "lingodb/utility/Setting.h"
 
+#include <arrow/array.h>
 #include <arrow/flight/server.h>
 #include <arrow/flight/sql/server.h>
 #include <arrow/flight/types.h>
@@ -14,11 +16,14 @@
 #include <arrow/type.h>
 
 #include <atomic>
+#include <cmath>
 #include <csignal>
 #include <cstdlib>
+#include <iomanip>
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <sstream>
 #include <string>
 #include <unordered_map>
 
@@ -26,6 +31,110 @@ namespace flight = arrow::flight;
 namespace flightsql = arrow::flight::sql;
 
 namespace {
+
+/// Convert one row of an Arrow RecordBatch into a list of LingoDB AST Values,
+/// one per column. Used to bind Flight SQL prepared-statement parameters into
+/// LingoDB's AST pipeline (see `SQLFrontend::setParameters`).
+arrow::Result<std::vector<std::shared_ptr<lingodb::ast::Value>>> RowToAstValues(
+   const arrow::RecordBatch& batch, int64_t row) {
+   std::vector<std::shared_ptr<lingodb::ast::Value>> out;
+   out.reserve(batch.num_columns());
+   for (int c = 0; c < batch.num_columns(); ++c) {
+      auto array = batch.column(c);
+      if (array->IsNull(row)) {
+         out.push_back(std::make_shared<lingodb::ast::NullValue>());
+         continue;
+      }
+      switch (array->type_id()) {
+         case arrow::Type::BOOL:
+            out.push_back(std::make_shared<lingodb::ast::BoolValue>(
+               std::static_pointer_cast<arrow::BooleanArray>(array)->Value(row)));
+            break;
+         case arrow::Type::INT8:
+         case arrow::Type::INT16:
+         case arrow::Type::INT32: {
+            int32_t v = array->type_id() == arrow::Type::INT8
+                           ? std::static_pointer_cast<arrow::Int8Array>(array)->Value(row)
+                        : array->type_id() == arrow::Type::INT16
+                           ? std::static_pointer_cast<arrow::Int16Array>(array)->Value(row)
+                           : std::static_pointer_cast<arrow::Int32Array>(array)->Value(row);
+            out.push_back(std::make_shared<lingodb::ast::IntValue>(v));
+            break;
+         }
+         case arrow::Type::INT64: {
+            int64_t v = std::static_pointer_cast<arrow::Int64Array>(array)->Value(row);
+            // LingoDB's IntValue is 32-bit signed; widen via FloatValue text
+            // when it doesn't fit. Most Flight SQL clients send ints as int64
+            // even for small values, so we reinterpret when possible.
+            if (v >= std::numeric_limits<int>::min() && v <= std::numeric_limits<int>::max()) {
+               out.push_back(std::make_shared<lingodb::ast::IntValue>(static_cast<int>(v)));
+            } else {
+               out.push_back(std::make_shared<lingodb::ast::FloatValue>(std::to_string(v)));
+            }
+            break;
+         }
+         case arrow::Type::UINT8:
+         case arrow::Type::UINT16:
+         case arrow::Type::UINT32: {
+            uint32_t v = array->type_id() == arrow::Type::UINT8
+                            ? std::static_pointer_cast<arrow::UInt8Array>(array)->Value(row)
+                         : array->type_id() == arrow::Type::UINT16
+                            ? std::static_pointer_cast<arrow::UInt16Array>(array)->Value(row)
+                            : std::static_pointer_cast<arrow::UInt32Array>(array)->Value(row);
+            out.push_back(std::make_shared<lingodb::ast::IntValue>(static_cast<int>(v)));
+            break;
+         }
+         case arrow::Type::UINT64: {
+            uint64_t v = std::static_pointer_cast<arrow::UInt64Array>(array)->Value(row);
+            out.push_back(std::make_shared<lingodb::ast::UnsignedIntValue>(v));
+            break;
+         }
+         case arrow::Type::FLOAT: {
+            float v = std::static_pointer_cast<arrow::FloatArray>(array)->Value(row);
+            if (std::isnan(v) || std::isinf(v))
+               return arrow::Status::Invalid("Cannot bind NaN/Inf as a SQL parameter.");
+            std::ostringstream oss;
+            oss << std::setprecision(9) << v;
+            out.push_back(std::make_shared<lingodb::ast::FloatValue>(oss.str()));
+            break;
+         }
+         case arrow::Type::DOUBLE: {
+            double v = std::static_pointer_cast<arrow::DoubleArray>(array)->Value(row);
+            if (std::isnan(v) || std::isinf(v))
+               return arrow::Status::Invalid("Cannot bind NaN/Inf as a SQL parameter.");
+            std::ostringstream oss;
+            oss << std::setprecision(17) << v;
+            out.push_back(std::make_shared<lingodb::ast::FloatValue>(oss.str()));
+            break;
+         }
+         case arrow::Type::STRING: {
+            auto view = std::static_pointer_cast<arrow::StringArray>(array)->GetView(row);
+            out.push_back(std::make_shared<lingodb::ast::StringValue>(std::string(view)));
+            break;
+         }
+         case arrow::Type::LARGE_STRING: {
+            auto view = std::static_pointer_cast<arrow::LargeStringArray>(array)->GetView(row);
+            out.push_back(std::make_shared<lingodb::ast::StringValue>(std::string(view)));
+            break;
+         }
+         case arrow::Type::DATE32: {
+            int32_t days = std::static_pointer_cast<arrow::Date32Array>(array)->Value(row);
+            std::time_t secs = static_cast<std::time_t>(days) * 86400;
+            std::tm tm{};
+            gmtime_r(&secs, &tm);
+            char buf[16];
+            std::strftime(buf, sizeof(buf), "%Y-%m-%d", &tm);
+            out.push_back(std::make_shared<lingodb::ast::DateValue>(buf));
+            break;
+         }
+         default:
+            return arrow::Status::NotImplemented(
+               "Flight SQL server cannot bind parameter of Arrow type ",
+               array->type()->ToString());
+      }
+   }
+   return out;
+}
 
 class LingoDBFlightSqlServer : public flightsql::FlightSqlServerBase {
    public:
@@ -36,7 +145,7 @@ class LingoDBFlightSqlServer : public flightsql::FlightSqlServerBase {
       const flight::ServerCallContext&, const flightsql::StatementQuery& command,
       const flight::FlightDescriptor& descriptor) override {
       std::shared_ptr<arrow::Table> table;
-      ARROW_RETURN_NOT_OK(ExecuteQuery(command.query, &table));
+      ARROW_RETURN_NOT_OK(ExecuteQuery(command.query, {}, &table));
 
       std::shared_ptr<arrow::Schema> schema = table ? table->schema() : arrow::schema({});
 
@@ -63,9 +172,6 @@ class LingoDBFlightSqlServer : public flightsql::FlightSqlServerBase {
    arrow::Result<std::unique_ptr<flight::SchemaResult>> GetSchemaStatement(
       const flight::ServerCallContext&, const flightsql::StatementQuery&,
       const flight::FlightDescriptor&) override {
-      // LingoDB compiles and executes together, so resolving just a schema
-      // without executing the query is not cheap. Report UNIMPLEMENTED and
-      // let clients discover the schema via GetFlightInfo instead.
       return arrow::Status::NotImplemented(
          "GetSchemaStatement is not supported by the LingoDB Flight SQL server; "
          "use GetFlightInfo to obtain both schema and data.");
@@ -83,40 +189,237 @@ class LingoDBFlightSqlServer : public flightsql::FlightSqlServerBase {
          table = std::move(it->second);
          results_.erase(it);
       }
+      return StreamFromTable(std::move(table));
+   }
 
+   arrow::Result<int64_t> DoPutCommandStatementUpdate(
+      const flight::ServerCallContext&, const flightsql::StatementUpdate& command) override {
+      std::shared_ptr<arrow::Table> ignored;
+      ARROW_RETURN_NOT_OK(ExecuteQuery(command.query, {}, &ignored));
+      return -1;
+   }
+
+   // ---- Prepared statements -------------------------------------------------
+   //
+   // `?` placeholders are parsed into `ParameterExpression` AST nodes by the
+   // LingoDB frontend. On execution, we hand over the bound values as
+   // `ast::Value`s via `Frontend::setParameters`; the analyzer resolves each
+   // placeholder to a `ConstantExpression` inline. No SQL-text editing happens
+   // in this server.
+
+   arrow::Result<flightsql::ActionCreatePreparedStatementResult> CreatePreparedStatement(
+      const flight::ServerCallContext&,
+      const flightsql::ActionCreatePreparedStatementRequest& request) override {
+      auto entry = std::make_shared<PreparedEntry>();
+      entry->sql = request.query;
+      entry->paramCount = CountPlaceholders(request.query);
+
+      std::string handle = "lingodb-prep-" + std::to_string(counter_.fetch_add(1));
+      {
+         std::lock_guard<std::mutex> lock(preparedMutex_);
+         prepared_[handle] = entry;
+      }
+
+      arrow::FieldVector paramFields;
+      paramFields.reserve(entry->paramCount);
+      for (size_t i = 0; i < entry->paramCount; ++i) {
+         paramFields.push_back(arrow::field("parameter_" + std::to_string(i + 1), arrow::null()));
+      }
+      return flightsql::ActionCreatePreparedStatementResult{
+         /*dataset_schema=*/arrow::schema({}),
+         /*parameter_schema=*/arrow::schema(paramFields),
+         /*prepared_statement_handle=*/std::move(handle)};
+   }
+
+   arrow::Status ClosePreparedStatement(
+      const flight::ServerCallContext&,
+      const flightsql::ActionClosePreparedStatementRequest& request) override {
+      std::lock_guard<std::mutex> lock(preparedMutex_);
+      auto it = prepared_.find(request.prepared_statement_handle);
+      if (it == prepared_.end()) {
+         return arrow::Status::KeyError("Unknown prepared statement handle: ",
+                                        request.prepared_statement_handle);
+      }
+      prepared_.erase(it);
+      return arrow::Status::OK();
+   }
+
+   arrow::Status DoPutPreparedStatementQuery(
+      const flight::ServerCallContext&, const flightsql::PreparedStatementQuery& command,
+      flight::FlightMessageReader* reader, flight::FlightMetadataWriter*) override {
+      ARROW_ASSIGN_OR_RAISE(auto entry, LookupPreparedStatement(command.prepared_statement_handle));
+      return BindParametersFromReader(*entry, reader);
+   }
+
+   arrow::Result<std::unique_ptr<flight::FlightInfo>> GetFlightInfoPreparedStatement(
+      const flight::ServerCallContext&, const flightsql::PreparedStatementQuery& command,
+      const flight::FlightDescriptor& descriptor) override {
+      ARROW_ASSIGN_OR_RAISE(auto entry, LookupPreparedStatement(command.prepared_statement_handle));
+      std::vector<std::shared_ptr<lingodb::ast::Value>> params;
+      std::string sql;
+      {
+         std::lock_guard<std::mutex> lock(preparedMutex_);
+         sql = entry->sql;
+         params = entry->boundValues;
+      }
+      std::shared_ptr<arrow::Table> table;
+      ARROW_RETURN_NOT_OK(ExecuteQuery(sql, params, &table));
+      {
+         std::lock_guard<std::mutex> lock(preparedMutex_);
+         entry->result = table;
+      }
+
+      std::shared_ptr<arrow::Schema> schema = table ? table->schema() : arrow::schema({});
+      // Round-trip the descriptor's command bytes as the ticket so the base
+      // class's DoGet dispatches back to DoGetPreparedStatement.
+      flight::Ticket ticket{descriptor.cmd};
+      std::vector<flight::Location> locations;
+      ARROW_ASSIGN_OR_RAISE(auto loc, flight::Location::Parse(clientLocationUri_));
+      locations.push_back(std::move(loc));
+      flight::FlightEndpoint endpoint{std::move(ticket), std::move(locations), std::nullopt, ""};
+
+      int64_t totalRecords = table ? table->num_rows() : 0;
+      ARROW_ASSIGN_OR_RAISE(auto info,
+                            flight::FlightInfo::Make(*schema, descriptor, {endpoint}, totalRecords, -1));
+      return std::make_unique<flight::FlightInfo>(std::move(info));
+   }
+
+   arrow::Result<std::unique_ptr<flight::FlightDataStream>> DoGetPreparedStatement(
+      const flight::ServerCallContext&, const flightsql::PreparedStatementQuery& command) override {
+      ARROW_ASSIGN_OR_RAISE(auto entry, LookupPreparedStatement(command.prepared_statement_handle));
+      std::shared_ptr<arrow::Table> table;
+      {
+         std::lock_guard<std::mutex> lock(preparedMutex_);
+         table = entry->result;
+         entry->result.reset(); // force re-execution on next GetFlightInfo round
+      }
+      if (!table) {
+         return arrow::Status::Invalid(
+            "No result cached for prepared statement ", command.prepared_statement_handle,
+            " — call GetFlightInfo before DoGet.");
+      }
+      return StreamFromTable(std::move(table));
+   }
+
+   arrow::Result<int64_t> DoPutPreparedStatementUpdate(
+      const flight::ServerCallContext&, const flightsql::PreparedStatementUpdate& command,
+      flight::FlightMessageReader* reader) override {
+      ARROW_ASSIGN_OR_RAISE(auto entry, LookupPreparedStatement(command.prepared_statement_handle));
+      ARROW_RETURN_NOT_OK(BindParametersFromReader(*entry, reader));
+      std::shared_ptr<arrow::Table> ignored;
+      ARROW_RETURN_NOT_OK(ExecuteQuery(entry->sql, entry->boundValues, &ignored));
+      return -1;
+   }
+
+   private:
+   struct PreparedEntry {
+      std::string sql;
+      size_t paramCount = 0;
+      std::vector<std::shared_ptr<lingodb::ast::Value>> boundValues;
+      std::shared_ptr<arrow::Table> result;
+   };
+
+   arrow::Result<std::shared_ptr<PreparedEntry>> LookupPreparedStatement(const std::string& handle) {
+      std::lock_guard<std::mutex> lock(preparedMutex_);
+      auto it = prepared_.find(handle);
+      if (it == prepared_.end()) {
+         return arrow::Status::KeyError("Unknown prepared statement handle: ", handle);
+      }
+      return it->second;
+   }
+
+   arrow::Status BindParametersFromReader(PreparedEntry& entry, flight::FlightMessageReader* reader) {
+      ARROW_ASSIGN_OR_RAISE(auto batches, reader->ToRecordBatches());
+      if (batches.empty()) {
+         if (entry.paramCount != 0) {
+            return arrow::Status::Invalid(
+               "Prepared statement expected ", entry.paramCount,
+               " parameter(s), but no parameter batch was bound.");
+         }
+         std::lock_guard<std::mutex> lock(preparedMutex_);
+         entry.boundValues.clear();
+         return arrow::Status::OK();
+      }
+      int64_t totalRows = 0;
+      for (const auto& b : batches) totalRows += b->num_rows();
+      if (totalRows != 1) {
+         return arrow::Status::NotImplemented(
+            "LingoDB Flight SQL server only supports single-row parameter binding; got ",
+            totalRows, " rows.");
+      }
+      std::shared_ptr<arrow::RecordBatch> batch;
+      for (const auto& b : batches) {
+         if (b->num_rows() > 0) { batch = b; break; }
+      }
+      if (static_cast<size_t>(batch->num_columns()) != entry.paramCount) {
+         return arrow::Status::Invalid(
+            "Prepared statement expected ", entry.paramCount, " parameter(s), received ",
+            batch->num_columns(), ".");
+      }
+      ARROW_ASSIGN_OR_RAISE(auto values, RowToAstValues(*batch, 0));
+      std::lock_guard<std::mutex> lock(preparedMutex_);
+      entry.boundValues = std::move(values);
+      return arrow::Status::OK();
+   }
+
+   // Count `?` placeholders in SQL, skipping comments and quoted literals.
+   static size_t CountPlaceholders(const std::string& sql) {
+      size_t count = 0;
+      const size_t n = sql.size();
+      for (size_t i = 0; i < n; ++i) {
+         char c = sql[i];
+         if (c == '\'' || c == '"') {
+            char quote = c;
+            ++i;
+            while (i < n) {
+               if (sql[i] == quote) {
+                  if (i + 1 < n && sql[i + 1] == quote) { i += 2; continue; }
+                  break;
+               }
+               ++i;
+            }
+         } else if (c == '-' && i + 1 < n && sql[i + 1] == '-') {
+            while (i < n && sql[i] != '\n') ++i;
+         } else if (c == '/' && i + 1 < n && sql[i + 1] == '*') {
+            i += 2;
+            while (i + 1 < n && !(sql[i] == '*' && sql[i + 1] == '/')) ++i;
+            ++i;
+         } else if (c == '?') {
+            ++count;
+         }
+      }
+      return count;
+   }
+
+   arrow::Result<std::unique_ptr<flight::FlightDataStream>> StreamFromTable(
+      std::shared_ptr<arrow::Table> table) {
       std::shared_ptr<arrow::Schema> schema = table ? table->schema() : arrow::schema({});
       std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
       if (table && table->num_rows() > 0) {
          arrow::TableBatchReader batchReader(*table);
          ARROW_ASSIGN_OR_RAISE(batches, batchReader.ToRecordBatches());
       }
-      ARROW_ASSIGN_OR_RAISE(auto reader, arrow::RecordBatchReader::Make(std::move(batches), schema));
-      return std::make_unique<flight::RecordBatchStream>(reader);
+      ARROW_ASSIGN_OR_RAISE(auto rbReader,
+                            arrow::RecordBatchReader::Make(std::move(batches), schema));
+      return std::make_unique<flight::RecordBatchStream>(rbReader);
    }
 
-   arrow::Result<int64_t> DoPutCommandStatementUpdate(
-      const flight::ServerCallContext&, const flightsql::StatementUpdate& command) override {
-      std::shared_ptr<arrow::Table> ignored;
-      ARROW_RETURN_NOT_OK(ExecuteQuery(command.query, &ignored));
-      // LingoDB does not report the number of affected rows; -1 ("unknown")
-      // is a valid Flight SQL response here.
-      return -1;
-   }
-
-   private:
-   arrow::Status ExecuteQuery(const std::string& sql, std::shared_ptr<arrow::Table>* out) {
-      // LingoDB's compilation pipeline and its context pre-warming are not
-      // designed for concurrent queries from the same process; serialize.
+   arrow::Status ExecuteQuery(const std::string& sql,
+                              std::vector<std::shared_ptr<lingodb::ast::Value>> params,
+                              std::shared_ptr<arrow::Table>* out) {
       std::lock_guard<std::mutex> lock(executionMutex_);
       try {
          auto config = lingodb::execution::createQueryExecutionConfig(
             lingodb::execution::getExecutionMode(), /*sqlInput=*/true);
+         if (!params.empty()) {
+            config->frontend->setParameters(std::move(params));
+         }
          config->resultProcessor = lingodb::execution::createTableRetriever(*out);
          auto executer = lingodb::execution::QueryExecuter::createDefaultExecuter(
             std::move(config), *session_);
          executer->setExitOnError(false);
          executer->fromData(sql);
-         auto errorPtr = executer->getError(); // copy shared_ptr, retains after move
+         auto errorPtr = executer->getError();
          lingodb::scheduler::awaitEntryTask(
             std::make_unique<lingodb::execution::QueryExecutionTask>(std::move(executer)));
          if (errorPtr && *errorPtr) {
@@ -133,6 +436,8 @@ class LingoDBFlightSqlServer : public flightsql::FlightSqlServerBase {
    std::mutex executionMutex_;
    std::mutex resultsMutex_;
    std::unordered_map<std::string, std::shared_ptr<arrow::Table>> results_;
+   std::mutex preparedMutex_;
+   std::unordered_map<std::string, std::shared_ptr<PreparedEntry>> prepared_;
    std::atomic<uint64_t> counter_{0};
 };
 
@@ -177,8 +482,6 @@ int main(int argc, char** argv) {
    auto scheduler = scheduler::startScheduler();
 
    std::string bindUri = "grpc://" + host + ":" + std::to_string(port);
-   // Clients advertised through FlightEndpoint should connect to 127.0.0.1 when
-   // the server binds to the wildcard address; otherwise reuse the bind host.
    std::string clientUri = "grpc://" + (host == "0.0.0.0" ? std::string("127.0.0.1") : host) +
                            ":" + std::to_string(port);
 

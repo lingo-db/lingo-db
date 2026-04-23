@@ -333,6 +333,22 @@ class ConstantExpression : public ParsedExpression {
    bool operator==(ParsedExpression& other) override;
 };
 
+/// Placeholder (`?`) parameter reference. Produced by the parser for every
+/// occurrence of `?` in the input, with a 1-based sequential `index`. The
+/// analyzer resolves a `ParameterExpression` to a `ConstantExpression` using
+/// the parameter values supplied alongside the SQL; see
+/// `SQLContext::parameterValues`.
+class ParameterExpression : public ParsedExpression {
+   public:
+   static constexpr ExpressionClass cType = ExpressionClass::PARAMETER;
+   explicit ParameterExpression(size_t index);
+
+   size_t index; // 1-based
+
+   size_t hash() override;
+   bool operator==(ParsedExpression& other) override;
+};
+
 class FunctionExpression : public ParsedExpression {
    public:
    static constexpr ExpressionClass cType = ExpressionClass::FUNCTION;

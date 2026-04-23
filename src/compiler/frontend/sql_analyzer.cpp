@@ -632,6 +632,16 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
 
          return constantExpr;
       }
+      case ast::ExpressionClass::PARAMETER: {
+         // Leave the ParameterExpression in place; the analyzer resolves it
+         // later against sqlContext->parameterValues. The canonicalizer would
+         // otherwise treat this node as a structural passthrough anyway.
+         auto paramExpr = std::static_pointer_cast<ast::ParameterExpression>(rootNode);
+         if (extend) {
+            return extendExpr(paramExpr);
+         }
+         return paramExpr;
+      }
       case ast::ExpressionClass::BETWEEN: {
          auto betweenExpr = std::static_pointer_cast<ast::BetweenExpression>(rootNode);
          betweenExpr->input = canonicalizeParsedExpression(betweenExpr->input, context, false, extendNode);
@@ -2082,6 +2092,20 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
    }
 
    switch (rootNode->exprClass) {
+      case ast::ExpressionClass::PARAMETER: {
+         auto paramExpr = std::static_pointer_cast<ast::ParameterExpression>(rootNode);
+         if (paramExpr->index == 0 || paramExpr->index > context->parameterValues.size()) {
+            error("Placeholder $" << paramExpr->index << " has no bound value (" << context->parameterValues.size() << " parameter(s) supplied)", paramExpr->loc);
+         }
+         auto boundValue = context->parameterValues[paramExpr->index - 1];
+         if (!boundValue) {
+            error("Bound value for placeholder $" << paramExpr->index << " is null", paramExpr->loc);
+         }
+         auto constExpr = drv.nf.node<ast::ConstantExpression>(paramExpr->loc);
+         constExpr->value = boundValue;
+         constExpr->alias = paramExpr->alias;
+         return analyzeExpression(constExpr, context, resolverScope);
+      }
       case ast::ExpressionClass::CONSTANT: {
          auto constExpr = std::static_pointer_cast<ast::ConstantExpression>(rootNode);
          if (!constExpr->value) {

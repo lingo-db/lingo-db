@@ -169,6 +169,7 @@ boolean [fF][aA][lL][sS][eE]
 ">"             { MAKE_KEYWORD(GREATER); }
 "|>"            { return lingodb::parser::make_PIPE(loc); }
 "::"            { MAKE_KEYWORD(TYPECAST); }
+"?"             { return lingodb::parser::make_PARAM(drv.nextParamIndex++, loc); }
 {newline}              { loc.lines();}
 
 AGGREGATE   { MAKE_KEYWORD(AGGREGATE); }
