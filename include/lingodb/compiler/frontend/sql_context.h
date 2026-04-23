@@ -2,6 +2,7 @@
 #define LINGODB_COMPILER_FRONTEND_SQL_CONTEXT_H
 
 #include "lingodb/compiler/frontend/ast/aggregation_node.h"
+#include "lingodb/compiler/frontend/ast/bound/bound_expression.h"
 #include "lingodb/compiler/frontend/ast/bound/bound_query_node.h"
 #include "lingodb/compiler/frontend/ast/extend_node.h"
 #include "lingodb/compiler/frontend/sql_scope.h"
@@ -89,6 +90,13 @@ class SQLContext {
    /// replaces each `ParameterExpression` with a `ConstantExpression`
    /// carrying the matching value.
    std::vector<std::shared_ptr<ast::Value>> parameterValues;
+   /// Bound expressions produced for each `?` during analysis, indexed by
+   /// (1-based) parameter index. After analysis completes, the final
+   /// `resultType` on each entry is the type the surrounding expression
+   /// inferred for that placeholder (e.g. `matrnr = ?` → int64). The
+   /// frontend surfaces these types so Flight SQL callers can publish an
+   /// accurate parameter schema for a prepared statement.
+   std::vector<std::shared_ptr<ast::BoundExpression>> parameterBoundExprs;
    std::vector<std::shared_ptr<SQLScope>> scopes;
    std::shared_ptr<SQLScope> currentScope;
 

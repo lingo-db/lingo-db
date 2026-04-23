@@ -2,13 +2,18 @@
 #define LINGODB_EXECUTION_FRONTEND_H
 #include "Error.h"
 #include "lingodb/catalog/Catalog.h"
+#include "lingodb/catalog/Types.h"
 
 #include <memory>
+#include <optional>
 #include <vector>
 namespace mlir {
 class ModuleOp;
 class MLIRContext;
 } // namespace mlir
+namespace lingodb {
+class NullableType;
+} // namespace lingodb
 namespace lingodb::ast {
 class Value;
 } // namespace lingodb::ast
@@ -38,6 +43,11 @@ class Frontend {
    /// they appear in the text. Default is a no-op (e.g. MLIR frontend has no
    /// placeholders). Must be called before `loadFromString` / `loadFromFile`.
    virtual void setParameters(std::vector<std::shared_ptr<ast::Value>> /*values*/) {}
+   /// Types the analyzer inferred for each `?` placeholder after the most
+   /// recent `loadFromString` / `loadFromFile`. Index matches the placeholder
+   /// order in the SQL (1-based = entry 0). Entry may be `std::nullopt` if
+   /// the placeholder was unused or its type could not be inferred.
+   virtual std::vector<std::optional<catalog::Type>> getInferredParameterTypes() const { return {}; }
    virtual bool isParallelismAllowed() { return true; }
    virtual mlir::ModuleOp* getModule() = 0;
    virtual ~Frontend() {}

@@ -2104,7 +2104,15 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
          auto constExpr = drv.nf.node<ast::ConstantExpression>(paramExpr->loc);
          constExpr->value = boundValue;
          constExpr->alias = paramExpr->alias;
-         return analyzeExpression(constExpr, context, resolverScope);
+         auto bound = analyzeExpression(constExpr, context, resolverScope);
+         // Record the bound expression so the frontend can surface the final
+         // inferred type per placeholder once the whole expression has been
+         // analyzed (comparisons etc. update `resultType` after this point).
+         if (context->parameterBoundExprs.size() < paramExpr->index) {
+            context->parameterBoundExprs.resize(paramExpr->index);
+         }
+         context->parameterBoundExprs[paramExpr->index - 1] = bound;
+         return bound;
       }
       case ast::ExpressionClass::CONSTANT: {
          auto constExpr = std::static_pointer_cast<ast::ConstantExpression>(rootNode);

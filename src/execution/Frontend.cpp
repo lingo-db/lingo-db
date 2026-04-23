@@ -108,11 +108,15 @@ class SQLFrontend : public lingodb::execution::Frontend {
    mlir::OwningOpRef<mlir::ModuleOp> module;
    bool isFile = false;
    std::vector<std::shared_ptr<lingodb::ast::Value>> parameterValues;
+   std::vector<std::optional<lingodb::catalog::Type>> inferredParameterTypes;
    void setContext(mlir::MLIRContext* ctx) override {
       context = ctx;
    }
    void setParameters(std::vector<std::shared_ptr<lingodb::ast::Value>> values) override {
       parameterValues = std::move(values);
+   }
+   std::vector<std::optional<lingodb::catalog::Type>> getInferredParameterTypes() const override {
+      return inferredParameterTypes;
    }
    void load(std::string fileOrDirect) {
       Driver drv;
@@ -138,6 +142,27 @@ class SQLFrontend : public lingodb::execution::Frontend {
             sqlContext->parameterValues = parameterValues;
             lingodb::analyzer::SQLQueryAnalyzer analyzer{catalog};
             drv.result[0] = analyzer.canonicalizeAndAnalyze(drv.result[0], sqlContext);
+
+            // Copy out the placeholder types the analyzer inferred; these are
+            // only known now that every surrounding expression has had a
+            // chance to refine `resultType` (comparison common-type,
+            // arithmetic promotion, etc.).
+            inferredParameterTypes.clear();
+            inferredParameterTypes.reserve(sqlContext->parameterBoundExprs.size());
+            for (const auto& boundExpr : sqlContext->parameterBoundExprs) {
+               if (boundExpr && boundExpr->resultType.has_value()) {
+                  const auto& nt = boundExpr->resultType.value();
+                  // `castType` holds the final coerced type if present; fall
+                  // back to the constant's own type.
+                  if (nt.castType) {
+                     inferredParameterTypes.emplace_back(nt.castType->type);
+                  } else {
+                     inferredParameterTypes.emplace_back(nt.type);
+                  }
+               } else {
+                  inferredParameterTypes.emplace_back(std::nullopt);
+               }
+            }
 
             mlir::OpBuilder builder(context);
 
