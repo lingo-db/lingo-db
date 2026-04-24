@@ -8,6 +8,11 @@
 #include <memory>
 #include <thread>
 
+#include <pthread.h>
+#ifndef ASAN_ACTIVE
+#include <sys/mman.h>
+#endif
+
 #include "lingodb/scheduler/Scheduler.h"
 #include "lingodb/scheduler/Task.h"
 #include "mlir/IR/MLIRContext.h"
@@ -15,6 +20,7 @@ namespace lingodb::scheduler {
 class Worker;
 namespace {
 static thread_local Worker* currentWorker;
+static constexpr size_t maxFibersPerWorker = 64;
 } // end namespace
 
 struct TaskWrapper;
@@ -157,8 +163,10 @@ class Fiber {
 
 #else
 class Fiber {
+   public:
    static constexpr size_t stackSize = 1 << 20;
 
+   private:
    struct LocalAllocator {
       Fiber* fiber = nullptr;
 
@@ -166,7 +174,7 @@ class Fiber {
          assert(!fiber->stackAllocated);
          boost::context::stack_context sctx;
          sctx.size = stackSize;
-         sctx.sp = fiber->stackSpace + stackSize;
+         sctx.sp = fiber->stackBase + stackSize;
          fiber->stackAllocated = true;
          return sctx;
       }
@@ -179,7 +187,11 @@ class Fiber {
       friend class Fiber;
    };
 
-   alignas(64) std::byte stackSpace[stackSize];
+   // Points into the worker's shared mmap'd stack region — the fiber does not
+   // own this memory. The worker allocates one big region up front and hands
+   // out per-fiber slots of `stackSize` bytes so that pthread can advertise
+   // the whole region as its stack.
+   std::byte* stackBase;
    bool stackAllocated = false;
    std::atomic<bool> isRunning = false;
    bool done = true;
@@ -239,7 +251,7 @@ class Fiber {
       return !isRunning;
    };
 
-   Fiber() = default;
+   explicit Fiber(std::byte* stackBase) : stackBase(stackBase) {}
 
    ~Fiber() {
       assert(done);
@@ -300,7 +312,27 @@ class Scheduler {
    size_t numWorkers;
 
    std::atomic<bool> shutdown{false};
+#ifdef ASAN_ACTIVE
    std::vector<std::thread> workerThreads;
+#else
+   // Each worker thread owns one contiguous mmap'd memory region that contains
+   // all its fiber stacks plus its own pthread stack. We advertise the whole
+   // region to pthread via pthread_attr_setstack so that libraries like CPython
+   // — which check whether the current stack pointer falls inside the pthread
+   // stack range — keep working even when a fiber is active.
+   struct WorkerThread {
+      pthread_t handle;
+      void* stackMemory = nullptr;
+      size_t stackMemorySize = 0;
+   };
+   std::vector<WorkerThread> workerThreads;
+   struct WorkerArg {
+      Scheduler* scheduler;
+      size_t workerId;
+      std::byte* stackRegion;
+   };
+   static void* workerEntry(void* raw);
+#endif
    // makes sure that all threads stay alive during the shutdown process
    std::mutex shutdownMutex;
    Worker* idleWorkers = nullptr;
@@ -315,6 +347,15 @@ class Scheduler {
    public:
    Scheduler(size_t numWorkers = std::thread::hardware_concurrency()) : numWorkers(numWorkers) {
    }
+#ifndef ASAN_ACTIVE
+   ~Scheduler() {
+      for (auto& wt : workerThreads) {
+         if (wt.stackMemory) {
+            munmap(wt.stackMemory, wt.stackMemorySize);
+         }
+      }
+   }
+#endif
    size_t getNumWorkers() {
       return numWorkers;
    }
@@ -326,12 +367,18 @@ class Scheduler {
    void stop();
 
    void join() {
+#ifdef ASAN_ACTIVE
       for (auto& workerThread : workerThreads) {
          assert(workerThread.joinable() && "Worker thread is not joinable");
          if (workerThread.joinable()) {
             workerThread.join();
          }
       }
+#else
+      for (auto& wt : workerThreads) {
+         pthread_join(wt.handle, nullptr);
+      }
+#endif
    }
 
    bool isShutdown() {
@@ -427,14 +474,28 @@ class Worker {
       static constexpr size_t initiallyAllocated = 2;
       size_t numAllocated;
       size_t maxFibers;
+#ifndef ASAN_ACTIVE
+      // Base of the worker's mmap'd fiber-stack region. Slot k lives at
+      // stackRegion + k * Fiber::stackSize. The memory is owned by Scheduler,
+      // not by the allocator.
+      std::byte* stackRegion;
+#endif
       std::deque<std::unique_ptr<Fiber>> allocatedAndAvailableFibers;
 
       public:
+#ifdef ASAN_ACTIVE
       explicit FiberAllocator(size_t maxFibers) : numAllocated(initiallyAllocated), maxFibers(maxFibers) {
          for (size_t i = 0; i < initiallyAllocated; i++) {
             allocatedAndAvailableFibers.push_back(std::make_unique<Fiber>());
          }
       }
+#else
+      FiberAllocator(std::byte* stackRegion, size_t maxFibers) : numAllocated(initiallyAllocated), maxFibers(maxFibers), stackRegion(stackRegion) {
+         for (size_t i = 0; i < initiallyAllocated; i++) {
+            allocatedAndAvailableFibers.push_back(std::make_unique<Fiber>(stackRegion + i * Fiber::stackSize));
+         }
+      }
+#endif
 
       bool canAllocate() {
          return numAllocated < maxFibers || !allocatedAndAvailableFibers.empty();
@@ -443,8 +504,14 @@ class Worker {
       std::unique_ptr<Fiber> allocate() {
          if (allocatedAndAvailableFibers.empty()) {
             if (numAllocated < maxFibers) {
+#ifdef ASAN_ACTIVE
                numAllocated++;
                return std::make_unique<Fiber>();
+#else
+               auto* slot = stackRegion + numAllocated * Fiber::stackSize;
+               numAllocated++;
+               return std::make_unique<Fiber>(slot);
+#endif
             } else {
                return {};
             }
@@ -490,8 +557,13 @@ class Worker {
    bool allowedToSleep = true;
    bool shouldSleep = true;
 
-   Worker(Scheduler& scheduler, size_t id) : scheduler(scheduler), fiberAllocator(64), workerId(id) {
+#ifdef ASAN_ACTIVE
+   Worker(Scheduler& scheduler, size_t id) : scheduler(scheduler), fiberAllocator(maxFibersPerWorker), workerId(id) {
    }
+#else
+   Worker(Scheduler& scheduler, size_t id, std::byte* stackRegion) : scheduler(scheduler), fiberAllocator(stackRegion, maxFibersPerWorker), workerId(id) {
+   }
+#endif
 
    void wakeupWorker() {
       {
@@ -629,9 +701,32 @@ void stopCurrentScheduler() {
 }
 } // end namespace
 
+#ifndef ASAN_ACTIVE
+void* Scheduler::workerEntry(void* raw) {
+   std::unique_ptr<WorkerArg> arg(static_cast<WorkerArg*>(raw));
+#if defined(__APPLE__) && defined(__arm64__)
+   // on apple silicon: signal os to prefer performance cores for scheduling this thread
+   // https://developer.apple.com/library/archive/documentation/Performance/Conceptual/power_efficiency_guidelines_osx/PrioritizeWorkAtTheTaskLevel.html
+   // we silently ignore errors, since this setting is not mission-critical.
+   pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+#endif
+#ifdef TRACER
+   utility::Tracer::ensureThreadLocalTraceRecordList();
+#endif
+   Worker worker(*arg->scheduler, arg->workerId, arg->stackRegion);
+   currentWorker = &worker;
+   worker.work();
+   arg->scheduler->stoppedWorkers++;
+   currentWorker = nullptr;
+   std::unique_lock<std::mutex> lock(arg->scheduler->shutdownMutex);
+   return nullptr;
+}
+#endif
+
 void Scheduler::start() {
    scheduler = this;
    for (size_t i = 0; i < numWorkers; i++) {
+#ifdef ASAN_ACTIVE
       workerThreads.emplace_back([this, i] {
 #if defined(__APPLE__) && defined(__arm64__)
          // on apple silicon: signal os to prefer performance cores for scheduling this thread
@@ -649,6 +744,51 @@ void Scheduler::start() {
          currentWorker = nullptr;
          std::unique_lock<std::mutex> lock(shutdownMutex);
       });
+#else
+      // Layout (low → high):
+      //   [ fiber 0 stack | ... | fiber N-1 stack | guard page | worker main stack ]
+      // pthread starts SP at the very top of the region. The guard page traps
+      // a worker-stack overflow before it can silently corrupt fiber memory.
+      // The whole region is declared as the thread's stack via
+      // pthread_attr_setstack, so CPython's stack-range check sees the SP as
+      // in-range regardless of which fiber is active.
+      constexpr size_t guardPageSize = 4096;
+      constexpr size_t workerStackSize = 2 * 1024 * 1024;
+      constexpr size_t fiberRegionSize = maxFibersPerWorker * Fiber::stackSize;
+      constexpr size_t totalSize = fiberRegionSize + guardPageSize + workerStackSize;
+
+      void* region = mmap(nullptr, totalSize, PROT_READ | PROT_WRITE,
+                          MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+      if (region == MAP_FAILED) {
+         throw std::runtime_error("mmap failed for worker stack region");
+      }
+      if (mprotect(static_cast<char*>(region) + fiberRegionSize, guardPageSize, PROT_NONE) != 0) {
+         munmap(region, totalSize);
+         throw std::runtime_error("mprotect failed for stack guard page");
+      }
+
+      pthread_attr_t attr;
+      if (pthread_attr_init(&attr) != 0) {
+         munmap(region, totalSize);
+         throw std::runtime_error("pthread_attr_init failed");
+      }
+      if (pthread_attr_setstack(&attr, region, totalSize) != 0) {
+         pthread_attr_destroy(&attr);
+         munmap(region, totalSize);
+         throw std::runtime_error("pthread_attr_setstack failed");
+      }
+
+      auto* arg = new WorkerArg{this, i, static_cast<std::byte*>(region)};
+      pthread_t handle;
+      int rc = pthread_create(&handle, &attr, &Scheduler::workerEntry, arg);
+      pthread_attr_destroy(&attr);
+      if (rc != 0) {
+         delete arg;
+         munmap(region, totalSize);
+         throw std::runtime_error("pthread_create failed");
+      }
+      workerThreads.push_back({handle, region, totalSize});
+#endif
    }
 }
 
