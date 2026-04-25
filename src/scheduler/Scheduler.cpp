@@ -11,6 +11,7 @@
 #include <pthread.h>
 #ifndef ASAN_ACTIVE
 #include <sys/mman.h>
+#include <unistd.h>
 #endif
 
 #include "lingodb/scheduler/Scheduler.h"
@@ -23,8 +24,13 @@ static thread_local Worker* currentWorker;
 static constexpr size_t maxFibersPerWorker = 64;
 #ifndef ASAN_ACTIVE
 // Size of the PROT_NONE guard pages placed below each fiber stack and below
-// the worker's main stack. 4 KiB matches the x86_64 / arm64 page size.
-static constexpr size_t stackGuardPageSize = 4096;
+// the worker's main stack. Resolved from sysconf at startup because mprotect
+// requires the protected range to be page-aligned, and the system page size
+// differs across platforms (4 KiB on Linux x86_64, 16 KiB on macOS arm64).
+static const size_t stackGuardPageSize = []() -> size_t {
+   long ps = sysconf(_SC_PAGESIZE);
+   return ps > 0 ? static_cast<size_t>(ps) : 4096;
+}();
 // Size of the worker thread's own stack, carved off the top of the mmap region.
 static constexpr size_t workerMainStackSize = 2 * 1024 * 1024;
 #endif
@@ -502,9 +508,8 @@ class Worker {
       // The stride between fiber k's usable stack and fiber k+1's usable stack
       // is stackSize + stackGuardPageSize, and fiber k's usable stack starts
       // stackGuardPageSize bytes into its slot (past the guard page below it).
-      static constexpr size_t slotStride = Fiber::stackSize + stackGuardPageSize;
       static std::byte* slotStackBase(std::byte* region, size_t k) {
-         return region + k * slotStride + stackGuardPageSize;
+         return region + k * (Fiber::stackSize + stackGuardPageSize) + stackGuardPageSize;
       }
 
       FiberAllocator(std::byte* stackRegion, size_t maxFibers) : numAllocated(initiallyAllocated), maxFibers(maxFibers), stackRegion(stackRegion) {
@@ -771,16 +776,16 @@ void Scheduler::start() {
       // the very top of the region, and the whole range is declared as the
       // thread's stack via pthread_attr_setstack, so CPython's stack-range
       // check sees the SP as in-range regardless of which fiber is active.
-      constexpr size_t fiberSlotStride = Fiber::stackSize + stackGuardPageSize;
-      constexpr size_t fiberRegionSize = maxFibersPerWorker * fiberSlotStride;
-      constexpr size_t totalSize = fiberRegionSize + stackGuardPageSize + workerMainStackSize;
+      const size_t fiberSlotStride = Fiber::stackSize + stackGuardPageSize;
+      const size_t fiberRegionSize = maxFibersPerWorker * fiberSlotStride;
+      const size_t totalSize = fiberRegionSize + stackGuardPageSize + workerMainStackSize;
 
       void* region = mmap(nullptr, totalSize, PROT_READ | PROT_WRITE,
                           MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
       if (region == MAP_FAILED) {
          throw std::runtime_error("mmap failed for worker stack region");
       }
-      auto protectGuard = [region](size_t offset) {
+      auto protectGuard = [region, totalSize](size_t offset) {
          if (mprotect(static_cast<char*>(region) + offset, stackGuardPageSize, PROT_NONE) != 0) {
             munmap(region, totalSize);
             throw std::runtime_error("mprotect failed for stack guard page");
