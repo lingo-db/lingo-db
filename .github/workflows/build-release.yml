@@ -1,15 +1,27 @@
 name: build release binaries
 
-# only run when tag is pushed
+# Run when a release branch (release-*) is pushed, or when a release tag is pushed.
+# Pushing a release-* branch produces validation builds for an upcoming release;
+# pushing a v* tag produces the final release artifacts.
 on:
   push:
+    branches:
+      - 'release-*'
     tags:
       - 'v*'
 env:
   REGISTRY: ghcr.io
 jobs:
   release-build:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runs-on: ubuntu-latest
+          - arch: arm64
+            runs-on: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runs-on }}
     container: ghcr.io/lingo-db/lingodb-py-dev:ba723e305302f60aefe75084c3b0c60e12dbad70
 
     steps:
@@ -25,11 +37,11 @@ jobs:
           cmake --build build --target sql run-sql run-mlir mlir-db-opt sql-to-mlir
       - uses: actions/upload-artifact@master
         with:
-          name: lingodb-cli-linux-amd64
+          name: lingodb-cli-linux-${{ matrix.arch }}
           path: build/sql
       - uses: actions/upload-artifact@master
         with:
-          name: lingodb-tools-linux-amd64
+          name: lingodb-tools-linux-${{ matrix.arch }}
           path: |
             build/run-sql
             build/run-mlir
