@@ -1,0 +1,86 @@
+name: Build Python Packages for macOS
+
+# Run when a release branch (release-*) is pushed, or when a release tag is pushed.
+# Mirrors the Linux build-python-packages workflow but uses the macOS bridge script
+# at tools/python/bridge/create_package.macos.sh. The script is currently hardwired
+# to Python 3.13 (homebrew default), so only a cp313 wheel is produced.
+on:
+  push:
+    branches:
+      - 'release-*'
+    tags:
+      - 'v*'
+
+jobs:
+  build_python_macos_arm64:
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Cache Homebrew packages
+        id: cache-brew
+        uses: actions/cache@v4
+        with:
+          path: |
+            /opt/homebrew
+            ~/Library/Caches/Homebrew
+          key: brew-macos-15-pypkg-${{ hashFiles('.github/workflows/build-python-packages-macos.yml', 'tools/python/bridge/create_package.macos.sh') }}
+          restore-keys: |
+            brew-macos-15-pypkg-
+            brew-macos-15-
+
+      - name: Install dependencies with Homebrew
+        run: |
+          brew update
+          brew install cmake ninja llvm@20 bzip2 libffi libedit libxml2 brotli zlib apache-arrow boost flex bison wget python@3.13
+          brew link --force cmake ninja llvm@20 bzip2 libffi libedit libxml2 brotli zlib apache-arrow boost flex bison
+
+      # The macOS bridge script self-detects existing LLVM/Arrow installs in
+      # build/llvm-install and build/arrow-install and skips rebuilding them.
+      # Caching these directories cuts the LLVM build (~1h) on subsequent runs.
+      - name: Cache LLVM install
+        id: cache-llvm
+        uses: actions/cache@v4
+        with:
+          path: build/llvm-install
+          key: macos-15-llvm-install-20.1.2-${{ hashFiles('tools/python/bridge/create_package.macos.sh') }}
+
+      - name: Cache Arrow install
+        id: cache-arrow
+        uses: actions/cache@v4
+        with:
+          path: build/arrow-install
+          key: macos-15-arrow-install-24.0.0-${{ hashFiles('tools/python/bridge/create_package.macos.sh') }}
+
+      - name: Build wheel
+        run: |
+          mkdir -p built-packages
+          bash tools/python/bridge/create_package.macos.sh
+          cp build/pylingodb/build-packages/*.whl built-packages/
+          cd tools/python
+          /opt/homebrew/bin/python3 -m venv venv
+          venv/bin/python3 -m pip install build
+          venv/bin/python3 -m build .
+          cp dist/*.whl ../../built-packages/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-dist-macos-arm64-313
+          path: built-packages
+
+  collect_packages_macos:
+    needs: [build_python_macos_arm64]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download macOS arm64 313 dist
+        uses: actions/download-artifact@v4
+        with:
+          name: python-dist-macos-arm64-313
+          path: dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: built-python-wheels-macos
+          path: dist/
