@@ -50,12 +50,6 @@ def Arrow_LoadVariableSizeBinaryOp : Arrow_Op<"array.load_variable_size_binary",
     let results = (outs I32:$length, RefType : $ptr);
     let assemblyFormat = " $array `,` $offset `->` type($ptr) attr-dict";
 }
-def Arrow_LoadIntervalDaytimeOp : Arrow_Op<"array.load_interval_daytime", [Pure] > {
-    let summary = "Loads an interval_day_time value from an array and returns nanoseconds.";
-    let arguments = (ins Arrow_Array:$array,Index:$offset);
-    let results = (outs I64:$value);
-    let assemblyFormat = " $array `,` $offset attr-dict";
-}
 def Arrow_AppendBoolOp : Arrow_Op<"array_builder.append_bool"> {
     let summary = "Appends a boolean value to an Arrow array builder.";
     let description = [{
@@ -73,11 +67,6 @@ def Arrow_AppendFixedSizedOp : Arrow_Op<"array_builder.append_fixed_sized"> {
     }];
     let arguments = (ins Arrow_ArrayBuilder:$builder, AnyType: $value, Optional<I1>: $valid);
     let assemblyFormat = " $builder `,` $value `:` type($value) ( `,` $valid^ )? attr-dict";
-}
-def Arrow_AppendIntervalDaytimeOp : Arrow_Op<"array_builder.append_interval_daytime"> {
-    let summary = "Appends an interval<daytime> value (nanoseconds) to an Arrow array builder (endianness-stable).";
-    let arguments = (ins Arrow_ArrayBuilder:$builder, I64: $nanos, Optional<I1>: $valid);
-    let assemblyFormat = " $builder `,` $nanos ( `,` $valid^ )? attr-dict";
 }
 def Arrow_AppendVariableSizeBinaryOp : Arrow_Op<"array_builder.append_variable_sized_binary"> {
     let summary = "Appends a variable sized binary value to an Arrow array builder.";
