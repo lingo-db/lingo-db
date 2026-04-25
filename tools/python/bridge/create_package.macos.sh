@@ -12,7 +12,7 @@ if [ ! -d "$LLVM_INSTALL_DIR" ] || [ ! -f "$LLVM_INSTALL_DIR/bin/llvm-config" ] 
   echo "LLVM not found. Building LLVM..."
   mkdir -p $LLVM_BUILD_DIR
   cd $LLVM_BUILD_DIR
-  /opt/homebrew/bin/python3 -m venv ./venv
+  /opt/homebrew/bin/python3.13 -m venv ./venv
   ./venv/bin/pip install numpy pybind11 nanobind
   wget -nc https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.2/llvm-project-20.1.2.src.tar.xz
   tar -xf llvm-project-20.1.2.src.tar.xz
@@ -39,7 +39,7 @@ else
   echo "Arrow version 24.0.0 is already installed. Skipping build."
 fi
 
-/opt/homebrew/bin/python3 -m venv $BASE_PATH/build/venv
+/opt/homebrew/bin/python3.13 -m venv $BASE_PATH/build/venv
 $BASE_PATH/build/venv/bin/python3 -m pip install build pyarrow===24.0.0
 $BASE_PATH/build/venv/bin/python3 -c "import pyarrow; pyarrow.create_library_symlinks()"
 
