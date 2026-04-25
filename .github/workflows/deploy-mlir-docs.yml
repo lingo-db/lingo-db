@@ -7,7 +7,7 @@ on:
 
 jobs:
   generate-docs:
-    container: ghcr.io/lingo-db/lingodb-dev:e3e4ce05ae1c45664a8e9d38d1f89d54103a7951
+    container: ghcr.io/lingo-db/lingodb-dev:ba723e305302f60aefe75084c3b0c60e12dbad70
     runs-on: ubuntu-latest
 
     steps:
