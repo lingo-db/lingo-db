@@ -1,8 +1,12 @@
 name: Build Python Packages for different versions
 
-# only run when tag is pushed
+# Run when a release branch (release-*) is pushed, or when a release tag is pushed.
+# Pushing a release-* branch produces validation wheels for an upcoming release;
+# pushing a v* tag produces the final release wheels.
 on:
   push:
+    branches:
+      - 'release-*'
     tags:
       - 'v*'
 
