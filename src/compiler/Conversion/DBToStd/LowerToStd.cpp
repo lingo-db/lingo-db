@@ -170,7 +170,25 @@ class LoadArrowOpLowering : public OpConversionPattern<db::LoadArrowOp> {
          if (intervalType.getUnit() == db::IntervalUnitAttr::months) {
             loaded = rewriter.create<lingodb::compiler::dialect::arrow::LoadFixedSizedOp>(loc, rewriter.getI32Type(), array, offset);
          } else {
-            loaded = rewriter.create<lingodb::compiler::dialect::arrow::LoadIntervalDaytimeOp>(loc, array, offset);
+            // Arrow's interval_day_time is two i32s (days, milliseconds) packed
+            // into 8 bytes. Load the whole 8 bytes as one i64 so the per-element
+            // stride matches the logical Arrow element, then split here in the
+            // DB lowering (low 32 = days, high 32 = ms; little-endian). The
+            // arrow dialect itself stays oblivious to the logical type.
+            auto i32Type = rewriter.getI32Type();
+            auto i64Type = rewriter.getI64Type();
+            mlir::Value packed = rewriter.create<lingodb::compiler::dialect::arrow::LoadFixedSizedOp>(loc, i64Type, array, offset);
+            mlir::Value c32 = rewriter.create<arith::ConstantIntOp>(loc, 32, 64);
+            mlir::Value daysI32 = rewriter.create<arith::TruncIOp>(loc, i32Type, packed);
+            mlir::Value msShifted = rewriter.create<arith::ShRUIOp>(loc, i64Type, packed, c32);
+            mlir::Value msI32 = rewriter.create<arith::TruncIOp>(loc, i32Type, msShifted);
+            mlir::Value daysI64 = rewriter.create<arith::ExtSIOp>(loc, i64Type, daysI32);
+            mlir::Value msI64 = rewriter.create<arith::ExtSIOp>(loc, i64Type, msI32);
+            mlir::Value nanosPerDay = rewriter.create<arith::ConstantIntOp>(loc, 86400000000000ll, 64);
+            mlir::Value nanosPerMilli = rewriter.create<arith::ConstantIntOp>(loc, 1000000ll, 64);
+            mlir::Value dayNanos = rewriter.create<arith::MulIOp>(loc, i64Type, daysI64, nanosPerDay);
+            mlir::Value msNanos = rewriter.create<arith::MulIOp>(loc, i64Type, msI64, nanosPerMilli);
+            loaded = rewriter.create<arith::AddIOp>(loc, i64Type, dayNanos, msNanos);
          }
       } else {
          return mlir::failure();
@@ -241,7 +259,25 @@ class AppendArrowLowering : public OpConversionPattern<db::AppendArrowOp> {
          if (intervalType.getUnit() == db::IntervalUnitAttr::months) {
             rewriter.create<lingodb::compiler::dialect::arrow::AppendFixedSizedOp>(loc, builder, value, valid);
          } else {
-            rewriter.create<lingodb::compiler::dialect::arrow::AppendIntervalDaytimeOp>(loc, builder, value, valid);
+            // Mirror of the load above: split nanoseconds into (days, ms) i32
+            // pair and pack into one i64 with days in the low 32 bits and ms
+            // in the high 32 bits (little-endian). The arrow dialect just
+            // appends 8 bytes of fixed-sized payload.
+            auto i32Type = rewriter.getI32Type();
+            auto i64Type = rewriter.getI64Type();
+            mlir::Value nanosPerDay = rewriter.create<arith::ConstantIntOp>(loc, 86400000000000ll, 64);
+            mlir::Value nanosPerMilli = rewriter.create<arith::ConstantIntOp>(loc, 1000000ll, 64);
+            mlir::Value daysI64 = rewriter.create<arith::DivSIOp>(loc, i64Type, value, nanosPerDay);
+            mlir::Value rem = rewriter.create<arith::RemSIOp>(loc, i64Type, value, nanosPerDay);
+            mlir::Value msI64 = rewriter.create<arith::DivSIOp>(loc, i64Type, rem, nanosPerMilli);
+            mlir::Value daysI32 = rewriter.create<arith::TruncIOp>(loc, i32Type, daysI64);
+            mlir::Value msI32 = rewriter.create<arith::TruncIOp>(loc, i32Type, msI64);
+            mlir::Value daysExt = rewriter.create<arith::ExtUIOp>(loc, i64Type, daysI32);
+            mlir::Value msExt = rewriter.create<arith::ExtUIOp>(loc, i64Type, msI32);
+            mlir::Value c32 = rewriter.create<arith::ConstantIntOp>(loc, 32, 64);
+            mlir::Value msShifted = rewriter.create<arith::ShLIOp>(loc, i64Type, msExt, c32);
+            mlir::Value packed = rewriter.create<arith::OrIOp>(loc, i64Type, daysExt, msShifted);
+            rewriter.create<lingodb::compiler::dialect::arrow::AppendFixedSizedOp>(loc, builder, packed, valid);
          }
       } else if (mlir::isa<db::StringType>(baseType)) {
          rewriter.create<lingodb::compiler::dialect::arrow::AppendVariableSizeBinaryOp>(loc, builder, value, valid);

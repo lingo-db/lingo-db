@@ -18,9 +18,13 @@ def Arrow_Dialect : Dialect {
         The Arrow dialect provides types and operations for working with Apache Arrow data structures.
         It includes types for arrays and builders (for chunked arrays), and the necessary operations to load values from arrays, and append values to builders.
 
-        The operation implemented by this dialect work directly on the physical memory layout, and do not have any knowledge about Apache Arrow's logical types.
+        The operations implemented by this dialect work directly on the *physical* memory layout, and do not have any knowledge about Apache Arrow's logical types.
         For example, dates are loaded as integers, strings are loaded as ptr + len, and so on.
-        Dealing with logical types is the responsibility of higher-level dialects.
+        Do **not** add operations or lowerings here that encode logical-type semantics
+        (e.g. interval_day_time -> nanoseconds, decimal scaling, timestamp unit conversion).
+        Such logical-to-physical translation is the responsibility of higher-level dialects
+        (in particular the DB dialect, see `Conversion/DBToStd/LowerToStd.cpp`), which
+        emit the appropriate sequence of physical loads/appends defined here.
     }];
     let cppNamespace = "::lingodb::compiler::dialect::arrow";
     let extraClassDeclaration = [{
