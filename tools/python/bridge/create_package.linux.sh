@@ -1,5 +1,9 @@
 set -e
 
+# baseline backend's CMake config does find_program(... clang-20 clang-19),
+# which only resolves once the container's custom LLVM bin dir is on PATH.
+export PATH=/built-llvm/bin/:$PATH
+
 /opt/python/$1/bin/python3 -m venv venv
 venv/bin/python3 -m pip install build pyarrow===24.0.0
 venv/bin/python3 -c "import pyarrow; pyarrow.create_library_symlinks()"
