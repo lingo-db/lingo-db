@@ -1,7 +1,20 @@
 set -ex
 
+# Usage: create_package.macos.sh [PYVER]
+#   PYVER: target Python version for the produced wheel (e.g. 3.13, 3.14).
+#          Default 3.13. Re-running with a different PYVER reuses the
+#          shared LLVM/Arrow/pybridge builds (which are Python-ABI-free).
+PYVER=${1:-3.13}
+PYTAG=${PYVER//./}                          # 313, 314 — used as dir suffix
+PYTHON_BIN=/opt/homebrew/bin/python${PYVER}
+
+# Python interpreter used while *building* LLVM. LLVM only invokes it for
+# codegen scripts (mlir-tblgen helpers etc.); nothing in the install ends up
+# linked into the wheel, so this can stay pinned independent of PYVER.
+LLVM_BUILD_PYTHON=python3.13
+
 BASE_PATH=$(pwd) # this must be the path to the lingoDB repo
-LINGO_BUILD_DIR=$(pwd)/build/lingodb-release
+LINGO_BUILD_DIR=$(pwd)/build/lingodb-release-py
 LLVM_INSTALL_DIR=$(pwd)/build/llvm-install
 LLVM_BUILD_DIR=$(pwd)/build/llvm-build
 ARROW_INSTALL_DIR=$(pwd)/build/arrow-install
@@ -12,14 +25,14 @@ if [ ! -d "$LLVM_INSTALL_DIR" ] || [ ! -f "$LLVM_INSTALL_DIR/bin/llvm-config" ] 
   echo "LLVM not found. Building LLVM..."
   mkdir -p $LLVM_BUILD_DIR
   cd $LLVM_BUILD_DIR
-  /opt/homebrew/bin/python3.13 -m venv ./venv
+  /opt/homebrew/bin/${LLVM_BUILD_PYTHON} -m venv ./venv
   ./venv/bin/pip install numpy pybind11 nanobind
   wget -nc https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.2/llvm-project-20.1.2.src.tar.xz
   tar -xf llvm-project-20.1.2.src.tar.xz
   rm llvm-project-20.1.2.src.tar.xz
   mkdir -p build
   export SDKROOT=$(xcrun --sdk macosx --show-sdk-path)
-  env VIRTUAL_ENV=$LLVM_BUILD_DIR/venv cmake -B build -DPython3_FIND_VIRTUALENV=ONLY -DPython3_EXECUTABLE=./venv/bin/python3.13 -DLLVM_ENABLE_PROJECTS="llvm;mlir;clang;clang-tools-extra" -DLLVM_TARGETS_TO_BUILD="AArch64" -DLLVM_BUILD_EXAMPLES=OFF -DCMAKE_BUILD_TYPE=Release -G Ninja -DLLVM_ENABLE_ASSERTIONS=OFF -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang -DLLVM_BUILD_TESTS=OFF -DLLVM_BUILD_LLVM_DYLIB=ON -DLLVM_LINK_LLVM_DYLIB=OFF -DLLVM_ENABLE_DUMP=ON -DLLVM_ENABLE_FFI=ON -DCMAKE_CXX_FLAGS="-fno-omit-frame-pointer -mno-omit-leaf-frame-pointer" -DLLVM_PARALLEL_LINK_JOBS=1 -DLLVM_PARALLEL_TABLEGEN_JOBS=10 -DBUILD_SHARED_LIBS=OFF -DLLVM_INSTALL_UTILS=ON  -DMLIR_ENABLE_BINDINGS_PYTHON=ON -DLLVM_ENABLE_ZLIB=OFF -DCMAKE_INSTALL_PREFIX=$LLVM_INSTALL_DIR -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_FIND_FRAMEWORK=LAST -Wno-dev -DBUILD_TESTING=OFF -DCMAKE_OSX_SYSROOT=$(xcrun --sdk macosx --show-sdk-path) -DLLVM_ENABLE_EH=OFF -DLLVM_ENABLE_FFI=ON -DLLVM_ENABLE_RTTI=ON -DLLVM_INCLUDE_DOCS=OFF -DLLVM_INCLUDE_TESTS=OFF -DLLVM_INSTALL_UTILS=ON -DLLVM_ENABLE_Z3_SOLVER=ON -DLLVM_OPTIMIZED_TABLEGEN=ON -DLLVM_USE_RELATIVE_PATHS_IN_FILES=ON -DLLVM_SOURCE_PREFIX=./llvm-project-20.1.2.src -DLLDB_USE_SYSTEM_DEBUGSERVER=ON -DLIBCXX_INSTALL_MODULES=ON -DLLVM_CREATE_XCODE_TOOLCHAIN=OFF -DCLANG_FORCE_MATCHING_LIBCLANG_SOVERSION=OFF -DFFI_INCLUDE_DIR=$(xcrun --sdk macosx --show-sdk-path)/usr/include/ffi -DFFI_LIBRARY_DIR=/$(xcrun --sdk macosx --show-sdk-path)/usr/lib -DLLVM_ENABLE_LIBCXX=ON -DLIBCXX_PSTL_BACKEND=libdispatch -DLIBCXX_INSTALL_LIBRARY_DIR=$LLVM_INSTALL_DIR/lib/c++ -DLIBUNWIND_INSTALL_LIBRARY_DIR=$LLVM_INSTALL_DIR/lib/unwind -DLIBCXXABI_INSTALL_LIBRARY_DIR=$LLVM_INSTALL_DIR/lib/c++ -DRUNTIMES_CMAKE_ARGS="-DCMAKE_INSTALL_RPATH=@loader_path|@loader_path/../unwind" -DCMAKE_C_COMPILER=/opt/homebrew/opt/llvm@20/bin/clang -DCMAKE_CXX_COMPILER=/opt/homebrew/opt/llvm@20/bin/clang++ -DCMAKE_PREFIX_PATH=/opt/homebrew ./llvm-project-20.1.2.src/llvm/
+  env VIRTUAL_ENV=$LLVM_BUILD_DIR/venv cmake -B build -DPython3_FIND_VIRTUALENV=ONLY -DPython3_EXECUTABLE=./venv/bin/${LLVM_BUILD_PYTHON} -DLLVM_ENABLE_PROJECTS="llvm;mlir;clang;clang-tools-extra" -DLLVM_TARGETS_TO_BUILD="AArch64" -DLLVM_BUILD_EXAMPLES=OFF -DCMAKE_BUILD_TYPE=Release -G Ninja -DLLVM_ENABLE_ASSERTIONS=OFF -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang -DLLVM_BUILD_TESTS=OFF -DLLVM_BUILD_LLVM_DYLIB=ON -DLLVM_LINK_LLVM_DYLIB=OFF -DLLVM_ENABLE_DUMP=ON -DLLVM_ENABLE_FFI=ON -DCMAKE_CXX_FLAGS="-fno-omit-frame-pointer -mno-omit-leaf-frame-pointer" -DLLVM_PARALLEL_LINK_JOBS=1 -DLLVM_PARALLEL_TABLEGEN_JOBS=10 -DBUILD_SHARED_LIBS=OFF -DLLVM_INSTALL_UTILS=ON  -DMLIR_ENABLE_BINDINGS_PYTHON=ON -DLLVM_ENABLE_ZLIB=OFF -DCMAKE_INSTALL_PREFIX=$LLVM_INSTALL_DIR -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_FIND_FRAMEWORK=LAST -Wno-dev -DBUILD_TESTING=OFF -DCMAKE_OSX_SYSROOT=$(xcrun --sdk macosx --show-sdk-path) -DLLVM_ENABLE_EH=OFF -DLLVM_ENABLE_FFI=ON -DLLVM_ENABLE_RTTI=ON -DLLVM_INCLUDE_DOCS=OFF -DLLVM_INCLUDE_TESTS=OFF -DLLVM_INSTALL_UTILS=ON -DLLVM_ENABLE_Z3_SOLVER=ON -DLLVM_OPTIMIZED_TABLEGEN=ON -DLLVM_USE_RELATIVE_PATHS_IN_FILES=ON -DLLVM_SOURCE_PREFIX=./llvm-project-20.1.2.src -DLLDB_USE_SYSTEM_DEBUGSERVER=ON -DLIBCXX_INSTALL_MODULES=ON -DLLVM_CREATE_XCODE_TOOLCHAIN=OFF -DCLANG_FORCE_MATCHING_LIBCLANG_SOVERSION=OFF -DFFI_INCLUDE_DIR=$(xcrun --sdk macosx --show-sdk-path)/usr/include/ffi -DFFI_LIBRARY_DIR=/$(xcrun --sdk macosx --show-sdk-path)/usr/lib -DLLVM_ENABLE_LIBCXX=ON -DLIBCXX_PSTL_BACKEND=libdispatch -DLIBCXX_INSTALL_LIBRARY_DIR=$LLVM_INSTALL_DIR/lib/c++ -DLIBUNWIND_INSTALL_LIBRARY_DIR=$LLVM_INSTALL_DIR/lib/unwind -DLIBCXXABI_INSTALL_LIBRARY_DIR=$LLVM_INSTALL_DIR/lib/c++ -DRUNTIMES_CMAKE_ARGS="-DCMAKE_INSTALL_RPATH=@loader_path|@loader_path/../unwind" -DCMAKE_C_COMPILER=/opt/homebrew/opt/llvm@20/bin/clang -DCMAKE_CXX_COMPILER=/opt/homebrew/opt/llvm@20/bin/clang++ -DCMAKE_PREFIX_PATH=/opt/homebrew ./llvm-project-20.1.2.src/llvm/
   cmake --build build --target install -j$(sysctl -n hw.logicalcpu)
 else
   echo "LLVM version 20.1.2 is already installed. Skipping build."
@@ -39,19 +52,28 @@ else
   echo "Arrow version 24.0.0 is already installed. Skipping build."
 fi
 
-/opt/homebrew/bin/python3.13 -m venv $BASE_PATH/build/venv
-$BASE_PATH/build/venv/bin/python3 -m pip install build pyarrow===24.0.0
-$BASE_PATH/build/venv/bin/python3 -c "import pyarrow; pyarrow.create_library_symlinks()"
+# Per-wheel virtualenv (Python ABI-bound).
+WHEEL_VENV=$BASE_PATH/build/venv-${PYTAG}
+${PYTHON_BIN} -m venv $WHEEL_VENV
+$WHEEL_VENV/bin/python3 -m pip install build pyarrow===24.0.0
+$WHEEL_VENV/bin/python3 -c "import pyarrow; pyarrow.create_library_symlinks()"
 
-# Build LingoDB
+# Build the C++ pybridge library. Shared across PYVER values — pybridge does
+# not link Python itself (see tools/python/bridgelib/CMakeLists.txt), so
+# ninja's incremental rebuild makes the second invocation a no-op.
 cd $BASE_PATH
-cmake -G Ninja . -B build/lingodb-release-py/ -DCMAKE_BUILD_TYPE=Release -DClang_DIR=$LLVM_INSTALL_DIR/lib/cmake/clang -DArrow_DIR=$ARROW_INSTALL_DIR/lib64/cmake/Arrow  -DENABLE_TESTS=OFF -DCMAKE_PREFIX_PATH=/opt/homebrew -DCMAKE_C_COMPILER=/opt/homebrew/opt/llvm@20/bin/clang -DCMAKE_CXX_COMPILER=/opt/homebrew/opt/llvm@20/bin/clang++ -DCMAKE_OSX_SYSROOT=$(xcrun --sdk macosx --show-sdk-path)
-cmake --build build/lingodb-release-py --target pybridge -j$(sysctl -n hw.logicalcpu)
-cp -r tools/python/bridge build/pylingodb
-cp -r tools/python/bridgelib/custom_dialects.h build/pylingodb/src/extensions/.
-cp -r tools/python/bridgelib/bridge.h build/pylingodb/src/extensions/.
+cmake -G Ninja . -B $LINGO_BUILD_DIR -DCMAKE_BUILD_TYPE=Release -DClang_DIR=$LLVM_INSTALL_DIR/lib/cmake/clang -DArrow_DIR=$ARROW_INSTALL_DIR/lib64/cmake/Arrow  -DENABLE_TESTS=OFF -DCMAKE_PREFIX_PATH=/opt/homebrew -DCMAKE_C_COMPILER=/opt/homebrew/opt/llvm@20/bin/clang -DCMAKE_CXX_COMPILER=/opt/homebrew/opt/llvm@20/bin/clang++ -DCMAKE_OSX_SYSROOT=$(xcrun --sdk macosx --show-sdk-path)
+cmake --build $LINGO_BUILD_DIR --target pybridge -j$(sysctl -n hw.logicalcpu)
 
-cd build/pylingodb
+# Per-wheel staging directory (rebuild fresh each time so dist/*.whl is
+# unambiguous and the previous PYVER's vendored sources are gone).
+PYLINGODB_DIR=$BASE_PATH/build/pylingodb-${PYTAG}
+rm -rf $PYLINGODB_DIR
+cp -r tools/python/bridge $PYLINGODB_DIR
+cp -r tools/python/bridgelib/custom_dialects.h $PYLINGODB_DIR/src/extensions/.
+cp -r tools/python/bridgelib/bridge.h $PYLINGODB_DIR/src/extensions/.
+
+cd $PYLINGODB_DIR
 mkdir -p src/lingodbbridge/mlir/dialects
 mkdir -p src/lingodbbridge/mlir/extras
 MLIR_BIN_DIR=$LLVM_INSTALL_DIR/bin
@@ -80,10 +102,10 @@ ${MLIR_BIN_DIR}/mlir-tblgen -gen-python-enum-bindings -bind-dialect=subop -I ${M
 
 cp -r ${LLVM_BUILD_DIR}/llvm-project-20.1.2.src/mlir/lib/Bindings/Python src/extensions/mlir_vendored
 mkdir -p src/lingodbbridge/libs
-cp $BASE_PATH/build/lingodb-release-py/tools/python/bridgelib/libpybridge.dylib src/lingodbbridge/libs/.
+cp $LINGO_BUILD_DIR/tools/python/bridgelib/libpybridge.dylib src/lingodbbridge/libs/.
 
-$BASE_PATH/build/venv/bin/python3 -m build --wheel --config-setting cmake.define.LLVM_DIR=$LLVM_INSTALL_DIR/ --config-setting cmake.define.PYARROW_LIBRARY_DIRS=$BASE_PATH/build/venv/lib/python3.13/site-packages/pyarrow/ --config-setting cmake.define.PYARROW_INCLUDE_DIR=$BASE_PATH/build/venv/lib/python3.13/site-packages/pyarrow/include
+$WHEEL_VENV/bin/python3 -m build --wheel --config-setting cmake.define.LLVM_DIR=$LLVM_INSTALL_DIR/ --config-setting cmake.define.PYARROW_LIBRARY_DIRS=$WHEEL_VENV/lib/python${PYVER}/site-packages/pyarrow/ --config-setting cmake.define.PYARROW_INCLUDE_DIR=$WHEEL_VENV/lib/python${PYVER}/site-packages/pyarrow/include
 
 # Install delocate if not already installed
-$BASE_PATH/build/venv/bin/python3 -m pip install delocate
-$BASE_PATH/build/venv/bin/delocate-wheel -v dist/*.whl -e libarrow_python.2400.dylib -e libarrow.2400.dylib -w ./build-packages --ignore-missing-dependencies
+$WHEEL_VENV/bin/python3 -m pip install delocate
+$WHEEL_VENV/bin/delocate-wheel -v dist/*.whl -e libarrow_python.2400.dylib -e libarrow.2400.dylib -w ./build-packages --ignore-missing-dependencies
