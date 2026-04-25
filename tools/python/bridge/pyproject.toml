@@ -14,7 +14,7 @@ dependencies = [
 wheel.packages = ["src/lingodbbridge","src/lingodbbridge.mlir", "src/lingodbbridge.mlir.dialects"]   # Include the package
 cmake.verbose = true                 # Useful for debugging
 cmake.args = [
-    "-DCMAKE_CXX_STANDARD=17",        # Adjust as needed
+    "-DCMAKE_CXX_STANDARD=20",        # Adjust as needed
     "-DCMAKE_CXX_FLAGS=-O3"
 ]
 cmake.minimum-version = "3.18"
