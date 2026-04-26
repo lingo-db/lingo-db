@@ -26,7 +26,8 @@ module {
       %reach = func.call @Reachability(%graph, %source) : (!graphalg.mat<#dim x #dim x i1>, !graphalg.mat<#dim x 1 x i1>) -> !graphalg.mat<#dim x 1 x i1>
 
       %result_rel = builtin.unrealized_conversion_cast %reach : !graphalg.mat<#dim x 1 x i1> to !tuples.tuplestream { cols =[@edges::@dst, @edges::@val] }
-      %materialized = relalg.materialize %result_rel [@edges::@dst] => ["dst"] : !subop.local_table<[dst: i64], ["dst"]>
+      %sorted =  relalg.sort %result_rel [(@edges::@dst,asc)]
+      %materialized = relalg.materialize %sorted [@edges::@dst] => ["dst"] : !subop.local_table<[dst: i64], ["dst"]>
 
       relalg.query_return %materialized : !subop.local_table<[dst: i64], ["dst"]>
     } -> !subop.local_table<[dst: i64], ["dst"]>

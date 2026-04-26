@@ -66,7 +66,8 @@ module {
       %pr = func.call @PR(%graph) : (!graphalg.mat<#dim x #dim x i1>) -> !graphalg.mat<#dim x 1 x f64>
 
       %result_rel = builtin.unrealized_conversion_cast %pr : !graphalg.mat<#dim x 1 x f64> to !tuples.tuplestream { cols =[@pr::@node, @pr::@val] }
-      %materialized = relalg.materialize %result_rel[@pr::@node, @pr::@val] => ["node", "pr"] : !subop.local_table<[node: i64, pr: f64], ["node", "pr"]>
+      %sorted =  relalg.sort %result_rel [(@pr::@node,asc),(@pr::@val,asc)]
+      %materialized = relalg.materialize %sorted[@pr::@node, @pr::@val] => ["node", "pr"] : !subop.local_table<[node: i64, pr: f64], ["node", "pr"]>
 
       relalg.query_return %materialized : !subop.local_table<[node: i64, pr: f64],["node", "pr"]>
     } -> !subop.local_table<[node: i64, pr: f64], ["node", "pr"]>

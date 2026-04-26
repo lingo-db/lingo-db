@@ -60,7 +60,8 @@ module {
 
       // 4. Materialize
       %result_rel = builtin.unrealized_conversion_cast %bfs_res : !graphalg.mat<#dim x 1 x i64> to !tuples.tuplestream { cols =[@edges::@dst, @result::@depth] }
-      %materialized = relalg.materialize %result_rel[@edges::@dst, @result::@depth] => ["dst", "val"] : !subop.local_table<[dst: i64, val: i64], ["dst", "val"]>
+      %sorted =  relalg.sort %result_rel [(@edges::@dst,asc),(@result::@depth,asc)]
+      %materialized = relalg.materialize %sorted[@edges::@dst, @result::@depth] => ["dst", "val"] : !subop.local_table<[dst: i64, val: i64], ["dst", "val"]>
       relalg.query_return %materialized : !subop.local_table<[dst: i64, val: i64], ["dst", "val"]>
 
     } -> !subop.local_table<[dst: i64, val: i64], ["dst", "val"]>
