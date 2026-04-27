@@ -53,6 +53,8 @@ class DefaultQueryOptimizer : public QueryOptimizer {
       addLingoDBInstrumentation(pm, getSerializationState());
       //pm.addPass(mlir::createInlinerPass());
       //pm.addPass(mlir::createSymbolDCEPass());
+      graphalg::buildGraphAlgToCorePipeline(pm);
+      graphalg::createLowerGraphAlgCoreToRelAlgPipeline(pm);
       relalg::createQueryOptPipeline(pm, catalog);
       if (mlir::failed(pm.run(moduleOp))) {
          error.emit() << " Query Optimization failed";
