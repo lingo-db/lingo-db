@@ -12,11 +12,13 @@
 
 #include <arrow/util/decimal.h>
 
+#include "lingodb/utility/Tracer.h"
 #include <cstring>
 #include <optional>
 #include <regex>
 #include <arrow/util/value_parsing.h>
 namespace lingodb::runtime {
+static utility::Tracer::Event processMorsel("TableScan", "morsel", false);
 
 namespace {
 int32_t parseDate32(std::string str) {
@@ -524,7 +526,6 @@ void ScanParquetFileTask::unitRun(LingoDBTable::TableChunk& chunk) {
    batchView.offset = begin;
    batchView.selectionVector = BatchView::defaultSelectionVector.data();
    batchView.length = std::min(static_cast<size_t>(chunk.getNumRows() - begin), len);
-   //TODO trace
    for (size_t i = 0; i < colIds.size(); i++) {
       batchView.arrays[i] = chunk.getArrayView(colIds[i]);
    }
@@ -534,6 +535,7 @@ void ScanParquetFileTask::unitRun(LingoDBTable::TableChunk& chunk) {
    batchView.length = newLen;
    batchView.selectionVector = selVec;
    if (batchView.length > 0) {
+      utility::Tracer::Trace trace(processMorsel);
       cb(&batchView);
    }
 }
