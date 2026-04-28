@@ -1,5 +1,6 @@
  # to generate, use:
  # nm path/to/build/tools/python/bridgelib/libpybridge.dylib | grep -oe " \(_mlir\|__ZN6bridge\)\w*" > tools/python/bridgelib/symbols.list.macos
+ __ZN6bridge10ConnectionC2ENSt3__110shared_ptrIN7lingodb7runtime7SessionEEE
  __ZN6bridge11appendTableEPNS_10ConnectionEPKcP16ArrowArrayStream
  __ZN6bridge11initContextE11MlirContext
  __ZN6bridge12loadFromDiskEPKc
@@ -83,6 +84,7 @@
  _mlirArrayAttrGetTypeID
  _mlirAsmStateCreateForOperation
  _mlirAsmStateCreateForValue
+ _mlirAsmStateCreateForValue
  _mlirAsmStateDestroy
  _mlirAttributeDump
  _mlirAttributeEqual
@@ -94,6 +96,8 @@
  _mlirAttributeIsAAffineMap
  _mlirAttributeIsAArray
  _mlirAttributeIsABool
+ _mlirAttributeIsAColumnDefMemberMappingAttribute
+ _mlirAttributeIsAColumnRefMemberMappingAttribute
  _mlirAttributeIsADenseBoolArray
  _mlirAttributeIsADenseElements
  _mlirAttributeIsADenseF32Array
@@ -107,6 +111,7 @@
  _mlirAttributeIsADenseResourceElements
  _mlirAttributeIsADictionary
  _mlirAttributeIsAElements
+ _mlirAttributeIsAElements
  _mlirAttributeIsAFlatSymbolRef
  _mlirAttributeIsAFloat
  _mlirAttributeIsAInteger
@@ -118,6 +123,7 @@
  _mlirAttributeIsASparseElements
  _mlirAttributeIsAStridedLayout
  _mlirAttributeIsAString
+ _mlirAttributeIsASubOpMemberAttribute
  _mlirAttributeIsASubOpStateMembersAttribute
  _mlirAttributeIsASymbolRef
  _mlirAttributeIsATuplesColumnDefAttribute
@@ -144,6 +150,7 @@
  _mlirBlockGetNumArguments
  _mlirBlockGetParentOperation
  _mlirBlockGetParentRegion
+ _mlirBlockGetTerminator
  _mlirBlockGetTerminator
  _mlirBlockInsertArgument
  _mlirBlockInsertOwnedOperation
@@ -202,8 +209,14 @@
  _mlirDBDateTypeGetTypeID
  _mlirDBDecimalTypeGet
  _mlirDBDecimalTypeGetTypeID
+ _mlirDBDictIterTypeGet
+ _mlirDBDictIterTypeGetTypeID
+ _mlirDBDictTypeGet
+ _mlirDBDictTypeGetTypeID
  _mlirDBIntervalTypeGet
  _mlirDBIntervalTypeGetTypeID
+ _mlirDBListTypeGet
+ _mlirDBListTypeGetTypeID
  _mlirDBNullableTypeGet
  _mlirDBNullableTypeGetTypeID
  _mlirDBStringTypeGet
@@ -218,12 +231,19 @@
  _mlirDenseDoubleResourceElementsAttrGetValue
  _mlirDenseElementsAttrBFloat16Get
  _mlirDenseElementsAttrBoolGet
+ _mlirDenseElementsAttrBoolGet
+ _mlirDenseElementsAttrBoolSplatGet
  _mlirDenseElementsAttrBoolSplatGet
  _mlirDenseElementsAttrDoubleGet
+ _mlirDenseElementsAttrDoubleGet
+ _mlirDenseElementsAttrDoubleSplatGet
  _mlirDenseElementsAttrDoubleSplatGet
  _mlirDenseElementsAttrFloat16Get
  _mlirDenseElementsAttrFloatGet
+ _mlirDenseElementsAttrFloatGet
  _mlirDenseElementsAttrFloatSplatGet
+ _mlirDenseElementsAttrFloatSplatGet
+ _mlirDenseElementsAttrGet
  _mlirDenseElementsAttrGet
  _mlirDenseElementsAttrGetBoolSplatValue
  _mlirDenseElementsAttrGetBoolValue
@@ -250,23 +270,41 @@
  _mlirDenseElementsAttrGetUInt8SplatValue
  _mlirDenseElementsAttrGetUInt8Value
  _mlirDenseElementsAttrInt16Get
+ _mlirDenseElementsAttrInt16Get
+ _mlirDenseElementsAttrInt32Get
  _mlirDenseElementsAttrInt32Get
  _mlirDenseElementsAttrInt32SplatGet
+ _mlirDenseElementsAttrInt32SplatGet
+ _mlirDenseElementsAttrInt64Get
  _mlirDenseElementsAttrInt64Get
  _mlirDenseElementsAttrInt64SplatGet
+ _mlirDenseElementsAttrInt64SplatGet
  _mlirDenseElementsAttrInt8Get
+ _mlirDenseElementsAttrInt8Get
+ _mlirDenseElementsAttrInt8SplatGet
  _mlirDenseElementsAttrInt8SplatGet
  _mlirDenseElementsAttrIsSplat
  _mlirDenseElementsAttrRawBufferGet
+ _mlirDenseElementsAttrRawBufferGet
+ _mlirDenseElementsAttrReshapeGet
  _mlirDenseElementsAttrReshapeGet
  _mlirDenseElementsAttrSplatGet
+ _mlirDenseElementsAttrSplatGet
+ _mlirDenseElementsAttrStringGet
  _mlirDenseElementsAttrStringGet
  _mlirDenseElementsAttrUInt16Get
+ _mlirDenseElementsAttrUInt16Get
+ _mlirDenseElementsAttrUInt32Get
  _mlirDenseElementsAttrUInt32Get
  _mlirDenseElementsAttrUInt32SplatGet
+ _mlirDenseElementsAttrUInt32SplatGet
+ _mlirDenseElementsAttrUInt64Get
  _mlirDenseElementsAttrUInt64Get
  _mlirDenseElementsAttrUInt64SplatGet
+ _mlirDenseElementsAttrUInt64SplatGet
  _mlirDenseElementsAttrUInt8Get
+ _mlirDenseElementsAttrUInt8Get
+ _mlirDenseElementsAttrUInt8SplatGet
  _mlirDenseElementsAttrUInt8SplatGet
  _mlirDenseF32ArrayGet
  _mlirDenseF32ArrayGetElement
@@ -311,7 +349,10 @@
  _mlirDictionaryAttrGetTypeID
  _mlirDisctinctAttrCreate
  _mlirElementsAttrGetNumElements
+ _mlirElementsAttrGetNumElements
  _mlirElementsAttrGetValue
+ _mlirElementsAttrGetValue
+ _mlirElementsAttrIsValidIndex
  _mlirElementsAttrIsValidIndex
  _mlirEmitError
  _mlirEnableGlobalDebug
@@ -352,6 +393,7 @@
  _mlirFloatAttrGetValueDouble
  _mlirFloatTF32TypeGetTypeID
  _mlirFloatTypeGetWidth
+ _mlirFloatTypeGetWidth
  _mlirFreezeRewritePattern
  _mlirFrozenRewritePatternSetDestroy
  _mlirFunctionTypeGet
@@ -370,8 +412,12 @@
  _mlirIndexTypeGet
  _mlirIndexTypeGetTypeID
  _mlirInferShapedTypeOpInterfaceInferReturnTypes
+ _mlirInferShapedTypeOpInterfaceInferReturnTypes
+ _mlirInferShapedTypeOpInterfaceTypeID
  _mlirInferShapedTypeOpInterfaceTypeID
  _mlirInferTypeOpInterfaceInferReturnTypes
+ _mlirInferTypeOpInterfaceInferReturnTypes
+ _mlirInferTypeOpInterfaceTypeID
  _mlirInferTypeOpInterfaceTypeID
  _mlirIntegerAttrGet
  _mlirIntegerAttrGetTypeID
@@ -423,7 +469,9 @@
  _mlirMemRefTypeContiguousGet
  _mlirMemRefTypeContiguousGetChecked
  _mlirMemRefTypeGet
+ _mlirMemRefTypeGet
  _mlirMemRefTypeGetAffineMap
+ _mlirMemRefTypeGetChecked
  _mlirMemRefTypeGetChecked
  _mlirMemRefTypeGetLayout
  _mlirMemRefTypeGetMemorySpace
@@ -467,6 +515,7 @@
  _mlirOpaqueTypeGetDialectNamespace
  _mlirOpaqueTypeGetTypeID
  _mlirOperationClone
+ _mlirOperationCreate
  _mlirOperationCreate
  _mlirOperationCreateParse
  _mlirOperationDestroy
@@ -610,18 +659,25 @@
  _mlirSetGlobalDebugType
  _mlirSetGlobalDebugTypes
  _mlirShapedTypeGetDimSize
+ _mlirShapedTypeGetDimSize
  _mlirShapedTypeGetDynamicSize
  _mlirShapedTypeGetDynamicStrideOrOffset
  _mlirShapedTypeGetElementType
+ _mlirShapedTypeGetElementType
+ _mlirShapedTypeGetRank
  _mlirShapedTypeGetRank
  _mlirShapedTypeHasRank
+ _mlirShapedTypeHasRank
  _mlirShapedTypeHasStaticShape
+ _mlirShapedTypeHasStaticShape
+ _mlirShapedTypeIsDynamicDim
  _mlirShapedTypeIsDynamicDim
  _mlirShapedTypeIsDynamicSize
  _mlirShapedTypeIsDynamicStrideOrOffset
  _mlirSparseElementsAttrGetIndices
  _mlirSparseElementsAttrGetTypeID
  _mlirSparseElementsAttrGetValues
+ _mlirSparseElementsAttribute
  _mlirSparseElementsAttribute
  _mlirStridedLayoutAttrGet
  _mlirStridedLayoutAttrGetNumStrides
@@ -638,10 +694,13 @@
  _mlirSubOpArrayTypeGetTypeID
  _mlirSubOpBufferTypeGet
  _mlirSubOpBufferTypeGetTypeID
+ _mlirSubOpColumnDefMemberMappingAttributeGet
+ _mlirSubOpColumnRefMemberMappingAttributeGet
  _mlirSubOpContinuousEntryRefTypeGet
  _mlirSubOpContinuousEntryRefTypeGetTypeID
  _mlirSubOpContinuousViewTypeGet
  _mlirSubOpContinuousViewTypeGetTypeID
+ _mlirSubOpCreateMember
  _mlirSubOpEntryListTypeGet
  _mlirSubOpEntryListTypeGetTypeID
  _mlirSubOpEntryRefTypeGet
@@ -658,6 +717,7 @@
  _mlirSubOpMapEntryRefTypeGetTypeID
  _mlirSubOpMapTypeGet
  _mlirSubOpMapTypeGetTypeID
+ _mlirSubOpMemberAttributeGet
  _mlirSubOpMultiMapEntryRefTypeGet
  _mlirSubOpMultiMapEntryRefTypeGetTypeID
  _mlirSubOpMultiMapTypeGet
@@ -679,6 +739,7 @@
  _mlirSymbolRefAttrGetNumNestedReferences
  _mlirSymbolRefAttrGetRootReference
  _mlirSymbolRefAttrGetTypeID
+ _mlirSymbolTableCreate
  _mlirSymbolTableCreate
  _mlirSymbolTableDestroy
  _mlirSymbolTableErase
@@ -718,13 +779,17 @@
  _mlirTypeIsADBCharType
  _mlirTypeIsADBDateType
  _mlirTypeIsADBDecimalType
+ _mlirTypeIsADBDictIterType
+ _mlirTypeIsADBDictType
  _mlirTypeIsADBIntervalType
+ _mlirTypeIsADBListType
  _mlirTypeIsADBNullableType
  _mlirTypeIsADBStringType
  _mlirTypeIsADBTimestampType
  _mlirTypeIsAF16
  _mlirTypeIsAF32
  _mlirTypeIsAF64
+ _mlirTypeIsAFloat
  _mlirTypeIsAFloat
  _mlirTypeIsAFloat4E2M1FN
  _mlirTypeIsAFloat6E2M3FN
@@ -744,6 +809,7 @@
  _mlirTypeIsANone
  _mlirTypeIsAOpaque
  _mlirTypeIsARankedTensor
+ _mlirTypeIsAShaped
  _mlirTypeIsAShaped
  _mlirTypeIsASubOpArrayType
  _mlirTypeIsASubOpBufferType
@@ -780,16 +846,28 @@
  _mlirUnitAttrGet
  _mlirUnitAttrGetTypeID
  _mlirUnmanagedDenseBoolResourceElementsAttrGet
+ _mlirUnmanagedDenseBoolResourceElementsAttrGet
+ _mlirUnmanagedDenseDoubleResourceElementsAttrGet
  _mlirUnmanagedDenseDoubleResourceElementsAttrGet
  _mlirUnmanagedDenseFloatResourceElementsAttrGet
+ _mlirUnmanagedDenseFloatResourceElementsAttrGet
+ _mlirUnmanagedDenseInt16ResourceElementsAttrGet
  _mlirUnmanagedDenseInt16ResourceElementsAttrGet
  _mlirUnmanagedDenseInt32ResourceElementsAttrGet
+ _mlirUnmanagedDenseInt32ResourceElementsAttrGet
+ _mlirUnmanagedDenseInt64ResourceElementsAttrGet
  _mlirUnmanagedDenseInt64ResourceElementsAttrGet
  _mlirUnmanagedDenseInt8ResourceElementsAttrGet
+ _mlirUnmanagedDenseInt8ResourceElementsAttrGet
+ _mlirUnmanagedDenseResourceElementsAttrGet
  _mlirUnmanagedDenseResourceElementsAttrGet
  _mlirUnmanagedDenseUInt16ResourceElementsAttrGet
+ _mlirUnmanagedDenseUInt16ResourceElementsAttrGet
+ _mlirUnmanagedDenseUInt32ResourceElementsAttrGet
  _mlirUnmanagedDenseUInt32ResourceElementsAttrGet
  _mlirUnmanagedDenseUInt64ResourceElementsAttrGet
+ _mlirUnmanagedDenseUInt64ResourceElementsAttrGet
+ _mlirUnmanagedDenseUInt8ResourceElementsAttrGet
  _mlirUnmanagedDenseUInt8ResourceElementsAttrGet
  _mlirUnrankedMemRefTypeGet
  _mlirUnrankedMemRefTypeGetChecked
@@ -822,10 +900,3 @@
  _mlirVectorTypeGetTypeID
  _mlirVectorTypeIsDimScalable
  _mlirVectorTypeIsScalable
- _mlirSubOpCreateMember
-_mlirSubOpColumnRefMemberMappingAttributeGet
-_mlirAttributeIsAColumnRefMemberMappingAttribute
-_mlirSubOpColumnDefMemberMappingAttributeGet
-_mlirAttributeIsAColumnDefMemberMappingAttribute
-_mlirSubOpMemberAttributeGet
-_mlirAttributeIsASubOpMemberAttribute
