@@ -197,7 +197,7 @@ bool ParquetBatchesWorkerResvState::hasMoreWork() {
 }
 void ParquetBatchesWorkerResvState::initNewRowGroup(int rowGroup, size_t splitSize, std::vector<std::deque<std::shared_ptr<ChunkWorkEntry>>>* queryLifetimeChunks, std::atomic<int>& rgIdstartIndex, int numberOfRowGroups, std::vector<int>& colIds, std::unique_ptr<parquet::arrow::FileReader>& localReader) {
    std::vector<int> newRgIds = {rowGroup};
-   auto newlocalRowGroupReaderUncertain = localReader->GetRecordBatchReader(newRgIds);
+   auto newlocalRowGroupReaderUncertain = localReader->GetRecordBatchReader(newRgIds, colIds);
    if (!newlocalRowGroupReaderUncertain.ok()) {
       //TODO handle error
       std::cerr << "Should not happen" << std::endl;
@@ -348,6 +348,9 @@ arrow::Status ScanParquetFileTask::init(std::vector<FilterDescription>& filterDe
       int metadataColumnId = parquetSchema->GetFieldIndex(filter.columnName);
       if (metadataColumnId < 0) {
          continue;
+      }
+      if (std::ranges::find(colIds, metadataColumnId) == colIds.end()) {
+         colIds.emplace_back(metadataColumnId);
       }
       if (filter.op == FilterOp::NOTNULL) {
          metadataFilters.emplace_back(metadataColumnId, std::make_shared<NotNullFilter>());
@@ -527,10 +530,22 @@ void ScanParquetFileTask::unitRun(LingoDBTable::TableChunk& chunk) {
    batchView.selectionVector = BatchView::defaultSelectionVector.data();
    batchView.length = std::min(static_cast<size_t>(chunk.getNumRows() - begin), len);
    for (size_t i = 0; i < colIds.size(); i++) {
-      batchView.arrays[i] = chunk.getArrayView(colIds[i]);
+      batchView.arrays[i] = chunk.getArrayView(i);
    }
    auto [newLen, selVec] = restrictions->applyFilters(begin, batchView.length, selVec1, selVec2, [&](size_t colId) {
-      return chunk.getArrayView(colId);
+      size_t projectedColId = 0;
+      bool found = false;
+      for (size_t i = 0; i < colIds.size(); i++) {
+         if (colIds[i] == static_cast<int>(colId)) {
+            projectedColId = i;
+            found = true;
+            break;
+         }
+      }
+      if (!found) {
+         return static_cast<const ArrayView*>(nullptr);
+      }
+      return chunk.getArrayView(projectedColId);
    });
    batchView.length = newLen;
    batchView.selectionVector = selVec;
