@@ -92,6 +92,9 @@ class LingoDBTable : public TableStorage {
    std::pair<const TableChunk*, size_t> getByRowId(size_t rowId) const;
 
    std::shared_ptr<arrow::DataType> getColumnStorageType(std::string_view columnName) const override;
+
+   // Convert the loaded internal table chunks into an Arrow Table. Ensures data is loaded.
+   std::vector<TableChunk>* getTableChunks();
 };
 } // namespace lingodb::runtime
 

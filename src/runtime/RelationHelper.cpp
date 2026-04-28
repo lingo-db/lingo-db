@@ -7,14 +7,19 @@
 #include "lingodb/catalog/TableCatalogEntry.h"
 #include "lingodb/runtime/ArrowTable.h"
 #include "lingodb/runtime/ExternalDataSourceProperty.h"
+#include "lingodb/runtime/storage/LingoDBTable.h"
 #include "lingodb/runtime/storage/TableStorage.h"
 #include "lingodb/utility/Serialization.h"
 
 #include <arrow/builder.h>
 #include <arrow/csv/api.h>
 #include <arrow/io/api.h>
+#include <arrow/ipc/api.h>
 #include <dlfcn.h>
 #include <lingodb/catalog/Defs.h>
+#include <parquet/arrow/writer.h>
+#include <parquet/properties.h>
+
 namespace lingodb::runtime {
 void RelationHelper::createTable(lingodb::runtime::VarLen32 meta) {
    auto* context = getCurrentExecutionContext();
@@ -81,7 +86,7 @@ void RelationHelper::appendTableFromResult(lingodb::runtime::VarLen32 tableName,
       appendToTable(session, tableName.str(), resultTable.value()->get());
    }
 }
-void RelationHelper::copyFromIntoTable(lingodb::runtime::VarLen32 tableName, lingodb::runtime::VarLen32 fileName, lingodb::runtime::VarLen32 delimiter, lingodb::runtime::VarLen32 escape, bool header) {
+void RelationHelper::copyFromIntoTableCSV(lingodb::runtime::VarLen32 tableName, lingodb::runtime::VarLen32 fileName, lingodb::runtime::VarLen32 delimiter, lingodb::runtime::VarLen32 escape, bool header) {
    auto* context = getCurrentExecutionContext();
    auto& session = context->getSession();
    auto catalog = session.getCatalog();
@@ -183,6 +188,107 @@ void RelationHelper::copyFromIntoTable(lingodb::runtime::VarLen32 tableName, lin
       throw std::runtime_error("copy failed: no such table");
    }
 }
+void RelationHelper::copyToFromTableCSV(runtime::VarLen32 tableName, runtime::VarLen32 fileName, runtime::VarLen32 delimiter, bool header) {
+   std::shared_ptr<arrow::io::FileOutputStream> outfile;
+   auto table = getArrowTableFromName(tableName.str());
+
+   auto openResult = arrow::io::FileOutputStream::Open(fileName.str());
+   if (!openResult.ok()) {
+      throw std::runtime_error("Error opening file" + openResult.status().ToString());
+   }
+   outfile = openResult.ValueOrDie();
+   auto write_options = arrow::csv::WriteOptions::Defaults();
+   write_options.delimiter = delimiter.str().front();
+   write_options.include_header = header;
+   auto status = arrow::csv::WriteCSV(*table, write_options, outfile.get());
+   if (!status.ok()) {
+      throw std::runtime_error("copy failed");
+   }
+}
+void RelationHelper::copyToFromTableParquet(runtime::VarLen32 tableName, runtime::VarLen32 fileName, runtime::VarLen32 compression) {
+   std::shared_ptr<arrow::io::FileOutputStream> outfile;
+   auto table = getArrowTableFromName(tableName.str());
+
+   // Convert fixed_size_binary columns to string for export
+   std::vector<int> fixedSizeBinaryColumnIndices;
+   for (int i = 0; i < table->num_columns(); i++) {
+      if (table->field(i)->type()->id() == arrow::Type::FIXED_SIZE_BINARY) {
+         fixedSizeBinaryColumnIndices.push_back(i);
+      }
+   }
+   for (int idx : fixedSizeBinaryColumnIndices) {
+      auto column = table->column(idx);
+      auto stringBuilder = std::make_unique<arrow::StringBuilder>(arrow::default_memory_pool());
+
+      auto chunks = column->chunks();
+      for (const auto& chunk : chunks) {
+         const auto fsbArray = std::static_pointer_cast<arrow::FixedSizeBinaryArray>(chunk);
+         for (int64_t i = 0; i < fsbArray->length(); i++) {
+            if (fsbArray->IsNull(i)) {
+               if (!stringBuilder->AppendNull().ok()) {
+                  throw std::runtime_error("failed to append null string data");
+               }
+            } else {
+               std::string str = fsbArray->GetString(i);
+               // Trim at first null byte
+               size_t nullPos = str.find('\0');
+               if (nullPos != std::string::npos) {
+                  str.resize(nullPos);
+               }
+               if (!stringBuilder->Append(str).ok()) {
+                  throw std::runtime_error("failed to append string data");
+               }
+            }
+         }
+      }
+      const auto stringArray = stringBuilder->Finish().ValueOrDie();
+      const auto newColumnChunked = std::make_shared<arrow::ChunkedArray>(stringArray);
+      auto field = arrow::field(table->field(idx)->name(), arrow::utf8());
+      table = table->SetColumn(idx, field, newColumnChunked).ValueOrDie();
+   }
+
+   auto openResult = arrow::io::FileOutputStream::Open(fileName.str());
+   if (!openResult.ok()) {
+      throw std::runtime_error("Error opening file" + openResult.status().ToString());
+   }
+   outfile = openResult.ValueOrDie();
+   auto compressionStr = compression.str();
+   auto compressionType = arrow::Compression::SNAPPY;
+   if (compressionStr == "UNCOMPRESSED") {
+      compressionType = arrow::Compression::UNCOMPRESSED;
+   } else if (compressionStr == "GZIP") {
+      compressionType = arrow::Compression::GZIP;
+   } else if (compressionStr == "BROTLI") {
+      compressionType = arrow::Compression::BROTLI;
+   } else if (compressionStr == "ZSTD") {
+      compressionType = arrow::Compression::ZSTD;
+   } else if (compressionStr == "LZ4") {
+      compressionType = arrow::Compression::LZ4;
+   } else if (compressionStr == "LZ4_FRAME") {
+      compressionType = arrow::Compression::LZ4_FRAME;
+   } else if (compressionStr == "LZO") {
+      compressionType = arrow::Compression::LZO;
+   } else if (compressionStr == "BZ2") {
+      compressionType = arrow::Compression::BZ2;
+   } else if (compressionStr == "LZ4_HADOOP") {
+      compressionType = arrow::Compression::LZ4_HADOOP;
+   } else if (compressionStr == "SNAPPY") {
+   } else {
+      throw std::runtime_error("Unsupported compression type");
+   }
+
+   std::shared_ptr<parquet::WriterProperties> props =
+      parquet::WriterProperties::Builder().compression(compressionType)->build();
+
+   std::shared_ptr<parquet::ArrowWriterProperties> arrowProps =
+      parquet::ArrowWriterProperties::Builder().store_schema()->build();
+
+   auto status = parquet::arrow::WriteTable(*table.get(), arrow::default_memory_pool(), outfile,
+                                            /*chunk_size=*/64 * 1024, props, arrowProps);
+   if (!status.ok()) {
+      throw std::runtime_error("copy failed: " + status.ToString());
+   }
+}
 void RelationHelper::setPersist(bool value) {
    auto* context = getCurrentExecutionContext();
    auto& session = context->getSession();
@@ -208,9 +314,47 @@ HashIndexAccess* RelationHelper::accessHashIndex(lingodb::runtime::VarLen32 desc
       context->registerState({access, [&](void* ptr) { delete static_cast<HashIndexAccess*>(ptr); }});
       return access;
    } else {
-      throw std::runtime_error("no such table");
+      throw std::runtime_error("Table " + description.str() + " not found");
    }
 
    throw std::runtime_error("index unsupported for now");
+}
+
+std::shared_ptr<arrow::Table> RelationHelper::getArrowTableFromName(std::string tableName) {
+   auto* context = getCurrentExecutionContext();
+   auto& session = context->getSession();
+   auto catalog = session.getCatalog();
+   if (auto relation = catalog->getTypedEntry<lingodb::catalog::TableCatalogEntry>(tableName)) {
+      std::shared_ptr<arrow::io::FileOutputStream> outfile;
+      // Ensure the table is loaded into memory and export from the in-memory representation
+      relation.value()->ensureFullyLoaded();
+      auto* lingoTable = dynamic_cast<lingodb::runtime::LingoDBTable*>(&relation.value()->getTableStorage());
+      if (!lingoTable) {
+         throw std::runtime_error("unsupported table storage");
+      }
+
+      lingoTable->ensureLoaded();
+      std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
+      for (const auto& chunk : *lingoTable->getTableChunks()) {
+         batches.push_back(chunk.data());
+      }
+      if (batches.empty()) {
+         throw std::runtime_error("no data to export");
+      }
+      auto table = arrow::Table::FromRecordBatches(batches).ValueOrDie();
+
+      if (!table) {
+         // empty table -> create empty Arrow table with schema from storage
+         auto schema = relation.value()->getSample().getSampleData() ? relation.value()->getSample().getSampleData()->schema() : nullptr;
+         if (!schema) {
+            throw std::runtime_error("no data to export");
+         }
+         table = arrow::Table::FromRecordBatches({}).ValueOrDie();
+         return table;
+      }
+      return table;
+   } else {
+      throw std::runtime_error("no such table found " + tableName);
+   }
 }
 } // end namespace lingodb::runtime

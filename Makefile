@@ -43,6 +43,16 @@ resources/data/%/.stamp: resources/data/%/.rawdata build/lingodb-$(DATA_BUILD_TY
 	touch $@
 	rm -rf resources/data/$*/.rawdata
 
+resources/data/%/.pq: resources/data/%/.stamp resources/data/%/.rawdata build/lingodb-$(DATA_BUILD_TYPE)/.buildstamp
+	@dir_name=$(shell dirname $@) && \
+	base_name=$$(basename $$dir_name) && \
+	dataset_name=$$(echo $$base_name | sed -E 's/-[0-9]+$$//') && \
+	cd resources/data/$*/ && $(ROOT_DIR)/build/lingodb-$(DATA_BUILD_TYPE)/sql . < $(ROOT_DIR)/resources/sql/$$dataset_name/export-to-parquet.sql
+	touch $@
+	rm -f resources/data/$*/*.arrow
+	rm -f resources/data/$*/*.hashidx
+	rm -f resources/data/$*/*.lingodb
+	rm -rf resources/data/$*/.stamp
 
 
 LDB_ARGS= -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  \

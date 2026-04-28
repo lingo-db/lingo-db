@@ -71,11 +71,7 @@ Type mapArrowTypeToCatalogType(const std::shared_ptr<arrow::DataType>& type) {
       case arrow::Type::INTERVAL_DAY_TIME:
          return Type::intervalDaytime();
       case arrow::Type::FIXED_SIZE_BINARY: {
-         auto fixedType = std::static_pointer_cast<arrow::FixedSizeBinaryType>(type);
-         if (fixedType->byte_width() <= 4) {
-            return Type::charType(fixedType->byte_width());
-         }
-         return Type::stringType();
+         throw std::runtime_error("Catalog parquet: unsupported arrow type " + type->ToString());
       }
       case arrow::Type::STRING:
       case arrow::Type::LARGE_STRING:
@@ -83,7 +79,7 @@ Type mapArrowTypeToCatalogType(const std::shared_ptr<arrow::DataType>& type) {
       case arrow::Type::LARGE_BINARY:
          return Type::stringType();
       default:
-         throw std::runtime_error("Catalog parquet bootstrap: unsupported arrow type " + type->ToString());
+         throw std::runtime_error("Catalog parquet: unsupported arrow type " + type->ToString());
    }
 }
 

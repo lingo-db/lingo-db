@@ -284,6 +284,10 @@ void LingoDBTable::flush() {
    storeTable(dbDir + "/" + fileName, schema, tableData);
 }
 
+std::vector<LingoDBTable::TableChunk>* LingoDBTable::getTableChunks() {
+   return &tableData;
+}
+
 std::shared_ptr<arrow::DataType> LingoDBTable::getColumnStorageType(std::string_view columnName) const {
    // this unnecessary to-string-allocation must be fixed in arrow. for now, we use this workaround
    auto field = schema->GetFieldByName(std::string{columnName});
