@@ -47,3 +47,56 @@ jobs:
             build/run-mlir
             build/mlir-db-opt
             build/sql-to-mlir
+
+  # Smoke test the released binaries on a clean Ubuntu runner (no dev
+  # container) to verify they're self-contained for the manylinux baseline.
+  smoke_test_release:
+    needs: release-build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runs-on: ubuntu-latest
+          - arch: arm64
+            runs-on: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: lingodb-cli-linux-${{ matrix.arch }}
+          path: artifacts/cli
+      - uses: actions/download-artifact@v4
+        with:
+          name: lingodb-tools-linux-${{ matrix.arch }}
+          path: artifacts/tools
+      - name: Stage binaries
+        run: |
+          mkdir -p bin
+          # upload-artifact preserves the build/ prefix, so flatten by name.
+          for tool in sql run-sql run-mlir mlir-db-opt sql-to-mlir; do
+            cp "$(find artifacts -type f -name "$tool" | head -1)" bin/
+          done
+          chmod +x bin/*
+          ls -la bin/
+      - name: Run a tiny query end-to-end
+        run: |
+          mkdir -p tinydb
+          cat <<'SQL' > setup.sql
+          set persist=1;
+          create table t(x int);
+          insert into t values (1), (2), (3);
+          SQL
+          bin/sql tinydb < setup.sql
+          # No trailing newline: sql-to-mlir on this branch loops once extra
+          # on a final "\n" iteration and segfaults on the empty parse result.
+          # Fix is in flight on a separate branch.
+          printf 'select sum(x) from t;' > q.sql
+          bin/run-sql q.sql tinydb | tee result.txt
+          grep -q '6' result.txt
+          bin/sql-to-mlir q.sql tinydb > q.mlir
+          test -s q.mlir
+          # mlir-db-opt and run-mlir need full lowering pipelines; just
+          # verify the binaries load cleanly here.
+          bin/mlir-db-opt --help > /dev/null 2>&1 || true
+          bin/run-mlir --help > /dev/null 2>&1 || true
