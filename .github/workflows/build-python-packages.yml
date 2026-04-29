@@ -11,48 +11,6 @@ on:
       - 'v*'
 
 jobs:
-  build_python_10:
-    runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-py-dev:ba723e305302f60aefe75084c3b0c60e12dbad70
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-        with:
-          submodules: recursive
-      - name: Build
-        run: |
-          rm -rf /built-packages          
-          mkdir -p /built-packages
-          bash tools/python/bridge/create_package.linux.sh cp310-cp310
-          cd tools/python
-          /opt/python/cp310-cp310/bin/python3 -m build .
-          cp dist/*.whl /built-packages/.
-      - uses: actions/upload-artifact@master
-        with:
-          name: python-dist-310
-          path: /built-packages
-  build_python_11:
-    runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-py-dev:ba723e305302f60aefe75084c3b0c60e12dbad70
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-        with:
-          submodules: recursive
-      - name: Build
-        run: |
-          rm -rf /built-packages          
-          mkdir -p /built-packages
-          bash tools/python/bridge/create_package.linux.sh cp311-cp311
-          cd tools/python
-          /opt/python/cp311-cp311/bin/python3 -m build .
-          cp dist/*.whl /built-packages/.
-      - uses: actions/upload-artifact@master
-        with:
-          name: python-dist-311
-          path: /built-packages
   build_python_12:
     runs-on: ubuntu-latest
     container: ghcr.io/lingo-db/lingodb-py-dev:ba723e305302f60aefe75084c3b0c60e12dbad70
@@ -64,7 +22,7 @@ jobs:
           submodules: recursive
       - name: Build
         run: |
-          rm -rf /built-packages          
+          rm -rf /built-packages
           mkdir -p /built-packages
           bash tools/python/bridge/create_package.linux.sh cp312-cp312
           cd tools/python
@@ -85,7 +43,7 @@ jobs:
           submodules: recursive
       - name: Build
         run: |
-          rm -rf /built-packages          
+          rm -rf /built-packages
           mkdir -p /built-packages
           bash tools/python/bridge/create_package.linux.sh cp313-cp313
           cd tools/python
@@ -95,20 +53,31 @@ jobs:
         with:
           name: python-dist-313
           path: /built-packages
+  build_python_14:
+    runs-on: ubuntu-latest
+    container: ghcr.io/lingo-db/lingodb-py-dev:ba723e305302f60aefe75084c3b0c60e12dbad70
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          submodules: recursive
+      - name: Build
+        run: |
+          rm -rf /built-packages
+          mkdir -p /built-packages
+          bash tools/python/bridge/create_package.linux.sh cp314-cp314
+          cd tools/python
+          /opt/python/cp314-cp314/bin/python3 -m build .
+          cp dist/*.whl /built-packages/.
+      - uses: actions/upload-artifact@master
+        with:
+          name: python-dist-314
+          path: /built-packages
   collect_packages:
-    needs: [build_python_10, build_python_11, build_python_12, build_python_13]
+    needs: [build_python_12, build_python_13, build_python_14]
     runs-on: ubuntu-latest
     steps:
-      - name: Download 310 dist
-        uses: actions/download-artifact@v4
-        with:
-          name: python-dist-310
-          path: dist/
-      - name: Download 311 dist
-        uses: actions/download-artifact@v4
-        with:
-          name: python-dist-311
-          path: dist/
       - name: Download 312 dist
         uses: actions/download-artifact@v4
         with:
@@ -118,8 +87,44 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: python-dist-313
+          path: dist/
+      - name: Download 314 dist
+        uses: actions/download-artifact@v4
+        with:
+          name: python-dist-314
           path : dist/
       - uses: actions/upload-artifact@master
         with:
           name: built-python-wheels
           path: dist/
+
+  # Smoke test the released wheels on a clean Ubuntu runner (no dev container)
+  # to verify they install and import on a baseline system.
+  test_python:
+    needs: [build_python_12, build_python_13, build_python_14]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - python_version: '3.12'
+            tag: '312'
+          - python_version: '3.13'
+            tag: '313'
+          - python_version: '3.14'
+            tag: '314'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python_version }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-dist-${{ matrix.tag }}
+          path: built-packages
+      - name: Install + run smoke tests
+        run: |
+          python -m pip install built-packages/*.whl
+          python -m pip install pandas
+          python tools/python/test/test.py
+          python tools/python/test/mlir-construction.py

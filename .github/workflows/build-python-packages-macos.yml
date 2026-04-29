@@ -107,3 +107,32 @@ jobs:
         with:
           name: built-python-wheels-macos
           path: dist/
+
+  # Smoke test the released wheels on a clean macos-15 runner to verify they
+  # install and import without the brew toolchain that built them.
+  test_python_macos_arm64:
+    needs: [build_python_macos_arm64]
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - python_version: '3.13'
+            tag: '313'
+          - python_version: '3.14'
+            tag: '314'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python_version }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-dist-macos-arm64-${{ matrix.tag }}
+          path: built-packages
+      - name: Install + run smoke tests
+        run: |
+          python -m pip install built-packages/*.whl
+          python -m pip install pandas
+          python tools/python/test/test.py
+          python tools/python/test/mlir-construction.py
