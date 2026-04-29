@@ -1,9 +1,9 @@
-FROM quay.io/pypa/manylinux_2_28_x86_64:2025.01.11-1 AS base-amd64
+FROM quay.io/pypa/manylinux_2_28_x86_64:2026.04.25-0 AS base-amd64
 ENV PLAT=manylinux_2_28_x86_64
 ENV NINJA_ARCHIVE=ninja-linux.zip
 ENV LLVM_TARGET_ARCH=X86
 
-FROM quay.io/pypa/manylinux_2_28_aarch64:2025.01.11-1 AS base-arm64
+FROM quay.io/pypa/manylinux_2_28_aarch64:2026.04.25-0 AS base-arm64
 ENV PLAT=manylinux_2_28_aarch64
 ENV NINJA_ARCHIVE=ninja-linux-aarch64.zip
 ENV LLVM_TARGET_ARCH=AArch64
