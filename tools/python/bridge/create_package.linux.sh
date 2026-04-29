@@ -1,9 +1,13 @@
 set -e
 
+# baseline backend's CMake config does find_program(... clang-20 clang-19),
+# which only resolves once the container's custom LLVM bin dir is on PATH.
+export PATH=/built-llvm/bin/:$PATH
+
 /opt/python/$1/bin/python3 -m venv venv
 venv/bin/python3 -m pip install build pyarrow===24.0.0
 venv/bin/python3 -c "import pyarrow; pyarrow.create_library_symlinks()"
-cmake -G Ninja . -B build/lingodb-release/ -DCMAKE_BUILD_TYPE=Release -DClang_DIR=/built-llvm/lib/cmake/clang -DArrow_DIR=/built-arrow/lib64/cmake/Arrow -DArrowCompute_DIR=/built-arrow/lib64/cmake/ArrowCompute   -DENABLE_TESTS=OFF
+cmake -G Ninja . -B build/lingodb-release/ -DCMAKE_BUILD_TYPE=Release -DClang_DIR=/built-llvm/lib/cmake/clang -DArrow_DIR=/built-arrow/lib64/cmake/Arrow -DArrowCompute_DIR=/built-arrow/lib64/cmake/ArrowCompute   -DENABLE_TESTS=OFF -DENABLE_BASELINE_BACKEND=ON
 
 cmake --build build/lingodb-release --target pybridge -j$(nproc)
 cp -r tools/python/bridge build/pylingodb
