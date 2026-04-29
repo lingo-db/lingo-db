@@ -2,8 +2,8 @@ name: Build Python Packages for macOS
 
 # Run when a release branch (release-*) is pushed, or when a release tag is pushed.
 # Mirrors the Linux build-python-packages workflow but uses the macOS bridge script
-# at tools/python/bridge/create_package.macos.sh. Builds cp313 and cp314 wheels in
-# the same job so the slow LLVM build (~1h) is shared across both.
+# at tools/python/bridge/create_package.macos.sh. Builds cp312, cp313, and cp314
+# wheels in the same job so the slow LLVM build (~1h) is shared across all three.
 on:
   push:
     branches:
@@ -35,7 +35,7 @@ jobs:
       - name: Install dependencies with Homebrew
         run: |
           brew update
-          brew install cmake ninja llvm@20 bzip2 libffi libedit libxml2 brotli zlib apache-arrow boost flex bison wget python@3.13 python@3.14
+          brew install cmake ninja llvm@20 bzip2 libffi libedit libxml2 brotli zlib apache-arrow boost flex bison wget python@3.12 python@3.13 python@3.14
           brew link --force cmake ninja llvm@20 bzip2 libffi libedit libxml2 brotli zlib apache-arrow boost flex bison
 
       # The macOS bridge script self-detects existing LLVM/Arrow installs in
@@ -54,6 +54,18 @@ jobs:
         with:
           path: build/arrow-install
           key: macos-15-arrow-install-24.0.0-${{ hashFiles('tools/python/bridge/create_package.macos.sh') }}
+
+      - name: Build wheel (cp312)
+        run: |
+          mkdir -p built-packages-312
+          bash tools/python/bridge/create_package.macos.sh 3.12
+          cp build/pylingodb-312/build-packages/*.whl built-packages-312/
+          cd tools/python
+          /opt/homebrew/bin/python3.12 -m venv venv-312
+          venv-312/bin/python3 -m pip install build
+          venv-312/bin/python3 -m build .
+          cp dist/*.whl ../../built-packages-312/
+          rm -rf dist
 
       - name: Build wheel (cp313)
         run: |
@@ -81,6 +93,11 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
+          name: python-dist-macos-arm64-312
+          path: built-packages-312
+
+      - uses: actions/upload-artifact@v4
+        with:
           name: python-dist-macos-arm64-313
           path: built-packages-313
 
@@ -93,6 +110,11 @@ jobs:
     needs: [build_python_macos_arm64]
     runs-on: ubuntu-latest
     steps:
+      - name: Download macOS arm64 cp312 dist
+        uses: actions/download-artifact@v4
+        with:
+          name: python-dist-macos-arm64-312
+          path: dist/
       - name: Download macOS arm64 cp313 dist
         uses: actions/download-artifact@v4
         with:
@@ -117,6 +139,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - python_version: '3.12'
+            tag: '312'
           - python_version: '3.13'
             tag: '313'
           - python_version: '3.14'
