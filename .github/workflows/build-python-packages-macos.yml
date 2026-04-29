@@ -2,8 +2,8 @@ name: Build Python Packages for macOS
 
 # Run when a release branch (release-*) is pushed, or when a release tag is pushed.
 # Mirrors the Linux build-python-packages workflow but uses the macOS bridge script
-# at tools/python/bridge/create_package.macos.sh. The script is currently hardwired
-# to Python 3.13 (homebrew default), so only a cp313 wheel is produced.
+# at tools/python/bridge/create_package.macos.sh. Builds cp313 and cp314 wheels in
+# the same job so the slow LLVM build (~1h) is shared across both.
 on:
   push:
     branches:
@@ -35,7 +35,7 @@ jobs:
       - name: Install dependencies with Homebrew
         run: |
           brew update
-          brew install cmake ninja llvm@20 bzip2 libffi libedit libxml2 brotli zlib apache-arrow boost flex bison wget python@3.13
+          brew install cmake ninja llvm@20 bzip2 libffi libedit libxml2 brotli zlib apache-arrow boost flex bison wget python@3.13 python@3.14
           brew link --force cmake ninja llvm@20 bzip2 libffi libedit libxml2 brotli zlib apache-arrow boost flex bison
 
       # The macOS bridge script self-detects existing LLVM/Arrow installs in
@@ -55,30 +55,53 @@ jobs:
           path: build/arrow-install
           key: macos-15-arrow-install-24.0.0-${{ hashFiles('tools/python/bridge/create_package.macos.sh') }}
 
-      - name: Build wheel
+      - name: Build wheel (cp313)
         run: |
-          mkdir -p built-packages
-          bash tools/python/bridge/create_package.macos.sh
-          cp build/pylingodb/build-packages/*.whl built-packages/
+          mkdir -p built-packages-313
+          bash tools/python/bridge/create_package.macos.sh 3.13
+          cp build/pylingodb-313/build-packages/*.whl built-packages-313/
           cd tools/python
-          /opt/homebrew/bin/python3 -m venv venv
-          venv/bin/python3 -m pip install build
-          venv/bin/python3 -m build .
-          cp dist/*.whl ../../built-packages/
+          /opt/homebrew/bin/python3.13 -m venv venv-313
+          venv-313/bin/python3 -m pip install build
+          venv-313/bin/python3 -m build .
+          cp dist/*.whl ../../built-packages-313/
+          rm -rf dist
+
+      - name: Build wheel (cp314)
+        run: |
+          mkdir -p built-packages-314
+          bash tools/python/bridge/create_package.macos.sh 3.14
+          cp build/pylingodb-314/build-packages/*.whl built-packages-314/
+          cd tools/python
+          /opt/homebrew/bin/python3.14 -m venv venv-314
+          venv-314/bin/python3 -m pip install build
+          venv-314/bin/python3 -m build .
+          cp dist/*.whl ../../built-packages-314/
+          rm -rf dist
 
       - uses: actions/upload-artifact@v4
         with:
           name: python-dist-macos-arm64-313
-          path: built-packages
+          path: built-packages-313
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-dist-macos-arm64-314
+          path: built-packages-314
 
   collect_packages_macos:
     needs: [build_python_macos_arm64]
     runs-on: ubuntu-latest
     steps:
-      - name: Download macOS arm64 313 dist
+      - name: Download macOS arm64 cp313 dist
         uses: actions/download-artifact@v4
         with:
           name: python-dist-macos-arm64-313
+          path: dist/
+      - name: Download macOS arm64 cp314 dist
+        uses: actions/download-artifact@v4
+        with:
+          name: python-dist-macos-arm64-314
           path: dist/
       - uses: actions/upload-artifact@v4
         with:
