@@ -1,3 +1,4 @@
+set(COMMON_LIBS runner utility runtime mlir-support scheduler)
 
 # Find Catch2 (CMake >= 3.11 recommended)
 find_package(Catch2 REQUIRED)
@@ -15,7 +16,7 @@ add_executable(tester
         utility/TestHyperLogLog.cpp
         execution/TestBaselineUtils.cpp
 )
-target_link_libraries(tester PRIVATE Catch2::Catch2WithMain ${LIBS} utility catalog MLIRSQLFrontend runtime runner)
+target_link_libraries(tester PRIVATE Catch2::Catch2WithMain ${LIBS} ${COMMON_LIBS})
 set_target_properties(tester PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
 enable_testing()
