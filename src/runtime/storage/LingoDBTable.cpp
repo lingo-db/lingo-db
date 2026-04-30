@@ -1,6 +1,7 @@
 #include "lingodb/runtime/storage/LingoDBTable.h"
 #include "lingodb/catalog/Defs.h"
 #include "lingodb/runtime/ArrowView.h"
+#include "lingodb/runtime/storage/ExternalTableScan.h"
 #include "lingodb/runtime/storage/Restrictions.h"
 #include "lingodb/scheduler/Tasks.h"
 #include "lingodb/utility/Serialization.h"
@@ -532,18 +533,40 @@ class ScanBatchesSingleThreadedTask : public lingodb::scheduler::TaskWithImplici
 };
 
 std::unique_ptr<scheduler::Task> LingoDBTable::createScanTask(const ScanConfig& scanConfig) {
-   ensureLoaded();
-   std::vector<size_t> colIds;
-   for (const auto& c : scanConfig.columns) {
-      auto colId = schema->GetFieldIndex(c);
-      assert(colId >= 0);
-      colIds.push_back(colId);
-   }
    auto restrictions = lingodb::runtime::Restrictions::create(scanConfig.filters, *schema);
-   if (scanConfig.parallel) {
-      return std::make_unique<ScanBatchesTask>(*this, tableData, colIds, std::move(restrictions), scanConfig.cb);
+   if (!useParquetScan) {
+      std::vector<size_t> colIds;
+      for (const auto& c : scanConfig.columns) {
+         auto colId = schema->GetFieldIndex(c);
+         assert(colId >= 0);
+         colIds.push_back(colId);
+      }
+      ensureLoaded();
+
+      if (scanConfig.parallel) {
+         return std::make_unique<ScanBatchesTask>(*this, tableData, colIds, std::move(restrictions), scanConfig.cb);
+      } else {
+         return std::make_unique<ScanBatchesSingleThreadedTask>(tableData, colIds, std::move(restrictions), scanConfig.cb);
+      }
    } else {
-      return std::make_unique<ScanBatchesSingleThreadedTask>(tableData, colIds, std::move(restrictions), scanConfig.cb);
+      std::vector<int> colIds;
+      for (const auto& c : scanConfig.columns) {
+         auto colId = schema->GetFieldIndex(c);
+         assert(colId >= 0);
+         colIds.push_back(colId);
+      }
+      //Remove .arrow and replace with .parquet
+      std::string parquetFileName = fileName;
+      size_t lastDot = parquetFileName.find_last_of(".");
+      if (lastDot != std::string::npos) {
+         parquetFileName.replace(lastDot, std::string::npos, ".parquet");
+      } else {
+         // If there's no extension at all, just append it
+         parquetFileName += ".parquet";
+      }
+      auto parquetPath = dbDir + "/" + parquetFileName;
+      auto scanParquetFileTask = std::make_unique<ScanParquetFileTask>(parquetPath, colIds, scanConfig.cb, std::move(restrictions), scanConfig.filters);
+      return scanParquetFileTask;
    }
 }
 
