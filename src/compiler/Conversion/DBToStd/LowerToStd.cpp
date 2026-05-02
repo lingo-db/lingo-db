@@ -6,6 +6,8 @@
 #include "lingodb/compiler/Dialect/DB/IR/DBOps.h"
 #include "lingodb/compiler/Dialect/DB/IR/RuntimeFunctions.h"
 #include "lingodb/compiler/Dialect/DB/Passes.h"
+#include "lingodb/compiler/Dialect/PyInterp/PyInterpDialect.h"
+#include "lingodb/compiler/Dialect/PyInterp/PyInterpOps.h"
 #include "lingodb/compiler/Dialect/util/FunctionHelper.h"
 #include "lingodb/compiler/Dialect/util/UtilDialect.h"
 #include "lingodb/compiler/Dialect/util/UtilOps.h"
@@ -1403,6 +1405,7 @@ void DBToStdLoweringPass::runOnOperation() {
    target.addLegalDialect<async::AsyncDialect>();
    target.addLegalOp<ModuleOp>();
    target.addLegalOp<UnrealizedConversionCastOp>();
+   target.addLegalDialect<lingodb::compiler::dialect::py_interp::PyInterpDialect>();
 
    target.addLegalDialect<func::FuncDialect>();
    target.addLegalDialect<memref::MemRefDialect>();
@@ -1466,6 +1469,7 @@ void DBToStdLoweringPass::runOnOperation() {
    target.addLegalDialect<cf::ControlFlowDialect>();
 
    target.addDynamicallyLegalDialect<util::UtilDialect>(opIsWithoutDBTypes);
+   target.addDynamicallyLegalDialect<lingodb::compiler::dialect::py_interp::PyInterpDialect>(opIsWithoutDBTypes);
    target.addDynamicallyLegalOp<func::FuncOp>([&](func::FuncOp op) {
       auto isLegal = !hasDBType(typeConverter, op.getFunctionType().getInputs()) &&
          !hasDBType(typeConverter, op.getFunctionType().getResults());
@@ -1502,6 +1506,8 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<SimpleTypeConversionPattern<mlir::func::ConstantOp>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::func::CallIndirectOp>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::arith::SelectOp>>(typeConverter, &getContext());
+   patterns.insert<SimpleTypeConversionPattern<lingodb::compiler::dialect::py_interp::CastFromPyObject>>(typeConverter, &getContext());
+   patterns.insert<SimpleTypeConversionPattern<lingodb::compiler::dialect::py_interp::CastToPyObject>>(typeConverter, &getContext());
    patterns.insert<LoadArrowOpLowering>(typeConverter, &getContext());
    patterns.insert<AppendArrowLowering>(typeConverter, &getContext());
    patterns.insert<StringCmpOpLowering>(typeConverter, ctxt);

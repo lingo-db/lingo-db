@@ -60,6 +60,14 @@ if(APPLE)
     set(CLANG_TOOL_FLAGS "${CLANG_TOOL_FLAGS}" "-isysroot" "${MACOS_SDK_PATH}")
     message(STATUS "Queried macOS SDK path: ${MACOS_SDK_PATH}")
 endif()
+# For WASM, forward USE_CPYTHON_WASM_RUNTIME so PythonRuntime.h's PyObjectPtr
+# desugars to uint32_t and the generated FunctionSpec entries use i32 instead
+# of util::RefType<i8>. Without this, the WASM lowering fails type legalization.
+# OFF/CPYTHON both keep the no-define path, which forward-declares _object and
+# yields PyObject* -> RefType<i8> — matching what those runtimes return.
+if (ENABLE_PYTHON STREQUAL "WASM")
+    set(CLANG_TOOL_FLAGS "${CLANG_TOOL_FLAGS}" "-DUSE_CPYTHON_WASM_RUNTIME=1")
+endif()
 # cache clang-tool flags
 set(CLANG_TOOL_FLAGS "${CLANG_TOOL_FLAGS}" CACHE STRING "Flags for Clang tools" FORCE)
 ##

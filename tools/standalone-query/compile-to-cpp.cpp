@@ -75,8 +75,6 @@ int main(int argc, char** argv) {
    std::string directory = std::string(argv[2]);
    std::string outputFileName = std::string(argv[3]);
    std::cout << "Loading Database from: " << directory << '\n';
-   auto session = runtime::Session::createSession(directory, eagerLoading.getValue());
-
    lingodb::compiler::support::eval::init();
    execution::ExecutionMode runMode = execution::getExecutionMode();
    auto queryExecutionConfig = execution::createQueryExecutionConfig(runMode, true);
@@ -85,6 +83,7 @@ int main(int argc, char** argv) {
    queryExecutionConfig->executionBackend = std::make_unique<CppGenerator>(outputFileName);
 
    auto scheduler = scheduler::startScheduler();
+   auto session = runtime::Session::createSession(directory, eagerLoading.getValue());
    auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), *session);
    executer->fromFile(inputFileName);
    scheduler::awaitEntryTask(std::make_unique<execution::QueryExecutionTask>(std::move(executer)));

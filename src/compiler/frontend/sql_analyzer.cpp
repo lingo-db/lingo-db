@@ -956,7 +956,7 @@ std::shared_ptr<ast::CreateNode> SQLQueryAnalyzer::analyzeFunctionCreate(std::sh
       }
    }
 
-   if (language == "c") {
+   if (language == "c" || language == "python") {
       NullableType returnType = SQLTypeUtils::typemodsToCatalogType(createFunctionInfo->returnType.logicalTypeId, createFunctionInfo->returnType.typeModifiers);
 
       auto boundCreateFunctionInfo = std::make_shared<ast::BoundCreateFunctionInfo>(createFunctionInfo->functionName, createFunctionInfo->replace, returnType);
@@ -969,7 +969,7 @@ std::shared_ptr<ast::CreateNode> SQLQueryAnalyzer::analyzeFunctionCreate(std::sh
       createNode->createInfo = boundCreateFunctionInfo;
       return createNode;
    } else {
-      error("Currently only c is allowed", createNode->loc);
+      error("language must be 'c' or 'python'", createNode->loc);
    }
 }
 
@@ -2918,6 +2918,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeFunctionExpressio
          if (function->arguments.size() != entry.value()->getArgumentTypes().size()) {
             error("Function " << function->functionName << " needs " << entry.value()->getArgumentTypes().size() << " arguments but got " << function->arguments.size(), function->loc);
          }
+         bool anyNullableArgs = false;
          for (size_t i = 0; i < function->arguments.size(); i++) {
             auto bound = analyzeExpression(function->arguments.at(i), context, resolverScope);
             auto nullableUDFArgumentType = NullableType(entry.value()->getArgumentTypes()[i]);
@@ -2927,9 +2928,11 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeFunctionExpressio
             }
             auto commonTypes = SQLTypeUtils::toCommonTypes(std::vector{nullableUDFArgumentType, bound->resultType.value()});
             bound->resultType = commonTypes[1];
+            anyNullableArgs |= bound->resultType->isNullable;
             boundArgs.emplace_back(bound);
          }
          resultType = entry.value()->getReturnType();
+         resultType.isNullable |= anyNullableArgs;
          boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, boundArgs);
          boundFunctionExpression->udfFunction = entry.value();
       }

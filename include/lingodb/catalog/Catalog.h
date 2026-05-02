@@ -18,6 +18,7 @@ class CatalogEntry {
       LINGODB_TABLE_ENTRY = 1,
       LINGODB_HASH_INDEX_ENTRY = 2,
       C_FUNCTION_ENTRY = 3,
+      PYTHON_FUNCTION_ENTRY = 4,
    };
 
    protected:

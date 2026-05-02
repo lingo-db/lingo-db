@@ -21,13 +21,6 @@ int main(int argc, char** argv) {
    }
 
    bool eagerLoading = std::getenv("LINGODB_BACKEND_ONLY");
-   std::shared_ptr<runtime::Session> session;
-   if (argc > 2) {
-      std::cout << "Loading Database from: " << argv[2] << '\n';
-      session = runtime::Session::createSession(std::string(argv[2]), eagerLoading);
-   } else {
-      session = runtime::Session::createSession();
-   }
    lingodb::compiler::support::eval::init();
    execution::ExecutionMode runMode = execution::getExecutionMode();
    auto queryExecutionConfig = execution::createQueryExecutionConfig(runMode, false);
@@ -38,6 +31,13 @@ int main(int argc, char** argv) {
    queryExecutionConfig->timingProcessor = std::make_unique<execution::TimingPrinter>(inputFileName);
 
    auto scheduler = scheduler::startScheduler();
+   std::shared_ptr<runtime::Session> session;
+   if (argc > 2) {
+      std::cout << "Loading Database from: " << argv[2] << '\n';
+      session = runtime::Session::createSession(std::string(argv[2]), eagerLoading);
+   } else {
+      session = runtime::Session::createSession();
+   }
    auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), *session);
    executer->fromFile(inputFileName);
    scheduler::awaitEntryTask(std::make_unique<execution::QueryExecutionTask>(std::move(executer)));

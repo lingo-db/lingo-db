@@ -8,6 +8,11 @@
 #include "ConcurrentMap.h"
 #include "Session.h"
 #include <lingodb/scheduler/Scheduler.h>
+#ifdef USE_CPYTHON_WASM_RUNTIME
+namespace lingodb::wasm {
+struct WASMSession;
+} // namespace lingodb::wasm
+#endif
 namespace lingodb::runtime {
 class Database;
 //some state required for query processing;
@@ -67,7 +72,13 @@ class ExecutionContext {
       allocators.resize(lingodb::scheduler::getNumWorkers());
       stringArenas.resize(lingodb::scheduler::getNumWorkers());
       perWorkerStates.resize(lingodb::scheduler::getNumWorkers());
+#ifdef USE_CPYTHON_RUNTIME
+      resetPythonSessionCache();
+#endif
    }
+#ifdef USE_CPYTHON_RUNTIME
+   void resetPythonSessionCache();
+#endif
    Session& getSession() {
       return session;
    }
@@ -103,6 +114,15 @@ class ExecutionContext {
    State& getAllocator(size_t group) {
       return allocators[lingodb::scheduler::currentWorkerId()][group];
    }
+#ifdef USE_CPYTHON_RUNTIME
+   void setupPython();
+   void teardownPython();
+#endif
+#ifdef USE_CPYTHON_WASM_RUNTIME
+   void setupWasm();
+   void teardownWasm();
+   wasm::WASMSession* getWasmSession();
+#endif
    ~ExecutionContext();
 };
 

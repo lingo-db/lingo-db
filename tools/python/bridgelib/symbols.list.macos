@@ -1,6 +1,7 @@
  # to generate, use:
  # nm path/to/build/tools/python/bridgelib/libpybridge.dylib | grep -oe " \(_mlir\|__ZN6bridge\)\w*" > tools/python/bridgelib/symbols.list.macos
- __ZN6bridge10ConnectionC2ENSt3__110shared_ptrIN7lingodb7runtime7SessionEEE
+ __ZN6bridge10ConnectionC2EPKc
+ __ZN6bridge10ConnectionC2Ev
  __ZN6bridge11appendTableEPNS_10ConnectionEPKcP16ArrowArrayStream
  __ZN6bridge11initContextE11MlirContext
  __ZN6bridge12loadFromDiskEPKc

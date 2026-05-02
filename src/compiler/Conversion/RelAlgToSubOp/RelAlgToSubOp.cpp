@@ -4,6 +4,7 @@
 #include "lingodb/compiler/Dialect/Arrow/IR/ArrowDialect.h"
 #include "lingodb/compiler/Dialect/DB/IR/DBDialect.h"
 #include "lingodb/compiler/Dialect/DB/IR/DBOps.h"
+#include "lingodb/compiler/Dialect/PyInterp/PyInterpDialect.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorDialect.h"
@@ -3070,6 +3071,7 @@ void RelalgToSubOpLoweringPass::runOnOperation() {
    target.addLegalDialect<cf::ControlFlowDialect>();
    target.addLegalDialect<scf::SCFDialect>();
    target.addLegalDialect<util::UtilDialect>();
+   target.addLegalDialect<lingodb::compiler::dialect::py_interp::PyInterpDialect>();
 
    TypeConverter typeConverter;
    typeConverter.addConversion([](tuples::TupleStreamType t) { return t; });

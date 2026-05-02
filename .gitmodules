@@ -5,3 +5,13 @@
 [submodule "vendored/mimalloc"]
 	path = vendored/mimalloc
 	url = https://github.com/microsoft/mimalloc.git
+[submodule "vendored/cpython-wasm"]
+	path = vendored/cpython-wasm
+	url = https://github.com/lingo-db/cpython-wasm.git
+	# Block recursion into cpython-wasm's nested submodules during default
+	# `git submodule update --init --recursive` (used by checkout actions).
+	# Its wasi-sdk sub-submodule references a savannah commit that needs auth
+	# to fetch and is only needed when ENABLE_PYTHON=WASM; the python_udfs CI
+	# job initializes the bits it needs explicitly.
+	fetchRecurseSubmodules = false
+	update = none

@@ -143,6 +143,7 @@ class VarLen32 {
 
    operator std::string() { return std::string((char*) getPtr(), getLen()); }
    std::string str() { return std::string((char*) getPtr(), getLen()); }
+   std::string_view strView() { return std::string_view((char*) getPtr(), getLen()); }
 };
 
 template <class T>

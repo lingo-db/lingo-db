@@ -40,6 +40,49 @@ option(ENABLE_GPU_BACKEND "enable GPU backend" OFF)
 option(ENABLE_BASELINE_BACKEND "enable tpde baseline backend" OFF)
 option(ENABLE_TESTS "enable tests" ON)
 option(ENABLE_MIMALLOC "enable mimalloc allocator" ON)
+
+# Python UDF support: OFF (default), CPYTHON (embed system CPython), or WASM
+# (run a sandboxed CPython compiled to WebAssembly via the bundled cpython-wasm
+# submodule + WAMR runtime).
+if(NOT DEFINED ENABLE_PYTHON)
+    set(ENABLE_PYTHON "OFF" CACHE STRING "Enable Python support: OFF, CPYTHON, WASM")
+else()
+    set(ENABLE_PYTHON "${ENABLE_PYTHON}" CACHE STRING "Enable Python support: OFF, CPYTHON, WASM" FORCE)
+endif()
+set_property(CACHE ENABLE_PYTHON PROPERTY STRINGS "OFF;CPYTHON;WASM")
+message(STATUS "ENABLE_PYTHON=${ENABLE_PYTHON}")
+if(ENABLE_PYTHON STREQUAL "CPYTHON")
+    # Headers are always required. Embed (libpython) is only needed by the
+    # standalone binaries that start their own interpreter (sql, run-sql,
+    # sqlite-tester, ...). The pybridge .so is loaded INTO a running Python
+    # process — symbols resolve at load time, so headers alone suffice. This
+    # matters for manylinux build images (cp312-cp312) which ship a statically
+    # linked python3 with no libpython.so.
+    find_package(Python3 3.12 REQUIRED COMPONENTS Development.Module)
+    find_package(Python3 3.12 OPTIONAL_COMPONENTS Development.Embed)
+    message(STATUS "Using Python from ${Python3_INCLUDE_DIRS} (libs: ${Python3_LIBRARIES})")
+    include_directories(${Python3_INCLUDE_DIRS})
+    add_compile_definitions(USE_CPYTHON_RUNTIME=1)
+elseif(ENABLE_PYTHON STREQUAL "WASM")
+    message(STATUS "Configuring CPython WASM support")
+    add_compile_definitions(USE_CPYTHON_WASM_RUNTIME=1)
+    # WAMR's os_thread_get_stack_boundary() caches a per-thread native-stack
+    # boundary computed from pthread_attr_getstack and clamped to the top
+    # APP_THREAD_STACK_SIZE_MAX bytes (default 8 MB). Our worker pthread stack
+    # holds 64 fiber stacks + a worker main stack (~66 MB total), and the cache
+    # is hit once per worker thread regardless of which fiber is active. Bump
+    # the max so the boundary lands at the bottom of the whole region — every
+    # fiber's SP is then in-range.
+    add_compile_definitions(APP_THREAD_STACK_SIZE_MAX=134217728)
+    # WAMR's stack HW bound check would mprotect a guard page at the bottom of
+    # what it sees as the pthread stack — i.e. below fiber 0's slot. Our
+    # scheduler already places PROT_NONE guard pages there, so WAMR's
+    # touch_pages probe hits one and segfaults. Disable WAMR's guard install;
+    # we already get stack-overflow protection from the scheduler's guards.
+    add_compile_definitions(WASM_DISABLE_STACK_HW_BOUND_CHECK=1)
+    include_directories(${PROJECT_SOURCE_DIR}/vendored/cpython-wasm/wasm-micro-runtime/core/iwasm/include)
+    add_subdirectory(${PROJECT_SOURCE_DIR}/vendored/cpython-wasm ${CMAKE_CURRENT_BINARY_DIR}/cpython-wasm)
+endif()
 if (ENABLE_MIMALLOC)
     add_subdirectory(vendored/mimalloc EXCLUDE_FROM_ALL)
     message(STATUS "MIMALLOC ENABLED")
@@ -128,6 +171,7 @@ gen_rt_def(st-rt-defs "SimpleState.h")
 gen_rt_def(paht-rt-defs "PreAggregationHashtable.h")
 gen_rt_def(lock-rt-defs "EntryLock.h")
 gen_rt_def(tracing-rt-defs "Tracing.h")
+gen_rt_def(py-rt-defs "PythonRuntime.h")
 message("cpp files ${runtime_funcs_ptr_libs}")
 string(REPLACE " " ";" runtime_funcs_ptr_libs "${runtime_funcs_ptr_libs}")
 
@@ -145,11 +189,13 @@ add_subdirectory(src/compiler/Dialect/SubOperator)
 add_subdirectory(src/compiler/Dialect/DB)
 add_subdirectory(src/compiler/Dialect/Arrow)
 add_subdirectory(src/compiler/Dialect/util)
+add_subdirectory(src/compiler/Dialect/PyInterp)
 
 add_subdirectory(src/compiler/Conversion/DBToStd)
 add_subdirectory(src/compiler/Conversion/ArrowToStd)
 add_subdirectory(src/compiler/Conversion/RelAlgToSubOp)
 add_subdirectory(src/compiler/Conversion/SubOpToControlFlow)
+add_subdirectory(src/compiler/Conversion/PyInterpLowering)
 
 add_subdirectory(src/compiler/Conversion/UtilToLLVM)
 
@@ -170,6 +216,8 @@ set(LIBS
         MLIRUtil
         MLIRDB
         MLIRArrow
+        MLIRPyInterp
+        MLIRPyInterpToStd
         MLIRIR
         MLIRParser
         MLIRPass

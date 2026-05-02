@@ -38,6 +38,8 @@ std::shared_ptr<CatalogEntry> CatalogEntry::deserialize(lingodb::utility::Deseri
          return LingoDBHashIndexEntry::deserialize(deserializer);
       case CatalogEntryType::C_FUNCTION_ENTRY:
          return FunctionCatalogEntry::deserialize(deserializer);
+      case CatalogEntryType::PYTHON_FUNCTION_ENTRY:
+         return FunctionCatalogEntry::deserialize(deserializer);
       default:
          throw std::runtime_error("deserialize: unknown catalog entry type");
    }
