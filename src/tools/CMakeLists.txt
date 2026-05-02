@@ -52,6 +52,12 @@ set_target_properties(run-mlir PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINA
 target_compile_definitions(run-mlir PRIVATE ${COMPILE_DEFS})
 
 
+add_executable(run-mlir-csv run-mlir-csv.cpp)
+target_link_libraries(run-mlir-csv PUBLIC ${COMMON_LIBS})
+set_target_properties(run-mlir-csv PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+target_compile_definitions(run-mlir-csv PRIVATE ${COMPILE_DEFS})
+
+
 # run-sql
 add_executable(run-sql run-sql.cpp)
 target_link_libraries(run-sql PUBLIC ${COMMON_LIBS})

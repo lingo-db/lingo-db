@@ -115,55 +115,74 @@ int main(int argc, char** argv) {
       std::cerr << "USAGE: sql database" << std::endl;
       return 1;
    }
-   auto session = runtime::Session::createSession(std::string(argv[1]), true);
 
+   auto session = runtime::Session::createSession(std::string(argv[1]), true);
    compiler::support::eval::init();
    auto scheduler = scheduler::startScheduler();
 
-   linenoiseSetMultiLine(true); // enables multi-line editing
+   bool interactive = isatty(STDIN_FILENO);
    std::stringstream query;
-   size_t count = 0;
-   while (true) {
-      const char* promptStr = prompt.getValue() ? (query.str().empty() ? "sql> " : "   -> ") : "";
-      char* input = linenoise(promptStr);
+   size_t dollarCount = 0;
 
-      if (input == nullptr) {
-         // Ctrl+D or EOF
-         std::cout << std::endl;
-         break;
+   if (interactive) {
+      linenoiseSetMultiLine(true);
+      while (true) {
+         const char* promptStr = (query.str().empty() ? "sql> " : "   -> ");
+         char* input = linenoise(promptStr);
+
+         if (input == nullptr) break;
+         std::string line = input;
+         free(input);
+
+         if (line == "exit") break;
+
+         query << line << '\n';
+
+         std::string trimmed = line;
+         trimmed.erase(trimmed.find_last_not_of(" \t\r\n") + 1);
+
+         // Count $$
+         size_t pos = 0;
+         while ((pos = trimmed.find("$$", pos)) != std::string::npos) {
+            dollarCount++;
+            pos += 2;
+         }
+
+         if (!trimmed.empty() && trimmed.back() == ';' && dollarCount % 2 == 0) {
+            handleQuery(*session, query.str());
+            query.str("");
+            query.clear();
+            dollarCount = 0;
+         }
       }
+      linenoiseHistoryFree();
+   } else {
+      // NON-INTERACTIVE MODE: For Java/Pipes
+      std::string line;
+      while (std::getline(std::cin, line)) {
+         query << line << '\n';
 
-      std::string line = input;
-      free(input); // linenoise returns malloc'd memory
+         std::string trimmed = line;
+         trimmed.erase(trimmed.find_last_not_of(" \t\r\n") + 1);
 
-      if (line == "exit") {
-         break;
-      }
+         size_t pos = 0;
+         while ((pos = trimmed.find("$$", pos)) != std::string::npos) {
+            dollarCount++;
+            pos += 2;
+         }
 
-      query << line << '\n';
+         if (!trimmed.empty() && trimmed.back() == ';' && dollarCount % 2 == 0) {
+            handleQuery(*session, query.str());
 
-      // Trim trailing whitespace
-      std::string trimmed = line;
-      trimmed.erase(trimmed.find_last_not_of(" \t\r\n") + 1);
-      // count how often $$ appears in the line
-      size_t pos = 0;
-      while ((pos = trimmed.find("$$", pos)) != std::string::npos) {
-         count++;
-         pos += 2;
-      }
+            // CRITICAL: Signal completion to Java
+            std::cout << "---DONE---" << std::endl;
 
-      if (!trimmed.empty() && trimmed.back() == ';' && count % 2 == 0) {
-         // Done reading the full statement
-         linenoiseHistoryAdd(query.str().c_str()); // optional: add to history
-
-         handleQuery(*session, query.str());
-
-         // Clear for next command
-         query.str("");
-         query.clear();
+            query.str("");
+            query.clear();
+            dollarCount = 0;
+         }
       }
    }
-   linenoiseHistoryFree();
 
    return 0;
 }

@@ -92,6 +92,10 @@ static relalg::ColumnSet getRequired(Operator op, llvm::DenseMap<Operator, relal
       }
       if (auto materializeOp = mlir::dyn_cast_or_null<relalg::MaterializeOp>(user)) {
          required.insert(relalg::ColumnSet::fromArrayAttr(materializeOp.getCols()));
+      } else if (auto subOpMat = mlir::dyn_cast_or_null<subop::MaterializeOp>(user)) {
+         for (auto x : subOpMat.getMapping().getMapping()) {
+            required.insert(&x.second.getColumn());
+         }
       }
    }
    auto res = available.intersect(required);
@@ -3041,6 +3045,79 @@ class QueryReturnOpLowering : public OpConversionPattern<relalg::QueryReturnOp> 
    }
 };
 
+class LocalTableScanLowering : public OpConversionPattern<relalg::LocalTableScanOp> {
+   public:
+   using OpConversionPattern::OpConversionPattern;
+
+   LogicalResult matchAndRewrite(relalg::LocalTableScanOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      // 1. Get the members from the LocalTableType
+      auto tableType = op.getState().getType().cast<subop::LocalTableType>();
+      auto members = tableType.getMembers().getMembers();
+
+      // 2. Get the columns from our relalg operation
+      auto columns = op.getColumns();
+
+      // 3. Zip them together! (They are perfectly 1-to-1 aligned)
+      SmallVector<std::pair<subop::Member, tuples::ColumnDefAttr>> mappingList;
+      for (size_t i = 0; i < members.size(); ++i) {
+         mappingList.push_back({members[i], columns[i].cast<tuples::ColumnDefAttr>()});
+      }
+
+      // 4. Create the mapping attribute natively for SubOp
+      auto mappingAttr = subop::ColumnDefMemberMappingAttr::get(getContext(), mappingList);
+
+      // 5. Replace with the actual execution primitive
+      rewriter.replaceOpWithNewOp<subop::ScanOp>(
+         op, tuples::TupleStreamType::get(getContext()),
+         adaptor.getState(),
+         mappingAttr);
+      return success();
+   }
+};
+
+class BufferScanLowering : public OpConversionPattern<relalg::BufferScanOp> {
+   public:
+   using OpConversionPattern<relalg::BufferScanOp>::OpConversionPattern;
+
+   LogicalResult matchAndRewrite(relalg::BufferScanOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto ctx = rewriter.getContext();
+
+      // 1. Get the members from the BufferType
+      auto bufferType = llvm::cast<subop::BufferType>(adaptor.getBuffer().getType());
+      auto members = bufferType.getMembers().getMembers();
+
+      // 2. Extract column definitions and their mapped string names
+      auto columns = op.getColumns();
+      auto columnMapping = op.getColumnMapping();
+      auto& memberManager = ctx->getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager();
+
+      // 3. Match the string names to the actual subop::Members
+      SmallVector<std::pair<subop::Member, tuples::ColumnDefAttr>> mappingList;
+      for (size_t i = 0; i < columns.size(); ++i) {
+         auto colDef = llvm::cast<tuples::ColumnDefAttr>(columns[i]);
+         auto memberName = llvm::cast<StringAttr>(columnMapping[i]).str();
+
+         for (auto m : members) {
+            if (memberManager.getName(m) == memberName) {
+               mappingList.push_back({m, colDef});
+               break;
+            }
+         }
+      }
+
+      // 4. Create the mapping attribute natively for SubOp
+      auto mappingAttr = subop::ColumnDefMemberMappingAttr::get(ctx, mappingList);
+
+      // 5. Replace with a direct subop.scan
+      rewriter.replaceOpWithNewOp<subop::ScanOp>(
+         op,         tuples::TupleStreamType::get(ctx),
+         adaptor.getBuffer(),
+         mappingAttr);
+
+      return success();
+   }
+};
+
 void RelalgToSubOpLoweringPass::runOnOperation() {
    auto module = getOperation();
    getContext().getLoadedDialect<util::UtilDialect>()->getFunctionHelper().setParentModule(module);
@@ -3072,6 +3149,7 @@ void RelalgToSubOpLoweringPass::runOnOperation() {
    target.addLegalDialect<util::UtilDialect>();
 
    TypeConverter typeConverter;
+   typeConverter.addConversion([](Type t) { return t; });
    typeConverter.addConversion([](tuples::TupleStreamType t) { return t; });
    auto* ctxt = &getContext();
 
@@ -3107,6 +3185,8 @@ void RelalgToSubOpLoweringPass::runOnOperation() {
    patterns.insert<TrackTuplesLowering>(ctxt);
    patterns.insert<QueryOpLowering>(ctxt);
    patterns.insert<QueryReturnOpLowering>(ctxt);
+   patterns.insert<LocalTableScanLowering>(ctxt);
+   patterns.insert<BufferScanLowering>(ctxt);
 
    if (failed(applyFullConversion(module, target, std::move(patterns))))
       signalPassFailure();

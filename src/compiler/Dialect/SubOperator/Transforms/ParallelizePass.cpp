@@ -455,29 +455,30 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                return left->isBeforeInBlock(right);
             });
 
-            assert(mergedUsers.size() > 0);
-            builder.setInsertionPoint(mergedUsers.front());
-            auto mergeStep = builder.create<subop::ExecutionStepOp>(loc, mergedType, toThreadLocal.first, builder.getBoolArrayAttr({false}));
-            {
-               mlir::OpBuilder::InsertionGuard guard(builder);
-               auto* block = new mlir::Block;
-               auto threadLocalVal = block->addArgument(threadLocalType, builder.getUnknownLoc());
-               mergeStep.getSubOps().push_back(block);
-               builder.setInsertionPointToStart(block);
-               auto mergeOp = builder.create<subop::MergeOp>(loc, mergedType, threadLocalVal);
-               if (toThreadLocal.second.combineRegion) {
-                  mlir::IRMapping mapping;
-                  toThreadLocal.second.combineRegion->cloneInto(&mergeOp.getCombineFn(), mapping);
+            if (!mergedUsers.empty()) {
+               builder.setInsertionPoint(mergedUsers.front());
+               auto mergeStep = builder.create<subop::ExecutionStepOp>(loc, mergedType, toThreadLocal.first, builder.getBoolArrayAttr({false}));
+               {
+                  mlir::OpBuilder::InsertionGuard guard(builder);
+                  auto* block = new mlir::Block;
+                  auto threadLocalVal = block->addArgument(threadLocalType, builder.getUnknownLoc());
+                  mergeStep.getSubOps().push_back(block);
+                  builder.setInsertionPointToStart(block);
+                  auto mergeOp = builder.create<subop::MergeOp>(loc, mergedType, threadLocalVal);
+                  if (toThreadLocal.second.combineRegion) {
+                     mlir::IRMapping mapping;
+                     toThreadLocal.second.combineRegion->cloneInto(&mergeOp.getCombineFn(), mapping);
+                  }
+                  if (toThreadLocal.second.compareRegion) {
+                     mlir::IRMapping mapping;
+                     toThreadLocal.second.compareRegion->cloneInto(&mergeOp.getEqFn(), mapping);
+                  }
+                  builder.create<subop::ExecutionStepReturnOp>(loc, mergeOp.getResult());
                }
-               if (toThreadLocal.second.compareRegion) {
-                  mlir::IRMapping mapping;
-                  toThreadLocal.second.compareRegion->cloneInto(&mergeOp.getEqFn(), mapping);
-               }
-               builder.create<subop::ExecutionStepReturnOp>(loc, mergeOp.getResult());
+               toThreadLocal.first.replaceUsesWithIf(mergeStep.getResult(0), [&](mlir::OpOperand& op) {
+                  return std::find(mergedUsers.begin(), mergedUsers.end(), op.getOwner()) != mergedUsers.end();
+               });
             }
-            toThreadLocal.first.replaceUsesWithIf(mergeStep.getResult(0), [&](mlir::OpOperand& op) {
-               return std::find(mergedUsers.begin(), mergedUsers.end(), op.getOwner()) != mergedUsers.end();
-            });
             producingExecutionStep->getResult(resultIdx).setType(threadLocalType);
          }
       }

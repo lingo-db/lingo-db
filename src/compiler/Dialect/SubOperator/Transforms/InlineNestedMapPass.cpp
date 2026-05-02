@@ -10,9 +10,11 @@
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamDialect.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
 
+#include "llvm/ADT/SmallPtrSet.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include <functional>
 #include <iostream>
 #include <queue>
 namespace {
@@ -92,6 +94,41 @@ class InlineNestedMapPass : public mlir::PassWrapper<InlineNestedMapPass, mlir::
                }
             }
          }
+
+         // Transitively discover and hoist external operations backwards to prevent SSA dominance breaking
+         llvm::SmallPtrSet<mlir::Operation*, 16> hoisted;
+         std::function<void(mlir::Operation*)> hoistImpl = [&](mlir::Operation* currentOp) {
+            currentOp->walk([&](mlir::Operation* innerOp) {
+               for (auto operand : innerOp->getOperands()) {
+                  if (mlir::Operation* defOp = operand.getDefiningOp()) {
+                     // Find the topmost ancestor of defOp that resides in the same block as nestedMap
+                     mlir::Operation* ancestorDef = defOp;
+                     while (ancestorDef && ancestorDef->getBlock() != nestedMap->getBlock()) {
+                        ancestorDef = ancestorDef->getParentOp();
+                     }
+                     if (!ancestorDef) continue; // Not in the same block as nestedMap
+
+                     // If the ancestor is one of the ops to be moved, it will be handled inherently
+                     if (std::find(opsToMove.begin(), opsToMove.end(), ancestorDef) != opsToMove.end()) continue;
+
+                     // Check if ancestorDef is located after nestedMap
+                     if (nestedMap->isBeforeInBlock(ancestorDef)) {
+                        if (hoisted.insert(ancestorDef).second) {
+                           hoistImpl(ancestorDef); // Recursively resolve dependencies of ancestorDef first
+                           ancestorDef->moveBefore(nestedMap);
+                        }
+                     }
+                  }
+               }
+            });
+         };
+
+         // Trigger the hoisting pass on the operators scheduled for moving
+         for (auto* op : opsToMove) {
+            hoistImpl(op);
+         }
+
+         // Safe to move operators now
          for (auto* op : opsToMove) {
             op->moveBefore(returnOp);
          }
