@@ -16,10 +16,10 @@ std::unique_ptr<ResultProcessor> createTablePrinter();
 std::unique_ptr<ResultProcessor> createBatchedTablePrinter();
 
 struct CSVConfig {
-   char delimiter = ',';
+   char delimiter = ' ';
    char quote = '"';
    char escape = '"';
-   bool includeHeader = true;
+   bool includeHeader = false;
    arrow::csv::QuotingStyle quotingStyle = arrow::csv::QuotingStyle::Needed;
    std::string eol = "\n";
    std::string filePath = (std::filesystem::temp_directory_path() / "lingodb_output.csv").string();
