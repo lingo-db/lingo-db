@@ -95,11 +95,9 @@ class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::Oper
    }
    Operator optimize(Operator op) {
       if (alreadyOptimized.count(op.getOperation())) {
-         //don't do anything, subtree is already optimized
          return op;
       }
       if (isUnsupportedOp(op)) {
-         //unsupported optimization -> try to optimize subtree(s) below
          auto children = op.getChildren();
          for (size_t i = 0; i < children.size(); i++) {
             children[i] = optimize(children[i]);
@@ -109,13 +107,11 @@ class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::Oper
          alreadyOptimized.insert(op.getOperation());
          return op;
       } else {
-         //generate querygraph
          relalg::QueryGraphBuilder queryGraphBuilder(op, alreadyOptimized);
          queryGraphBuilder.generate();
          relalg::QueryGraph& queryGraph = queryGraphBuilder.getQueryGraph();
          queryGraph.estimate();
-         //queryGraph.dump();
-         //enumerates possible plans and find best one
+
          std::shared_ptr<relalg::Plan> solution;
          relalg::DPHyp solver(queryGraph);
          if (solver.countSubGraphs(1000) < 1000) {
@@ -125,16 +121,13 @@ class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::Oper
             solution = fallBackSolver.solve();
          }
          if (!solution) {
-            //no solution was found
             llvm::dbgs() << "no valid join order found\n";
             return op;
          }
-         //now: realize found plan
-         //first: collect all operators that are reachable now
+
          llvm::SmallVector<Operator, 4> before = op.getAllSubOperators();
          llvm::SmallPtrSet<mlir::Operation*, 8> prevUsers{op->user_begin(), op->user_end()};
 
-         // Safely record positions of already optimized leaf ops to prevent them from being dominantly orphaned
          llvm::DenseMap<mlir::Block*, llvm::DenseMap<mlir::Operation*, int>> blockPositions;
          llvm::DenseMap<mlir::Block*, llvm::SmallVector<mlir::Operation*, 4>> leavesByBlock;
          llvm::DenseMap<mlir::Operation*, mlir::Operation*> prevNodeMap;
@@ -155,23 +148,19 @@ class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::Oper
             }
          }
 
-         //realize plan
          Operator realized = solution->realizePlan();
 
-         //second: collect all operators that are reachable now
-         llvm::SmallVector<Operator, 4> after = realized.getAllSubOperators();
-
-         // Restore leaves back to their exact original block positions to solve SSA dominance breaks
+         // 1. Restore leaves to their original blocks and exact positions
          for (auto& pair : leavesByBlock) {
             mlir::Block* b = pair.first;
             auto& leaves = pair.second;
-            // Strict sort preserves their relative topological order
+
             std::sort(leaves.begin(), leaves.end(), [&](mlir::Operation* a, mlir::Operation* bOp) {
                return blockPositions[b][a] < blockPositions[b][bOp];
             });
             for (auto leaf : leaves) {
                mlir::Operation* pNode = prevNodeMap[leaf];
-               if (pNode) {
+               if (pNode && pNode->getBlock() == b) {
                   leaf->moveAfter(pNode);
                } else {
                   leaf->moveBefore(&b->front());
@@ -179,13 +168,50 @@ class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::Oper
             }
          }
 
-         //maybe op is now somewhere deep in the subtree -> replace all "relevant" uses with the new subtree root
+         llvm::SmallVector<Operator, 4> after = realized.getAllSubOperators();
+         mlir::Block* opBlock = op->getBlock();
+
+         // 2. Shepherd ALL new/reused internal operators to the root op's block to prevent cross-region dominance faults.
+         for (auto aop : after) {
+            mlir::Operation* aopNode = aop.getOperation();
+            if (!seenLeaves.contains(aopNode) && aopNode != op.getOperation()) {
+               aopNode->moveBefore(op.getOperation());
+            }
+         }
+
+         // 3. Block-local robust topological sort using region walking
+         bool dominanceChanged = true;
+         while (dominanceChanged) {
+            dominanceChanged = false;
+            for (mlir::Operation& blockOp : *opBlock) {
+               mlir::Operation* opPtr = &blockOp;
+               mlir::Operation* moveAfterTarget = nullptr;
+
+               opPtr->walk([&](mlir::Operation* nestedOp) {
+                  for (mlir::Value operand : nestedOp->getOperands()) {
+                     mlir::Operation* defOp = operand.getDefiningOp();
+                     if (defOp && defOp->getBlock() == opBlock && opPtr->isBeforeInBlock(defOp)) {
+                        if (!moveAfterTarget || moveAfterTarget->isBeforeInBlock(defOp)) {
+                           moveAfterTarget = defOp;
+                        }
+                     }
+                  }
+               });
+
+               if (moveAfterTarget) {
+                  opPtr->moveAfter(moveAfterTarget);
+                  dominanceChanged = true;
+                  break;
+               }
+            }
+         }
+
          if (realized != op) {
             op->getResult(0).replaceUsesWithIf(realized->getResult(0), [prevUsers](mlir::OpOperand& operand) {
                return prevUsers.contains(operand.getOwner());
             });
          }
-         //cleanup: make sure that all operators that are not reachable any more are cleaned up
+
          llvm::SmallPtrSet<mlir::Operation*, 8> afterHt;
          for (auto aop : after) {
             afterHt.insert(aop.getOperation());
@@ -198,7 +224,6 @@ class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::Oper
             }
          }
 
-         // Run strict/safe DCE replacing the crash-prone dropAllUses
          bool changed = true;
          while (changed) {
             changed = false;
@@ -213,7 +238,6 @@ class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::Oper
             }
          }
 
-         //mark subtree as already optimized
          alreadyOptimized.insert(realized);
          return realized;
       }
