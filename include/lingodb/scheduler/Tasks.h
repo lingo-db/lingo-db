@@ -10,9 +10,21 @@ class TaskWithContext : public Task {
    TaskWithContext(runtime::ExecutionContext* context) : context(context) {}
    void setup() override {
       runtime::setCurrentExecutionContext(context);
+#ifdef USE_CPYTHON_RUNTIME
+      context->setupPython();
+#endif
+#ifdef USE_CPYTHON_WASM_RUNTIME
+      context->setupWasm();
+#endif
    }
    void teardown() override {
       runtime::setCurrentExecutionContext(nullptr);
+#ifdef USE_CPYTHON_RUNTIME
+      context->teardownPython();
+#endif
+#ifdef USE_CPYTHON_WASM_RUNTIME
+      context->teardownWasm();
+#endif
    }
 };
 class TaskWithImplicitContext : public Task {
@@ -22,9 +34,21 @@ class TaskWithImplicitContext : public Task {
    TaskWithImplicitContext() : context(runtime::getCurrentExecutionContext()) {}
    void setup() override {
       runtime::setCurrentExecutionContext(context);
+#ifdef USE_CPYTHON_RUNTIME
+      context->setupPython();
+#endif
+#ifdef USE_CPYTHON_WASM_RUNTIME
+      context->setupWasm();
+#endif
    }
    void teardown() override {
       runtime::setCurrentExecutionContext(nullptr);
+#ifdef USE_CPYTHON_RUNTIME
+      context->teardownPython();
+#endif
+#ifdef USE_CPYTHON_WASM_RUNTIME
+      context->teardownWasm();
+#endif
    }
 };
 class SimpleTask : public lingodb::scheduler::Task {

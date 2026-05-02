@@ -14,6 +14,10 @@
 #include <unistd.h>
 #endif
 
+#ifdef USE_CPYTHON_RUNTIME
+#include <Python.h>
+#endif
+
 #include "lingodb/scheduler/Scheduler.h"
 #include "lingodb/scheduler/Task.h"
 #include "mlir/IR/MLIRContext.h"
@@ -934,6 +938,20 @@ std::unique_ptr<SchedulerHandle> startScheduler(size_t numWorkers) {
             }
          }
       }
+#ifdef USE_CPYTHON_RUNTIME
+      // Standalone binaries (sql, run-sql, sqlite-tester) start with no
+      // interpreter — initialize one and release the freshly-acquired main
+      // thread state so worker threads can come up cleanly. When loaded as a
+      // Python extension (the lingodb wheel), Py_IsInitialized() is already
+      // true and the host owns the GIL; we must NOT touch it here. Per-worker
+      // sub-interpreters use PyInterpreterConfig_OWN_GIL, so they don't
+      // contend with the host GIL anyway.
+      if (!Py_IsInitialized()) {
+         Py_Initialize();
+         auto* _save = PyEval_SaveThread();
+         (void) _save;
+      }
+#endif
       scheduler = new Scheduler(numWorkers);
       scheduler->start();
    }

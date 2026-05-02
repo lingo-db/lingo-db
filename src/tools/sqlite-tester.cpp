@@ -401,13 +401,13 @@ int main(int argc, char** argv) {
       std::cerr << "usage: sqllite-tester file [dataset]" << std::endl;
       exit(1);
    }
+   auto scheduler = scheduler::startScheduler();
    std::shared_ptr<runtime::Session> session;
    if (argc == 3) {
       session = runtime::Session::createSession(std::string(argv[2]), true);
    } else {
       session = runtime::Session::createSession();
    }
-   auto scheduler = scheduler::startScheduler();
    auto lines = filterLines(readTestFile(argv[1]));
    size_t line = 0;
    bool first = true;

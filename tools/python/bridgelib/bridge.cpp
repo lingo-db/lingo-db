@@ -9,6 +9,9 @@
 #include "lingodb/runtime/RelationHelper.h"
 #include "lingodb/runtime/storage/TableStorage.h"
 #include <arrow/table.h>
+#ifdef USE_CPYTHON_RUNTIME
+#include "Python.h"
+#endif
 
 namespace {
 using namespace lingodb;
@@ -30,14 +33,26 @@ class TimingCollector : public execution::TimingProcessor {
 
 namespace bridge {
 class Connection {
+   // Field declaration order is chosen so that the SchedulerHandle is
+   // destroyed FIRST (it stops the worker threads) and only after that is
+   // the session torn down — otherwise workers might still touch session
+   // state while it is being freed. The scheduler-before-session
+   // construction order is forced in the ctor body instead, since session
+   // ctor needs the scheduler running to size per-worker python state.
    std::shared_ptr<runtime::Session> session;
    std::unordered_map<std::string, double> times;
    std::unique_ptr<scheduler::SchedulerHandle> scheduler;
 
    public:
-   Connection(std::shared_ptr<runtime::Session> session) : session(session) {
+   Connection() {
       lingodb::compiler::support::eval::init();
       scheduler = lingodb::scheduler::startScheduler();
+      session = runtime::Session::createSession();
+   }
+   Connection(const char* directory) {
+      lingodb::compiler::support::eval::init();
+      scheduler = lingodb::scheduler::startScheduler();
+      session = runtime::Session::createSession(directory, true);
    }
    runtime::Session& getSession() {
       return *session;
@@ -49,10 +64,10 @@ class Connection {
 } //namespace bridge
 
 bridge::Connection* bridge::createInMemory() {
-   return new Connection(runtime::Session::createSession());
+   return new Connection();
 }
 bridge::Connection* bridge::loadFromDisk(const char* directory) {
-   return new Connection(runtime::Session::createSession(directory, true));
+   return new Connection(directory);
 }
 bool bridge::run(Connection* connection, const char* module, ArrowArrayStream* res) {
    auto queryExecutionConfig = execution::createQueryExecutionConfig(execution::ExecutionMode::SPEED, false);
@@ -61,7 +76,13 @@ bool bridge::run(Connection* connection, const char* module, ArrowArrayStream* r
    queryExecutionConfig->timingProcessor = std::make_unique<TimingCollector>(connection->getTimes());
    auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), connection->getSession());
    executer->fromData(module);
+#ifdef USE_CPYTHON_RUNTIME
+   PyThreadState* _save = PyEval_SaveThread();
+#endif
    scheduler::awaitEntryTask(std::make_unique<execution::QueryExecutionTask>(std::move(executer)));
+#ifdef USE_CPYTHON_RUNTIME
+   PyEval_RestoreThread(_save);
+#endif
    if (result) {
       auto batchReader = std::make_shared<arrow::TableBatchReader>(result);
       if (!arrow::ExportRecordBatchReader(batchReader, res).ok()) {
@@ -79,7 +100,13 @@ bool bridge::runSQL(Connection* connection, const char* query, ArrowArrayStream*
    queryExecutionConfig->timingProcessor = std::make_unique<TimingCollector>(connection->getTimes());
    auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), connection->getSession());
    executer->fromData(query);
+#ifdef USE_CPYTHON_RUNTIME
+   PyThreadState* _save = PyEval_SaveThread();
+#endif
    scheduler::awaitEntryTask(std::make_unique<execution::QueryExecutionTask>(std::move(executer)));
+#ifdef USE_CPYTHON_RUNTIME
+   PyEval_RestoreThread(_save);
+#endif
    if (result) {
       auto batchReader = std::make_shared<arrow::TableBatchReader>(result);
       if (!arrow::ExportRecordBatchReader(batchReader, res).ok()) {
@@ -102,7 +129,25 @@ double bridge::getTiming(bridge::Connection* con, const char* type) {
    }
 }
 void bridge::closeConnection(bridge::Connection* con) {
+   // Release the host's GIL across destruction. Tearing down the Connection
+   // joins the scheduler workers, and the workers' last actions on shutdown
+   // (~MLIRContext drops cached shared_ptrs to catalog entries, whose
+   // RecordBatches transitively own pyarrow-imported NumPy buffers; their
+   // destructors call PyGILState_Ensure to drop the NumPy refs). If the
+   // calling thread (nanobind tp_dealloc, which is the host's main thread
+   // holding the main interpreter's GIL) keeps the GIL, those workers
+   // block waiting for it and either deadlock or — worse — race with us
+   // and corrupt the heap. ~Session then runs after the scheduler has
+   // joined; with the GIL released here it sees the same "no tstate / no
+   // GIL" entry state it sees in standalone, where its existing
+   // PyThreadState_Swap + Py_EndInterpreter loop already works.
+#ifdef USE_CPYTHON_RUNTIME
+   PyThreadState* _save = PyEval_SaveThread();
+#endif
    delete con;
+#ifdef USE_CPYTHON_RUNTIME
+   PyEval_RestoreThread(_save);
+#endif
 }
 
 void bridge::initContext(MlirContext context) {

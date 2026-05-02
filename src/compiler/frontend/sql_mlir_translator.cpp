@@ -258,6 +258,19 @@ void SQLMlirTranslator::translateCreateFunction(mlir::OpBuilder& builder, std::s
       auto descriptionValue = createStringValue(builder, utility::serializeToHexString(createFunctionDef));
       compiler::runtime::RelationHelper::createFunction(builder, builder.getUnknownLoc())(mlir::ValueRange({descriptionValue}));
 
+   } else if (language == "python") {
+      std::vector<catalog::Type> standaloneArgumentTypes;
+      standaloneArgumentTypes.reserve(boundCreateFunctionInfo->argumentTypes.size());
+      for (size_t i = 0; i < boundCreateFunctionInfo->argumentTypes.size(); i++) {
+         standaloneArgumentTypes.emplace_back(boundCreateFunctionInfo->argumentTypes[i].second);
+      }
+      lingodb::catalog::CreateFunctionDef createFunctionDef(
+         functionName,
+         boundCreateFunctionInfo->language,
+         code,
+         returnType.type, std::move(standaloneArgumentTypes));
+      auto descriptionValue = createStringValue(builder, utility::serializeToHexString(createFunctionDef));
+      compiler::runtime::RelationHelper::createFunction(builder, builder.getUnknownLoc())(mlir::ValueRange({descriptionValue}));
    } else {
       translatorError("UDF language not supported " << language, createNode->loc);
    }

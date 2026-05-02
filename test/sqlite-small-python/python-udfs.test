@@ -1,0 +1,143 @@
+statement ok
+CREATE TABLE ints(i int not null);
+
+statement ok
+INSERT INTO ints VALUES (1), (2), (3), (4);
+
+statement ok
+CREATE TABLE nullable_ints(i int);
+
+statement ok
+INSERT INTO nullable_ints VALUES (1), (NULL), (3), (NULL);
+
+statement ok
+CREATE TABLE words(s varchar not null);
+
+statement ok
+INSERT INTO words VALUES ('hello'), ('world'), ('lingodb');
+
+# basic int -> int
+statement ok
+CREATE OR REPLACE FUNCTION py_add_one(x int)
+RETURNS int
+AS $$
+def py_add_one(x):
+    return x + 1
+$$ LANGUAGE python;
+
+query py-1
+SELECT py_add_one(41);
+----
+42
+
+query py-2
+SELECT py_add_one(i) FROM ints ORDER BY i;
+----
+2
+3
+4
+5
+
+# two int args
+statement ok
+CREATE OR REPLACE FUNCTION py_add(a int, b int)
+RETURNS int
+AS $$
+def py_add(a, b):
+    return a + b
+$$ LANGUAGE python;
+
+query py-3
+SELECT py_add(40, 2);
+----
+42
+
+# float arithmetic
+statement ok
+CREATE OR REPLACE FUNCTION py_factorial(b float8)
+RETURNS float8
+AS $$
+def py_factorial(b):
+    for i in range(1, int(b)):
+        b = b * i
+    return b
+$$ LANGUAGE python;
+
+query py-4
+SELECT py_factorial(10.0::float8);
+----
+3628800
+
+# bool result
+statement ok
+CREATE OR REPLACE FUNCTION py_is_even(x int)
+RETURNS bool
+AS $$
+def py_is_even(x):
+    return x % 2 == 0
+$$ LANGUAGE python;
+
+query py-5
+SELECT i FROM ints WHERE py_is_even(i) ORDER BY i;
+----
+2
+4
+
+# string -> string
+statement ok
+CREATE OR REPLACE FUNCTION py_upper(s varchar)
+RETURNS varchar
+AS $$
+def py_upper(s):
+    return s.upper()
+$$ LANGUAGE python;
+
+query py-6
+SELECT py_upper(s) FROM words ORDER BY s;
+----
+HELLO
+LINGODB
+WORLD
+
+# string -> int (length)
+statement ok
+CREATE OR REPLACE FUNCTION py_strlen(s varchar)
+RETURNS int
+AS $$
+def py_strlen(s):
+    return len(s)
+$$ LANGUAGE python;
+
+query py-7
+SELECT py_strlen(s) FROM words ORDER BY s;
+----
+5
+7
+5
+
+# date input
+statement ok
+CREATE OR REPLACE FUNCTION py_year(d date)
+RETURNS int
+AS $$
+def py_year(d):
+    return d.year
+$$ LANGUAGE python;
+
+query py-8
+SELECT py_year(date '2024-07-19');
+----
+2024
+
+# null propagation: any NULL input short-circuits to NULL without entering the
+# Python interpreter (verified via IS NULL count).
+query py-9
+SELECT count(*) FROM nullable_ints WHERE py_add_one(i) IS NULL;
+----
+2
+
+query py-9b
+SELECT count(*) FROM nullable_ints WHERE py_add_one(i) IS NOT NULL;
+----
+2
+

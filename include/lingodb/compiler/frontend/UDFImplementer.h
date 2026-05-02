@@ -18,6 +18,8 @@ namespace lingodb::compiler::frontend {
 std::shared_ptr<catalog::MLIRUDFImplementor> getUDFImplementer(std::shared_ptr<catalog::FunctionCatalogEntry> entry);
 std::shared_ptr<catalog::MLIRUDFImplementor> createCUDFImplementer(
    std::string funcName, std::string cCode, std::vector<lingodb::catalog::Type> argumentTypes, lingodb::catalog::Type returnType);
+std::shared_ptr<catalog::MLIRUDFImplementor> createPythonUDFImplementer(
+   std::string funcName, std::string pyCode, std::vector<lingodb::catalog::Type> argumentTypes, lingodb::catalog::Type returnType);
 
 } // namespace lingodb::compiler::frontend
 #endif

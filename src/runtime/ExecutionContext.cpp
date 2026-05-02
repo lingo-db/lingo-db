@@ -1,4 +1,12 @@
 #include "lingodb/runtime/ExecutionContext.h"
+#include "lingodb/runtime/PythonRuntime.h"
+#ifdef USE_CPYTHON_RUNTIME
+#include "Python.h"
+#endif
+#ifdef USE_CPYTHON_WASM_RUNTIME
+#include "lingodb/runtime/WASM.h"
+#include "wasm_export.h"
+#endif
 #include <cassert>
 
 void lingodb::runtime::ExecutionContext::setResult(uint32_t id, uint8_t* ptr) {
@@ -50,3 +58,65 @@ lingodb::runtime::ExecutionContext* lingodb::runtime::getCurrentExecutionContext
    assert(currentExecutionContext);
    return currentExecutionContext;
 }
+
+#ifdef USE_CPYTHON_RUNTIME
+void lingodb::runtime::ExecutionContext::resetPythonSessionCache() {
+   for (size_t i = 0; i < session.pythonExtStates.size(); ++i) {
+      if (session.pythonExtStates[i]) {
+         session.pythonExtStates[i]->clearCache();
+      }
+   }
+}
+void lingodb::runtime::ExecutionContext::setupPython() {
+   auto workerId = scheduler::currentWorkerId();
+   if (session.pythonThreadStates[workerId] == nullptr) {
+      // First time this worker enters a Python region — give it its own
+      // sub-interpreter (with its own GIL) so workers don't fight over the GIL.
+      PyThreadState* tstate = nullptr;
+      PyInterpreterConfig config = {
+         .use_main_obmalloc = 0,
+         .allow_fork = 0,
+         .allow_threads = 0,
+         .allow_daemon_threads = 0,
+         .check_multi_interp_extensions = 1,
+         .gil = PyInterpreterConfig_OWN_GIL,
+      };
+      PyStatus status = Py_NewInterpreterFromConfig(&tstate, &config);
+      if (PyStatus_Exception(status)) {
+         Py_ExitStatusException(status);
+      }
+      session.pythonExtStates[workerId] = PythonRuntime::createPythonExtState();
+   } else {
+      PyThreadState_Swap((PyThreadState*) session.pythonThreadStates[workerId]);
+   }
+}
+void lingodb::runtime::ExecutionContext::teardownPython() {
+   auto workerId = scheduler::currentWorkerId();
+   auto* state = PyThreadState_Swap(nullptr);
+   if (state) {
+      session.pythonThreadStates[workerId] = state;
+   }
+}
+#endif
+
+#ifdef USE_CPYTHON_WASM_RUNTIME
+void lingodb::runtime::ExecutionContext::setupWasm() {
+   auto workerId = scheduler::currentWorkerId();
+   auto* wasmSession = session.wasmEnvironments[workerId];
+   if (wasmSession == nullptr) {
+      session.wasmEnvironments[workerId] = wasm::WASM::initializeWASM();
+      wasmSession = session.wasmEnvironments[workerId];
+   }
+   // Note: WAMR queries the native stack via pthread_attr; since the new
+   // scheduler places every fiber's stack inside the worker's pthread stack
+   // range, no explicit wasm_runtime_set_native_stack_boundary is needed.
+   PythonRuntime::setWasmSession(wasmSession);
+}
+void lingodb::runtime::ExecutionContext::teardownWasm() {
+   //TODO teardown
+}
+lingodb::wasm::WASMSession* lingodb::runtime::ExecutionContext::getWasmSession() {
+   auto workerId = scheduler::currentWorkerId();
+   return session.wasmEnvironments[workerId];
+}
+#endif

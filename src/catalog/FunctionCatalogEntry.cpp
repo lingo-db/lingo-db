@@ -20,6 +20,8 @@ std::shared_ptr<FunctionCatalogEntry> FunctionCatalogEntry::deserialize(lingodb:
    switch (entryType) {
       case CatalogEntryType::C_FUNCTION_ENTRY:
          return CFunctionCatalogEntry::deserialize(deserializer);
+      case CatalogEntryType::PYTHON_FUNCTION_ENTRY:
+         return PythonFunctionCatalogEntry::deserialize(deserializer);
       default:
          throw std::runtime_error("Should not happen");
    }
@@ -31,6 +33,14 @@ std::shared_ptr<FunctionCatalogEntry> CFunctionCatalogEntry::deserialize(lingodb
    auto returnType = deserializer.readProperty<Type>(4);
    auto argumentTypes = deserializer.readProperty<std::vector<Type>>(5);
    return std::make_shared<CFunctionCatalogEntry>(name, code, returnType, argumentTypes);
+}
+
+std::shared_ptr<FunctionCatalogEntry> PythonFunctionCatalogEntry::deserialize(lingodb::utility::Deserializer& deserializer) {
+   auto name = deserializer.readProperty<std::string>(2);
+   auto code = deserializer.readProperty<std::string>(3);
+   auto returnType = deserializer.readProperty<Type>(4);
+   auto argumentTypes = deserializer.readProperty<std::vector<Type>>(5);
+   return std::make_shared<PythonFunctionCatalogEntry>(name, code, returnType, argumentTypes);
 }
 
 void visitUDFFunctions(const std::function<void(std::string, void*)>& fn) {

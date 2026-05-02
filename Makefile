@@ -9,6 +9,7 @@ TEST_BUILD_TYPE ?= debug
 SQLITE_TEST_BUILD_TYPE ?= release
 ENABLE_BASELINE_BACKEND ?= OFF
 ENABLE_MIMALLOC ?= ON
+ENABLE_PYTHON ?= OFF
 
 build:
 	mkdir -p $@
@@ -47,7 +48,8 @@ resources/data/%/.stamp: resources/data/%/.rawdata build/lingodb-$(DATA_BUILD_TY
 LDB_ARGS= -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  \
 	   	 -DCMAKE_BUILD_TYPE=Debug \
 	   	 -DENABLE_BASELINE_BACKEND=$(ENABLE_BASELINE_BACKEND) \
-	   	 -DENABLE_MIMALLOC=$(ENABLE_MIMALLOC)
+	   	 -DENABLE_MIMALLOC=$(ENABLE_MIMALLOC) \
+	   	 -DENABLE_PYTHON=$(ENABLE_PYTHON)
 
 build/lingodb-debug/.stamp: build
 	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS) -DCMAKE_BUILD_TYPE=Debug $(CMAKE_PREFIX_PATH_FLAG)
