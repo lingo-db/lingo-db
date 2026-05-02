@@ -1,5 +1,16 @@
 set -e
 
+# Usage: create_package.linux.sh <pyver> [with-python-udf]
+#   <pyver>           e.g. cp312-cp312, cp313-cp313 — picks the manylinux
+#                     Python under /opt/python/<pyver>.
+#   with-python-udf   if present, build the wheel with embedded CPython
+#                     sub-interpreter UDF support. Currently requires
+#                     Python 3.13+ at runtime: the cross-thread
+#                     Py_EndInterpreter that ~Session needs (when the wheel
+#                     is unloaded) only has the safe Py_FinalizeEx auto-
+#                     reaping path in 3.13. cp312 wheels are therefore
+#                     built without UDF support.
+
 # baseline backend's CMake config does find_program(... clang-20 clang-19),
 # which only resolves once the container's custom LLVM bin dir is on PATH.
 export PATH=/built-llvm/bin/:$PATH
@@ -7,7 +18,13 @@ export PATH=/built-llvm/bin/:$PATH
 /opt/python/$1/bin/python3 -m venv venv
 venv/bin/python3 -m pip install build pyarrow===24.0.0
 venv/bin/python3 -c "import pyarrow; pyarrow.create_library_symlinks()"
-cmake -G Ninja . -B build/lingodb-release/ -DCMAKE_BUILD_TYPE=Release -DClang_DIR=/built-llvm/lib/cmake/clang -DArrow_DIR=/built-arrow/lib64/cmake/Arrow -DArrowCompute_DIR=/built-arrow/lib64/cmake/ArrowCompute   -DENABLE_TESTS=OFF -DENABLE_BASELINE_BACKEND=ON
+PY_ROOT=/opt/python/$1
+PY_INCLUDE_DIR=$($PY_ROOT/bin/python3 -c "import sysconfig; print(sysconfig.get_path('include'))")
+PYTHON_FLAGS=""
+if [ "$2" = "with-python-udf" ]; then
+    PYTHON_FLAGS="-DENABLE_PYTHON=CPYTHON -DPython3_INCLUDE_DIR=$PY_INCLUDE_DIR -DPython3_ROOT_DIR=$PY_ROOT"
+fi
+cmake -G Ninja . -B build/lingodb-release/ -DCMAKE_BUILD_TYPE=Release -DClang_DIR=/built-llvm/lib/cmake/clang -DArrow_DIR=/built-arrow/lib64/cmake/Arrow -DArrowCompute_DIR=/built-arrow/lib64/cmake/ArrowCompute -DPython3_EXECUTABLE=$PY_ROOT/bin/python3 $PYTHON_FLAGS -DENABLE_TESTS=OFF -DENABLE_BASELINE_BACKEND=ON
 
 cmake --build build/lingodb-release --target pybridge -j$(nproc)
 cp -r tools/python/bridge build/pylingodb

@@ -217,6 +217,11 @@ jobs:
           LINGODB_EXECUTION_MODE: BASELINE
 
 
+  # cp312 wheel: built WITHOUT embedded-CPython UDF support. The
+  # Py_FinalizeEx auto-reap of leftover sub-interpreters that the
+  # destructor relies on lives only in CPython 3.13+. Anyone using the
+  # cp312 wheel still gets full SQL/MLIR functionality, just no Python
+  # UDFs.
   build_lingodb_python:
     runs-on: ubuntu-24.04
     container: ghcr.io/lingo-db/lingodb-py-dev:a49b5b26648d55dda2817c23b70376d94e8f9084
@@ -253,6 +258,52 @@ jobs:
           pip install pandas
           python3 tools/python/test/test.py
           python3 tools/python/test/mlir-construction.py
+
+  # cp313 wheel: built WITH embedded-CPython UDF support. CPython 3.13
+  # added Py_FinalizeEx auto-reaping of leftover sub-interpreters, which
+  # lets ~Session safely defer cross-thread teardown to the runtime.
+  build_lingodb_python_313:
+    runs-on: ubuntu-24.04
+    container: ghcr.io/lingo-db/lingodb-py-dev:a49b5b26648d55dda2817c23b70376d94e8f9084
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+            submodules: recursive
+      - name: Build
+        run: |
+          rm -rf /built-packages
+          mkdir -p /built-packages
+          bash tools/python/bridge/create_package.linux.sh cp313-cp313 with-python-udf
+          cd tools/python
+          /opt/python/cp313-cp313/bin/python3 -m build .
+          cp dist/*.whl /built-packages/.
+      - uses: actions/upload-artifact@master
+        with:
+          name: lingodb-python-build-313
+          path: /built-packages
+
+  test_lingodb_python_313:
+    needs: build_lingodb_python_313
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@master
+      - name: Setup Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/download-artifact@master
+        with:
+          name: lingodb-python-build-313
+          path: built-packages
+      - name: Test
+        run: |
+          python3 -m pip install built-packages/*.whl
+          python3 -m pip install pandas
+          python3 tools/python/test/test.py
+          python3 tools/python/test/mlir-construction.py
+          python3 tools/python/test/python-udf.py
+          python3 tools/python/test/python-udf-heavy.py
 
   python_udfs:
     strategy:

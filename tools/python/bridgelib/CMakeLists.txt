@@ -60,5 +60,14 @@ if (NOT CMAKE_BUILD_TYPE STREQUAL "ASAN")
                 -Wl,--no-whole-archive
         )
         target_link_options(pybridge PUBLIC -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/symbols.list.gnu)
+        # When ENABLE_PYTHON=CPYTHON but no libpython is available (manylinux
+        # wheel build, where python3 is statically linked into the interpreter
+        # and no .so/.a is shipped), Python's Py* symbols must remain
+        # unresolved in libpybridge.so and resolve at load time from the host
+        # Python process. LLVM cmake adds -Wl,-z,defs which forbids that, so
+        # cancel it out for this target.
+        if(ENABLE_PYTHON STREQUAL "CPYTHON" AND NOT TARGET Python3::Python)
+            target_link_options(pybridge PRIVATE -Wl,-z,undefs)
+        endif()
     endif ()
 endif ()
