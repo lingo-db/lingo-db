@@ -253,6 +253,80 @@ jobs:
           pip install pandas
           python3 tools/python/test/test.py
           python3 tools/python/test/mlir-construction.py
+
+  python_udfs:
+    strategy:
+      matrix:
+        include:
+          - python_mode: CPYTHON
+          - python_mode: WASM
+      fail-fast: false
+    runs-on: ubuntu-24.04
+    container: ghcr.io/lingo-db/lingodb-dev:ba723e305302f60aefe75084c3b0c60e12dbad70
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - name: Init required submodules
+        run: |
+          # The cpython-wasm submodule's nested .gitmodules still uses
+          # git@github.com:; rewrite to https for unauthenticated CI access.
+          git config --global url.https://github.com/.insteadOf git@github.com:
+          REPO_ROOT=$(pwd)
+          git config --global --add safe.directory "$REPO_ROOT"
+          git submodule update --init vendored/tpde vendored/mimalloc
+          if [ "${{ matrix.python_mode }}" = "WASM" ]; then
+            # cpython-wasm itself, then only the bits the build actually
+            # needs (cpython source + WAMR runtime). wasi-sdk is fetched as
+            # a prebuilt tarball at cmake time; numpy is unused here.
+            # --checkout overrides the `update = none` set in .gitmodules
+            # (which keeps recursive checkout out of cpython-wasm for
+            # non-Python jobs).
+            git submodule update --init --checkout vendored/cpython-wasm
+            git -C vendored/cpython-wasm config --add safe.directory "$REPO_ROOT/vendored/cpython-wasm"
+            git -C vendored/cpython-wasm submodule update --init cpython wasm-micro-runtime
+          fi
+      - name: Install python mode-specific deps
+        run: |
+          if [ "${{ matrix.python_mode }}" = "CPYTHON" ]; then
+            apt-get update
+            apt-get install -y python3-dev
+          fi
+          # WASM mode needs only wget+tar to fetch wasi-sdk-29; both are
+          # in the dev container already.
+      - name: CPU info
+        # ubuntu-24.04 GitHub-Actions runners are not feature-uniform; print
+        # the CPU info so any future cpu-feature-related issues are easy
+        # to correlate.
+        run: |
+          lscpu
+          echo "---"
+          grep -m1 "model name" /proc/cpuinfo
+          echo "---"
+          grep -m1 flags /proc/cpuinfo
+      - name: Build
+        run: |
+          make clean
+          make build-release ENABLE_PYTHON=${{ matrix.python_mode }}
+        env:
+          CC: clang-20
+          CXX: clang++-20
+      - name: Test python-udfs
+        run: |
+          chmod +x build/lingodb-release/*
+          # The python-udfs.test file lives outside test/sqlite-small/ so
+          # the default test job (which builds with ENABLE_PYTHON=OFF) does
+          # not try to execute Python UDFs and abort.
+          for t in test/sqlite-small-python/*.test; do
+            build/lingodb-release/sqlite-tester "$t"
+          done
+      - name: Test sqlite-small (regression with Python enabled)
+        # Confirm we did not break the existing tests when Python is on.
+        run: |
+          make test-no-rebuild-sqlite-small
+        env:
+          TEST_BUILD_TYPE: release
+
   test_standalone:
     needs: build
     strategy:
