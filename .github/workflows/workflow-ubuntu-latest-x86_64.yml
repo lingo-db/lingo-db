@@ -263,6 +263,11 @@ jobs:
   # added Py_FinalizeEx auto-reaping of leftover sub-interpreters, which
   # lets ~Session safely defer cross-thread teardown to the runtime.
   build_lingodb_python_313:
+    # Python-UDF jobs are gated: run on every pull_request, and on pushes
+    # only when the branch name contains "python". For everyday work on
+    # other branches this avoids the long sub-interpreter build / test
+    # cycle.
+    if: github.event_name == 'pull_request' || contains(github.ref, 'python')
     runs-on: ubuntu-24.04
     container: ghcr.io/lingo-db/lingodb-py-dev:a49b5b26648d55dda2817c23b70376d94e8f9084
     steps:
@@ -284,6 +289,10 @@ jobs:
           path: /built-packages
 
   test_lingodb_python_313:
+    # Same gate as the build it depends on; the dependency alone is not
+    # enough — the job would still be evaluated and skipped, but with an
+    # explicit if we get a clean "skipped" status across both jobs.
+    if: github.event_name == 'pull_request' || contains(github.ref, 'python')
     needs: build_lingodb_python_313
     runs-on: ubuntu-24.04
     steps:
@@ -306,6 +315,8 @@ jobs:
           python3 tools/python/test/python-udf-heavy.py
 
   python_udfs:
+    # Same gating as the wheel jobs — UDF-specific.
+    if: github.event_name == 'pull_request' || contains(github.ref, 'python')
     strategy:
       matrix:
         include:
