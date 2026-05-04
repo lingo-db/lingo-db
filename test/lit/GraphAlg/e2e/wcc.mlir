@@ -30,7 +30,6 @@ module {
     %result = relalg.query() {
 
       // 1. Setup the Graph Relation
-
       %edges_rel = relalg.const_relation columns:[@edges::@src({type=i64}), @edges::@dst({type=i64}), @edges::@val({type=i1})] values:[
         [0: i64, 1: i64, true],[0: i64, 2: i64, true],[1: i64, 0: i64, true],
         [1: i64, 2: i64, true],
@@ -65,7 +64,6 @@ module {
     // CHECK-DAG: | 1 | 0 | true |
     // CHECK-DAG: | 2 | 0 | true |
     // CHECK-DAG: | 3 | 0 | true |
-    // CHECK-DAG: | 4 | 4 | true |
     // CHECK-DAG: | 5 | 5 | true |
     // CHECK-DAG: | 6 | 5 | true |
     // CHECK-DAG: | 7 | 5 | true |

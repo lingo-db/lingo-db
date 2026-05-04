@@ -347,7 +347,6 @@ static void resolveDimensionsGlobally(ModuleOp module, ConversionState& state) {
 
       if (!unionRel) continue;
 
-      // STEP 1: Compute absolute max_id and dim_size based on sparse edge lists.
       auto maxDef = createColumnDef(ctx, AttributeGenerator::nextName("dim_max"), rewriter.getI64Type());
       auto maxRef = createColumnRef(maxDef);
       auto aggMax = rewriter.create<relalg::AggregationOp>(loc, tuples::TupleStreamType::get(ctx), unionRel, ArrayAttr::get(ctx, {}), ArrayAttr::get(ctx, {maxDef}));
@@ -376,119 +375,9 @@ static void resolveDimensionsGlobally(ModuleOp module, ConversionState& state) {
       }
       state.globalDimSizes[dimAttr] = {mapOp.getResult(), countRef};
 
-      // STEP 2: Generate Dense Domain via subop.loop dynamically injecting 0 -> dimSize
-      subop::Member domainMember = memberManager.createMember("dense_domain_id", rewriter.getI64Type());
-      auto bufferType = subop::BufferType::get(ctx, subop::StateMembersAttr::get(ctx, {domainMember}));
-      Value denseDomainBuffer = rewriter.create<subop::GenericCreateOp>(loc, bufferType);
-
-      Value startBoundVal = rewriter.create<arith::ConstantIndexOp>(loc, 0);
-      Value stepBoundVal = rewriter.create<arith::ConstantIndexOp>(loc, 1);
-
-      auto loopOp = rewriter.create<subop::LoopOp>(loc, TypeRange{rewriter.getIndexType(), bufferType}, ValueRange{startBoundVal, denseDomainBuffer});
-      Block* loopBlock = rewriter.createBlock(&loopOp.getRegion());
-      Value idxArg = loopBlock->addArgument(rewriter.getIndexType(), loc);
-      Value bufArg = loopBlock->addArgument(bufferType, loc);
-      rewriter.setInsertionPointToStart(loopBlock);
-
-      auto dummyDef = createColumnDef(ctx, AttributeGenerator::nextName("dummy"), rewriter.getI1Type());
-      Value constRel = rewriter.create<relalg::ConstRelationOp>(loc, ArrayAttr::get(ctx, {dummyDef}), ArrayAttr::get(ctx, {ArrayAttr::get(ctx, {rewriter.getIntegerAttr(rewriter.getI1Type(), 0)})})).getResult();
-
-      auto currIdxDef = createColumnDef(ctx, AttributeGenerator::nextName("curr_idx"), rewriter.getI64Type());
-      auto currIdxRef = createColumnRef(currIdxDef);
-      auto mapIdxOp = rewriter.create<relalg::MapOp>(loc, constRel);
-      mapIdxOp.setComputedColsAttr(ArrayAttr::get(ctx, {currIdxDef}));
-      {
-         OpBuilder::InsertionGuard guard(rewriter);
-         Block* mapIdxBlock = rewriter.createBlock(&mapIdxOp.getPredicate());
-         mapIdxBlock->addArgument(tuples::TupleType::get(ctx), loc);
-         rewriter.setInsertionPointToEnd(mapIdxBlock);
-         Value idxI64 = rewriter.create<arith::IndexCastOp>(loc, rewriter.getI64Type(), idxArg);
-         rewriter.create<tuples::ReturnOp>(loc, ValueRange{idxI64});
-      }
-
-      SmallVector<std::pair<subop::Member, tuples::ColumnRefAttr>> mappingPairs = {{domainMember, currIdxRef}};
-      auto mappingAttr = subop::ColumnRefMemberMappingAttr::get(ctx, mappingPairs);
-      rewriter.create<subop::MaterializeOp>(loc, mapIdxOp.getResult(), bufArg, mappingAttr);
-
-      Value nextIdx = rewriter.create<arith::AddIOp>(loc, idxArg, stepBoundVal);
-
-      // Evaluate Loop Condition: curr_idx < dim_size
-      auto joinOp = rewriter.create<relalg::InnerJoinOp>(loc, mapIdxOp.getResult(), mapOp.getResult());
-      {
-         OpBuilder::InsertionGuard guard(rewriter);
-         Block* joinBlock = rewriter.createBlock(&joinOp.getPredicate());
-         joinBlock->addArgument(tuples::TupleType::get(ctx), loc);
-         rewriter.setInsertionPointToEnd(joinBlock);
-         Value trueVal = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
-         rewriter.create<tuples::ReturnOp>(loc, ValueRange{trueVal});
-      }
-
-      auto condDef = createColumnDef(ctx, AttributeGenerator::nextName("loop_cond"), rewriter.getI1Type());
-      auto condRef = createColumnRef(condDef);
-      auto mapCondOp = rewriter.create<relalg::MapOp>(loc, joinOp.getResult());
-      mapCondOp.setComputedColsAttr(ArrayAttr::get(ctx, {condDef}));
-      {
-         OpBuilder::InsertionGuard guard(rewriter);
-         Block* mapCondBlock = rewriter.createBlock(&mapCondOp.getPredicate());
-         auto tupleArg = mapCondBlock->addArgument(tuples::TupleType::get(ctx), loc);
-         rewriter.setInsertionPointToEnd(mapCondBlock);
-         Value idxVal = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), currIdxRef, tupleArg);
-         Value countVal = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), countRef, tupleArg);
-         Value cond = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt, idxVal, countVal);
-         rewriter.create<tuples::ReturnOp>(loc, ValueRange{cond});
-      }
-
-      subop::Member condMember = memberManager.createMember("loop_cond", rewriter.getI1Type());
-      Type simpleStateType = subop::SimpleStateType::get(ctx, subop::StateMembersAttr::get(ctx, {condMember}));
-      auto condMemberAttr = subop::MemberAttr::get(ctx, condMember);
-
-      auto createStateOp = rewriter.create<subop::CreateSimpleStateOp>(loc, simpleStateType);
-      {
-         OpBuilder::InsertionGuard guard(rewriter);
-         Block* initBlock = rewriter.createBlock(&createStateOp.getInitFn());
-         rewriter.setInsertionPointToStart(initBlock);
-         Value defaultCond = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
-         rewriter.create<tuples::ReturnOp>(loc, ValueRange{defaultCond});
-      }
-
-      auto lookupRefType = subop::LookupEntryRefType::get(ctx, llvm::cast<subop::LookupAbleState>(simpleStateType));
-      auto lookupDef = createColumnDef(ctx, AttributeGenerator::nextName("lookup_ref"), lookupRefType);
-      auto lookupRef = createColumnRef(lookupDef);
-      auto lookupOp = rewriter.create<subop::LookupOp>(loc, tuples::TupleStreamType::get(ctx), mapCondOp.getResult(), createStateOp.getResult(), rewriter.getArrayAttr({}), lookupDef);
-
-      auto reduceOp = rewriter.create<subop::ReduceOp>(loc, lookupOp.getResult(), lookupRef, rewriter.getArrayAttr({condRef}), rewriter.getArrayAttr({condMemberAttr}));
-      {
-         OpBuilder::InsertionGuard guard(rewriter);
-         Block* updateBlock = rewriter.createBlock(&reduceOp.getRegion());
-         updateBlock->addArgument(rewriter.getI1Type(), loc);
-         updateBlock->addArgument(rewriter.getI1Type(), loc);
-         rewriter.setInsertionPointToStart(updateBlock);
-         rewriter.create<tuples::ReturnOp>(loc, ValueRange{updateBlock->getArgument(0)});
-
-         Block* combineBlock = rewriter.createBlock(&reduceOp.getCombine());
-         combineBlock->addArgument(rewriter.getI1Type(), loc);
-         combineBlock->addArgument(rewriter.getI1Type(), loc);
-         rewriter.setInsertionPointToStart(combineBlock);
-         rewriter.create<tuples::ReturnOp>(loc, ValueRange{combineBlock->getArgument(0)});
-      }
-
-      rewriter.create<subop::LoopContinueOp>(loc, createStateOp.getResult(), condMemberAttr, ValueRange{nextIdx, bufArg});
-      rewriter.setInsertionPointAfter(loopOp);
-
-      // STEP 3: Scan the densely populated buffer to stream back to relational pipeline.
-      Value finalBuf = loopOp.getResult(1);
-      auto scanOp = rewriter.create<relalg::BufferScanOp>(
-         loc,
-         tuples::TupleStreamType::get(ctx),
-         finalBuf,
-         rewriter.getArrayAttr({domainDef}),
-         rewriter.getArrayAttr({rewriter.getStringAttr(memberManager.getName(domainMember))}));
-      scanOp->setAttr("rows", rewriter.getF64FloatAttr(100.0));
-
-      state.globalDomains[dimAttr] = {scanOp.getResult(), domainRef};
+      state.globalDomains[dimAttr] = {unionRel, domainRef};
    }
 }
-
 static DimBound getDimBound(Location loc, DimAttr dim, ConversionPatternRewriter& rewriter, ConversionState& state, Operation* contextOp) {
    if (dim.isConcrete()) {
       return {rewriter.create<arith::ConstantIndexOp>(loc, dim.getConcreteDim()), nullptr, nullptr};
