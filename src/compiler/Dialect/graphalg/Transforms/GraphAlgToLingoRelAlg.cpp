@@ -264,7 +264,6 @@ static std::pair<MatrixMeta, Value> renameMeta(OpBuilder& rewriter, Location loc
 static void resolveDimensionsGlobally(ModuleOp module, ConversionState& state) {
    mlir::IRRewriter rewriter(module.getContext());
    auto* ctx = module.getContext();
-   auto& memberManager = ctx->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
 
    llvm::DenseMap<Attribute, SmallVector<std::pair<Value, Attribute>>> dimSources;
 
