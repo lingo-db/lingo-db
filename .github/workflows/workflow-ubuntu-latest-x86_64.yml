@@ -338,15 +338,15 @@ jobs:
           git config --global --add safe.directory "$REPO_ROOT"
           git submodule update --init vendored/tpde vendored/mimalloc
           if [ "${{ matrix.python_mode }}" = "WASM" ]; then
-            # cpython-wasm itself, then only the bits the build actually
-            # needs (cpython source + WAMR runtime). wasi-sdk is fetched as
-            # a prebuilt tarball at cmake time; numpy is unused here.
+            # cpython-wasm itself, then only the cpython source — wasi-sdk
+            # and the Wasmer C SDK are both fetched as prebuilt tarballs at
+            # cmake time; numpy is unused here.
             # --checkout overrides the `update = none` set in .gitmodules
             # (which keeps recursive checkout out of cpython-wasm for
             # non-Python jobs).
             git submodule update --init --checkout vendored/cpython-wasm
             git -C vendored/cpython-wasm config --add safe.directory "$REPO_ROOT/vendored/cpython-wasm"
-            git -C vendored/cpython-wasm submodule update --init cpython wasm-micro-runtime
+            git -C vendored/cpython-wasm submodule update --init cpython
           fi
       - name: Install python mode-specific deps
         run: |
