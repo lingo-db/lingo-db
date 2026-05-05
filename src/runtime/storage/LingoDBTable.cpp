@@ -1,7 +1,9 @@
 #include "lingodb/runtime/storage/LingoDBTable.h"
 #include "lingodb/catalog/Defs.h"
 #include "lingodb/runtime/ArrowView.h"
+#if ENABLE_PARQUET_SCANNER
 #include "lingodb/runtime/storage/ExternalTableScan.h"
+#endif
 #include "lingodb/runtime/storage/Restrictions.h"
 #include "lingodb/scheduler/Tasks.h"
 #include "lingodb/utility/Serialization.h"
@@ -538,21 +540,8 @@ class ScanBatchesSingleThreadedTask : public lingodb::scheduler::TaskWithImplici
 
 std::unique_ptr<scheduler::Task> LingoDBTable::createScanTask(const ScanConfig& scanConfig) {
    auto restrictions = lingodb::runtime::Restrictions::create(scanConfig.filters, *schema);
-   if (!useParquetScan) {
-      std::vector<size_t> colIds;
-      for (const auto& c : scanConfig.columns) {
-         auto colId = schema->GetFieldIndex(c);
-         assert(colId >= 0);
-         colIds.push_back(colId);
-      }
-      ensureLoaded();
-
-      if (scanConfig.parallel) {
-         return std::make_unique<ScanBatchesTask>(*this, tableData, colIds, std::move(restrictions), scanConfig.cb);
-      } else {
-         return std::make_unique<ScanBatchesSingleThreadedTask>(tableData, colIds, std::move(restrictions), scanConfig.cb);
-      }
-   } else {
+#if ENABLE_PARQUET_SCANNER
+   if (useParquetScan) {
       std::vector<int> colIds;
       for (const auto& c : scanConfig.columns) {
          auto colId = schema->GetFieldIndex(c);
@@ -571,6 +560,20 @@ std::unique_ptr<scheduler::Task> LingoDBTable::createScanTask(const ScanConfig& 
       auto parquetPath = dbDir + "/" + parquetFileName;
       auto scanParquetFileTask = std::make_unique<ScanParquetFileTask>(parquetPath, colIds, scanConfig.cb, std::move(restrictions), scanConfig.filters);
       return scanParquetFileTask;
+   }
+#endif
+   std::vector<size_t> colIds;
+   for (const auto& c : scanConfig.columns) {
+      auto colId = schema->GetFieldIndex(c);
+      assert(colId >= 0);
+      colIds.push_back(colId);
+   }
+   ensureLoaded();
+
+   if (scanConfig.parallel) {
+      return std::make_unique<ScanBatchesTask>(*this, tableData, colIds, std::move(restrictions), scanConfig.cb);
+   } else {
+      return std::make_unique<ScanBatchesSingleThreadedTask>(tableData, colIds, std::move(restrictions), scanConfig.cb);
    }
 }
 

@@ -37,13 +37,13 @@ message("Using Python3: ${Python3_EXECUTABLE}")
 find_package(Arrow 24 REQUIRED)
 find_package(ArrowCompute 24 REQUIRED)
 find_package(Parquet REQUIRED)
-find_package(ArrowDataset 24 REQUIRED)
-find_package(ArrowAcero 24 REQUIRED)
+
+
 option(ENABLE_GPU_BACKEND "enable GPU backend" OFF)
 option(ENABLE_BASELINE_BACKEND "enable tpde baseline backend" OFF)
 option(ENABLE_TESTS "enable tests" ON)
 option(ENABLE_MIMALLOC "enable mimalloc allocator" ON)
-
+option(ENABLE_PARQUET_SCANNER "enable experimental external table  scanner for parquet files" OFF)
 # Python UDF support: OFF (default), CPYTHON (embed system CPython), or WASM
 # (run a sandboxed CPython compiled to WebAssembly via the bundled cpython-wasm
 # submodule + WAMR runtime).
@@ -86,6 +86,7 @@ elseif(ENABLE_PYTHON STREQUAL "WASM")
     include_directories(${PROJECT_SOURCE_DIR}/vendored/cpython-wasm/wasm-micro-runtime/core/iwasm/include)
     add_subdirectory(${PROJECT_SOURCE_DIR}/vendored/cpython-wasm ${CMAKE_CURRENT_BINARY_DIR}/cpython-wasm)
 endif()
+
 if (ENABLE_MIMALLOC)
     add_subdirectory(vendored/mimalloc EXCLUDE_FROM_ALL)
     message(STATUS "MIMALLOC ENABLED")

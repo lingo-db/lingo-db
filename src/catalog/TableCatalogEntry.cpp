@@ -66,7 +66,9 @@ runtime::TableStorage& LingoDBTableCatalogEntry::getTableStorage() {
 
 std::shared_ptr<LingoDBTableCatalogEntry> LingoDBTableCatalogEntry::createFromCreateTable(const CreateTableDef& def, bool useParquetScan) {
    auto impl = runtime::LingoDBTable::create(def);
+#if ENABLE_PARQUET_SCANNER
    impl->setUseParquetScan(useParquetScan);
+#endif
    auto res = std::make_shared<LingoDBTableCatalogEntry>(def.name, def.columns, def.primaryKey, std::vector<std::string>{}, std::move(impl));
    return res;
 }

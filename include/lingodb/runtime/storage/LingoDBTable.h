@@ -38,7 +38,9 @@ class LingoDBTable : public TableStorage {
    catalog::Sample sample;
    std::shared_ptr<arrow::Schema> schema;
    std::vector<TableChunk> tableData;
+#if ENABLE_PARQUET_SCANNER
    bool useParquetScan{false};
+#endif
 
    struct TransparentStringHasher : std::hash<std::string>, std::hash<std::string_view> {
       using is_transparent = void;
@@ -59,9 +61,11 @@ class LingoDBTable : public TableStorage {
          flush();
       }
    }
+#if ENABLE_PARQUET_SCANNER
    void setUseParquetScan(bool useParquetScan) {
       this->useParquetScan = useParquetScan;
    }
+#endif
    size_t nextRowId() override {
       return numRows;
    }

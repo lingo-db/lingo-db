@@ -1,4 +1,4 @@
-add_library(runtime OBJECT
+set(RUNTIME_SOURCES
         helpers.cpp
         Tracing.cpp
         ArrowColumn.cpp
@@ -38,8 +38,20 @@ add_library(runtime OBJECT
         storage/LingoDBTable.cpp
         storage/Restrictions.cpp
         PythonRuntime.cpp
-        storage/ExternalTableScan.cpp
 )
+
+
+if(ENABLE_PARQUET_SCANNER)
+    list(APPEND RUNTIME_SOURCES
+            storage/ExternalTableScan.cpp
+    )
+endif ()
+add_library(runtime OBJECT
+        ${RUNTIME_SOURCES}
+)
+if (ENABLE_PARQUET_SCANNER)
+    target_compile_definitions(runtime PRIVATE ENABLE_PARQUET_SCANNER=1)
+endif ()
 set(COMPILE_DEFS "")
 if (ENABLE_GPU_BACKEND)
     list(APPEND COMPILE_DEFS "GPU_ENABLED=1")

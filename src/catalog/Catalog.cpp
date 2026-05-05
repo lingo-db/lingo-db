@@ -11,6 +11,7 @@
 #include <arrow/type.h>
 
 #include <filesystem>
+#include <iostream>
 #include <parquet/arrow/reader.h>
 
 namespace {
@@ -82,7 +83,7 @@ Type mapArrowTypeToCatalogType(const std::shared_ptr<arrow::DataType>& type) {
          throw std::runtime_error("Catalog parquet: unsupported arrow type " + type->ToString());
    }
 }
-
+#if ENABLE_PARQUET_SCANNER
 std::vector<std::filesystem::path> findParquetFiles(const std::string& dbDir) {
    std::vector<std::filesystem::path> parquetFiles;
    for (const auto& entry : std::filesystem::directory_iterator(dbDir)) {
@@ -97,6 +98,7 @@ std::vector<std::filesystem::path> findParquetFiles(const std::string& dbDir) {
    std::sort(parquetFiles.begin(), parquetFiles.end());
    return parquetFiles;
 }
+#endif
 } // namespace
 
 namespace lingodb::catalog {
@@ -167,6 +169,7 @@ std::shared_ptr<Catalog> Catalog::create(std::string dbDir, bool eagerLoading) {
    if (!std::filesystem::exists(dbDir)) {
       std::filesystem::create_directories(dbDir);
    }
+#if ENABLE_PARQUET_SCANNER
    auto parquetFiles = findParquetFiles(dbDir);
    if (!parquetFiles.empty()) {
       auto res = std::make_shared<Catalog>();
@@ -207,6 +210,7 @@ std::shared_ptr<Catalog> Catalog::create(std::string dbDir, bool eagerLoading) {
 
       return res;
    }
+#endif
 
    if (!std::filesystem::exists(dbDir + "/db.lingodb")) {
       auto res = std::make_shared<Catalog>();

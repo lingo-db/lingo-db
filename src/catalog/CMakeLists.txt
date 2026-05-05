@@ -7,6 +7,9 @@ target_link_libraries(mlirTypes
 
 add_library(catalog Catalog.cpp Types.cpp Defs.cpp TableCatalogEntry.cpp IndexCatalogEntry.cpp MetaData.cpp Column.cpp FunctionCatalogEntry.cpp)
 target_link_libraries(catalog PUBLIC mlirTypes)
+if (ENABLE_PARQUET_SCANNER)
+        target_compile_definitions(catalog PRIVATE ENABLE_PARQUET_SCANNER=1)
+endif ()
 
 set(COMPILE_DEFS "SOURCE_DIR=\"${CMAKE_SOURCE_DIR}\"")
 target_compile_definitions(mlirTypes PRIVATE ${COMPILE_DEFS})
