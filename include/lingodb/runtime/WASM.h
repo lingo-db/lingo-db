@@ -3,8 +3,7 @@
 
 #include "lingodb/catalog/Catalog.h"
 
-#include "wasm.h"
-#include "wasmer.h"
+#include "wasix_python_bridge.h"
 
 #include <cstdint>
 #include <cstring>
@@ -13,7 +12,6 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <vector>
 
 namespace lingodb::wasm {
@@ -76,34 +74,21 @@ static std::vector<std::pair<CommonPyFunc, std::string>> commonPyFuncNames = {
 };
 
 struct WASMSession {
-   // Wasmer ownership graph: store owns instance/wasiEnv; module is shareable
-   // across stores (engine-bound) but we hold one per session for now.
-   wasm_store_t* store = nullptr;
-   wasm_module_t* module = nullptr;
-   wasm_instance_t* instance = nullptr;
-   wasi_env_t* wasiEnv = nullptr;
-   wasm_memory_t* memory = nullptr;     // borrowed from `exports`
-   wasm_func_t* guestMalloc = nullptr;  // borrowed from `exports`
-   wasm_func_t* guestFree = nullptr;    // borrowed from `exports`
-   wasm_extern_vec_t exports{};
-   wasm_exporttype_vec_t exportTypes{};
+   lingodb_wasix_session_t* shim = nullptr;
+   // Cached shim function indices, indexed by CommonPyFunc.
+   std::vector<int32_t> funcs;
+   int32_t guestMallocIdx = -1;
+   int32_t guestFreeIdx = -1;
 
-   // Cached CPython C-API entries indexed by CommonPyFunc — borrowed pointers
-   // into `exports` (no separate ownership).
-   std::vector<wasm_func_t*> funcs;
-
-   // Pre-allocated scratch buffer in the guest's linear memory used for
-   // short-lived host->guest string copies. Allocated once at session creation
-   // by calling the guest-exported malloc; reset (bump-pointer) per call.
-   size_t allocatedTmpSpace = 128 * 1024; // 128 KiB
+   // Pre-allocated bump arena in the guest's linear memory; reset (bump
+   // pointer rewinds) per call via WasmSessionTmpScope.
+   size_t allocatedTmpSpace = 128 * 1024;
    size_t tmpSpaceAvailable = allocatedTmpSpace;
    uint32_t tmpSpaceAddr = 0;
    uint32_t currTmpSpaceAddr = 0;
 
    uint32_t allocateFromTmpSpace(size_t size) {
-      if (size > tmpSpaceAvailable) {
-         return 0;
-      }
+      if (size > tmpSpaceAvailable) return 0;
       uint32_t addr = currTmpSpaceAddr;
       currTmpSpaceAddr += size;
       tmpSpaceAvailable -= size;
@@ -115,30 +100,24 @@ struct WASMSession {
    }
 
    public:
-   // Cache used by the WASM PythonRuntime path (mirrors PythonExtState in the
-   // CPython embed path — kept for parity, currently unused on the WASM side).
+   // Mirrors PythonExtState in the CPython embed path; currently unused on
+   // the WASIX side but kept on the public surface for parity.
    std::vector<uint32_t> cachedObjects;
    uint32_t get(size_t idx) {
-      if (idx >= cachedObjects.size()) {
-         cachedObjects.resize(idx + 1, 0);
-      }
+      if (idx >= cachedObjects.size()) cachedObjects.resize(idx + 1, 0);
       return cachedObjects[idx];
    }
    void set(size_t idx, uint32_t obj) {
-      if (idx >= cachedObjects.size()) {
-         cachedObjects.resize(idx + 1, 0);
-      }
+      if (idx >= cachedObjects.size()) cachedObjects.resize(idx + 1, 0);
       cachedObjects[idx] = obj;
    }
-   void clearCache() {
-      cachedObjects.clear();
-   }
+   void clearCache() { cachedObjects.clear(); }
 
-   // Translate a guest linear-memory offset to a native pointer. Cheap (one
-   // addition), but the result is invalidated if the guest grows its memory —
-   // do not cache across wasm calls. Use at the moment of access.
+   // Translate a guest linear-memory offset to a native pointer. Cheap, but
+   // invalidated if the guest grows its memory — recompute at use, never
+   // cache across wasm calls.
    uint8_t* nativeAddr(uint32_t guestOffset) {
-      return reinterpret_cast<uint8_t*>(wasm_memory_data(memory)) + guestOffset;
+      return lingodb_wasix_memory_base(shim) + guestOffset;
    }
 
    class WASMTmpString {
@@ -150,13 +129,9 @@ struct WASMSession {
       WASMTmpString(WASMSession& session, uint32_t addr, bool owned)
          : session(session), addr(addr), owned(owned) {}
       uint32_t getAddr() const { return addr; }
-      // Recompute on demand because wasm_memory_data() can be invalidated by
-      // memory.grow between calls — never cache the native pointer.
       uint8_t* getNativeAddr() const { return session.nativeAddr(addr); }
       ~WASMTmpString() {
-         if (owned) {
-            session.freeWasmBuffer(addr);
-         }
+         if (owned) session.freeWasmBuffer(addr);
       }
    };
    class WasmSessionTmpScope {
@@ -167,8 +142,6 @@ struct WASMSession {
       WASMTmpString allocateRaw(size_t size) {
          uint32_t addr = session.allocateFromTmpSpace(size);
          if (addr == 0) {
-            // Tmp arena exhausted — fall back to a one-off guest malloc, freed
-            // on WASMTmpString destruction.
             uint32_t guestPtr = session.createWasmBuffer(size);
             return WASMTmpString(session, guestPtr, /*owned=*/true);
          }
@@ -183,64 +156,30 @@ struct WASMSession {
       ~WasmSessionTmpScope() { session.resetTmpSpace(); }
    };
 
-   WASMSession(wasm_store_t* store, wasm_module_t* module,
-               wasm_instance_t* instance, wasi_env_t* wasiEnv,
-               wasm_extern_vec_t exports, wasm_exporttype_vec_t exportTypes)
-      : store(store), module(module), instance(instance), wasiEnv(wasiEnv),
-        exports(exports), exportTypes(exportTypes) {
-      // Build a name -> export-index map. The two vecs are parallel (same
-      // ordering by spec).
-      std::unordered_map<std::string, size_t> nameToIdx;
-      nameToIdx.reserve(exportTypes.size);
-      for (size_t i = 0; i < exportTypes.size; ++i) {
-         const wasm_name_t* n = wasm_exporttype_name(exportTypes.data[i]);
-         nameToIdx.emplace(std::string(n->data, n->size), i);
-      }
-      auto lookupExtern = [&](const char* nm) -> wasm_extern_t* {
-         auto it = nameToIdx.find(nm);
-         return it == nameToIdx.end() ? nullptr : exports.data[it->second];
-      };
-      auto lookupFunc = [&](const char* nm) -> wasm_func_t* {
-         wasm_extern_t* e = lookupExtern(nm);
-         return e ? wasm_extern_as_func(e) : nullptr;
-      };
-
-      if (auto* m = lookupExtern("memory")) {
-         memory = wasm_extern_as_memory(m);
-      }
-      if (!memory) {
-         throw std::runtime_error("WASM module exports no `memory`");
-      }
-
-      // wasi-sdk CPython exports its libc allocator. Used both for the tmp
-      // arena and for one-off allocations beyond the arena.
-      guestMalloc = lookupFunc("malloc");
-      guestFree = lookupFunc("free");
-      if (!guestMalloc || !guestFree) {
-         throw std::runtime_error("WASM module is missing `malloc`/`free` exports");
-      }
-
+   explicit WASMSession(lingodb_wasix_session_t* shim) : shim(shim) {
+      // Resolve the CPython C-API exports + the guest libc allocator.
       for (const auto& [funcId, funcName] : commonPyFuncNames) {
-         wasm_func_t* func = lookupFunc(funcName.c_str());
-         if (!func) {
-            throw std::runtime_error(std::format("Failed to lookup function '{}'", funcName));
+         int32_t idx = lingodb_wasix_lookup_func(shim, funcName.c_str());
+         if (idx < 0) {
+            throw std::runtime_error(std::format("missing wasm export: {}", funcName));
          }
-         if (funcId >= funcs.size()) {
-            funcs.resize(funcId + 1);
-         }
-         funcs[funcId] = func;
+         if (funcId >= funcs.size()) funcs.resize(funcId + 1, -1);
+         funcs[funcId] = idx;
       }
+      guestMallocIdx = lingodb_wasix_lookup_func(shim, "malloc");
+      guestFreeIdx = lingodb_wasix_lookup_func(shim, "free");
+      if (guestMallocIdx < 0 || guestFreeIdx < 0) {
+         throw std::runtime_error("wasm module is missing `malloc`/`free` exports");
+      }
+
+      // Note: Py_Initialize is already called by the shim's session_new
+      // (mirrors embed-python.rs). No need to call it again here.
 
       allocateTmpSpace();
    }
 
    ~WASMSession() {
-      if (exports.data) wasm_extern_vec_delete(&exports);
-      if (exportTypes.data) wasm_exporttype_vec_delete(&exportTypes);
-      if (instance) wasm_instance_delete(instance);
-      if (wasiEnv) wasi_env_delete(wasiEnv);
-      if (module) wasm_module_delete(module);
-      if (store) wasm_store_delete(store);
+      if (shim) lingodb_wasix_session_free(shim);
    }
 
    WasmSessionTmpScope createTmpScope() {
@@ -251,34 +190,24 @@ struct WASMSession {
    // - Ins... are deduced from the provided inputs.
    template <typename... Out, typename... Ins>
    auto callPyFunc(CommonPyFunc funcId, Ins&&... ins) {
-      wasm_func_t* func = funcs[funcId];
-      std::array<wasm_val_t, sizeof...(Ins) == 0 ? 1 : sizeof...(Ins)> argsBuf;
+      int32_t funcIdx = funcs[funcId];
+      std::array<lingodb_wasm_val_t, sizeof...(Ins) == 0 ? 1 : sizeof...(Ins)> argsBuf{};
       uint32_t numArgs = 0;
       constexpr size_t num_results = countResults<Out...>();
       serializeArgs(argsBuf.data(), numArgs, ins...);
-      std::array<wasm_val_t, num_results == 0 ? 1 : num_results> resultsBuf;
+      std::array<lingodb_wasm_val_t, num_results == 0 ? 1 : num_results> resultsBuf{};
 
-      wasm_val_vec_t argsVec{
-         .size = sizeof...(Ins),
-         .data = argsBuf.data(),
-      };
-      wasm_val_vec_t resultsVec{
-         .size = num_results,
-         .data = resultsBuf.data(),
-      };
-      wasm_trap_t* trap = wasm_func_call(func, &argsVec, &resultsVec);
-      if (trap) {
-         wasm_message_t msg;
-         wasm_trap_message(trap, &msg);
-         std::string err(msg.data ? msg.data : "<no message>", msg.size);
-         wasm_byte_vec_delete(&msg);
-         wasm_trap_delete(trap);
-         throw std::runtime_error(std::format("wasm trap: {}", err));
+      int rc = lingodb_wasix_call(
+         shim, funcIdx,
+         argsBuf.data(), sizeof...(Ins),
+         resultsBuf.data(), num_results);
+      if (rc != 0) {
+         const char* msg = lingodb_wasix_last_error();
+         throw std::runtime_error(std::format("wasm trap in funcId={}: {}",
+                                              static_cast<int>(funcId),
+                                              msg ? msg : "<no message>"));
       }
-
-      // Return a fixed-size std::array<wasm_val_t, num_results>; callers index
-      // via .at(0).of.{i32,i64,f64} same as before.
-      std::array<wasm_val_t, num_results> out{};
+      std::array<lingodb_wasm_val_t, num_results> out{};
       for (size_t i = 0; i < num_results; ++i) out[i] = resultsBuf[i];
       return out;
    }
@@ -289,23 +218,19 @@ struct WASMSession {
    }
 
    uint32_t createWasmBuffer(size_t size) {
-      wasm_val_t args[1] = {WASM_I32_VAL(static_cast<int32_t>(size))};
-      wasm_val_t res[1] = {WASM_INIT_VAL};
-      wasm_val_vec_t a{.size = 1, .data = args};
-      wasm_val_vec_t r{.size = 1, .data = res};
-      wasm_trap_t* trap = wasm_func_call(guestMalloc, &a, &r);
-      if (trap) {
-         wasm_trap_delete(trap);
-         throw std::runtime_error("guest malloc trapped");
+      lingodb_wasm_val_t arg{.kind = LINGODB_WASM_I32, ._pad = {}, .of = {.i32 = static_cast<int32_t>(size)}};
+      lingodb_wasm_val_t res{};
+      int rc = lingodb_wasix_call(shim, guestMallocIdx, &arg, 1, &res, 1);
+      if (rc != 0) {
+         const char* msg = lingodb_wasix_last_error();
+         throw std::runtime_error(std::format("guest malloc trapped: {}", msg ? msg : ""));
       }
-      return static_cast<uint32_t>(res[0].of.i32);
+      return static_cast<uint32_t>(res.of.i32);
    }
    void freeWasmBuffer(uint32_t addr) {
-      wasm_val_t args[1] = {WASM_I32_VAL(static_cast<int32_t>(addr))};
-      wasm_val_vec_t a{.size = 1, .data = args};
-      wasm_val_vec_t r = WASM_EMPTY_VEC;
-      wasm_trap_t* trap = wasm_func_call(guestFree, &a, &r);
-      if (trap) wasm_trap_delete(trap);
+      lingodb_wasm_val_t arg{.kind = LINGODB_WASM_I32, ._pad = {}, .of = {.i32 = static_cast<int32_t>(addr)}};
+      int rc = lingodb_wasix_call(shim, guestFreeIdx, &arg, 1, nullptr, 0);
+      (void) rc; // best-effort free
    }
 
    private:
@@ -318,27 +243,27 @@ struct WASMSession {
    void packVal(void* argsVoid, uint32_t& idx, T v)
       requires(std::integral<T> && sizeof(T) == 4)
    {
-      auto& entry = static_cast<wasm_val_t*>(argsVoid)[idx++];
-      entry.of.i32 = v;
-      entry.kind = WASM_I32;
+      auto& entry = static_cast<lingodb_wasm_val_t*>(argsVoid)[idx++];
+      entry.of.i32 = static_cast<int32_t>(v);
+      entry.kind = LINGODB_WASM_I32;
    }
    template <typename T>
    void packVal(void* argsVoid, uint32_t& idx, T v)
       requires(std::integral<T> && sizeof(T) == 8)
    {
-      auto& entry = static_cast<wasm_val_t*>(argsVoid)[idx++];
+      auto& entry = static_cast<lingodb_wasm_val_t*>(argsVoid)[idx++];
       entry.of.i64 = static_cast<int64_t>(v);
-      entry.kind = WASM_I64;
+      entry.kind = LINGODB_WASM_I64;
    }
    inline void packVal(void* argsVoid, uint32_t& idx, float v) {
-      auto& entry = static_cast<wasm_val_t*>(argsVoid)[idx++];
+      auto& entry = static_cast<lingodb_wasm_val_t*>(argsVoid)[idx++];
       entry.of.f32 = v;
-      entry.kind = WASM_F32;
+      entry.kind = LINGODB_WASM_F32;
    }
    inline void packVal(void* argsVoid, uint32_t& idx, double v) {
-      auto& entry = static_cast<wasm_val_t*>(argsVoid)[idx++];
+      auto& entry = static_cast<lingodb_wasm_val_t*>(argsVoid)[idx++];
       entry.of.f64 = v;
-      entry.kind = WASM_F64;
+      entry.kind = LINGODB_WASM_F64;
    }
    template <typename T>
    void packVal(void* /*args*/, uint32_t& /*idx*/, T /*v*/) {
@@ -357,7 +282,7 @@ struct WASMSession {
    static constexpr int countResults() { return 0; }
 
    template <typename... Ins>
-   void serializeArgs(wasm_val_t* args, uint32_t& numArgs, Ins&&... ins) {
+   void serializeArgs(lingodb_wasm_val_t* args, uint32_t& numArgs, Ins&&... ins) {
       numArgs = 0;
       (packVal(static_cast<void*>(args), numArgs, std::forward<Ins>(ins)), ...);
    }
@@ -365,9 +290,6 @@ struct WASMSession {
 
 class WASM {
    public:
-   // One engine shared across all sessions / workers — Engine compiles wasm
-   // and is thread-safe; Stores (and below) are per-thread.
-   static wasm_engine_t* engine;
    static std::vector<std::shared_ptr<WASMSession>> localWasmSessions;
    static WASMSession* initializeWASM();
 };
