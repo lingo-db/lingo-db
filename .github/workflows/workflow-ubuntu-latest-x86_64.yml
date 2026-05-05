@@ -331,22 +331,19 @@ jobs:
           submodules: false
       - name: Init required submodules
         run: |
-          # The cpython-wasm submodule's nested .gitmodules still uses
-          # git@github.com:; rewrite to https for unauthenticated CI access.
-          git config --global url.https://github.com/.insteadOf git@github.com:
           REPO_ROOT=$(pwd)
           git config --global --add safe.directory "$REPO_ROOT"
           git submodule update --init vendored/tpde vendored/mimalloc
           if [ "${{ matrix.python_mode }}" = "WASM" ]; then
-            # cpython-wasm itself, then only the cpython source — wasi-sdk
-            # and the Wasmer C SDK are both fetched as prebuilt tarballs at
-            # cmake time; numpy is unused here.
+            # cpython-wasm holds the wasix-python-bridge Rust shim crate.
+            # No nested submodules needed — the python interpreter (a webc)
+            # and the numpy wheel are pulled at cmake time, and the Wasmer
+            # runtime is a cargo dependency of the shim.
             # --checkout overrides the `update = none` set in .gitmodules
             # (which keeps recursive checkout out of cpython-wasm for
             # non-Python jobs).
             git submodule update --init --checkout vendored/cpython-wasm
             git -C vendored/cpython-wasm config --add safe.directory "$REPO_ROOT/vendored/cpython-wasm"
-            git -C vendored/cpython-wasm submodule update --init cpython
           fi
       - name: Install python mode-specific deps
         run: |
@@ -354,8 +351,16 @@ jobs:
             apt-get update
             apt-get install -y python3-dev
           fi
-          # WASM mode needs only wget+tar to fetch wasi-sdk-29; both are
-          # in the dev container already.
+          if [ "${{ matrix.python_mode }}" = "WASM" ]; then
+            # The wasix-python-bridge crate is built via cargo. unzip
+            # extracts the numpy wheel at cmake time. Both are absent from
+            # the lingodb-dev base image.
+            apt-get update
+            apt-get install -y --no-install-recommends unzip ca-certificates curl
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+              sh -s -- -y --profile minimal --default-toolchain stable
+            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          fi
       - name: CPU info
         # ubuntu-24.04 GitHub-Actions runners are not feature-uniform; print
         # the CPU info so any future cpu-feature-related issues are easy
@@ -376,10 +381,19 @@ jobs:
       - name: Test python-udfs
         run: |
           chmod +x build/lingodb-release/*
-          # The python-udfs.test file lives outside test/sqlite-small/ so
-          # the default test job (which builds with ENABLE_PYTHON=OFF) does
-          # not try to execute Python UDFs and abort.
+          # test/sqlite-small-python/ lives outside test/sqlite-small/ so the
+          # default test job (ENABLE_PYTHON=OFF) does not try to execute
+          # Python UDFs. The glob picks up python-udfs.test (pure-Python) and
+          # python-udfs-numpy.test (exercises the numpy wheel mounted at
+          # /site-packages — only meaningful in WASM mode, where the wasix
+          # numpy wheel is fetched + unpacked by cmake).
           for t in test/sqlite-small-python/*.test; do
+            if [ "${{ matrix.python_mode }}" = "CPYTHON" ] && \
+               [[ "$t" == *python-udfs-numpy.test ]]; then
+              echo "skip $t under CPYTHON (no embedded numpy)"
+              continue
+            fi
+            echo "=== $t ==="
             build/lingodb-release/sqlite-tester "$t"
           done
       - name: Test sqlite-small (regression with Python enabled)
