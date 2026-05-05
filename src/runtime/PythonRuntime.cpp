@@ -260,10 +260,12 @@ template <typename... Args>
 static uint32_t callPythonWASMUDF(PyObjectPtr callable, Args&&... args) {
    wasm::WASMSession& wasmSession = *currentWasmSession;
    auto tmpScope = wasmSession.createTmpScope();
-   size_t numArgs = sizeof...(Args);
+   // size_t is 8 bytes on the host but 4 bytes in the wasm32 guest — keep it
+   // narrow so wasm_func_call sees an i32 (matches the guest signature).
+   uint32_t numArgs = sizeof...(Args);
    auto raw = tmpScope.allocateRaw(numArgs * sizeof(uint32_t));
    uint32_t* argsBuf = reinterpret_cast<uint32_t*>(raw.getNativeAddr());
-   size_t idx = 0;
+   uint32_t idx = 0;
    ((argsBuf[idx++] = args), ...);
    return wasmSession.callPyFunc<PyObjectPtr>(wasm::PyObject_Vectorcall, callable, raw.getAddr(), numArgs, 0).at(0).of.i32;
 }
@@ -300,7 +302,7 @@ runtime::VarLen32 PythonRuntime::toVarLen32(PyObjectPtr obj) {
    auto wasmStrObj = wasmSession.callPyFunc<PyObjectPtr>(wasm::PyUnicode_AsUTF8, obj).at(0).of.i32;
    if (!wasmStrObj) throw std::runtime_error("Object is not a string");
    auto size = wasmSession.callPyFunc<int32_t>(wasm::PyUnicode_GetLength, obj).at(0).of.i32;
-   const char* data = static_cast<const char*>(wasm_runtime_addr_app_to_native(wasmSession.moduleInst, wasmStrObj));
+   const char* data = reinterpret_cast<const char*>(wasmSession.nativeAddr(wasmStrObj));
    if (!data) throw std::runtime_error("Failed to convert WASM string to host string");
    // Copy into the execution context's string arena (the WASM-side buffer is
    // unsafe to keep once the call returns).

@@ -74,21 +74,6 @@ if(ENABLE_PYTHON STREQUAL "CPYTHON")
 elseif(ENABLE_PYTHON STREQUAL "WASM")
     message(STATUS "Configuring CPython WASM support")
     add_compile_definitions(USE_CPYTHON_WASM_RUNTIME=1)
-    # WAMR's os_thread_get_stack_boundary() caches a per-thread native-stack
-    # boundary computed from pthread_attr_getstack and clamped to the top
-    # APP_THREAD_STACK_SIZE_MAX bytes (default 8 MB). Our worker pthread stack
-    # holds 64 fiber stacks + a worker main stack (~66 MB total), and the cache
-    # is hit once per worker thread regardless of which fiber is active. Bump
-    # the max so the boundary lands at the bottom of the whole region — every
-    # fiber's SP is then in-range.
-    add_compile_definitions(APP_THREAD_STACK_SIZE_MAX=134217728)
-    # WAMR's stack HW bound check would mprotect a guard page at the bottom of
-    # what it sees as the pthread stack — i.e. below fiber 0's slot. Our
-    # scheduler already places PROT_NONE guard pages there, so WAMR's
-    # touch_pages probe hits one and segfaults. Disable WAMR's guard install;
-    # we already get stack-overflow protection from the scheduler's guards.
-    add_compile_definitions(WASM_DISABLE_STACK_HW_BOUND_CHECK=1)
-    include_directories(${PROJECT_SOURCE_DIR}/vendored/cpython-wasm/wasm-micro-runtime/core/iwasm/include)
     add_subdirectory(${PROJECT_SOURCE_DIR}/vendored/cpython-wasm ${CMAKE_CURRENT_BINARY_DIR}/cpython-wasm)
 endif()
 if (ENABLE_MIMALLOC)

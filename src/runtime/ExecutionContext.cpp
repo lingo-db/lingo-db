@@ -5,7 +5,6 @@
 #endif
 #ifdef USE_CPYTHON_WASM_RUNTIME
 #include "lingodb/runtime/WASM.h"
-#include "wasm_export.h"
 #endif
 #include <cassert>
 
