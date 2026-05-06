@@ -350,6 +350,7 @@
 %type<lingodb::ast::LogicalTypeWithMods> func_type func_return
 %type<std::vector<lingodb::ast::FunctionArgument>> func_args_with_defaults func_args_with_defaults_list
 %type<lingodb::ast::FunctionArgument> func_arg_with_default func_arg
+%type<std::vector<std::pair<std::string, lingodb::ast::LogicalTypeWithMods>>> table_func_column_list
 
 
 /* Precedence: lowest to highest */
@@ -947,6 +948,15 @@ table_ref:
         subquery->alias = $opt_alias_clause.first;
         subquery->columnNames = $opt_alias_clause.second;
         $$ = subquery;
+    }
+    | func_application opt_alias_clause
+    {
+        // FROM funcname(args...) — table-valued (tabular UDF) call.
+        auto tableFunc = mkNode<lingodb::ast::TableFunctionRef>(@$,
+            $func_application->functionName,
+            $func_application->arguments);
+        tableFunc->alias = $opt_alias_clause.first;
+        $$ = tableFunc;
     }
 
 
@@ -3555,7 +3565,7 @@ set_list:
 
 
 CreateFunctionStmt:
-    CREATE opt_or_replace FUNCTION func_name func_args_with_defaults 
+    CREATE opt_or_replace FUNCTION func_name func_args_with_defaults
     RETURNS func_return opt_createfunc_opt_list opt_routine_body
     {
         auto createFunctionInfo = std::make_shared<lingodb::ast::CreateFunctionInfo>($func_name, $opt_or_replace);
@@ -3563,7 +3573,30 @@ CreateFunctionStmt:
         createFunctionInfo->argumentTypes = $func_args_with_defaults;
         createFunctionInfo->options = $opt_createfunc_opt_list;
         $$ = mkNode<lingodb::ast::CreateNode>(@$, createFunctionInfo);
-        
+
+    }
+    | CREATE opt_or_replace FUNCTION func_name func_args_with_defaults
+      RETURNS TABLE LP table_func_column_list RP opt_createfunc_opt_list opt_routine_body
+    {
+        auto createFunctionInfo = std::make_shared<lingodb::ast::CreateFunctionInfo>($func_name, $opt_or_replace);
+        createFunctionInfo->argumentTypes = $func_args_with_defaults;
+        createFunctionInfo->returnColumns = $table_func_column_list;
+        createFunctionInfo->options = $opt_createfunc_opt_list;
+        $$ = mkNode<lingodb::ast::CreateNode>(@$, createFunctionInfo);
+    }
+    ;
+
+table_func_column_list:
+    param_name func_type
+    {
+        std::vector<std::pair<std::string, lingodb::ast::LogicalTypeWithMods>> list;
+        list.emplace_back($param_name, $func_type);
+        $$ = list;
+    }
+    | table_func_column_list[list] COMMA param_name func_type
+    {
+        $list.emplace_back($param_name, $func_type);
+        $$ = $list;
     }
     ;
 
