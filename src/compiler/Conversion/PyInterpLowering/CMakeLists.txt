@@ -8,6 +8,7 @@ add_mlir_conversion_library(MLIRPyInterpToStd
 
         DEPENDS
         py-rt-defs
+        MLIRArrowOpsIncGen
         LINK_COMPONENTS
         Core
 

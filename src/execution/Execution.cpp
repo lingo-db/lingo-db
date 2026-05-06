@@ -180,8 +180,12 @@ class DefaultImperativeLowering : public LoweringStep {
       mlir::PassManager lowerArrowPm(moduleOp->getContext());
       lowerArrowPm.enableVerifier(verify);
       addLingoDBInstrumentation(lowerArrowPm, getSerializationState());
-      lowerArrowPm.addPass(arrow::createLowerToStdPass());
+      // PyInterp first: lowers py_interp ops + their arrow.table operands to
+      // i8*, which lets ArrowToStd's applyFullConversion reconcile any
+      // unrealized arrow.table<->i8* casts emitted by the bridge ops in
+      // SubOpToControlFlow.
       lowerArrowPm.addPass(py_interp::createLowerToStdPass());
+      lowerArrowPm.addPass(arrow::createLowerToStdPass());
       if (cleanupAfterImperative.getValue()) {
          lowerArrowPm.addPass(lingodb::compiler::createCanonicalizerPass());
          lowerArrowPm.addPass(mlir::createLoopInvariantCodeMotionPass());
