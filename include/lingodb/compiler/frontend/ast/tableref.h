@@ -147,5 +147,23 @@ class ExpressionListRef : public TableRef {
    std::vector<std::vector<std::shared_ptr<ParsedExpression>>> values;
 };
 
+/**
+ * `FROM funcname(args...)` — call a table-valued (tabular UDF) function.
+ * The first arg of v1 is the table (a parenthesised query) the UDF operates
+ * on; the remaining args are scalar parameters.
+ */
+class TableFunctionRef : public TableRef {
+   public:
+   static constexpr TableReferenceType cType = TableReferenceType::TABLE_FUNCTION;
+   TableFunctionRef(std::string functionName, std::vector<std::shared_ptr<ParsedExpression>> arguments)
+      : TableRef(cType), functionName(std::move(functionName)), arguments(std::move(arguments)) {}
+
+   std::string functionName;
+   std::vector<std::shared_ptr<ParsedExpression>> arguments;
+   //! Optional bound subquery argument (the table the UDF operates on).
+   //! Populated by the analyzer when one of the args is a SubqueryExpression.
+   std::shared_ptr<TableProducer> tableArgument;
+};
+
 } // namespace lingodb::ast
 #endif
