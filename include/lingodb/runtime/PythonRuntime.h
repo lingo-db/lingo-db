@@ -26,6 +26,7 @@ struct WASMSession;
 } // namespace lingodb::wasm
 
 namespace lingodb::runtime {
+class ArrowTable;
 #ifdef USE_CPYTHON_RUNTIME
 struct PythonExtState {
    std::vector<PyObjectPtr> cachedObjects;
@@ -72,6 +73,10 @@ class PythonRuntime {
    static PyObjectPtr fromVarLen32(runtime::VarLen32 value);
    static double toDouble(PyObjectPtr obj);
    static PyObjectPtr fromDouble(double value);
+   // Convert between a runtime-owned arrow::Table (lingodb::runtime::ArrowTable*)
+   // and a pyarrow.Table PyObject. Used by tabular Python UDFs.
+   static PyObjectPtr fromArrowTable(ArrowTable* table);
+   static ArrowTable* toArrowTable(PyObjectPtr obj);
    static void decref(PyObjectPtr obj);
    static void incref(PyObjectPtr obj);
    static PyObjectPtr import(size_t x, runtime::VarLen32 val);
