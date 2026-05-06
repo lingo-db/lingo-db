@@ -1,6 +1,8 @@
 #include "lingodb/compiler/Conversion/PyInterpLowering/PyInterpLoweringPass.h"
 
 #include "lingodb/compiler/Conversion/UtilToLLVM/Passes.h"
+#include "lingodb/compiler/Dialect/Arrow/IR/ArrowDialect.h"
+#include "lingodb/compiler/Dialect/Arrow/IR/ArrowTypes.h"
 #include "lingodb/compiler/Dialect/PyInterp/PyInterpDialect.h"
 #include "lingodb/compiler/Dialect/PyInterp/PyInterpOps.h"
 #include "lingodb/compiler/Dialect/util/UtilDialect.h"
@@ -31,6 +33,7 @@
 using namespace mlir;
 namespace py_interp = lingodb::compiler::dialect::py_interp;
 namespace util = lingodb::compiler::dialect::util;
+namespace arrow = lingodb::compiler::dialect::arrow;
 namespace rt = lingodb::compiler::runtime;
 
 namespace {
@@ -173,6 +176,9 @@ class CastToPyObjectLowering : public OpConversionPattern<py_interp::CastToPyObj
          rewriter.replaceOp(op, rt::PythonRuntime::fromVarLen32(rewriter, op.getLoc())({adaptor.getFrom()})[0]);
       } else if (mlir::isa<mlir::IntegerType>(t) && op.getPythonType() == "datetime.date") {
          rewriter.replaceOp(op, rt::PythonRuntime::fromDate(rewriter, op.getLoc())({adaptor.getFrom()})[0]);
+      } else if (mlir::isa<arrow::TableType>(t) && op.getPythonType() == "pyarrow.Table") {
+         // arrow.table → i8* runtime::ArrowTable* → wrap_table → pyarrow.Table PyObject.
+         rewriter.replaceOp(op, rt::PythonRuntime::fromArrowTable(rewriter, op.getLoc())({adaptor.getFrom()})[0]);
       } else {
          return failure();
       }
@@ -204,6 +210,9 @@ class CastFromPyObjectLowering : public OpConversionPattern<py_interp::CastFromP
          }
       } else if (mlir::isa<util::VarLen32Type>(t)) {
          rewriter.replaceOp(op, rt::PythonRuntime::toVarLen32(rewriter, op.getLoc())({adaptor.getFrom()})[0]);
+      } else if (mlir::isa<arrow::TableType>(t) && op.getPythonType() == "pyarrow.Table") {
+         // pyarrow.Table PyObject → unwrap_table → i8* runtime::ArrowTable*.
+         rewriter.replaceOp(op, rt::PythonRuntime::toArrowTable(rewriter, op.getLoc())({adaptor.getFrom()})[0]);
       } else {
          return failure();
       }
@@ -240,6 +249,9 @@ void PyInterpLoweringPass::runOnOperation() {
 
    target.addLegalDialect<func::FuncDialect>();
    target.addLegalDialect<memref::MemRefDialect>();
+   // PyInterpLowering may now run before ArrowToStd; arrow ops survive this
+   // pass and get lowered later.
+   target.addLegalDialect<lingodb::compiler::dialect::arrow::ArrowDialect>();
    target.addIllegalDialect<py_interp::PyInterpDialect>();
    TypeConverter typeConverter;
    typeConverter.addConversion([&](mlir::Type type) { return type; });
@@ -285,6 +297,21 @@ void PyInterpLoweringPass::runOnOperation() {
 #else
       return util::RefType::get(ctxt, mlir::IntegerType::get(ctxt, 8));
 #endif
+   });
+   // arrow.table is opaque at the runtime level — a `lingodb::runtime::ArrowTable*`.
+   typeConverter.addConversion([&](arrow::TableType) -> mlir::Type {
+      return util::RefType::get(ctxt, mlir::IntegerType::get(ctxt, 8));
+   });
+   // Source/target materializations for arrow.table so applyFullConversion can
+   // resolve unrealized_conversion_casts that bridge i8*<->arrow.table emitted
+   // by the SubOp bridge-op lowerings.
+   typeConverter.addSourceMaterialization([&](mlir::OpBuilder& b, mlir::Type t, mlir::ValueRange inputs, mlir::Location loc) -> mlir::Value {
+      if (inputs.size() != 1) return {};
+      return b.create<mlir::UnrealizedConversionCastOp>(loc, t, inputs).getResult(0);
+   });
+   typeConverter.addTargetMaterialization([&](mlir::OpBuilder& b, mlir::Type t, mlir::ValueRange inputs, mlir::Location loc) -> mlir::Value {
+      if (inputs.size() != 1) return {};
+      return b.create<mlir::UnrealizedConversionCastOp>(loc, t, inputs).getResult(0);
    });
    typeConverter.addConversion([&](FunctionType funcType) {
       llvm::SmallVector<Type> convertedInputs;
