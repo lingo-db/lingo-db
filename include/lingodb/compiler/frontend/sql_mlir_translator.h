@@ -68,6 +68,7 @@ class SQLMlirTranslator {
    mlir::Value translateCoalesceExpression(mlir::OpBuilder& builder, NullableType resultType, std::vector<std::shared_ptr<ast::BoundExpression>> expressions, std::shared_ptr<analyzer::SQLContext> context);
 
    mlir::Value translateTableRef(mlir::OpBuilder& builder, std::shared_ptr<ast::BoundTableRef> tableRef, std::shared_ptr<analyzer::SQLContext> context);
+   mlir::Value translateTableFunctionRef(mlir::OpBuilder& builder, std::shared_ptr<ast::BoundTableFunctionRef> tableFunctionRef, std::shared_ptr<analyzer::SQLContext> context);
 
    mlir::Value translateSetOperation(mlir::OpBuilder& builder, std::shared_ptr<ast::BoundSetOperationNode> boundSetOp, std::shared_ptr<analyzer::SQLContext> context);
    mlir::Value translateAggregationFunction(mlir::OpBuilder& builder, std::string mapName, std::vector<mlir::Attribute> groupByAttrs, mlir::Value relation, mlir::OpBuilder functionBuilder, std::shared_ptr<ast::BoundFunctionExpression> aggrFunction, mlir::Value& expr, compiler::dialect::tuples::ColumnDefAttr& attrDef);
