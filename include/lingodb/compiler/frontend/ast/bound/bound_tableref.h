@@ -89,5 +89,36 @@ class BoundExpressionListRef : public BoundTableRef {
    std::vector<std::vector<std::shared_ptr<BoundConstantExpression>>> values;
    std::vector<std::shared_ptr<ColumnReference>> columnReferenceEntries;
 };
+
+class BoundTableFunctionRef : public BoundTableRef {
+   public:
+   static constexpr TableReferenceType cType = TableReferenceType::TABLE_FUNCTION;
+   BoundTableFunctionRef(std::string functionName,
+                         std::vector<std::shared_ptr<BoundExpression>> scalarArguments,
+                         std::shared_ptr<TableProducer> tableArgument,
+                         std::vector<std::shared_ptr<ColumnReference>> columnReferenceEntries,
+                         std::shared_ptr<analyzer::SQLScope> innerScope,
+                         std::string mlirScope)
+      : BoundTableRef(cType),
+        functionName(std::move(functionName)),
+        scalarArguments(std::move(scalarArguments)),
+        tableArgument(std::move(tableArgument)),
+        columnReferenceEntries(std::move(columnReferenceEntries)),
+        innerScope(std::move(innerScope)),
+        mlirScope(std::move(mlirScope)) {}
+
+   std::string functionName;
+   //! Scalar arguments, in their declared order (excluding the table arg).
+   std::vector<std::shared_ptr<BoundExpression>> scalarArguments;
+   //! Bound subquery providing the table argument.
+   std::shared_ptr<TableProducer> tableArgument;
+   //! One ColumnReference per output column declared in `RETURNS TABLE(...)`.
+   std::vector<std::shared_ptr<ColumnReference>> columnReferenceEntries;
+   //! Inner scope used while binding the table-arg subquery.
+   std::shared_ptr<analyzer::SQLScope> innerScope;
+   std::string mlirScope;
+   //! Resolved catalog entry for the UDF — populated by the analyzer.
+   std::shared_ptr<lingodb::catalog::FunctionCatalogEntry> udfFunction;
+};
 } // namespace lingodb::ast
 #endif

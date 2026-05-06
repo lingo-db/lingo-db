@@ -93,6 +93,10 @@ class CreateFunctionInfo : public CreateInfo {
    //Parameters with Default values if exists
    std::vector<FunctionArgument> argumentTypes;
    LogicalTypeWithMods returnType;
+   // For tabular UDFs (`RETURNS TABLE(col t, ...)`), the per-column output
+   // schema. When non-empty, this signals a tabular UDF and `returnType` is
+   // unused.
+   std::vector<std::pair<std::string, LogicalTypeWithMods>> returnColumns;
    std::vector<std::pair<std::string, std::string>> options;
 };
 } // namespace lingodb::ast

@@ -37,6 +37,9 @@ class BoundCreateFunctionInfo : public CreateInfo {
    std::vector<std::pair<std::string, catalog::Type>> argumentTypes;
    std::vector<std::string> argumentNames;
 
+   // For tabular UDFs: per-column output (name, type). Empty == scalar UDF.
+   std::vector<std::pair<std::string, catalog::Type>> returnColumns;
+
    std::vector<std::pair<std::string, std::string>> options;
 };
 
