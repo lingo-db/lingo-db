@@ -10,6 +10,10 @@ class DataSource {
    virtual void iterate(bool parallel, std::vector<std::string> members, const std::function<void(BatchView*)>& cb) = 0;
    virtual ~DataSource() {}
    static DataSource* get(runtime::VarLen32 description);
+   // Wrap an in-memory ArrowTable as a DataSource so its rows can be iterated
+   // via the regular scan_refs lowering path. The returned pointer is owned
+   // by the current ExecutionContext.
+   static DataSource* fromArrowTable(ArrowTable* table);
    //static DataSource* getFromTable(ArrowTable* arrowTable, runtime::VarLen32 mappingVal,runtime::VarLen32 columnArray);
 };
 class DataSourceIteration {
