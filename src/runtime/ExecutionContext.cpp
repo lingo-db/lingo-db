@@ -1,5 +1,6 @@
 #include "lingodb/runtime/ExecutionContext.h"
 #include "lingodb/runtime/PythonRuntime.h"
+#include "lingodb/utility/Setting.h"
 #ifdef USE_CPYTHON_RUNTIME
 #include "Python.h"
 #endif
@@ -8,6 +9,19 @@
 #include "wasm_export.h"
 #endif
 #include <cassert>
+
+#ifdef USE_CPYTHON_RUNTIME
+namespace {
+// "isolated"   — each worker gets its own GIL + strict multi-interpreter
+//                extension check. Best for parallel scalar UDFs that only
+//                touch stdlib. Refuses to load legacy C extensions like
+//                pyarrow inside sub-interpreters.
+// "compatible" — workers share the host interpreter's GIL (serialised Python
+//                execution) but legacy extensions can be imported. Required
+//                for tabular Python UDFs (which load pyarrow / numpy).
+lingodb::utility::GlobalSetting<std::string> pythonSubinterpMode("system.python.subinterpreter_mode", "isolated");
+} // namespace
+#endif
 
 void lingodb::runtime::ExecutionContext::setResult(uint32_t id, uint8_t* ptr) {
    auto* context = getCurrentExecutionContext();
@@ -69,6 +83,30 @@ void lingodb::runtime::ExecutionContext::resetPythonSessionCache() {
 }
 void lingodb::runtime::ExecutionContext::setupPython() {
    auto workerId = scheduler::currentWorkerId();
+   const auto mode = pythonSubinterpMode.getValue();
+   const bool compatible = (mode == "compatible");
+   if (compatible) {
+      // Run all tabular UDFs against the host's main interpreter. Sub-
+      // interpreters can't share legacy single-phase-init extensions like
+      // numpy/pandas: each one would be the "first interpreter" from
+      // numpy's POV, and the second sub-interpreter to import it dies with
+      // "Interpreter change detected". With a single shared interpreter
+      // numpy is imported once and reused across queries / workers.
+      //
+      // PyGILState_Ensure attaches the calling OS thread to the main
+      // interpreter (creating a tstate for it on first call) and acquires
+      // the GIL. Multiple workers therefore serialise on the main GIL —
+      // acceptable because that's the trade-off of compatible mode.
+      PyGILState_STATE gstate = PyGILState_Ensure();
+      // Pack the gilstate into the per-worker slot so teardownPython can
+      // release it. Add 2 to avoid colliding with kMainInterpreterMarker
+      // (LOCKED is 0, UNLOCKED is 1 in CPython 3.12).
+      session.pythonThreadStates[workerId] = reinterpret_cast<void*>(static_cast<uintptr_t>(gstate) + 2);
+      if (session.pythonExtStates[workerId] == nullptr) {
+         session.pythonExtStates[workerId] = PythonRuntime::createPythonExtState();
+      }
+      return;
+   }
    if (session.pythonThreadStates[workerId] == nullptr) {
       // First time this worker enters a Python region — give it its own
       // sub-interpreter (with its own GIL) so workers don't fight over the GIL.
@@ -92,6 +130,17 @@ void lingodb::runtime::ExecutionContext::setupPython() {
 }
 void lingodb::runtime::ExecutionContext::teardownPython() {
    auto workerId = scheduler::currentWorkerId();
+   const auto mode = pythonSubinterpMode.getValue();
+   if (mode == "compatible") {
+      // Match the PyGILState_Ensure from setupPython.
+      auto packed = reinterpret_cast<uintptr_t>(session.pythonThreadStates[workerId]);
+      if (packed >= 2) {
+         PyGILState_STATE gstate = static_cast<PyGILState_STATE>(packed - 2);
+         PyGILState_Release(gstate);
+         session.pythonThreadStates[workerId] = nullptr;
+      }
+      return;
+   }
    auto* state = PyThreadState_Swap(nullptr);
    if (state) {
       session.pythonThreadStates[workerId] = state;
