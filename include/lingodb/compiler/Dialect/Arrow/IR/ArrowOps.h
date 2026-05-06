@@ -7,6 +7,7 @@
 
 #include "lingodb/compiler/Dialect/Arrow/IR/ArrowTypes.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOpsInterfaces.h"
+#include "lingodb/compiler/Dialect/SubOperator/SubOperatorOpsTypes.h"
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
