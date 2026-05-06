@@ -349,7 +349,12 @@ jobs:
         run: |
           if [ "${{ matrix.python_mode }}" = "CPYTHON" ]; then
             apt-get update
-            apt-get install -y python3-dev
+            apt-get install -y python3-dev python3-pip
+            # pyarrow is needed at build time (the runtime includes
+            # arrow/python/pyarrow.h and links libarrow_python) and at
+            # test time (tabular Python UDFs hand pyarrow.Table objects
+            # back and forth). pandas is used by the tabular UDF tests.
+            python3 -m pip install --break-system-packages pyarrow pandas
           fi
           if [ "${{ matrix.python_mode }}" = "WASM" ]; then
             # The wasix-python-bridge crate is built via cargo. unzip
@@ -391,24 +396,29 @@ jobs:
           # to find LLVM-21. Harmless for the CPYTHON matrix entry, which
           # does not build any Rust.
           LLVM_SYS_211_PREFIX: /usr/lib/llvm-21
-      - name: Test python-udfs
+      - name: Test python-udfs (scalar)
         run: |
           chmod +x build/lingodb-release/*
-          # test/sqlite-small-python/ lives outside test/sqlite-small/ so the
-          # default test job (ENABLE_PYTHON=OFF) does not try to execute
-          # Python UDFs. The glob picks up python-udfs.test (pure-Python) and
-          # python-udfs-numpy.test (exercises the numpy wheel mounted at
-          # /site-packages — only meaningful in WASM mode, where the wasix
-          # numpy wheel is fetched + unpacked by cmake).
-          for t in test/sqlite-small-python/*.test; do
-            if [ "${{ matrix.python_mode }}" = "CPYTHON" ] && \
-               [[ "$t" == *python-udfs-numpy.test ]]; then
-              echo "skip $t under CPYTHON (no embedded numpy)"
-              continue
-            fi
-            echo "=== $t ==="
-            build/lingodb-release/sqlite-tester "$t"
-          done
+          # The python-udfs.test file lives outside test/sqlite-small/ so
+          # the default test job (which builds with ENABLE_PYTHON=OFF) does
+          # not try to execute Python UDFs and abort.
+          build/lingodb-release/sqlite-tester test/sqlite-small-python/python-udfs.test
+      - name: Test python-udfs (numpy, WASM only)
+        # Exercises the numpy wheel mounted at /site-packages in the WASIX
+        # sandbox (fetched + unpacked by cmake). CPYTHON mode embeds the
+        # dev-image's host Python, which has no numpy by default.
+        if: matrix.python_mode == 'WASM'
+        run: |
+          build/lingodb-release/sqlite-tester test/sqlite-small-python/python-udfs-numpy.test
+      - name: Test python-udfs (tabular)
+        # Tabular UDFs need pyarrow (loaded above) and the "compatible"
+        # sub-interpreter mode; pyarrow's C extension is single-phase
+        # init and refuses to load into the WASM backend's sandbox.
+        if: matrix.python_mode == 'CPYTHON'
+        env:
+          LINGODB_PYTHON_SUBINTERPRETER_MODE: compatible
+        run: |
+          build/lingodb-release/sqlite-tester test/sqlite-small-python/python-udfs-tabular.test
       - name: Test sqlite-small (regression with Python enabled)
         # Confirm we did not break the existing tests when Python is on.
         run: |
