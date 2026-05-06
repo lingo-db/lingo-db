@@ -2,6 +2,11 @@
 
 #include "lingodb/catalog/Defs.h"
 #include "lingodb/catalog/TableCatalogEntry.h"
+#include "lingodb/compiler/Dialect/Arrow/IR/ArrowOps.h"
+#include "lingodb/compiler/Dialect/Arrow/IR/ArrowTypes.h"
+#include "lingodb/compiler/Dialect/PyInterp/PyInterpOps.h"
+#include "lingodb/compiler/Dialect/PyInterp/PyInterpTypes.h"
+#include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "lingodb/compiler/Dialect/RelAlg/Transforms/queryopt/QueryGraph.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorDialect.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
@@ -258,7 +263,8 @@ void SQLMlirTranslator::translateCreateFunction(mlir::OpBuilder& builder, std::s
          functionName,
          boundCreateFunctionInfo->language,
          code,
-         returnType.type, std::move(standaloneArgumentTypes));
+         returnType.type, std::move(standaloneArgumentTypes),
+         boundCreateFunctionInfo->returnColumns);
       auto descriptionValue = createStringValue(builder, utility::serializeToHexString(createFunctionDef));
       compiler::runtime::RelationHelper::createFunction(builder, builder.getUnknownLoc())(mlir::ValueRange({descriptionValue}));
    } else {
@@ -1307,6 +1313,10 @@ mlir::Value SQLMlirTranslator::translateTableRef(mlir::OpBuilder& builder, std::
 
          return translated;
       }
+      case ast::TableReferenceType::TABLE_FUNCTION: {
+         auto tableFunctionRef = std::static_pointer_cast<ast::BoundTableFunctionRef>(tableRef);
+         return translateTableFunctionRef(builder, tableFunctionRef, context);
+      }
       case ast::TableReferenceType::BOUND_EXPRESSION_LIST: {
          auto expressionList = std::static_pointer_cast<ast::BoundExpressionListRef>(tableRef);
          std::vector<mlir::Attribute> rows;
@@ -1359,6 +1369,158 @@ mlir::Value SQLMlirTranslator::translateTableRef(mlir::OpBuilder& builder, std::
       default:
          translatorError("Table reference not implemented", tableRef->loc);
    }
+}
+
+mlir::Value SQLMlirTranslator::translateTableFunctionRef(mlir::OpBuilder& builder, std::shared_ptr<ast::BoundTableFunctionRef> tableFunctionRef, std::shared_ptr<analyzer::SQLContext> context) {
+   auto* mlirContext = builder.getContext();
+   auto loc = getLocationFromBison(tableFunctionRef->loc, mlirContext);
+   auto tupleStreamType = tuples::TupleStreamType::get(mlirContext);
+
+   auto pyEntry = std::dynamic_pointer_cast<catalog::PythonFunctionCatalogEntry>(tableFunctionRef->udfFunction);
+   if (!pyEntry || !pyEntry->isTabular()) {
+      translatorError("Tabular UDF call lost its catalog binding", tableFunctionRef->loc);
+   }
+
+   // 1) Translate the input table arg subquery → tuple stream (in inner scope).
+   context->pushNewScope(tableFunctionRef->innerScope);
+   auto inputStream = translateTableProducer(builder, tableFunctionRef->tableArgument, context);
+   auto inputTargetColumns = context->currentScope->targetInfo.getTargetColumns();
+   context->popCurrentScope();
+
+   // 2) Pre-build the column-ref attrs and member descriptors for the input.
+   auto& memberManager = mlirContext->getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager();
+   std::vector<mlir::Attribute> inputColumnRefs;
+   std::vector<mlir::Attribute> inputColumnNames;
+   llvm::SmallVector<subop::Member> inputMembers;
+   for (auto& col : inputTargetColumns) {
+      inputColumnRefs.push_back(col->createRef(builder, attrManager));
+      auto displayName = col->displayName.empty() ? col->name : col->displayName;
+      inputColumnNames.push_back(builder.getStringAttr(displayName));
+      inputMembers.push_back(memberManager.createMember(displayName, col->resultType.toMlirType(mlirContext)));
+   }
+   auto inputLocalTableType = subop::LocalTableType::get(
+      mlirContext,
+      subop::StateMembersAttr::get(mlirContext, inputMembers),
+      builder.getArrayAttr(inputColumnNames));
+
+   // 3) Build the output column defs (used inside the body by the scan op)
+   //    + matching refs (used as the nested op's available_cols attr) + member list.
+   //    relalg.nested itself doesn't define columns; the inner ops do, and
+   //    available_cols is a list of references to those columns.
+   std::vector<mlir::Attribute> outputColumnRefs;
+   llvm::SmallVector<tuples::ColumnDefAttr> outputColumnDefs;
+   std::vector<mlir::Attribute> outputColumnNames;
+   llvm::SmallVector<subop::Member> outputMembers;
+   llvm::SmallVector<std::pair<subop::Member, tuples::ColumnDefAttr>> scanMapping;
+   for (auto& col : tableFunctionRef->columnReferenceEntries) {
+      auto defAttr = col->createDef(builder, attrManager);
+      defAttr.getColumn().type = col->resultType.toMlirType(mlirContext);
+      outputColumnDefs.push_back(defAttr);
+      outputColumnRefs.push_back(col->createRef(builder, attrManager));
+      outputColumnNames.push_back(builder.getStringAttr(col->displayName));
+      auto member = memberManager.createMember(col->displayName, col->resultType.toMlirType(mlirContext));
+      outputMembers.push_back(member);
+      scanMapping.emplace_back(member, defAttr);
+   }
+   auto outputLocalTableType = subop::LocalTableType::get(
+      mlirContext,
+      subop::StateMembersAttr::get(mlirContext, outputMembers),
+      builder.getArrayAttr(outputColumnNames));
+
+   // 4) Build the relalg.nested op. used_cols = input refs, available_cols = output refs.
+   //    The body region has one block with a TupleStream argument bound to inputStream.
+   auto nestedOp = builder.create<relalg::NestedOp>(
+      loc,
+      tupleStreamType,
+      mlir::ValueRange{inputStream},
+      builder.getArrayAttr(inputColumnRefs),
+      builder.getArrayAttr(outputColumnRefs));
+   auto* bodyBlock = new mlir::Block;
+   bodyBlock->addArgument(tupleStreamType, loc);
+   nestedOp.getNestedFn().getBlocks().clear();
+   nestedOp.getNestedFn().push_back(bodyBlock);
+
+   // 5) Populate body.
+   {
+      mlir::OpBuilder::InsertionGuard guard(builder);
+      builder.setInsertionPointToStart(bodyBlock);
+      mlir::Value innerStream = bodyBlock->getArgument(0);
+
+      // 5a) Materialize input → subop.local_table.
+      mlir::Value localTableIn = builder.create<relalg::MaterializeOp>(
+         loc,
+         inputLocalTableType,
+         innerStream,
+         builder.getArrayAttr(inputColumnRefs),
+         builder.getArrayAttr(inputColumnNames));
+
+      // 5b) Bridge subop.local_table → arrow.table.
+      auto arrowTableType = arrow::TableType::get(mlirContext);
+      mlir::Value arrowTableIn = builder.create<arrow::TableFromLocalTableOp>(loc, arrowTableType, localTableIn);
+
+      // 5c) Resolve the python function (cached module + getattr).
+      auto pyObjType = py_interp::PyObjectType::get(mlirContext);
+      mlir::Value moduleVal = builder.create<py_interp::CreateModule>(
+         loc, pyObjType,
+         builder.getStringAttr("udf_" + tableFunctionRef->functionName),
+         builder.getStringAttr(pyEntry->getCode()));
+      mlir::Value functionVal = builder.create<py_interp::GetAttr>(
+         loc, pyObjType, moduleVal, builder.getStringAttr(tableFunctionRef->functionName));
+
+      // 5d) Cast inputs to PyObjects.
+      std::vector<mlir::Value> pyArgs;
+      pyArgs.push_back(builder.create<py_interp::CastToPyObject>(loc, pyObjType, arrowTableIn, "pyarrow.Table"));
+      auto pythonScalarType = [](catalog::Type t) -> std::string {
+         using namespace lingodb::catalog;
+         switch (t.getTypeId()) {
+            case LogicalTypeId::BOOLEAN: return "builtins.bool";
+            case LogicalTypeId::INT: return "builtins.int";
+            case LogicalTypeId::FLOAT: return "builtins.float";
+            case LogicalTypeId::DOUBLE: return "builtins.float";
+            case LogicalTypeId::STRING: return "builtins.str";
+            case LogicalTypeId::DATE: return "datetime.date";
+            default: throw std::runtime_error("Unsupported scalar type for tabular Python UDF: " + t.toString());
+         }
+      };
+      for (size_t i = 0; i < tableFunctionRef->scalarArguments.size(); ++i) {
+         auto& boundArg = tableFunctionRef->scalarArguments[i];
+         mlir::Value translatedArg = translateExpression(builder, boundArg, context);
+         translatedArg = boundArg->resultType->castValue(builder, translatedArg);
+         auto declared = pyEntry->getArgumentTypes()[i];
+         pyArgs.push_back(builder.create<py_interp::CastToPyObject>(
+            loc, pyObjType, translatedArg, pythonScalarType(declared)));
+      }
+
+      // 5e) Call.
+      mlir::Value pyResult = builder.create<py_interp::Call>(
+         loc, pyObjType, functionVal, mlir::ValueRange(pyArgs), builder.getArrayAttr({}));
+
+      // 5f) Cast back to arrow.table.
+      mlir::Value arrowTableOut = builder.create<py_interp::CastFromPyObject>(
+         loc, arrowTableType, pyResult, "pyarrow.Table");
+
+      // 5g) Bridge arrow.table → subop.local_table (with declared output schema).
+      mlir::Value localTableOut = builder.create<arrow::TableToLocalTableOp>(
+         loc, outputLocalTableType, arrowTableOut);
+
+      // 5h) Build the column-def-member mapping for the scan.
+      auto scanMappingAttr = subop::ColumnDefMemberMappingAttr::get(mlirContext, scanMapping);
+
+      // 5i) Scan the output local table back into a tuple stream.
+      mlir::Value outStream = builder.create<subop::ScanOp>(loc, tupleStreamType, localTableOut, scanMappingAttr);
+
+      // 5j) TODO: emit dec_ref ops for pyResult / pyArgs / functionVal once the
+      //          SubOp execution-step splitter properly orders side-effect-only
+      //          ops after the last use of their operand (currently it can
+      //          place a dec_ref step ahead of a step that still uses the
+      //          value, leading to use-after-free). Skipping for now leaks
+      //          refcounts per query.
+
+      // 5k) Return the scan tuple stream.
+      builder.create<tuples::ReturnOp>(loc, outStream);
+   }
+
+   return nestedOp.getResult();
 }
 
 mlir::Value SQLMlirTranslator::translateSetOperation(mlir::OpBuilder& builder, std::shared_ptr<ast::BoundSetOperationNode> boundSetOp, std::shared_ptr<analyzer::SQLContext> context) {
