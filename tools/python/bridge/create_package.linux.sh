@@ -24,7 +24,17 @@ PYTHON_FLAGS=""
 if [ "$2" = "with-python-udf" ]; then
     PYTHON_FLAGS="-DENABLE_PYTHON=CPYTHON -DPython3_INCLUDE_DIR=$PY_INCLUDE_DIR -DPython3_ROOT_DIR=$PY_ROOT"
 fi
-cmake -G Ninja . -B build/lingodb-release/ -DCMAKE_BUILD_TYPE=Release -DClang_DIR=/built-llvm/lib/cmake/clang -DArrow_DIR=/built-arrow/lib64/cmake/Arrow -DArrowCompute_DIR=/built-arrow/lib64/cmake/ArrowCompute -DPython3_EXECUTABLE=$PY_ROOT/bin/python3 $PYTHON_FLAGS -DENABLE_TESTS=OFF -DENABLE_BASELINE_BACKEND=ON
+# pyarrow lives in the venv we set up above, not in /opt/python/$1. Pass its
+# include/lib dirs explicitly so the runtime CMake can wire up tabular UDF
+# support without re-querying the (pyarrow-less) bare interpreter.
+VENV_PY="$(pwd)/venv/bin/python3"
+PYARROW_FLAGS=""
+if [ "$2" = "with-python-udf" ]; then
+    PYARROW_INC=$($VENV_PY -c "import pyarrow as pa; print(pa.get_include())")
+    PYARROW_LIB=$($VENV_PY -c "import pyarrow as pa; print(pa.get_library_dirs()[0])")
+    PYARROW_FLAGS="-DPYARROW_INCLUDE_DIR=$PYARROW_INC -DPYARROW_LIBRARY_DIRS=$PYARROW_LIB"
+fi
+cmake -G Ninja . -B build/lingodb-release/ -DCMAKE_BUILD_TYPE=Release -DClang_DIR=/built-llvm/lib/cmake/clang -DArrow_DIR=/built-arrow/lib64/cmake/Arrow -DArrowCompute_DIR=/built-arrow/lib64/cmake/ArrowCompute -DPython3_EXECUTABLE=$PY_ROOT/bin/python3 $PYTHON_FLAGS $PYARROW_FLAGS -DENABLE_TESTS=OFF -DENABLE_BASELINE_BACKEND=ON
 
 cmake --build build/lingodb-release --target pybridge -j$(nproc)
 cp -r tools/python/bridge build/pylingodb
