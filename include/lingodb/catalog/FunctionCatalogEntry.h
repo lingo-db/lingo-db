@@ -44,10 +44,19 @@ class CFunctionCatalogEntry : public FunctionCatalogEntry {
 };
 
 class PythonFunctionCatalogEntry : public FunctionCatalogEntry {
-   public:
-   PythonFunctionCatalogEntry(std::string name, std::string code, Type returnType, std::vector<Type> argumentTypes)
-      : FunctionCatalogEntry(CatalogEntryType::PYTHON_FUNCTION_ENTRY, name, code, returnType, argumentTypes) {}
+   // Empty for scalar UDFs; non-empty marks this as a tabular UDF with the
+   // given output (name, type) schema. For tabular entries `returnType` is
+   // unused.
+   std::vector<std::pair<std::string, Type>> returnColumns;
 
+   public:
+   PythonFunctionCatalogEntry(std::string name, std::string code, Type returnType, std::vector<Type> argumentTypes, std::vector<std::pair<std::string, Type>> returnColumns = {})
+      : FunctionCatalogEntry(CatalogEntryType::PYTHON_FUNCTION_ENTRY, name, code, returnType, argumentTypes), returnColumns(std::move(returnColumns)) {}
+
+   [[nodiscard]] bool isTabular() const { return !returnColumns.empty(); }
+   [[nodiscard]] const std::vector<std::pair<std::string, Type>>& getReturnColumns() const { return returnColumns; }
+
+   void serializeEntry(lingodb::utility::Serializer& serializer) const override;
    static std::shared_ptr<FunctionCatalogEntry> deserialize(lingodb::utility::Deserializer& deserializer);
 };
 
