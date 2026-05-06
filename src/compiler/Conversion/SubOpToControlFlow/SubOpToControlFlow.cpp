@@ -811,6 +811,12 @@ class SubOpRewriter {
                    return t.getDialect().getNamespace() == "subop";
                 });
       }
+      // Bridge ops between subop.local_table and arrow.table need rewriting
+      // when one side is a sub-op type.
+      if (mlir::isa<lingodb::compiler::dialect::arrow::TableFromLocalTableOp,
+                    lingodb::compiler::dialect::arrow::TableToLocalTableOp>(op)) {
+         return true;
+      }
       return false;
    }
    void rewrite(mlir::Block* block) {
@@ -1084,6 +1090,30 @@ class CreateThreadLocalLowering : public SubOpConversionPattern<subop::CreateThr
       Value functionPointer = rewriter.create<mlir::func::ConstantOp>(loc, funcOp.getFunctionType(), SymbolRefAttr::get(rewriter.getStringAttr(funcOp.getSymName())));
       rewriter.replaceOp(createThreadLocal, rt::ThreadLocal::create(rewriter, loc)({functionPointer, arg}));
       return mlir::success();
+   }
+};
+// arrow.table.from_local_table / arrow.table.to_local_table are pure type-
+// witnesses: the underlying SSA value is an `i8*` (runtime::ArrowTable*) on
+// both sides. During subop->control-flow lowering, the SubOp side of the
+// bridge gets converted to `i8*` while the bridge op remains. Replace the
+// bridge with an unrealized_conversion_cast between the (type-converted)
+// operand and the result type — `reconcile-unrealized-casts` later folds the
+// chain (since both convert to i8*).
+class TableFromLocalTableSubOpLowering : public SubOpConversionPattern<lingodb::compiler::dialect::arrow::TableFromLocalTableOp> {
+   using SubOpConversionPattern<lingodb::compiler::dialect::arrow::TableFromLocalTableOp>::SubOpConversionPattern;
+   LogicalResult matchAndRewrite(lingodb::compiler::dialect::arrow::TableFromLocalTableOp op, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
+      auto cast = rewriter.create<mlir::UnrealizedConversionCastOp>(op.getLoc(), op.getArrowTable().getType(), adaptor.getLocalTable());
+      rewriter.replaceOp(op, cast.getResult(0));
+      return success();
+   }
+};
+class TableToLocalTableSubOpLowering : public SubOpConversionPattern<lingodb::compiler::dialect::arrow::TableToLocalTableOp> {
+   using SubOpConversionPattern<lingodb::compiler::dialect::arrow::TableToLocalTableOp>::SubOpConversionPattern;
+   LogicalResult matchAndRewrite(lingodb::compiler::dialect::arrow::TableToLocalTableOp op, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
+      auto convertedResultType = typeConverter->convertType(op.getLocalTable().getType());
+      auto cast = rewriter.create<mlir::UnrealizedConversionCastOp>(op.getLoc(), convertedResultType, adaptor.getArrowTable());
+      rewriter.replaceOp(op, cast.getResult(0));
+      return success();
    }
 };
 class UnrealizedConversionCastLowering : public SubOpConversionPattern<mlir::UnrealizedConversionCastOp> {
@@ -4383,6 +4413,8 @@ PatternList getCPUPatternList(TypeConverter& typeConverter, mlir::MLIRContext* c
    patterns.insertPattern<ReduceOpLowering>(typeConverter, ctxt);
    patterns.insertPattern<NestedMapLowering>(typeConverter, ctxt);
    patterns.insertPattern<UnrealizedConversionCastLowering>(typeConverter, ctxt);
+   patterns.insertPattern<TableFromLocalTableSubOpLowering>(typeConverter, ctxt);
+   patterns.insertPattern<TableToLocalTableSubOpLowering>(typeConverter, ctxt);
    patterns.insertPattern<UnwrapOptionalHashmapRefLowering>(typeConverter, ctxt);
    patterns.insertPattern<OffsetReferenceByLowering>(typeConverter, ctxt);
    patterns.insertPattern<GetBeginLowering>(typeConverter, ctxt);
@@ -4445,6 +4477,11 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
       return util::RefType::get(t.getContext(), mlir::IntegerType::get(ctxt, 8));
    });
    typeConverter.addConversion([&](subop::LocalTableType t) -> Type {
+      return util::RefType::get(t.getContext(), mlir::IntegerType::get(ctxt, 8));
+   });
+   // arrow.table is opaque (a runtime::ArrowTable*) — same i8* representation
+   // as a sub-op local table, so the bridge between them is a no-op cast.
+   typeConverter.addConversion([&](lingodb::compiler::dialect::arrow::TableType t) -> Type {
       return util::RefType::get(t.getContext(), mlir::IntegerType::get(ctxt, 8));
    });
    typeConverter.addConversion([&](subop::ResultTableType t) -> Type {

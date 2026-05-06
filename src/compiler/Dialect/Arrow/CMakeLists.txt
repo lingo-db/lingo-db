@@ -8,6 +8,7 @@ add_mlir_dialect_library(MLIRArrow
 
         DEPENDS
         MLIRArrowOpsIncGen
+        MLIRSubOperatorOpsIncGen
         LINK_LIBS PUBLIC
         MLIRIR
         MLIRFuncTransforms

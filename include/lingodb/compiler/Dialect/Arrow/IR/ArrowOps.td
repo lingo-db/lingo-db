@@ -86,4 +86,38 @@ def Arrow_BuilderFromPtr : Arrow_Op<"array_builder.from_ptr", [Pure] > {
     let assemblyFormat = " $ptr `->` type($builder) attr-dict";
 }
 
+def SubOp_LocalTable : Type<CPred<"mlir::isa<::lingodb::compiler::dialect::subop::LocalTableType>($_self)">,"sub-op local table type">;
+
+def Arrow_TableFromLocalTableOp : Arrow_Op<"table.from_local_table", [Pure]> {
+    let summary = "View a sub-op local table as an opaque arrow.table handle";
+    let description = [{
+        Both types are runtime-equivalent (a `lingodb::runtime::ArrowTable*`),
+        but at the MLIR-type level the conversion is explicit so we can hand the
+        opaque handle to operations that don't carry a per-column schema
+        (e.g. py_interp casts).
+
+        The operand is typed `AnyType` rather than the strict `subop.local_table`
+        because the bridge op survives past `lower-subop-to-cf`, which lowers
+        the local_table into a plain `i8*` while the bridge op is still in
+        place; using `AnyType` keeps the IR verifiable across that window.
+    }];
+    let arguments = (ins AnyType:$local_table);
+    let results = (outs Arrow_Table:$arrow_table);
+    let assemblyFormat = " $local_table `:` type($local_table) attr-dict";
+}
+
+def Arrow_TableToLocalTableOp : Arrow_Op<"table.to_local_table", [Pure]> {
+    let summary = "Annotate an opaque arrow.table with a schema, producing a sub-op local table";
+    let description = [{
+        The target `local_table` type carries the column names + member types
+        the surrounding pipeline (sub-op scans) expects. Verified at runtime
+        that the underlying arrow::Table actually has that schema.
+
+        Result is `AnyType` for the same reason as `from_local_table` above.
+    }];
+    let arguments = (ins Arrow_Table:$arrow_table);
+    let results = (outs AnyType:$local_table);
+    let assemblyFormat = " $arrow_table `->` type($local_table) attr-dict";
+}
+
 #endif// OPS
