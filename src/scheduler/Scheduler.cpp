@@ -20,7 +20,18 @@
 
 #include "lingodb/scheduler/Scheduler.h"
 #include "lingodb/scheduler/Task.h"
+#include "lingodb/utility/Setting.h"
 #include "mlir/IR/MLIRContext.h"
+
+#ifdef USE_CPYTHON_RUNTIME
+namespace {
+// Colon- or comma-separated list of directories to prepend to sys.path of
+// the embedded interpreter. Useful when the host process can't import
+// site-packages directly (e.g. tabular Python UDFs need pyarrow from a venv
+// that isn't otherwise on PYTHONPATH).
+lingodb::utility::GlobalSetting<std::string> pythonPathSetting("system.python.path", "");
+} // namespace
+#endif
 namespace lingodb::scheduler {
 class Worker;
 namespace {
@@ -947,6 +958,27 @@ std::unique_ptr<SchedulerHandle> startScheduler(size_t numWorkers) {
       // sub-interpreters use PyInterpreterConfig_OWN_GIL, so they don't
       // contend with the host GIL anyway.
       if (!Py_IsInitialized()) {
+         // Optional user-supplied search paths must be propagated to every
+         // sub-interpreter we'll later create via Py_NewInterpreterFromConfig.
+         // Each sub-interpreter computes its own sys.path from PYTHONPATH at
+         // creation time (it doesn't inherit it from the main interpreter),
+         // so the cleanest way is to merge our setting into the env var
+         // *before* Py_Initialize. ':' and ',' both accepted as separators
+         // (':' is what Python expects; ',' is convenient for a single env
+         // line).
+         const std::string extraPath = pythonPathSetting.getValue();
+         if (!extraPath.empty()) {
+            std::string normalised;
+            normalised.reserve(extraPath.size());
+            for (char c : extraPath) normalised.push_back(c == ',' ? ':' : c);
+            const char* existing = std::getenv("PYTHONPATH");
+            std::string combined = normalised;
+            if (existing && *existing) {
+               combined.push_back(':');
+               combined.append(existing);
+            }
+            ::setenv("PYTHONPATH", combined.c_str(), 1);
+         }
          Py_Initialize();
          auto* _save = PyEval_SaveThread();
          (void) _save;
