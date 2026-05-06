@@ -49,4 +49,14 @@ def Arrow_ArrayBuilder : Arrow_Type<"ArrayBuilder","builder"> {
     let summary = "represents an anonymous Apache Arrow builder (building a chunked array), without knowledge of the type stored by it";
 }
 
+def Arrow_Table : Arrow_Type<"Table","table"> {
+    let summary = "opaque handle to a runtime-owned Apache Arrow Table (lingodb::runtime::ArrowTable*)";
+    let description = [{
+        Carries no schema information at the type level — column names and
+        types are tracked by the surrounding logical-level types
+        (e.g. subop.local_table). At lowering time this becomes a raw `i8*`
+        pointing to a `lingodb::runtime::ArrowTable` instance.
+    }];
+}
+
 #endif// LINGODB_DIALECT_Arrow_IR_OPS

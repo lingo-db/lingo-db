@@ -324,6 +324,10 @@ void ArrowToStdLoweringPass::runOnOperation() {
    typeConverter.addConversion([&](arrow::ArrayBuilderType builderType) {
       return util::RefType::get(&getContext(), IntegerType::get(&getContext(), 8));
    });
+   // arrow.table values may flow into py_interp.cast_to_pyobject (legal in
+   // ArrowToStd's target). Don't convert arrow.table here — leave it for
+   // PyInterpLowering to lower, where the surrounding consumers also become
+   // i8*-typed and the unrealized casts can be reconciled.
    RewritePatternSet patterns(&getContext());
 
    mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::func::FuncOp>(patterns, typeConverter);
@@ -341,6 +345,9 @@ void ArrowToStdLoweringPass::runOnOperation() {
    patterns.insert<BuilderAppendFixedSizedLowering>(typeConverter, &getContext());
    patterns.insert<BuilderAppendBoolLowering>(typeConverter, &getContext());
    patterns.insert<BuilderAppendVariableSizeBinaryLowering>(typeConverter, &getContext());
+   // The bridge ops (arrow.table.{from,to}_local_table) get lowered earlier in
+   // SubOpToControlFlow; if any survives to here, leave it alone — ArrowToStd
+   // doesn't convert arrow.table at all, so they remain valid IR.
    if (failed(applyFullConversion(module, target, std::move(patterns))))
       signalPassFailure();
 }
