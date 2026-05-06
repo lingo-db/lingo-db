@@ -44,9 +44,6 @@ lingodb::runtime::Session::~Session() {
    // a complete substitute as long as we save/restore the entry tstate.
 #if PY_VERSION_HEX >= 0x030D0000
    if (Py_IsFinalizing()) {
-#else
-   if (_Py_IsFinalizing()) {
-#endif
       // Skip Py_EndInterpreter; only delete the C++-side ext state.
    } else {
       PyThreadState* host_saved = PyThreadState_Swap(nullptr);
@@ -61,6 +58,16 @@ lingodb::runtime::Session::~Session() {
          PyThreadState_Swap(host_saved);
       }
    }
+#else
+   // Python 3.12: Py_EndInterpreter calls threading._shutdown first, which
+   // blocks on every Python-level Thread._tstate_lock. Tabular Python UDFs
+   // import pyarrow (which imports numpy), and those imports leave threads
+   // behind in the sub-interpreter whose tstate_lock the worker that created
+   // them never released — Py_EndInterpreter then hangs forever. The 3.13+
+   // path above relies on Py_FinalizeEx's auto-reap to clean these up; on
+   // 3.12 there's no such reaper, so we deliberately skip Py_EndInterpreter
+   // and let the sub-interpreter leak (the process is exiting anyway).
+#endif
    for (auto* extState : pythonExtStates) {
       delete extState;
    }
