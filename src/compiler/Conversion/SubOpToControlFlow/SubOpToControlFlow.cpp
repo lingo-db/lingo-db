@@ -781,6 +781,19 @@ class SubOpRewriter {
             return;
          }
       }
+      // No pattern matched. If this is a non-SubOp op that ended up inside an
+      // execution step (e.g. arrow / py_interp glue between two SubOp steps),
+      // hoist it out to the insertion point with operands remapped through
+      // the SSA value mapping. The execution-step return mapping then sees
+      // the unchanged op result.
+      if (op->getDialect()->getNamespace() != "subop" && !mlir::isa<mlir::UnrealizedConversionCastOp>(op)) {
+         op->remove();
+         builder.insert(op);
+         for (auto& operand : op->getOpOperands()) {
+            operand.set(getMapped(operand.get()));
+         }
+         return;
+      }
       op->dump();
       llvm::dbgs() << "Could not rewrite" << op->getName() << "\n";
       assert(false);
@@ -1125,17 +1138,35 @@ class ScanRefsTableLowering : public SubOpConversionPattern<subop::ScanRefsOp> {
    using SubOpConversionPattern<subop::ScanRefsOp>::SubOpConversionPattern;
 
    LogicalResult matchAndRewrite(subop::ScanRefsOp scanOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
-      auto tableType = mlir::dyn_cast_or_null<subop::TableType>(scanOp.getState().getType());
-      if (!tableType) return failure();
+      auto stateType = scanOp.getState().getType();
+      auto tableType = mlir::dyn_cast_or_null<subop::TableType>(stateType);
+      auto localTableType = mlir::dyn_cast_or_null<subop::LocalTableType>(stateType);
+      if (!tableType && !localTableType) return failure();
+      bool filtered = tableType ? tableType.getFiltered() : false;
       auto& memberManager = getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
       auto loc = scanOp->getLoc();
       auto refType = mlir::cast<subop::TableEntryRefType>(scanOp.getRef().getColumn().type);
+      // For local_table, build a member-name -> arrow-column-name lookup so we
+      // can pass the arrow-side column names (rather than the suffixed MLIR
+      // member names) to the runtime ArrowTableSource.
+      llvm::DenseMap<subop::Member, std::string> memberToColumnName;
+      if (localTableType) {
+         auto allMembers = localTableType.getMembers().getMembers();
+         auto allColNames = localTableType.getColumnNames();
+         for (auto [m, n] : llvm::zip(allMembers, allColNames)) {
+            memberToColumnName[m] = mlir::cast<mlir::StringAttr>(n).getValue().str();
+         }
+      }
       std::string memberMapping = "[";
       llvm::SmallVector<mlir::Type> accessedColumnTypes;
       auto members = refType.getMembers();
       for (auto m : members.getMembers()) {
          auto type = memberManager.getType(m);
          auto name = memberManager.getName(m);
+         if (localTableType) {
+            auto it = memberToColumnName.find(m);
+            if (it != memberToColumnName.end()) name = it->second;
+         }
          accessedColumnTypes.push_back(type);
          if (memberMapping.length() > 1) {
             memberMapping += ",";
@@ -1144,7 +1175,13 @@ class ScanRefsTableLowering : public SubOpConversionPattern<subop::ScanRefsOp> {
       }
       memberMapping += "]";
       mlir::Value memberMappingValue = rewriter.create<util::CreateConstVarLen>(scanOp->getLoc(), util::VarLen32Type::get(rewriter.getContext()), memberMapping);
-      mlir::Value iterator = rt::DataSourceIteration::init(rewriter, scanOp->getLoc())({adaptor.getState(), memberMappingValue})[0];
+      mlir::Value dataSource = adaptor.getState();
+      if (localTableType) {
+         // local_table holds an ArrowTable*; wrap it in a runtime DataSource
+         // so the existing iteration machinery can scan it.
+         dataSource = rt::DataSource::fromArrowTable(rewriter, scanOp->getLoc())({dataSource})[0];
+      }
+      mlir::Value iterator = rt::DataSourceIteration::init(rewriter, scanOp->getLoc())({dataSource, memberMappingValue})[0];
       ColumnMapping mapping;
 
       auto* ctxt = rewriter.getContext();
@@ -1168,7 +1205,7 @@ class ScanRefsTableLowering : public SubOpConversionPattern<subop::ScanRefsOp> {
          mlir::Value end = rewriter.create<util::LoadElementOp>(loc, rewriter.getIndexType(), recordBatchPointer, 0);
          mlir::Value globalOffset = rewriter.create<util::LoadElementOp>(loc, rewriter.getIndexType(), recordBatchPointer, 1);
          mlir::Value selVecPtr;
-         if (tableType.getFiltered()) {
+         if (filtered) {
             selVecPtr = rewriter.create<util::LoadElementOp>(loc, util::RefType::get(i16T), recordBatchPointer, 2);
          }
          mlir::Value ptrToColumns = rewriter.create<util::LoadElementOp>(loc, util::RefType::get(arrow::ArrayType::get(ctxt)), recordBatchPointer, 3);
@@ -1184,7 +1221,7 @@ class ScanRefsTableLowering : public SubOpConversionPattern<subop::ScanRefsOp> {
          auto forOp2 = rewriter.create<mlir::scf::ForOp>(loc, start, end, c1, mlir::ValueRange{});
          rewriter.atStartOf(forOp2.getBody(), [&](SubOpRewriter& rewriter) {
             mlir::Value index = forOp2.getInductionVar();
-            if (tableType.getFiltered()) {
+            if (filtered) {
                auto idx = rewriter.create<util::LoadOp>(loc, selVecPtr, index);
                index = rewriter.create<mlir::arith::IndexCastOp>(loc, rewriter.getIndexType(), idx);
             }
