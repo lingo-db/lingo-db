@@ -560,7 +560,13 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
                              if (isFirstTupleStream && noOtherTupleStream) {
                                 returnedStream = definingOp->getOperand(0);
                              } else {
+                                // Non-passthrough op (e.g. tabular-UDF body's
+                                // subop.scan terminator whose first operand is
+                                // a state, not a tuple stream): we can't see
+                                // through it, and `returnedStream` would not
+                                // advance, so break to avoid spinning forever.
                                 canPushThrough = false;
+                                break;
                              }
                              if (auto subop = mlir::dyn_cast_or_null<subop::SubOperator>(definingOp)) {
                                 auto writtenMembers = subop.getWrittenMembers();
@@ -570,6 +576,7 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
                              }
                           } else {
                              canPushThrough = false;
+                             break;
                           }
                        }
                        if (canPushThrough) {
