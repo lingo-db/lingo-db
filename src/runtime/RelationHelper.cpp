@@ -48,7 +48,7 @@ void RelationHelper::createFunction(runtime::VarLen32 meta) {
          std::filesystem::remove(catalog->getDbDir() + "/udf/" + def.name + ".so");
       }
    } else if (def.language == "python") {
-      func = std::make_shared<lingodb::catalog::PythonFunctionCatalogEntry>(def.name, def.code, def.returnType, def.argumentTypes);
+      func = std::make_shared<lingodb::catalog::PythonFunctionCatalogEntry>(def.name, def.code, def.returnType, def.argumentTypes, def.returnColumns);
    } else {
       throw std::runtime_error("unsupported function language: " + def.language);
    }

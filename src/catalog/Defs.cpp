@@ -19,6 +19,7 @@ void lingodb::catalog::CreateFunctionDef::serialize(utility::Serializer& seriali
    serializer.writeProperty(3, code);
    serializer.writeProperty(4, returnType);
    serializer.writeProperty(5, argumentTypes);
+   serializer.writeProperty(6, returnColumns);
 }
 lingodb::catalog::CreateFunctionDef lingodb::catalog::CreateFunctionDef::deserialize(utility::Deserializer& deserializer) {
    auto name = deserializer.readProperty<std::string>(1);
@@ -26,6 +27,7 @@ lingodb::catalog::CreateFunctionDef lingodb::catalog::CreateFunctionDef::deseria
    auto code = deserializer.readProperty<std::string>(3);
    auto returnType = deserializer.readProperty<Type>(4);
    auto argumentTypes = deserializer.readProperty<std::vector<Type>>(5);
+   auto returnColumns = deserializer.readProperty<std::vector<std::pair<std::string, Type>>>(6);
 
-   return CreateFunctionDef{name, language, code, returnType, argumentTypes};
+   return CreateFunctionDef{name, language, code, returnType, argumentTypes, returnColumns};
 }
