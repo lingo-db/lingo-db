@@ -1,4 +1,5 @@
 #include "lingodb/runtime/PythonRuntime.h"
+#include "lingodb/runtime/ArrowTable.h"
 #include "lingodb/runtime/DateRuntime.h"
 #include "lingodb/runtime/ExecutionContext.h"
 #include "lingodb/runtime/Session.h"
@@ -8,6 +9,8 @@
 #endif
 #ifdef USE_CPYTHON_RUNTIME
 #include "datetime.h"
+#include <arrow/python/pyarrow.h>
+#include <arrow/table.h>
 #endif
 #include <iostream>
 #include <stdexcept>
@@ -189,6 +192,58 @@ PyObjectPtr PythonRuntime::fromDate(int64_t value) {
    return dateTimeAPI->Date_FromDate((year), (month), (day), dateTimeAPI->DateType);
 }
 
+namespace {
+// Lazily import pyarrow's C++ helper module the first time we hand an
+// arrow::Table across the boundary. Each sub-interpreter has its own
+// import-state, so we re-arm per worker.
+void ensurePyarrowImportedThisThread() {
+   thread_local bool imported = false;
+   if (imported) return;
+   if (arrow::py::import_pyarrow() != 0) {
+      // Capture the actual Python exception so we can see why the import
+      // failed (missing package vs. sub-interpreter incompatibility vs. other).
+      std::string detail = "<no Python error set>";
+      if (PyErr_Occurred()) {
+         PyObject *ptype = nullptr, *pvalue = nullptr, *ptraceback = nullptr;
+         PyErr_Fetch(&ptype, &pvalue, &ptraceback);
+         PyErr_NormalizeException(&ptype, &pvalue, &ptraceback);
+         if (pvalue) {
+            if (PyObject* str = PyObject_Str(pvalue)) {
+               if (const char* utf8 = PyUnicode_AsUTF8(str)) {
+                  detail = utf8;
+               }
+               Py_DECREF(str);
+            }
+         }
+         Py_XDECREF(ptype);
+         Py_XDECREF(pvalue);
+         Py_XDECREF(ptraceback);
+      }
+      throw std::runtime_error(
+         std::string("Tabular Python UDFs require the 'pyarrow' package to be importable "
+                     "inside the embedded Python interpreter. Underlying error: ") + detail);
+   }
+   imported = true;
+}
+} // namespace
+
+PyObjectPtr PythonRuntime::fromArrowTable(ArrowTable* table) {
+   ensurePyarrowImportedThisThread();
+   auto wrapped = arrow::py::wrap_table(table->get());
+   if (!wrapped) {
+      throw_python_error();
+   }
+   return wrapped;
+}
+ArrowTable* PythonRuntime::toArrowTable(PyObject* obj) {
+   ensurePyarrowImportedThisThread();
+   auto unwrapped = arrow::py::unwrap_table(obj);
+   if (!unwrapped.ok()) {
+      throw std::runtime_error("Tabular Python UDF must return a pyarrow.Table; got an object of a different type");
+   }
+   return new ArrowTable(unwrapped.ValueOrDie());
+}
+
 void PythonRuntime::decref(PyObject* obj) {
    Py_DECREF(obj);
 }
@@ -349,6 +404,16 @@ void PythonRuntime::incref(PyObjectPtr obj) {
    wasm::WASMSession& wasmSession = *currentWasmSession;
    wasmSession.callPyFunc<void>(wasm::Py_IncRef, obj);
 }
+PyObjectPtr PythonRuntime::fromArrowTable(ArrowTable*) {
+   throw std::runtime_error(
+      "Tabular Python UDFs are not supported in the WASM Python backend. "
+      "Build with -DENABLE_PYTHON=CPYTHON to enable them.");
+}
+ArrowTable* PythonRuntime::toArrowTable(PyObjectPtr) {
+   throw std::runtime_error(
+      "Tabular Python UDFs are not supported in the WASM Python backend. "
+      "Build with -DENABLE_PYTHON=CPYTHON to enable them.");
+}
 
 #else
 
@@ -390,6 +455,8 @@ double PythonRuntime::toDouble(PyObjectPtr) { noPython(); }
 PyObjectPtr PythonRuntime::fromDouble(double) { noPython(); }
 void PythonRuntime::decref(PyObjectPtr) {}
 void PythonRuntime::incref(PyObjectPtr) {}
+PyObjectPtr PythonRuntime::fromArrowTable(ArrowTable*) { noPython(); }
+ArrowTable* PythonRuntime::toArrowTable(PyObjectPtr) { noPython(); }
 PyObjectPtr PythonRuntime::import(size_t, runtime::VarLen32) { noPython(); }
 PythonExtState* PythonRuntime::createPythonExtState() { noPython(); }
 void PythonRuntime::setWasmSession(wasm::WASMSession*) {}
