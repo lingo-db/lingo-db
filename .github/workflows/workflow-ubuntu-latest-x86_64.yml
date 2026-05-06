@@ -353,10 +353,19 @@ jobs:
           fi
           if [ "${{ matrix.python_mode }}" = "WASM" ]; then
             # The wasix-python-bridge crate is built via cargo. unzip
-            # extracts the numpy wheel at cmake time. Both are absent from
-            # the lingodb-dev base image.
+            # extracts the numpy wheel at cmake time. The LLVM-21 dev
+            # headers are needed because the shim's vendored fork of
+            # wasmer-vm 7.1.0 pulls in llvm-sys 211 (wasmer's `llvm`
+            # feature gives ~2× faster guest code than the default
+            # Cranelift backend on this workload). All three are absent
+            # from the lingodb-dev base image (which ships LLVM-20 only).
             apt-get update
-            apt-get install -y --no-install-recommends unzip ca-certificates curl
+            apt-get install -y --no-install-recommends \
+              unzip ca-certificates curl software-properties-common
+            add-apt-repository -y \
+              "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-21 main"
+            apt-get update
+            apt-get install -y --no-install-recommends llvm-21-dev libpolly-21-dev
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
               sh -s -- -y --profile minimal --default-toolchain stable
             echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
@@ -378,6 +387,10 @@ jobs:
         env:
           CC: clang-20
           CXX: clang++-20
+          # Tell llvm-sys 211 (pulled in by the patched wasmer-vm) where
+          # to find LLVM-21. Harmless for the CPYTHON matrix entry, which
+          # does not build any Rust.
+          LLVM_SYS_211_PREFIX: /usr/lib/llvm-21
       - name: Test python-udfs
         run: |
           chmod +x build/lingodb-release/*

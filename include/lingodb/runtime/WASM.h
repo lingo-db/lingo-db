@@ -123,29 +123,43 @@ struct WASMSession {
    class WASMTmpString {
       WASMSession& session;
       uint32_t addr;
+      // Cached native pointer (memBase + addr at allocation time). Valid
+      // until the next host->guest call: callers always write into this
+      // before invoking the wasm export, so caching is safe in practice.
+      uint8_t* nativeAddrCached;
       bool owned;
 
       public:
-      WASMTmpString(WASMSession& session, uint32_t addr, bool owned)
-         : session(session), addr(addr), owned(owned) {}
+      WASMTmpString(WASMSession& session, uint32_t addr, uint8_t* nativeAddr, bool owned)
+         : session(session), addr(addr), nativeAddrCached(nativeAddr), owned(owned) {}
       uint32_t getAddr() const { return addr; }
-      uint8_t* getNativeAddr() const { return session.nativeAddr(addr); }
+      uint8_t* getNativeAddr() const { return nativeAddrCached; }
       ~WASMTmpString() {
          if (owned) session.freeWasmBuffer(addr);
       }
    };
    class WasmSessionTmpScope {
       WASMSession& session;
+      // Cached `lingodb_wasix_memory_base(shim)` taken once at scope creation
+      // — saves one C-ABI -> Rust crossing per allocation. The slow path
+      // (guest-malloc fallback below) refreshes it because that wasm call may
+      // have triggered memory.grow.
+      uint8_t* memBase;
 
       public:
-      WasmSessionTmpScope(WASMSession& session) : session(session) {}
+      WasmSessionTmpScope(WASMSession& session)
+         : session(session), memBase(session.nativeAddr(0)) {}
       WASMTmpString allocateRaw(size_t size) {
          uint32_t addr = session.allocateFromTmpSpace(size);
          if (addr == 0) {
+            // Tmp arena exhausted — fall back to a one-off guest malloc.
+            // The malloc call may grow guest memory, so refresh the base
+            // before computing the native pointer.
             uint32_t guestPtr = session.createWasmBuffer(size);
-            return WASMTmpString(session, guestPtr, /*owned=*/true);
+            memBase = session.nativeAddr(0);
+            return WASMTmpString(session, guestPtr, memBase + guestPtr, /*owned=*/true);
          }
-         return WASMTmpString(session, addr, /*owned=*/false);
+         return WASMTmpString(session, addr, memBase + addr, /*owned=*/false);
       }
       WASMTmpString allocateString(std::string_view strView) {
          auto tmpStr = allocateRaw(strView.size() + 1);
