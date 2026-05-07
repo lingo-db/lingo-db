@@ -143,3 +143,84 @@ SELECT id, score FROM py_square_score((SELECT id, score FROM rows)) WHERE score 
 12.25
 5
 20.25
+
+# Two-input tabular UDF: pandas-side merge (inner-join on id) of two
+# numeric tables. Strings are intentionally avoided here — the pandas
+# round-trip of varchar columns currently mangles output (see py_str_id
+# above). The UDF signature still has two TABLE inputs, exercising the
+# multi-input plumbing end-to-end.
+statement ok
+CREATE TABLE bonus(id int not null, bonus float8 not null);
+
+statement ok
+INSERT INTO bonus VALUES (1, 10.0), (2, 20.0), (3, 30.0), (4, 40.0), (5, 50.0);
+
+statement ok
+CREATE OR REPLACE FUNCTION py_join_numeric(
+    a TABLE(id int, score float8),
+    b TABLE(id int, bonus float8)
+)
+RETURNS TABLE(id int, total float8)
+AS $$
+import pyarrow as pa
+def py_join_numeric(a, b):
+    da = a.to_pandas()
+    db = b.to_pandas()
+    merged = da.merge(db, on="id", how="inner")
+    merged["total"] = merged["score"] + merged["bonus"]
+    return pa.Table.from_pandas(merged[["id", "total"]], preserve_index=False)
+$$ LANGUAGE python;
+
+query py-tab-7 nosort
+SELECT id, total FROM py_join_numeric((SELECT id, score FROM rows), (SELECT id, bonus FROM bonus)) ORDER BY id;
+----
+1
+10.5
+2
+21.5
+3
+32.5
+4
+43.5
+5
+54.5
+
+# Same UDF, then SQL filter on the joined output.
+query py-tab-8 nosort
+SELECT id, total FROM py_join_numeric((SELECT id, score FROM rows), (SELECT id, bonus FROM bonus)) WHERE total > 30.0 ORDER BY id;
+----
+3
+32.5
+4
+43.5
+5
+54.5
+
+# Two-input UDF + a scalar argument: filter rows by the threshold inside Python.
+statement ok
+CREATE OR REPLACE FUNCTION py_join_threshold(
+    a TABLE(id int, score float8),
+    b TABLE(id int, bonus float8),
+    threshold float8
+)
+RETURNS TABLE(id int, total float8)
+AS $$
+import pyarrow as pa
+def py_join_threshold(a, b, threshold):
+    da = a.to_pandas()
+    db = b.to_pandas()
+    merged = da.merge(db, on="id", how="inner")
+    merged["total"] = merged["score"] + merged["bonus"]
+    merged = merged[merged["total"] > threshold]
+    return pa.Table.from_pandas(merged[["id", "total"]], preserve_index=False)
+$$ LANGUAGE python;
+
+query py-tab-9 nosort
+SELECT id, total FROM py_join_threshold((SELECT id, score FROM rows), (SELECT id, bonus FROM bonus), 30.0) ORDER BY id;
+----
+3
+32.5
+4
+43.5
+5
+54.5

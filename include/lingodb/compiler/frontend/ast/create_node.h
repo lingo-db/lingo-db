@@ -97,6 +97,13 @@ class CreateFunctionInfo : public CreateInfo {
    std::vector<std::pair<std::string, std::string>> options;
 };
 
+// One declared input table in a tabular UDF signature: parameter name + the
+// per-column (name, type) schema. A signature can list one or more.
+struct TableFunctionInputDecl {
+   std::string name;
+   std::vector<std::pair<std::string, LogicalTypeWithMods>> columns;
+};
+
 // Tabular `CREATE FUNCTION ... RETURNS TABLE(col t, ...)`.
 class CreateTableFunctionInfo : public CreateInfo {
    public:
@@ -105,10 +112,9 @@ class CreateTableFunctionInfo : public CreateInfo {
 
    std::string functionName;
    bool replace;
-   //! Declared input table: parameter name + per-column (name, type) schema.
-   std::string inputTableName;
-   std::vector<std::pair<std::string, LogicalTypeWithMods>> inputColumns;
-   //! Scalar arguments after the input table.
+   //! Declared input tables, in argument order. At least one.
+   std::vector<TableFunctionInputDecl> inputTables;
+   //! Scalar arguments after the input tables.
    std::vector<FunctionArgument> argumentTypes;
    //! Per-column output schema declared in `RETURNS TABLE(...)`.
    std::vector<std::pair<std::string, LogicalTypeWithMods>> returnColumns;
