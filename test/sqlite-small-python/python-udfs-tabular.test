@@ -110,9 +110,7 @@ SELECT count(*) FROM py_pandas_filter((SELECT id, score FROM rows));
 ----
 3
 
-# varchar passthrough — exercises arrow varlen32 (no pandas involved; pandas
-# round-trip of string columns currently mangles output and is a known issue
-# in the runtime varchar reader, separate from the tabular UDF wiring).
+# varchar passthrough — exercises arrow varlen32 with no pandas involved.
 statement ok
 CREATE OR REPLACE FUNCTION py_str_id(t TABLE(id int, w varchar))
 RETURNS TABLE(id int, w varchar)
@@ -133,6 +131,73 @@ gamma
 4
 delta
 
+# pandas-side transform on a varchar column. pa.Table.from_pandas's default
+# choice for object-dtype columns is `large_string` (64-bit offsets), which
+# the runtime varchar reader can't yet decode. The fix is on the UDF side:
+# build an explicit pa.schema for the OUTPUT (after the transformation, so
+# we can't just reuse t.schema) and pass it to from_pandas — that pins the
+# output to `string` (32-bit offsets).
+statement ok
+CREATE OR REPLACE FUNCTION py_upper(t TABLE(id int, w varchar))
+RETURNS TABLE(id int, upper_w varchar)
+AS $$
+import pyarrow as pa
+def py_upper(t):
+    df = t.to_pandas()
+    df["upper_w"] = df["w"].str.upper()
+    out_schema = pa.schema([
+        ("id", pa.int32()),
+        ("upper_w", pa.string()),
+    ])
+    return pa.Table.from_pandas(df[["id", "upper_w"]], schema=out_schema, preserve_index=False)
+$$ LANGUAGE python;
+
+query py-tab-5b nosort
+SELECT id, upper_w FROM py_upper((SELECT id, w FROM words_tab)) ORDER BY id;
+----
+1
+ALPHA
+2
+BETA
+3
+GAMMA
+4
+DELTA
+
+# Same idea, but now the output adds a brand-new varchar column on top of
+# the original ones — so the output schema differs from the input schema.
+statement ok
+CREATE OR REPLACE FUNCTION py_concat_w(t TABLE(id int, w varchar))
+RETURNS TABLE(id int, w varchar, doubled varchar)
+AS $$
+import pyarrow as pa
+def py_concat_w(t):
+    df = t.to_pandas()
+    df["doubled"] = df["w"] + df["w"]
+    out_schema = pa.schema([
+        ("id", pa.int32()),
+        ("w", pa.string()),
+        ("doubled", pa.string()),
+    ])
+    return pa.Table.from_pandas(df, schema=out_schema, preserve_index=False)
+$$ LANGUAGE python;
+
+query py-tab-5c nosort
+SELECT id, w, doubled FROM py_concat_w((SELECT id, w FROM words_tab)) ORDER BY id;
+----
+1
+alpha
+alphaalpha
+2
+beta
+betabeta
+3
+gamma
+gammagamma
+4
+delta
+deltadelta
+
 # tabular UDF result fed into another SQL operator (filter)
 query py-tab-6 nosort
 SELECT id, score FROM py_square_score((SELECT id, score FROM rows)) WHERE score > 5.0 ORDER BY id;
@@ -145,9 +210,7 @@ SELECT id, score FROM py_square_score((SELECT id, score FROM rows)) WHERE score 
 20.25
 
 # Two-input tabular UDF: pandas-side merge (inner-join on id) of two
-# numeric tables. Strings are intentionally avoided here — the pandas
-# round-trip of varchar columns currently mangles output (see py_str_id
-# above). The UDF signature still has two TABLE inputs, exercising the
+# numeric tables. The UDF signature has two TABLE inputs, exercising the
 # multi-input plumbing end-to-end.
 statement ok
 CREATE TABLE bonus(id int not null, bonus float8 not null);
