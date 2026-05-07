@@ -46,7 +46,7 @@ class WrapAggrFuncPattern : public mlir::RewritePattern {
          rewriter.create<tuples::ReturnOp>(op->getLoc(), mlir::ValueRange({val}));
       }
       auto nullableType = mlir::dyn_cast_or_null<db::NullableType>(aggrFuncOp.getType());
-      mlir::Value getScalarOp = rewriter.replaceOpWithNewOp<relalg::GetScalarOp>(op, nullableType, attributeManager.createRef(&def.getColumn()), aggrOp.asRelation());
+      mlir::Value getScalarOp = rewriter.replaceOpWithNewOp<relalg::GetScalarOp>(op, nullableType, &def.getColumn(), aggrOp.asRelation());
       mlir::Value res = getScalarOp;
       if (!nullableType) {
          res = rewriter.create<db::NullableGetVal>(op->getLoc(), aggrFuncOp.getType(), getScalarOp);
@@ -89,7 +89,7 @@ class WrapCountRowsPattern : public mlir::RewritePattern {
       if (!mlir::isa<db::NullableType>(nullableType)) {
          nullableType = db::NullableType::get(rewriter.getContext(), nullableType);
       }
-      mlir::Value getScalarOp = rewriter.create<relalg::GetScalarOp>(op->getLoc(), nullableType, attributeManager.createRef(&def.getColumn()), aggrOp.asRelation());
+      mlir::Value getScalarOp = rewriter.create<relalg::GetScalarOp>(op->getLoc(), nullableType, &def.getColumn(), aggrOp.asRelation());
       mlir::Value res = rewriter.create<db::AsNullableOp>(op->getLoc(), aggrFuncOp.getType(), getScalarOp);
       rewriter.replaceOp(op, res);
       return mlir::success(true);

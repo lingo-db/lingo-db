@@ -564,7 +564,7 @@ mlir::Value SQLMlirTranslator::translateSubquery(mlir::OpBuilder& builder, std::
          }
          assert(subquery->columnReference.has_value());
 
-         mlir::Value scalarValue = builder.create<relalg::GetScalarOp>(exprLocation, resType, subquery->columnReferenceForSubquery->createRef(builder, attrManager), translatedSubquery);
+         mlir::Value scalarValue = builder.create<relalg::GetScalarOp>(exprLocation, resType, &subquery->columnReferenceForSubquery->createRef(builder, attrManager).getColumn(), translatedSubquery);
          if (subquery->columnReference.value()->resultType.useZeroInsteadOfNull) {
             mlir::Value isNull = builder.create<db::IsNullOp>(exprLocation, scalarValue);
             mlir::Value nonNullValue = builder.create<db::NullableGetVal>(exprLocation, scalarValue);

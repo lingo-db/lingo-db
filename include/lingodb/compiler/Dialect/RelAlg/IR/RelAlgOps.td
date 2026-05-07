@@ -507,7 +507,7 @@ def TmpOp : RelAlg_Op<"tmp", [Pure,Operator]> {
 def GetScalarOp : RelAlg_Op<"getscalar", [Pure]> {
     let summary = "get column";
 
-    let arguments = (ins ColumnRefAttr:$attr, TupleStream:$rel);
+    let arguments = (ins Property<"::lingodb::compiler::dialect::tuples::Column*">:$attr, TupleStream:$rel);
     let results = (outs AnyType : $res);
     let assemblyFormat = [{  custom<CustRef>($attr) $rel `:` type($res) attr-dict }];
 }

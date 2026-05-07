@@ -88,8 +88,8 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
             OpBuilder builder(surroundingOperator);
             std::string scopeName = attributeManager.getUniqueScope("singlejoin");
             std::string attributeName = "sjattr";
-            auto before = getscalarop.getAttr();
-            auto fromExisting = ArrayAttr::get(&getContext(), {before});
+            auto beforeRef = attributeManager.createRef(getscalarop.getAttr());
+            auto fromExisting = ArrayAttr::get(&getContext(), {static_cast<mlir::Attribute>(beforeRef)});
 
             auto newAttrType = getscalarop.getType();
             auto newDef = attributeManager.createDef(scopeName, attributeName, fromExisting);
