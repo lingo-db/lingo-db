@@ -7,7 +7,6 @@
 
 #include "lingodb/execution/ResultProcessing.h"
 #include "lingodb/runtime/ArrowTable.h"
-#include <functional>
 #include <arrow/array/array_base.h>
 
 namespace {
@@ -64,12 +63,16 @@ void printTable(const std::shared_ptr<arrow::Table>& table) {
             auto chunk = c->chunk(i);
             for (int64_t j = 0; j < chunk->null_count(); ++j) {
                nullRep << "null";
-               if (j < chunk->length() - 1) nullRep << ",\n";
-               else nullRep << "\n";
+               if (j < chunk->length() - 1)
+                  nullRep << ",\n";
+               else
+                  nullRep << "\n";
             }
             nullRep << "]"; // Close inner Array chunk
-            if (i < c->num_chunks() - 1) nullRep << ",\n";
-            else nullRep << "\n";
+            if (i < c->num_chunks() - 1)
+               nullRep << ",\n";
+            else
+               nullRep << "\n";
          }
          nullRep << "]"; // Close outer ChunkedArray
          str = nullRep.str();
