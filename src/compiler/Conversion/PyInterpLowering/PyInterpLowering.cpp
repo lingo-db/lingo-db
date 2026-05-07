@@ -177,7 +177,8 @@ class CastToPyObjectLowering : public OpConversionPattern<py_interp::CastToPyObj
       } else if (mlir::isa<mlir::IntegerType>(t) && op.getPythonType() == "datetime.date") {
          rewriter.replaceOp(op, rt::PythonRuntime::fromDate(rewriter, op.getLoc())({adaptor.getFrom()})[0]);
       } else if (mlir::isa<arrow::TableType>(t) && op.getPythonType() == "pyarrow.Table") {
-         // arrow.table → i8* runtime::ArrowTable* → wrap_table → pyarrow.Table PyObject.
+         // arrow.table (i8* ArrowTable*) → ArrowArrayStream → pyarrow.Table PyObject
+         // via the Arrow C Data Interface (see runtime::PythonRuntime::fromArrowTable).
          rewriter.replaceOp(op, rt::PythonRuntime::fromArrowTable(rewriter, op.getLoc())({adaptor.getFrom()})[0]);
       } else {
          return failure();
@@ -211,7 +212,8 @@ class CastFromPyObjectLowering : public OpConversionPattern<py_interp::CastFromP
       } else if (mlir::isa<util::VarLen32Type>(t)) {
          rewriter.replaceOp(op, rt::PythonRuntime::toVarLen32(rewriter, op.getLoc())({adaptor.getFrom()})[0]);
       } else if (mlir::isa<arrow::TableType>(t) && op.getPythonType() == "pyarrow.Table") {
-         // pyarrow.Table PyObject → unwrap_table → i8* runtime::ArrowTable*.
+         // pyarrow.Table → ArrowArrayStream → arrow::Table (i8* ArrowTable*)
+         // via the Arrow C Data Interface (see runtime::PythonRuntime::toArrowTable).
          rewriter.replaceOp(op, rt::PythonRuntime::toArrowTable(rewriter, op.getLoc())({adaptor.getFrom()})[0]);
       } else {
          return failure();
