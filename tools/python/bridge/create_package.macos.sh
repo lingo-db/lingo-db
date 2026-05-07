@@ -59,8 +59,7 @@ fi
 # Per-wheel virtualenv (Python ABI-bound).
 WHEEL_VENV=$BASE_PATH/build/venv-${PYTAG}
 ${PYTHON_BIN} -m venv $WHEEL_VENV
-$WHEEL_VENV/bin/python3 -m pip install build pyarrow===24.0.0
-$WHEEL_VENV/bin/python3 -c "import pyarrow; pyarrow.create_library_symlinks()"
+$WHEEL_VENV/bin/python3 -m pip install build
 
 # Build the C++ pybridge library. Shared across PYVER values — pybridge does
 # not link Python itself (see tools/python/bridgelib/CMakeLists.txt), so
@@ -108,8 +107,8 @@ cp -r ${LLVM_INSTALL_DIR}/mlir-python-bindings-src src/extensions/mlir_vendored
 mkdir -p src/lingodbbridge/libs
 cp $LINGO_BUILD_DIR/tools/python/bridgelib/libpybridge.dylib src/lingodbbridge/libs/.
 
-$WHEEL_VENV/bin/python3 -m build --wheel --config-setting cmake.define.LLVM_DIR=$LLVM_INSTALL_DIR/ --config-setting cmake.define.PYARROW_LIBRARY_DIRS=$WHEEL_VENV/lib/python${PYVER}/site-packages/pyarrow/ --config-setting cmake.define.PYARROW_INCLUDE_DIR=$WHEEL_VENV/lib/python${PYVER}/site-packages/pyarrow/include
+$WHEEL_VENV/bin/python3 -m build --wheel --config-setting cmake.define.LLVM_DIR=$LLVM_INSTALL_DIR/
 
 # Install delocate if not already installed
 $WHEEL_VENV/bin/python3 -m pip install delocate
-$WHEEL_VENV/bin/delocate-wheel -v dist/*.whl -e libarrow_python.2400.dylib -e libarrow.2400.dylib -w ./build-packages --ignore-missing-dependencies
+$WHEEL_VENV/bin/delocate-wheel -v dist/*.whl -e libarrow.2400.dylib -w ./build-packages --ignore-missing-dependencies

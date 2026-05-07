@@ -353,10 +353,10 @@ jobs:
           if [ "${{ matrix.python_mode }}" = "CPYTHON" ]; then
             apt-get update
             apt-get install -y python3-dev python3-pip
-            # pyarrow is needed at build time (the runtime includes
-            # arrow/python/pyarrow.h and links libarrow_python) and at
-            # test time (tabular Python UDFs hand pyarrow.Table objects
-            # back and forth). pandas is used by the tabular UDF tests.
+            # pyarrow + pandas are only needed at test time: tabular Python
+            # UDFs bridge arrow::Table ↔ pyarrow via the Arrow C Data
+            # Interface (no host-side libarrow_python link), and the
+            # tabular UDF tests use pandas internally.
             python3 -m pip install --break-system-packages pyarrow pandas
           fi
           # WASM mode needs only wget+tar to fetch wasi-sdk-29; both are

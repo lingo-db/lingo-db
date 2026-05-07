@@ -9,7 +9,9 @@
 #endif
 #ifdef USE_CPYTHON_RUNTIME
 #include "datetime.h"
-#include <arrow/python/pyarrow.h>
+#include <arrow/c/abi.h>
+#include <arrow/c/bridge.h>
+#include <arrow/record_batch.h>
 #include <arrow/table.h>
 #endif
 #include <iostream>
@@ -193,55 +195,103 @@ PyObjectPtr PythonRuntime::fromDate(int64_t value) {
 }
 
 namespace {
-// Lazily import pyarrow's C++ helper module the first time we hand an
-// arrow::Table across the boundary. Each sub-interpreter has its own
-// import-state, so we re-arm per worker.
-void ensurePyarrowImportedThisThread() {
-   thread_local bool imported = false;
-   if (imported) return;
-   if (arrow::py::import_pyarrow() != 0) {
-      // Capture the actual Python exception so we can see why the import
-      // failed (missing package vs. sub-interpreter incompatibility vs. other).
-      std::string detail = "<no Python error set>";
-      if (PyErr_Occurred()) {
-         PyObject *ptype = nullptr, *pvalue = nullptr, *ptraceback = nullptr;
-         PyErr_Fetch(&ptype, &pvalue, &ptraceback);
-         PyErr_NormalizeException(&ptype, &pvalue, &ptraceback);
-         if (pvalue) {
-            if (PyObject* str = PyObject_Str(pvalue)) {
-               if (const char* utf8 = PyUnicode_AsUTF8(str)) {
-                  detail = utf8;
-               }
-               Py_DECREF(str);
-            }
-         }
-         Py_XDECREF(ptype);
-         Py_XDECREF(pvalue);
-         Py_XDECREF(ptraceback);
+// Bridge an arrow::Table across to pyarrow via the Arrow C Data Interface
+// (https://arrow.apache.org/docs/format/CDataInterface.html). The host side
+// only links against arrow_static (no `arrow_python` / pyarrow C++ helper).
+// Pyarrow is reached purely through its public Python `_import_from_c` /
+// `_export_to_c` methods on RecordBatchReader, with the struct address
+// passed as a Python integer.
+
+// Cache pa.RecordBatchReader._import_from_c per-thread; each sub-interpreter
+// has its own import state, so resolve once per worker and reuse.
+std::string formatCurrentPyError() {
+   if (!PyErr_Occurred()) return "<no Python error set>";
+   PyObject *ptype = nullptr, *pvalue = nullptr, *ptraceback = nullptr;
+   PyErr_Fetch(&ptype, &pvalue, &ptraceback);
+   PyErr_NormalizeException(&ptype, &pvalue, &ptraceback);
+   std::string msg = "<unknown>";
+   if (pvalue) {
+      if (PyObject* str = PyObject_Str(pvalue)) {
+         if (const char* utf8 = PyUnicode_AsUTF8(str)) msg = utf8;
+         Py_DECREF(str);
       }
-      throw std::runtime_error(
-         std::string("Tabular Python UDFs require the 'pyarrow' package to be importable "
-                     "inside the embedded Python interpreter. Underlying error: ") + detail);
    }
-   imported = true;
+   Py_XDECREF(ptype);
+   Py_XDECREF(pvalue);
+   Py_XDECREF(ptraceback);
+   return msg;
+}
+
+PyObject* getReaderImportFromC() {
+   thread_local PyObject* cached = nullptr;
+   if (cached) return cached;
+   PyObject* mod = PyImport_ImportModule("pyarrow");
+   if (!mod) {
+      throw std::runtime_error(
+         "Tabular Python UDFs require the 'pyarrow' package to be importable "
+         "inside the embedded Python interpreter. Underlying error: " + formatCurrentPyError());
+   }
+   PyObject* cls = PyObject_GetAttrString(mod, "RecordBatchReader");
+   Py_DECREF(mod);
+   if (!cls) throw std::runtime_error("pyarrow.RecordBatchReader not found");
+   PyObject* method = PyObject_GetAttrString(cls, "_import_from_c");
+   Py_DECREF(cls);
+   if (!method) throw std::runtime_error("pyarrow.RecordBatchReader._import_from_c not found");
+   cached = method; // owned, leaked at thread teardown — cheap and matches sub-interpreter lifetime
+   return cached;
+}
+
+[[noreturn]] void throw_arrow_error(const arrow::Status& s, const char* what) {
+   throw std::runtime_error(std::string(what) + ": " + s.ToString());
 }
 } // namespace
 
 PyObjectPtr PythonRuntime::fromArrowTable(ArrowTable* table) {
-   ensurePyarrowImportedThisThread();
-   auto wrapped = arrow::py::wrap_table(table->get());
-   if (!wrapped) {
+   // Wrap the arrow::Table in a TableBatchReader; ExportRecordBatchReader keeps
+   // it alive through the stream's release callback.
+   auto reader = std::make_shared<arrow::TableBatchReader>(*table->get());
+
+   ArrowArrayStream stream{};
+   auto status = arrow::ExportRecordBatchReader(reader, &stream);
+   if (!status.ok()) throw_arrow_error(status, "ExportRecordBatchReader");
+
+   PyObject* importFromC = getReaderImportFromC();
+   PyObject* addr = PyLong_FromUnsignedLongLong(reinterpret_cast<uintptr_t>(&stream));
+   PyObject* readerObj = PyObject_CallFunctionObjArgs(importFromC, addr, nullptr);
+   Py_DECREF(addr);
+   if (!readerObj) {
+      // _import_from_c failed before consuming the stream — release it ourselves.
+      if (stream.release) stream.release(&stream);
       throw_python_error();
    }
-   return wrapped;
+   // On success, _import_from_c moved stream's contents into pyarrow's reader
+   // (zeroing the source); nothing to release on the host side.
+
+   PyObject* table_obj = PyObject_CallMethod(readerObj, "read_all", nullptr);
+   Py_DECREF(readerObj);
+   if (!table_obj) throw_python_error();
+   return table_obj;
 }
 ArrowTable* PythonRuntime::toArrowTable(PyObject* obj) {
-   ensurePyarrowImportedThisThread();
-   auto unwrapped = arrow::py::unwrap_table(obj);
-   if (!unwrapped.ok()) {
+   // Convert Python pa.Table → RecordBatchReader → ArrowArrayStream, then
+   // import on the host side without touching pyarrow C++ helpers.
+   PyObject* reader = PyObject_CallMethod(obj, "to_reader", nullptr);
+   if (!reader) {
       throw std::runtime_error("Tabular Python UDF must return a pyarrow.Table; got an object of a different type");
    }
-   return new ArrowTable(unwrapped.ValueOrDie());
+   ArrowArrayStream stream{};
+   PyObject* addr = PyLong_FromUnsignedLongLong(reinterpret_cast<uintptr_t>(&stream));
+   PyObject* res = PyObject_CallMethod(reader, "_export_to_c", "O", addr);
+   Py_DECREF(addr);
+   Py_DECREF(reader);
+   if (!res) throw_python_error();
+   Py_DECREF(res);
+
+   auto reader_result = arrow::ImportRecordBatchReader(&stream);
+   if (!reader_result.ok()) throw_arrow_error(reader_result.status(), "ImportRecordBatchReader");
+   auto table_result = reader_result.ValueOrDie()->ToTable();
+   if (!table_result.ok()) throw_arrow_error(table_result.status(), "RecordBatchReader::ToTable");
+   return new ArrowTable(table_result.ValueOrDie());
 }
 
 void PythonRuntime::decref(PyObject* obj) {
