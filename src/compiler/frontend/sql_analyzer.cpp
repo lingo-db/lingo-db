@@ -1004,6 +1004,12 @@ std::shared_ptr<ast::CreateNode> SQLQueryAnalyzer::analyzeTableFunctionCreate(st
    auto bound = std::make_shared<ast::BoundCreateTableFunctionInfo>(createTableFunctionInfo->functionName, createTableFunctionInfo->replace);
    bound->language = language;
    bound->code = code;
+   bound->inputTableName = createTableFunctionInfo->inputTableName;
+   for (auto& [colName, colType] : createTableFunctionInfo->inputColumns) {
+      bound->inputColumns.emplace_back(
+         colName,
+         SQLTypeUtils::typemodsToCatalogType(colType.logicalTypeId, colType.typeModifiers).type);
+   }
    for (auto& fArgument : createTableFunctionInfo->argumentTypes) {
       bound->argumentTypes.emplace_back(fArgument.name, SQLTypeUtils::typemodsToCatalogType(fArgument.type.logicalTypeId, fArgument.type.typeModifiers).type);
    }
@@ -1764,6 +1770,31 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableFunctionRef(st
       tableArgument = analyzeTableProducer(subqueryExpr->subquery, context, innerResolverScope);
       innerTargetInfo = innerScope->targetInfo;
       context->popCurrentScope();
+   }
+
+   // Validate the subquery shape against the declared input-table schema.
+   // Same column count; pair-wise type compatibility (we only allow lossless
+   // implicit casts here — getCommonBaseType throws on incompatibility).
+   const auto& declaredInputColumns = tableFunctionEntry->getInputColumns();
+   const auto& providedInputColumns = innerTargetInfo.getTargetColumns();
+   if (declaredInputColumns.size() != providedInputColumns.size()) {
+      error("Tabular UDF '" + tableFunctionRef->functionName + "' expects " +
+               std::to_string(declaredInputColumns.size()) + " input column(s); subquery produced " +
+               std::to_string(providedInputColumns.size()),
+            firstArg->loc);
+   }
+   for (size_t i = 0; i < declaredInputColumns.size(); ++i) {
+      auto declared = NullableType(declaredInputColumns[i].second, true);
+      auto provided = providedInputColumns[i]->resultType;
+      // Reject any pair that has no common base type — toCommonTypes throws.
+      try {
+         (void) SQLTypeUtils::toCommonTypes(std::vector{declared, provided});
+      } catch (const std::exception& e) {
+         error("Tabular UDF '" + tableFunctionRef->functionName + "' input column " + std::to_string(i + 1) +
+                  " ('" + declaredInputColumns[i].first + "'): declared type " + declared.type.toString() +
+                  " incompatible with subquery type " + provided.type.toString(),
+               firstArg->loc);
+      }
    }
 
    // Analyze remaining (scalar) arguments in the outer scope. The declared

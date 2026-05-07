@@ -289,6 +289,8 @@ void SQLMlirTranslator::translateCreateTableFunction(mlir::OpBuilder& builder, s
       boundInfo->functionName,
       boundInfo->language,
       boundInfo->code,
+      boundInfo->inputTableName,
+      boundInfo->inputColumns,
       std::move(standaloneArgumentTypes),
       boundInfo->returnColumns);
    auto descriptionValue = createStringValue(builder, utility::serializeToHexString(def));

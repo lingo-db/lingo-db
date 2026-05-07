@@ -35,12 +35,19 @@ struct CreateTableFunctionDef {
    std::string name;
    std::string language;
    std::string code;
+   //! Declared input table: parameter name + per-column (name, type) schema.
+   std::string inputTableName;
+   std::vector<std::pair<std::string, Type>> inputColumns;
+   //! Scalar arguments after the input table.
    std::vector<Type> argumentTypes;
    std::vector<std::pair<std::string, Type>> returnColumns;
    CreateTableFunctionDef(std::string name, std::string language, std::string code,
+                          std::string inputTableName,
+                          std::vector<std::pair<std::string, Type>> inputColumns,
                           std::vector<Type> argumentTypes,
                           std::vector<std::pair<std::string, Type>> returnColumns)
       : name(std::move(name)), language(std::move(language)), code(std::move(code)),
+        inputTableName(std::move(inputTableName)), inputColumns(std::move(inputColumns)),
         argumentTypes(std::move(argumentTypes)), returnColumns(std::move(returnColumns)) {}
    void serialize(utility::Serializer& serializer) const;
    static CreateTableFunctionDef deserialize(utility::Deserializer& deserializer);

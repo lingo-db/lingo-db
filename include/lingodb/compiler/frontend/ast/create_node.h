@@ -105,6 +105,10 @@ class CreateTableFunctionInfo : public CreateInfo {
 
    std::string functionName;
    bool replace;
+   //! Declared input table: parameter name + per-column (name, type) schema.
+   std::string inputTableName;
+   std::vector<std::pair<std::string, LogicalTypeWithMods>> inputColumns;
+   //! Scalar arguments after the input table.
    std::vector<FunctionArgument> argumentTypes;
    //! Per-column output schema declared in `RETURNS TABLE(...)`.
    std::vector<std::pair<std::string, LogicalTypeWithMods>> returnColumns;
