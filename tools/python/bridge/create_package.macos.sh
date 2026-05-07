@@ -111,4 +111,7 @@ $WHEEL_VENV/bin/python3 -m build --wheel --config-setting cmake.define.LLVM_DIR=
 
 # Install delocate if not already installed
 $WHEEL_VENV/bin/python3 -m pip install delocate
-$WHEEL_VENV/bin/delocate-wheel -v dist/*.whl -e libarrow.2400.dylib -w ./build-packages --ignore-missing-dependencies
+# `lingodbbridge.ext` links libarrow_python / libarrow transitively (see
+# tools/python/bridge/CMakeLists.txt). Exclude both so delocate doesn't try
+# to bundle them — pyarrow ships them at install time.
+$WHEEL_VENV/bin/delocate-wheel -v dist/*.whl -e libarrow_python.2400.dylib -e libarrow.2400.dylib -w ./build-packages --ignore-missing-dependencies

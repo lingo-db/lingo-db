@@ -67,4 +67,7 @@ mkdir -p src/lingodbbridge/libs
 cp ../lingodb-release/tools/python/bridgelib/libpybridge.so  src/lingodbbridge/libs/.
 
 $BASE_PATH/venv/bin/python3 -m build --wheel --config-setting cmake.define.LLVM_DIR=/built-llvm/
-auditwheel repair dist/*.whl --plat "$PLAT" --exclude libarrow.so.2400 -w /built-packages
+# `lingodbbridge.ext` links libarrow_python.so / libarrow.so transitively
+# (see tools/python/bridge/CMakeLists.txt). Exclude both from the wheel so
+# auditwheel doesn't try to bundle them — pyarrow ships them at install time.
+auditwheel repair dist/*.whl --plat "$PLAT" --exclude libarrow_python.so.2400 --exclude libarrow.so.2400 -w /built-packages
