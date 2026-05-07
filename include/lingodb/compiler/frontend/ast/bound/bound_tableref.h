@@ -118,7 +118,7 @@ class BoundTableFunctionRef : public BoundTableRef {
    std::shared_ptr<analyzer::SQLScope> innerScope;
    std::string mlirScope;
    //! Resolved catalog entry for the UDF — populated by the analyzer.
-   std::shared_ptr<lingodb::catalog::FunctionCatalogEntry> udfFunction;
+   std::shared_ptr<lingodb::catalog::TableFunctionCatalogEntry> udfFunction;
 };
 } // namespace lingodb::ast
 #endif

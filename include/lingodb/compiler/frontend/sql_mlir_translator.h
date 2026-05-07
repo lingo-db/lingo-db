@@ -49,7 +49,8 @@ class SQLMlirTranslator {
    mlir::Value translateTableProducer(mlir::OpBuilder& builder, std::shared_ptr<ast::TableProducer> tableProducer, std::shared_ptr<analyzer::SQLContext> context);
 
    void translateCreateNode(mlir::OpBuilder& builder, std::shared_ptr<ast::CreateNode> createNode, std::shared_ptr<analyzer::SQLContext> context);
-   void translateCreateFunction(mlir::OpBuilder& builder, std::shared_ptr<ast::CreateNode> createNode, std::shared_ptr<ast::BoundCreateFunctionInfo> boundCreateFunctionInfo, std::shared_ptr<analyzer::SQLContext> context);
+   void translateCreateScalarFunction(mlir::OpBuilder& builder, std::shared_ptr<ast::CreateNode> createNode, std::shared_ptr<ast::BoundCreateFunctionInfo> boundCreateFunctionInfo, std::shared_ptr<analyzer::SQLContext> context);
+   void translateCreateTableFunction(mlir::OpBuilder& builder, std::shared_ptr<ast::CreateNode> createNode, std::shared_ptr<ast::BoundCreateTableFunctionInfo> boundCreateTableFunctionInfo, std::shared_ptr<analyzer::SQLContext> context);
    void translateInsertNode(mlir::OpBuilder& builder, std::shared_ptr<ast::BoundInsertNode> insertNode, std::shared_ptr<analyzer::SQLContext> context);
    void translateSetNode(mlir::OpBuilder& builder, std::shared_ptr<ast::SetNode> insertNode, std::shared_ptr<analyzer::SQLContext> context);
    void translateCopyNode(mlir::OpBuilder& builder, std::shared_ptr<ast::CopyNode> copyStmt, std::shared_ptr<analyzer::SQLContext> context);

@@ -3578,11 +3578,11 @@ CreateFunctionStmt:
     | CREATE opt_or_replace FUNCTION func_name func_args_with_defaults
       RETURNS TABLE LP table_func_column_list RP opt_createfunc_opt_list opt_routine_body
     {
-        auto createFunctionInfo = std::make_shared<lingodb::ast::CreateFunctionInfo>($func_name, $opt_or_replace);
-        createFunctionInfo->argumentTypes = $func_args_with_defaults;
-        createFunctionInfo->returnColumns = $table_func_column_list;
-        createFunctionInfo->options = $opt_createfunc_opt_list;
-        $$ = mkNode<lingodb::ast::CreateNode>(@$, createFunctionInfo);
+        auto createTableFunctionInfo = std::make_shared<lingodb::ast::CreateTableFunctionInfo>($func_name, $opt_or_replace);
+        createTableFunctionInfo->argumentTypes = $func_args_with_defaults;
+        createTableFunctionInfo->returnColumns = $table_func_column_list;
+        createTableFunctionInfo->options = $opt_createfunc_opt_list;
+        $$ = mkNode<lingodb::ast::CreateNode>(@$, createTableFunctionInfo);
     }
     ;
 
