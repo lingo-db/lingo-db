@@ -26,19 +26,26 @@ class InlineNestedMapPass : public mlir::PassWrapper<InlineNestedMapPass, mlir::
    // Mirror of FinalizePass::cloneRec — used to fold a "union at the end of
    // a nested_map body" once we've reshaped its consumer to a SubOperator
    // (`subop.combine_tuple`) and can therefore safely clone the chain.
-   void cloneRec(mlir::Operation* op, mlir::IRMapping mapping, mlir::Value val, subop::ColumnMapping columnMapping) {
+   // Cloned NestedMaps are appended to `producedNestedMaps` so the caller
+   // can re-process them (their outer consumers must still be inlined into
+   // the cloned body — they were only inlined into the *original* once).
+   void cloneRec(mlir::Operation* op, mlir::IRMapping mapping, mlir::Value val, subop::ColumnMapping columnMapping, std::vector<subop::NestedMapOp>& producedNestedMaps) {
       mlir::OpBuilder builder(op->getContext());
       builder.setInsertionPointAfter(mapping.lookup(val).getDefiningOp() ? mapping.lookup(val).getDefiningOp() : op);
-      mlir::cast<subop::SubOperator>(op).cloneSubOp(builder, mapping, columnMapping);
+      auto* cloned = mlir::cast<subop::SubOperator>(op).cloneSubOp(builder, mapping, columnMapping);
+      if (auto clonedNestedMap = mlir::dyn_cast<subop::NestedMapOp>(cloned)) {
+         producedNestedMaps.push_back(clonedNestedMap);
+      }
       for (auto& use : op->getUses()) {
-         cloneRec(use.getOwner(), mapping, use.get(), columnMapping);
+         cloneRec(use.getOwner(), mapping, use.get(), columnMapping, producedNestedMaps);
       }
    }
 
    // Eliminate a union whose only consumer chain (post-inlining) is a
    // SubOperator chain — same algorithm FinalizePass uses on inter-pipeline
    // unions, but applied here because Finalize had to skip this one.
-   void foldEndUnion(subop::UnionOp unionOp) {
+   // Cloned NestedMaps go into `producedNestedMaps` for re-processing.
+   void foldEndUnion(subop::UnionOp unionOp, std::vector<subop::NestedMapOp>& producedNestedMaps) {
       std::vector<mlir::Value> operands(unionOp.getOperands().begin(), unionOp.getOperands().end());
       if (operands.empty()) {
          return;
@@ -55,7 +62,7 @@ class InlineNestedMapPass : public mlir::PassWrapper<InlineNestedMapPass, mlir::
          mlir::IRMapping mapping;
          mapping.map(unionOp.getResult(), operands[i]);
          for (auto* user : unionOp.getResult().getUsers()) {
-            cloneRec(user, mapping, unionOp.getResult(), {});
+            cloneRec(user, mapping, unionOp.getResult(), {}, producedNestedMaps);
          }
       }
       unionOp->replaceAllUsesWith(mlir::ValueRange{operands.back()});
@@ -142,9 +149,17 @@ class InlineNestedMapPass : public mlir::PassWrapper<InlineNestedMapPass, mlir::
          streamResult.replaceAllUsesWith(replacement);
          returnOp->setOperands({});
          // The union (if any) is now consumed by `replacement` (a SubOperator).
-         // FinalizePass's algorithm is applicable now.
+         // FinalizePass's algorithm is applicable now. Any NestedMaps cloned
+         // by the fold need to go through this pass too — their outer
+         // consumers were inlined into the *original* nested_map's body, but
+         // each clone has a fresh body whose outer consumers still need
+         // inlining.
          if (auto innerUnion = innerStream.getDefiningOp<subop::UnionOp>()) {
-            foldEndUnion(innerUnion);
+            std::vector<subop::NestedMapOp> producedNestedMaps;
+            foldEndUnion(innerUnion, producedNestedMaps);
+            for (auto cloned : producedNestedMaps) {
+               nestedMapOps.push(cloned);
+            }
          }
          for (auto unionOp : unions) {
             if (unionOp.getNumOperands() == 1) {
