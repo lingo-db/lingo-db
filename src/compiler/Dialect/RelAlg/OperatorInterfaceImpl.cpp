@@ -221,7 +221,7 @@ ColumnSet AggregationOp::getUsedColumns() {
    auto used = relalg::detail::getUsedColumns(getOperation());
    used.insert(ColumnSet::fromArrayAttr(getGroupByCols()));
    getOperation()->walk([&](relalg::AggrFuncOp aggrFn) {
-      used.insert(&aggrFn.getAttr().getColumn());
+      used.insert(aggrFn.getAttr());
    });
    return used;
 }
@@ -233,7 +233,7 @@ ColumnSet GroupJoinOp::getUsedColumns() {
    used.insert(ColumnSet::fromArrayAttr(getLeftCols()));
    used.insert(ColumnSet::fromArrayAttr(getRightCols()));
    getOperation()->walk([&](relalg::AggrFuncOp aggrFn) {
-      used.insert(&aggrFn.getAttr().getColumn());
+      used.insert(aggrFn.getAttr());
    });
    return used;
 }
@@ -258,7 +258,7 @@ ColumnSet WindowOp::getUsedColumns() {
    auto used = relalg::detail::getUsedColumns(getOperation());
    used.insert(ColumnSet::fromArrayAttr(getPartitionBy()));
    getOperation()->walk([&](relalg::AggrFuncOp aggrFn) {
-      used.insert(&aggrFn.getAttr().getColumn());
+      used.insert(aggrFn.getAttr());
    });
    for (mlir::Attribute a : getOrderBy()) {
       used.insert(&mlir::dyn_cast_or_null<relalg::SortSpecificationAttr>(a).getAttr().getColumn());
@@ -871,8 +871,8 @@ mlir::LogicalResult relalg::AggregationOp::changeForColumns(lingodb::compiler::d
    getAggrFunc().walk([&](mlir::Operation* op) {
       if (mlir::isa<relalg::CountRowsOp>(op)) {
       } else if (auto aggrFunc = mlir::dyn_cast<relalg::AggrFuncOp>(op)) {
-         if (columnInfo.directMappings.contains(&aggrFunc.getAttr().getColumn())) {
-            aggrFunc.setAttrAttr(colManager.createRef(columnInfo.directMappings[&aggrFunc.getAttr().getColumn()]));
+         if (columnInfo.directMappings.contains(aggrFunc.getAttr())) {
+            aggrFunc.setAttr(columnInfo.directMappings[aggrFunc.getAttr()]);
             if (!getGroupByCols().empty()) {
                aggrFunc.getResult().setType(getBaseType(aggrFunc.getType()));
                propagateNonNull(aggrFunc.getResult());

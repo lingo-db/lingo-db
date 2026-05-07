@@ -111,6 +111,20 @@ ParseResult parseCustRef(OpAsmParser& parser, tuples::ColumnRefAttr& attr) {
 void printCustRef(OpAsmPrinter& p, mlir::Operation* op, tuples::ColumnRefAttr attr) {
    p << attr.getName();
 }
+
+// Overloads for tuples::Column* properties — reuse the ColumnRefAttr text
+// format so the assembly format is identical pre/post migration.
+ParseResult parseCustRef(OpAsmParser& parser, tuples::Column*& col) {
+   tuples::ColumnRefAttr attr;
+   if (parseCustRef(parser, attr)) return failure();
+   col = &attr.getColumn();
+   return success();
+}
+void printCustRef(OpAsmPrinter& p, mlir::Operation* op, tuples::Column* col) {
+   auto& colManager = op->getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+   printCustRef(p, op, colManager.createRef(col));
+}
+
 ParseResult parseCustRegion(OpAsmParser& parser, Region& result) {
    OpAsmParser::Argument predArgument;
    SmallVector<OpAsmParser::Argument, 4> regionArgs;

@@ -464,7 +464,7 @@ def NestedOp : RelAlg_Op<"nested", [Pure,Operator]> {
 def AggrFuncOp : RelAlg_Op<"aggrfn", [Pure]> {
     let summary = "aggregation operation";
 
-    let arguments = (ins RelAlg_AggrFunc:$fn,TupleStream:$rel,ColumnRefAttr:$attr);
+    let arguments = (ins RelAlg_AggrFunc:$fn,TupleStream:$rel,Property<"::lingodb::compiler::dialect::tuples::Column*">:$attr);
     let results = (outs AnyType:$result);
     let assemblyFormat = [{  $fn custom<CustRef>($attr) $rel `:` type($result) attr-dict }];
 }

@@ -558,7 +558,10 @@ class ToJson {
                if (auto countStar = mlir::dyn_cast_or_null<relalg::CountRowsOp>(aggrResult.getDefiningOp())) {
                   aggrExpr = innerExpression({"count(*)"}, mlir::ValueRange{});
                } else if (auto aggrFunc = mlir::dyn_cast_or_null<relalg::AggrFuncOp>(aggrResult.getDefiningOp())) {
-                  aggrExpr = innerExpression({stringifyEnum(aggrFunc.getFn()).str() + std::string("("), ")"}, {columnToJSON(aggrFunc.getAttr())});
+                  {
+                     auto& colManager = aggrFunc.getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+                     aggrExpr = innerExpression({stringifyEnum(aggrFunc.getFn()).str() + std::string("("), ")"}, {columnToJSON(colManager.createRef(aggrFunc.getAttr()))});
+                  }
                } else {
                   aggrExpr = nlohmann::json{{"type", "expression_leaf"}, {"leaf_type", "unknown"}};
                }
@@ -586,7 +589,10 @@ class ToJson {
                if (auto countStar = mlir::dyn_cast_or_null<relalg::CountRowsOp>(aggrResult.getDefiningOp())) {
                   aggrExpr = innerExpression({"count(*)"}, mlir::ValueRange{});
                } else if (auto aggrFunc = mlir::dyn_cast_or_null<relalg::AggrFuncOp>(aggrResult.getDefiningOp())) {
-                  aggrExpr = innerExpression({stringifyEnum(aggrFunc.getFn()).str() + std::string("("), ")"}, {columnToJSON(aggrFunc.getAttr())});
+                  {
+                     auto& colManager = aggrFunc.getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+                     aggrExpr = innerExpression({stringifyEnum(aggrFunc.getFn()).str() + std::string("("), ")"}, {columnToJSON(colManager.createRef(aggrFunc.getAttr()))});
+                  }
                } else {
                   aggrExpr = nlohmann::json{{"type", "expression_leaf"}, {"leaf_type", "unknown"}};
                }
@@ -724,7 +730,10 @@ class ToJson {
                if (auto countStar = mlir::dyn_cast_or_null<relalg::CountRowsOp>(aggrResult.getDefiningOp())) {
                   aggrExpr = innerExpression({"count(*)"}, mlir::ValueRange{}); //todo: quick hack
                } else if (auto aggrFunc = mlir::dyn_cast_or_null<relalg::AggrFuncOp>(aggrResult.getDefiningOp())) {
-                  aggrExpr = innerExpression({stringifyEnum(aggrFunc.getFn()).str() + std::string("("), ")"}, {columnToJSON(aggrFunc.getAttr())});
+                  {
+                     auto& colManager = aggrFunc.getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+                     aggrExpr = innerExpression({stringifyEnum(aggrFunc.getFn()).str() + std::string("("), ")"}, {columnToJSON(colManager.createRef(aggrFunc.getAttr()))});
+                  }
                } else if (auto rankOp = mlir::dyn_cast_or_null<relalg::RankOp>(aggrResult.getDefiningOp())) {
                   aggrExpr = innerExpression({"rank()"}, mlir::ValueRange{});
                } else {

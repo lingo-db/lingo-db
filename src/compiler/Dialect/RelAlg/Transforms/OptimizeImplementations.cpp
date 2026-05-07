@@ -742,7 +742,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                         newCol->type = column->type;
                         renaming.push_back(colManager.createDef(column, builder.getArrayAttr({colManager.createRef(newCol)})));
                         computedCols.push_back(colManager.createDef(newCol));
-                        aggregates.push_back(builder.create<relalg::AggrFuncOp>(aggrOp->getLoc(), column->type, relalg::AggrFunc::any, aggrOp.getAggrFunc().getArgument(0), colManager.createRef(column)));
+                        aggregates.push_back(builder.create<relalg::AggrFuncOp>(aggrOp->getLoc(), column->type, relalg::AggrFunc::any, aggrOp.getAggrFunc().getArgument(0), const_cast<tuples::Column*>(column)));
                      }
                      builder.create<tuples::ReturnOp>(aggrOp.getLoc(), aggregates);
                      previousTerminator->erase();

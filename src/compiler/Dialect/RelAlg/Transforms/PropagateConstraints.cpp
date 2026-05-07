@@ -61,7 +61,7 @@ class ReduceAggrKeyPattern : public mlir::RewritePattern {
             newCol->type = x->type;
             mapping.insert({x, newCol});
             computedCols.push_back(colManager.createDef(newCol));
-            values.push_back(rewriter.create<relalg::AggrFuncOp>(aggr->getLoc(), x->type, relalg::AggrFunc::any, aggr.getAggrFunc().getArgument(0), colManager.createRef(x)));
+            values.push_back(rewriter.create<relalg::AggrFuncOp>(aggr->getLoc(), x->type, relalg::AggrFunc::any, aggr.getAggrFunc().getArgument(0), const_cast<tuples::Column*>(x)));
          }
          rewriter.create<tuples::ReturnOp>(aggr->getLoc(), values);
          rewriter.eraseOp(terminator);

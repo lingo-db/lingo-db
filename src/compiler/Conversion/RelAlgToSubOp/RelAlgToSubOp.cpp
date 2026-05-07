@@ -2214,7 +2214,8 @@ class WindowLowering : public OpConversionPattern<relalg::WindowOp> {
          std::shared_ptr<DistAggrFunc> distAggrFunc;
          if (auto aggrFn = mlir::dyn_cast_or_null<relalg::AggrFuncOp>(computedVal.getDefiningOp())) {
             tupleStream = aggrFn.getRel();
-            auto sourceColumnAttr = aggrFn.getAttr();
+            auto& colManager = aggrFn.getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+            auto sourceColumnAttr = colManager.createRef(aggrFn.getAttr());
             if (aggrFn.getFn() == relalg::AggrFunc::sum) {
                distAggrFunc = std::make_shared<SumAggrFunc>(destColumnAttr, sourceColumnAttr);
             } else if (aggrFn.getFn() == relalg::AggrFunc::min) {
@@ -2571,7 +2572,8 @@ class AggregationLowering : public OpConversionPattern<relalg::AggregationOp> {
          std::shared_ptr<DistAggrFunc> distAggrFunc;
          if (auto aggrFn = mlir::dyn_cast_or_null<relalg::AggrFuncOp>(computedVal.getDefiningOp())) {
             tupleStream = aggrFn.getRel();
-            auto sourceColumnAttr = aggrFn.getAttr();
+            auto& colManager = aggrFn.getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+            auto sourceColumnAttr = colManager.createRef(aggrFn.getAttr());
             switch (aggrFn.getFn()) {
                case relalg::AggrFunc::sum:
                   distAggrFunc = std::make_shared<SumAggrFunc>(destColumnAttr, sourceColumnAttr);
@@ -2699,7 +2701,8 @@ class GroupJoinLowering : public OpConversionPattern<relalg::GroupJoinOp> {
          std::shared_ptr<DistAggrFunc> distAggrFunc;
          if (auto aggrFn = mlir::dyn_cast_or_null<relalg::AggrFuncOp>(computedVal.getDefiningOp())) {
             tupleStream = aggrFn.getRel();
-            auto sourceColumnAttr = aggrFn.getAttr();
+            auto& colManager = aggrFn.getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+            auto sourceColumnAttr = colManager.createRef(aggrFn.getAttr());
             if (aggrFn.getFn() == relalg::AggrFunc::sum) {
                distAggrFunc = std::make_shared<SumAggrFunc>(destColumnAttr, sourceColumnAttr);
             } else if (aggrFn.getFn() == relalg::AggrFunc::min) {

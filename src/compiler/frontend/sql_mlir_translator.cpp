@@ -1540,7 +1540,7 @@ mlir::Value SQLMlirTranslator::translateAggregationFunction(mlir::OpBuilder& bui
          aggrFunction->columnReference.value()->resultType.isNullable = true;
       }
 
-      expr = functionBuilder.create<relalg::AggrFuncOp>(location, aggrResultType, relalgAggrFunc, currRel, refAttr);
+      expr = functionBuilder.create<relalg::AggrFuncOp>(location, aggrResultType, relalgAggrFunc, currRel, &refAttr.getColumn());
    }
    attrDef.getColumn().type = expr.getType();
    return expr;
