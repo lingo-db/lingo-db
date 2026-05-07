@@ -1110,8 +1110,24 @@ class TableFromLocalTableSubOpLowering : public SubOpConversionPattern<lingodb::
 class TableToLocalTableSubOpLowering : public SubOpConversionPattern<lingodb::compiler::dialect::arrow::TableToLocalTableOp> {
    using SubOpConversionPattern<lingodb::compiler::dialect::arrow::TableToLocalTableOp>::SubOpConversionPattern;
    LogicalResult matchAndRewrite(lingodb::compiler::dialect::arrow::TableToLocalTableOp op, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
+      // If a schema descriptor was attached upstream, emit a runtime call
+      // that throws on mismatch. The runtime ABI sees arrow::Table* as a
+      // generic ref<i8>; bridge through an unrealized_conversion_cast so the
+      // strongly-typed `arrow.table` operand reaches the func.call as ref<i8>.
+      auto i8RefType = lingodb::compiler::dialect::util::RefType::get(rewriter.getContext(), rewriter.getI8Type());
+      mlir::Value arrowTableAsRef = rewriter.create<mlir::UnrealizedConversionCastOp>(
+                                              op.getLoc(), i8RefType, adaptor.getArrowTable())
+                                       .getResult(0);
+      if (auto descriptor = op.getSchemaDescriptorAttr()) {
+         auto descriptorVal = rewriter.create<lingodb::compiler::dialect::util::CreateConstVarLen>(
+            op.getLoc(),
+            lingodb::compiler::dialect::util::VarLen32Type::get(rewriter.getContext()),
+            descriptor);
+         lingodb::compiler::runtime::ArrowTable::verifySchema(rewriter, op.getLoc())(
+            mlir::ValueRange{arrowTableAsRef, descriptorVal});
+      }
       auto convertedResultType = typeConverter->convertType(op.getLocalTable().getType());
-      auto cast = rewriter.create<mlir::UnrealizedConversionCastOp>(op.getLoc(), convertedResultType, adaptor.getArrowTable());
+      auto cast = rewriter.create<mlir::UnrealizedConversionCastOp>(op.getLoc(), convertedResultType, arrowTableAsRef);
       rewriter.replaceOp(op, cast.getResult(0));
       return success();
    }

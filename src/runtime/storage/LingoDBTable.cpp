@@ -1,5 +1,6 @@
 #include "lingodb/runtime/storage/LingoDBTable.h"
 #include "lingodb/catalog/Defs.h"
+#include "lingodb/runtime/ArrowTable.h"
 #include "lingodb/runtime/ArrowView.h"
 #include "lingodb/runtime/storage/Restrictions.h"
 #include "lingodb/scheduler/Tasks.h"
@@ -119,81 +120,6 @@ std::shared_ptr<arrow::RecordBatch> createSample(const std::vector<lingodb::runt
    return arrow::Table::FromRecordBatches(sampleData).ValueOrDie()->CombineChunksToBatch().ValueOrDie();
 }
 
-std::shared_ptr<arrow::DataType> toPhysicalType(lingodb::catalog::Type t) {
-   using TypeId = lingodb::catalog::LogicalTypeId;
-   switch (t.getTypeId()) {
-      case TypeId::BOOLEAN:
-         return arrow::boolean();
-      case TypeId::INT:
-         switch (t.getInfo<lingodb::catalog::IntTypeInfo>()->getBitWidth()) {
-            case 8:
-               return arrow::int8();
-            case 16:
-               return arrow::int16();
-            case 32:
-               return arrow::int32();
-            case 64:
-               return arrow::int64();
-            default:
-               throw std::runtime_error("unsupported bit width");
-         }
-      case TypeId::FLOAT:
-         return arrow::float32();
-      case TypeId::DOUBLE:
-         return arrow::float64();
-      case TypeId::DECIMAL:
-         return arrow::decimal128(t.getInfo<lingodb::catalog::DecimalTypeInfo>()->getPrecision(),
-                                  t.getInfo<lingodb::catalog::DecimalTypeInfo>()->getScale());
-      case TypeId::DATE: {
-         auto dateUnit = t.getInfo<lingodb::catalog::DateTypeInfo>()->getUnit();
-         switch (dateUnit) {
-            case lingodb::catalog::DateTypeInfo::DateUnit::DAY:
-               return arrow::date32();
-            case lingodb::catalog::DateTypeInfo::DateUnit::MILLIS:
-               return arrow::date64();
-         }
-      }
-      case TypeId::TIMESTAMP: {
-         arrow::TimeUnit::type timeUnit;
-         auto logicalTimeUnit = t.getInfo<lingodb::catalog::TimestampTypeInfo>()->getUnit();
-         switch (logicalTimeUnit) {
-            case lingodb::catalog::TimestampTypeInfo::TimestampUnit::NANOS:
-               timeUnit = arrow::TimeUnit::NANO;
-               break;
-            case lingodb::catalog::TimestampTypeInfo::TimestampUnit::MICROS:
-               timeUnit = arrow::TimeUnit::MICRO;
-               break;
-            case lingodb::catalog::TimestampTypeInfo::TimestampUnit::MILLIS:
-               timeUnit = arrow::TimeUnit::MILLI;
-               break;
-            case lingodb::catalog::TimestampTypeInfo::TimestampUnit::SECONDS:
-               timeUnit = arrow::TimeUnit::SECOND;
-               break;
-         }
-         return arrow::timestamp(timeUnit);
-      }
-      case TypeId::INTERVAL: {
-         auto intervalUnit = t.getInfo<lingodb::catalog::IntervalTypeInfo>()->getUnit();
-         switch (intervalUnit) {
-            case lingodb::catalog::IntervalTypeInfo::IntervalUnit::DAYTIME:
-               return arrow::day_time_interval();
-            case lingodb::catalog::IntervalTypeInfo::IntervalUnit::MONTH:
-               return arrow::month_interval();
-         }
-      }
-      case TypeId::CHAR: {
-         if (t.getInfo<lingodb::catalog::CharTypeInfo>()->getLength() == 1) {
-            return arrow::fixed_size_binary(4);
-         }
-         return arrow::utf8();
-      }
-      case TypeId::STRING:
-         return arrow::utf8();
-      default:
-         throw std::runtime_error("unsupported type");
-   }
-}
-
 } // namespace
 
 namespace lingodb::runtime {
@@ -227,7 +153,7 @@ LingoDBTable::TableChunk::TableChunk(std::shared_ptr<arrow::RecordBatch> data, s
 std::unique_ptr<LingoDBTable> LingoDBTable::create(const catalog::CreateTableDef& def) {
    arrow::FieldVector fields;
    for (auto c : def.columns) {
-      fields.push_back(std::make_shared<arrow::Field>(std::string{c.getColumnName()}, toPhysicalType(c.getLogicalType())));
+      fields.push_back(std::make_shared<arrow::Field>(std::string{c.getColumnName()}, lingodb::runtime::arrowPhysicalTypeFor(c.getLogicalType())));
    }
    auto arrowSchema = std::make_shared<arrow::Schema>(fields);
    return std::make_unique<LingoDBTable>(def.name + ".arrow", arrowSchema);

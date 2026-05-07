@@ -1520,9 +1520,21 @@ mlir::Value SQLMlirTranslator::translateTableFunctionRef(mlir::OpBuilder& builde
       mlir::Value arrowTableOut = implementer->callFunction(
          moduleOp, builder, loc, mlir::ValueRange(arrowTableIns), mlir::ValueRange(nativeScalarArgs), context->catalog);
 
-      // 5d) Bridge arrow.table → subop.local_table (with declared output schema).
+      // 5d) Bridge arrow.table → subop.local_table (with declared output
+      //     schema). Stash the expected (column-name, lingodb-type) list as
+      //     a hex-serialized attribute; SubOpToControlFlow emits a runtime
+      //     verifySchema call ahead of the bridge so the UDF's return type
+      //     is checked at the boundary (catches the easy class of mistakes:
+      //     wrong column count, wrong names, type drift — most commonly the
+      //     pyarrow large_string-vs-string mismatch after a pandas roundtrip).
+      std::vector<std::pair<std::string, catalog::Type>> expectedSchema;
+      expectedSchema.reserve(tableFunctionRef->columnReferenceEntries.size());
+      for (auto& col : tableFunctionRef->columnReferenceEntries) {
+         expectedSchema.emplace_back(col->displayName, col->resultType.type);
+      }
       mlir::Value localTableOut = builder.create<arrow::TableToLocalTableOp>(
-         loc, outputLocalTableType, arrowTableOut);
+         loc, outputLocalTableType, arrowTableOut,
+         builder.getStringAttr(utility::serializeToHexString(expectedSchema)));
 
       // 5e) Build the column-def-member mapping for the scan.
       auto scanMappingAttr = subop::ColumnDefMemberMappingAttr::get(mlirContext, scanMapping);
