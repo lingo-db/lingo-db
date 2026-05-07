@@ -106,16 +106,25 @@ def Arrow_TableFromLocalTableOp : Arrow_Op<"table.from_local_table", [Pure]> {
     let assemblyFormat = " $local_table `:` type($local_table) attr-dict";
 }
 
-def Arrow_TableToLocalTableOp : Arrow_Op<"table.to_local_table", [Pure]> {
+def Arrow_TableToLocalTableOp : Arrow_Op<"table.to_local_table"> {
     let summary = "Annotate an opaque arrow.table with a schema, producing a sub-op local table";
     let description = [{
         The target `local_table` type carries the column names + member types
-        the surrounding pipeline (sub-op scans) expects. Verified at runtime
-        that the underlying arrow::Table actually has that schema.
+        the surrounding pipeline (sub-op scans) expects.
+
+        When `schema_descriptor` is set (a hex-serialized
+        `vector<pair<string, catalog::Type>>`), the SubOp→ControlFlow lowering
+        emits a runtime call to `lingodb::runtime::ArrowTable::verifySchema`
+        ahead of the bridge that throws a clear error if the wrapped
+        `arrow::Table` does not match the declared schema. Used by tabular
+        UDFs to catch return-type drift at the UDF/runtime boundary instead
+        of letting it become wrong answers downstream.
 
         Result is `AnyType` for the same reason as `from_local_table` above.
+
+        Not marked `Pure`: the runtime schema check is a side effect.
     }];
-    let arguments = (ins Arrow_Table:$arrow_table);
+    let arguments = (ins Arrow_Table:$arrow_table, OptionalAttr<StrAttr>:$schema_descriptor);
     let results = (outs AnyType:$local_table);
     let assemblyFormat = " $arrow_table `->` type($local_table) attr-dict";
 }
