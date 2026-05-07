@@ -42,7 +42,7 @@ class CatalogEntry {
 };
 
 class Catalog {
-   static constexpr size_t binaryVersion = 5;
+   static constexpr size_t binaryVersion = 6;
    bool shouldPersist;
    std::string dbDir;
 

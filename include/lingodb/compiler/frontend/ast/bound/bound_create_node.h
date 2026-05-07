@@ -2,6 +2,7 @@
 #define LINGODB_COMPILER_FRONTEND_AST_BOUND_BOUND_CREATE_NODE_H
 
 #include "lingodb/catalog/Catalog.h"
+#include "lingodb/catalog/FunctionCatalogEntry.h"
 #include "lingodb/compiler/frontend/ast/create_node.h"
 #include "lingodb/compiler/frontend/frontend_type.h"
 
@@ -52,10 +53,9 @@ class BoundCreateTableFunctionInfo : public CreateInfo {
 
    std::string language;
    std::string code;
-   //! Declared input table: parameter name + per-column (name, type) schema.
-   std::string inputTableName;
-   std::vector<std::pair<std::string, catalog::Type>> inputColumns;
-   //! Scalar arguments after the input table.
+   //! Declared input tables, in argument order. At least one.
+   std::vector<catalog::TableFunctionInput> inputTables;
+   //! Scalar arguments after the input tables.
    std::vector<std::pair<std::string, catalog::Type>> argumentTypes;
    //! Per-column output schema declared in `RETURNS TABLE(...)`.
    std::vector<std::pair<std::string, catalog::Type>> returnColumns;

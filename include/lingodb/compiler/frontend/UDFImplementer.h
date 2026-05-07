@@ -16,13 +16,14 @@ class MLIRUDFImplementor {
 // Lowering hook for tabular UDFs. The translator handles the SQL scaffolding
 // around the call (the relalg.nested wrapper, arrow.table ↔ subop.local_table
 // bridges, scalar-arg expression translation); the implementor is responsible
-// only for the language-specific bridge: take an `arrow.table` SSA value
-// carrying the input rows plus already-cast scalar args, emit whatever ops
-// invoke the UDF, and return an `arrow.table` SSA value carrying the output.
+// only for the language-specific bridge: take one or more `arrow.table` SSA
+// values carrying the input rows plus already-cast scalar args, emit whatever
+// ops invoke the UDF, and return an `arrow.table` SSA value carrying the
+// output.
 class MLIRTableUDFImplementor {
    public:
    virtual mlir::Value callFunction(mlir::ModuleOp& moduleOp, mlir::OpBuilder& builder, mlir::Location loc,
-                                    mlir::Value inputArrowTable, mlir::ValueRange scalarArgs,
+                                    mlir::ValueRange inputArrowTables, mlir::ValueRange scalarArgs,
                                     lingodb::catalog::Catalog* catalog) = 0;
    virtual ~MLIRTableUDFImplementor() = default;
 };

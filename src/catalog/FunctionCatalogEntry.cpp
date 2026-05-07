@@ -43,26 +43,34 @@ std::shared_ptr<FunctionCatalogEntry> PythonFunctionCatalogEntry::deserialize(li
    return std::make_shared<PythonFunctionCatalogEntry>(name, code, returnType, argumentTypes);
 }
 
+void TableFunctionInput::serialize(lingodb::utility::Serializer& serializer) const {
+   serializer.writeProperty(1, name);
+   serializer.writeProperty(2, columns);
+}
+TableFunctionInput TableFunctionInput::deserialize(lingodb::utility::Deserializer& deserializer) {
+   auto name = deserializer.readProperty<std::string>(1);
+   auto columns = deserializer.readProperty<std::vector<std::pair<std::string, Type>>>(2);
+   return TableFunctionInput{name, columns};
+}
+
 void TableFunctionCatalogEntry::serializeEntry(lingodb::utility::Serializer& serializer) const {
    serializer.writeProperty(1, entryType);
    serializer.writeProperty(2, name);
    serializer.writeProperty(3, language);
    serializer.writeProperty(4, code);
-   serializer.writeProperty(5, inputTableName);
-   serializer.writeProperty(6, inputColumns);
-   serializer.writeProperty(7, argumentTypes);
-   serializer.writeProperty(8, returnColumns);
+   serializer.writeProperty(5, inputTables);
+   serializer.writeProperty(6, argumentTypes);
+   serializer.writeProperty(7, returnColumns);
 }
 
 std::shared_ptr<TableFunctionCatalogEntry> TableFunctionCatalogEntry::deserialize(lingodb::utility::Deserializer& deserializer) {
    auto name = deserializer.readProperty<std::string>(2);
    auto language = deserializer.readProperty<std::string>(3);
    auto code = deserializer.readProperty<std::string>(4);
-   auto inputTableName = deserializer.readProperty<std::string>(5);
-   auto inputColumns = deserializer.readProperty<std::vector<std::pair<std::string, Type>>>(6);
-   auto argumentTypes = deserializer.readProperty<std::vector<Type>>(7);
-   auto returnColumns = deserializer.readProperty<std::vector<std::pair<std::string, Type>>>(8);
-   return std::make_shared<TableFunctionCatalogEntry>(name, language, code, inputTableName, inputColumns, argumentTypes, returnColumns);
+   auto inputTables = deserializer.readProperty<std::vector<TableFunctionInput>>(5);
+   auto argumentTypes = deserializer.readProperty<std::vector<Type>>(6);
+   auto returnColumns = deserializer.readProperty<std::vector<std::pair<std::string, Type>>>(7);
+   return std::make_shared<TableFunctionCatalogEntry>(name, language, code, inputTables, argumentTypes, returnColumns);
 }
 
 void visitUDFFunctions(const std::function<void(std::string, void*)>& fn) {

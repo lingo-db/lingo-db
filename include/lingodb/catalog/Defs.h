@@ -1,6 +1,7 @@
 #ifndef LINGODB_CATALOG_DEFS_H
 #define LINGODB_CATALOG_DEFS_H
 #include "Column.h"
+#include "FunctionCatalogEntry.h"
 
 #include <vector>
 
@@ -31,23 +32,23 @@ struct CreateScalarFunctionDef {
 };
 
 // Wire-format payload for `CREATE FUNCTION ... RETURNS TABLE(...)`.
+// Reuses TableFunctionInput from FunctionCatalogEntry.h — the wire shape and
+// the in-memory catalog shape are deliberately identical for input tables.
 struct CreateTableFunctionDef {
    std::string name;
    std::string language;
    std::string code;
-   //! Declared input table: parameter name + per-column (name, type) schema.
-   std::string inputTableName;
-   std::vector<std::pair<std::string, Type>> inputColumns;
-   //! Scalar arguments after the input table.
+   //! Declared input tables, in argument order. At least one.
+   std::vector<TableFunctionInput> inputTables;
+   //! Scalar arguments after the input tables.
    std::vector<Type> argumentTypes;
    std::vector<std::pair<std::string, Type>> returnColumns;
    CreateTableFunctionDef(std::string name, std::string language, std::string code,
-                          std::string inputTableName,
-                          std::vector<std::pair<std::string, Type>> inputColumns,
+                          std::vector<TableFunctionInput> inputTables,
                           std::vector<Type> argumentTypes,
                           std::vector<std::pair<std::string, Type>> returnColumns)
       : name(std::move(name)), language(std::move(language)), code(std::move(code)),
-        inputTableName(std::move(inputTableName)), inputColumns(std::move(inputColumns)),
+        inputTables(std::move(inputTables)),
         argumentTypes(std::move(argumentTypes)), returnColumns(std::move(returnColumns)) {}
    void serialize(utility::Serializer& serializer) const;
    static CreateTableFunctionDef deserialize(utility::Deserializer& deserializer);

@@ -254,7 +254,7 @@ class PythonTableUDFImplementer : public lingodb::catalog::MLIRTableUDFImplement
       : functionName(std::move(functionName)), code(std::move(code)), scalarArgumentTypes(std::move(scalarArgumentTypes)) {}
 
    mlir::Value callFunction(mlir::ModuleOp& moduleOp, mlir::OpBuilder& builder, mlir::Location loc,
-                            mlir::Value inputArrowTable, mlir::ValueRange scalarArgs,
+                            mlir::ValueRange inputArrowTables, mlir::ValueRange scalarArgs,
                             lingodb::catalog::Catalog* catalog) override {
       namespace py_interp = lingodb::compiler::dialect::py_interp;
       namespace arrow_dialect = lingodb::compiler::dialect::arrow;
@@ -270,9 +270,13 @@ class PythonTableUDFImplementer : public lingodb::catalog::MLIRTableUDFImplement
       mlir::Value functionVal = builder.create<py_interp::GetAttr>(
          loc, pyObjType, moduleVal, builder.getStringAttr(functionName));
 
-      // Cast inputs to PyObjects: input table first, then scalar args.
+      // Cast inputs to PyObjects: input tables first (in declaration order),
+      // then scalar args.
       std::vector<mlir::Value> pyArgs;
-      pyArgs.push_back(builder.create<py_interp::CastToPyObject>(loc, pyObjType, inputArrowTable, "pyarrow.Table"));
+      pyArgs.reserve(inputArrowTables.size() + scalarArgs.size());
+      for (auto inputTable : inputArrowTables) {
+         pyArgs.push_back(builder.create<py_interp::CastToPyObject>(loc, pyObjType, inputTable, "pyarrow.Table"));
+      }
       for (auto [scalarArg, declaredType] : llvm::zip(scalarArgs, scalarArgumentTypes)) {
          pyArgs.push_back(builder.create<py_interp::CastToPyObject>(
             loc, pyObjType, scalarArg, getPythonScalarType(declaredType)));
