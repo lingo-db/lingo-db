@@ -70,11 +70,10 @@ void addRequirements(mlir::Operation* op, mlir::Operation* includeChildren, mlir
    }
 }
 void replaceColumnUsesInLambda(mlir::MLIRContext* context, mlir::Block& block, const relalg::ColumnFoldInfo& columnInfo) {
-   auto& colManager = context->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
-   block.walk([&columnInfo, &colManager](tuples::GetColumnOp getColumnOp) {
-      auto* currColumn = &getColumnOp.getAttr().getColumn();
+   block.walk([&columnInfo](tuples::GetColumnOp getColumnOp) {
+      auto* currColumn = getColumnOp.getAttr();
       if (columnInfo.directMappings.contains(currColumn)) {
-         getColumnOp.setAttrAttr(colManager.createRef(columnInfo.directMappings.at(currColumn)));
+         getColumnOp.setAttr(columnInfo.directMappings.at(currColumn));
       }
    });
 }
@@ -135,7 +134,7 @@ bool relalg::detail::canColumnReach(mlir::Operation* currentOp, mlir::Operation*
 ColumnSet relalg::detail::getUsedColumns(mlir::Operation* op) {
    ColumnSet creations;
    op->walk([&](GetColumnOp attrOp) {
-      creations.insert(&attrOp.getAttr().getColumn());
+      creations.insert(attrOp.getAttr());
    });
    if (op->hasAttr("rightHash")) {
       creations.insert(ColumnSet::fromArrayAttr(op->getAttrOfType<mlir::ArrayAttr>("rightHash")));
@@ -304,7 +303,7 @@ bool SemiJoinOp::canColumnReach(Operator source, Operator target, const tuples::
 }
 ColumnSet MarkJoinOp::getAvailableColumns(AvailabilityCache& cache) {
    auto available = cache.getAvailableColumnsFor(mlir::cast<Operator>(leftChild()));
-   available.insert(&getMarkattr().getColumn());
+   available.insert(getMarkattr());
    return available;
 }
 bool MarkJoinOp::canColumnReach(Operator source, Operator target, const tuples::Column* col) {
@@ -490,7 +489,7 @@ bool CollectionJoinOp::canColumnReach(Operator source, Operator target, const tu
 }
 ColumnSet MarkJoinOp::getCreatedColumns() {
    ColumnSet created;
-   created.insert(&getMarkattr().getColumn());
+   created.insert(getMarkattr());
    return created;
 }
 
@@ -537,9 +536,9 @@ relalg::FunctionalDependencies relalg::SelectionOp::getFDs() {
                   if (auto getColLeft = mlir::dyn_cast_or_null<tuples::GetColumnOp>(cmpOp.getLeft().getDefiningOp())) {
                      if (auto getColRight = mlir::dyn_cast_or_null<tuples::GetColumnOp>(cmpOp.getRight().getDefiningOp())) {
                         relalg::ColumnSet left;
-                        left.insert(&getColLeft.getAttr().getColumn());
+                        left.insert(getColLeft.getAttr());
                         relalg::ColumnSet right;
-                        right.insert(&getColRight.getAttr().getColumn());
+                        right.insert(getColRight.getAttr());
                         dependencies.insert(left, right);
                         dependencies.insert(right, left);
                      }
@@ -592,9 +591,9 @@ relalg::FunctionalDependencies relalg::InnerJoinOp::getFDs() {
                   if (auto getColLeft = mlir::dyn_cast_or_null<tuples::GetColumnOp>(cmpOp.getLeft().getDefiningOp())) {
                      if (auto getColRight = mlir::dyn_cast_or_null<tuples::GetColumnOp>(cmpOp.getRight().getDefiningOp())) {
                         relalg::ColumnSet left;
-                        left.insert(&getColLeft.getAttr().getColumn());
+                        left.insert(getColLeft.getAttr());
                         relalg::ColumnSet right;
-                        right.insert(&getColRight.getAttr().getColumn());
+                        right.insert(getColRight.getAttr());
                         newFds.insert(left, right);
                         newFds.insert(right, left);
                      }
@@ -710,7 +709,7 @@ mlir::LogicalResult relalg::MapOp::foldColumns(relalg::ColumnFoldInfo& columnInf
    auto returnOp = mlir::cast<tuples::ReturnOp>(getPredicate().front().getTerminator());
    for (auto z : llvm::zip(returnOp.getResults(), getComputedCols())) {
       if (auto getColumnOp = mlir::dyn_cast_or_null<tuples::GetColumnOp>(std::get<0>(z).getDefiningOp())) {
-         auto* previousColumn = &getColumnOp.getAttr().getColumn();
+         auto* previousColumn = getColumnOp.getAttr();
          auto* currentColumn = &mlir::cast<tuples::ColumnDefAttr>(std::get<1>(z)).getColumn();
          columnInfo.directMappings[currentColumn] = previousColumn;
       }
@@ -768,11 +767,10 @@ mlir::LogicalResult handleChangeForPredicate(PredicateOperator op, lingodb::comp
    auto predicateArg = op.getPredicateArgument();
    for (auto* user : predicateArg.getUsers()) {
       auto getColumnOp = mlir::cast<tuples::GetColumnOp>(user);
-      auto* oldCol = &getColumnOp.getAttr().getColumn();
+      auto* oldCol = getColumnOp.getAttr();
       if (columnInfo.directMappings.contains(oldCol)) {
          auto* newCol = columnInfo.directMappings[oldCol];
-         auto& colManager = op.getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
-         getColumnOp.setAttrAttr(colManager.createRef(newCol));
+         getColumnOp.setAttr(newCol);
          getColumnOp.getRes().setType(newCol->type);
          propagateNonNull(getColumnOp.getRes());
       }
@@ -832,10 +830,10 @@ mlir::LogicalResult relalg::MapOp::changeForColumns(lingodb::compiler::dialect::
    auto predicateArg = getLambdaArgument();
    for (auto* user : predicateArg.getUsers()) {
       auto getColumnOp = mlir::cast<tuples::GetColumnOp>(user);
-      auto* oldCol = &getColumnOp.getAttr().getColumn();
+      auto* oldCol = getColumnOp.getAttr();
       if (columnInfo.directMappings.contains(oldCol)) {
          auto* newCol = columnInfo.directMappings[oldCol];
-         getColumnOp.setAttrAttr(colManager.createRef(newCol));
+         getColumnOp.setAttr(newCol);
          getColumnOp.getRes().setType(newCol->type);
          propagateNonNull(getColumnOp.getRes());
       }

@@ -1,5 +1,6 @@
 #ifndef LINGODB_COMPILER_DIALECT_SUBOPERATOR_UTILS_H
 #define LINGODB_COMPILER_DIALECT_SUBOPERATOR_UTILS_H
+#include "lingodb/compiler/Dialect/TupleStream/TupleStreamDialect.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include <unordered_map>
@@ -24,6 +25,10 @@ class MapCreationHelper {
          colRefs.push_back(columnRefAttr);
          return arg;
       }
+   }
+   mlir::Value access(dialect::tuples::Column* keyColumn, mlir::Location loc) {
+      auto& colManager = context->getLoadedDialect<dialect::tuples::TupleStreamDialect>()->getColumnManager();
+      return access(colManager.createRef(keyColumn), loc);
    }
    mlir::ArrayAttr getColRefs() {
       return mlir::ArrayAttr::get(context, colRefs);

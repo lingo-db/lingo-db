@@ -12,7 +12,6 @@ struct ColumnUsageAnalysis {
    llvm::DenseMap<mlir::Operation*, llvm::DenseSet<dialect::tuples::Column*>> usedColumns;
    llvm::DenseMap<dialect::tuples::Column*, llvm::SmallVector<mlir::Operation*>> operationsUsingColumn;
    ColumnUsageAnalysis(mlir::Operation* op);
-   void analyze(mlir::Operation* op, mlir::Attribute attr);
    static llvm::DenseSet<dialect::tuples::Column*> getUsedColumnsForOp(mlir::Operation* op);
    auto& getUsedColumns(mlir::Operation* op) {
       return usedColumns[op];

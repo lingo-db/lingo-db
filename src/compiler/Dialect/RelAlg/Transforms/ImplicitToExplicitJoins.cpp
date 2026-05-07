@@ -64,12 +64,12 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
          tuples::ColumnDefAttr markAttrDef = attributeManager.createDef(scopeName, attributeName);
          auto& ra = markAttrDef.getColumn();
          ra.type = builder.getI1Type();
-         PredicateOperator markJoin = builder.create<relalg::MarkJoinOp>(loc, relType, markAttrDef, treeVal, relOperator.asRelation());
+         PredicateOperator markJoin = builder.create<relalg::MarkJoinOp>(loc, relType, &ra, treeVal, relOperator.asRelation());
          markJoin.initPredicate();
          apply(markJoin);
          tuples::ColumnRefAttr markAttrRef = attributeManager.createRef(scopeName, attributeName);
          builder.setInsertionPoint(op);
-         auto replacement = builder.create<tuples::GetColumnOp>(loc, builder.getI1Type(), markAttrRef, surroundingOperator.getLambdaRegion().getArgument(0));
+         auto replacement = builder.create<tuples::GetColumnOp>(loc, builder.getI1Type(), &markAttrRef.getColumn(), surroundingOperator.getLambdaRegion().getArgument(0));
          op->replaceAllUsesWith(replacement);
          op->erase();
          surroundingOperator->setOperand(0, markJoin->getResult(0));
@@ -102,7 +102,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
             auto singleJoin = builder.create<relalg::SingleJoinOp>(getscalarop->getLoc(), tuples::TupleStreamType::get(builder.getContext()), treeVal, getscalarop.getRel(), mapping);
             singleJoin.initPredicate();
             builder.setInsertionPoint(getscalarop);
-            mlir::Value replacement = builder.create<tuples::GetColumnOp>(getscalarop->getLoc(), newAttrType, attributeManager.createRef(scopeName, attributeName), surroundingOperator.getLambdaRegion().getArgument(0));
+            mlir::Value replacement = builder.create<tuples::GetColumnOp>(getscalarop->getLoc(), newAttrType, &attributeManager.createRef(scopeName, attributeName).getColumn(), surroundingOperator.getLambdaRegion().getArgument(0));
             getscalarop.replaceAllUsesWith(replacement);
             getscalarop->erase();
             treeVal = singleJoin;
@@ -118,7 +118,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
             auto collectionJoin = builder.create<relalg::CollectionJoinOp>(getlistop->getLoc(), tuples::TupleStreamType::get(builder.getContext()), fromAttrs, newDef, treeVal, getlistop.getRel());
             collectionJoin.initPredicate();
             builder.setInsertionPoint(getlistop);
-            Operation* replacement = builder.create<tuples::GetColumnOp>(getlistop->getLoc(), getlistop.getType(), attributeManager.createRef(scopeName, attributeName), surroundingOperator.getLambdaRegion().getArgument(0));
+            Operation* replacement = builder.create<tuples::GetColumnOp>(getlistop->getLoc(), getlistop.getType(), &attributeManager.createRef(scopeName, attributeName).getColumn(), surroundingOperator.getLambdaRegion().getArgument(0));
             getlistop.replaceAllUsesWith(replacement);
             getlistop->erase();
             treeVal = collectionJoin;
@@ -137,7 +137,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
                   mapping.map(surroundingOperator.getLambdaArgument(), predicateOperator.getPredicateArgument());
                   relalg::detail::inlineOpIntoBlock(inop.getVal().getDefiningOp(), surroundingOperator.getOperation(), &predicateOperator.getPredicateBlock(), mapping);
                   auto val = mapping.lookup(inop.getVal());
-                  auto otherVal = builder.create<tuples::GetColumnOp>(inop->getLoc(), searchInAttr.getColumn().type, searchInAttr, tuple);
+                  auto otherVal = builder.create<tuples::GetColumnOp>(inop->getLoc(), searchInAttr.getColumn().type, &searchInAttr.getColumn(), tuple);
                   Value predicate = builder.create<db::CmpOp>(inop->getLoc(), db::DBCmpPredicate::eq, val, otherVal);
                   return predicate;
                });

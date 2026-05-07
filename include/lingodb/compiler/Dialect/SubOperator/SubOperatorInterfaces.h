@@ -1,5 +1,6 @@
 #ifndef LINGODB_COMPILER_DIALECT_SUBOPERATOR_SUBOPERATORINTERFACES_H
 #define LINGODB_COMPILER_DIALECT_SUBOPERATOR_SUBOPERATORINTERFACES_H
+#include "lingodb/compiler/Dialect/SubOperator/ColumnUsageHelpers.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOpsAttributes.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/StateUsageTransformer.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOpsAttributes.h"

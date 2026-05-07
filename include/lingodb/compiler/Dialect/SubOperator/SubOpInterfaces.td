@@ -29,6 +29,34 @@ def SubOperator : OpInterface<"SubOperator"> {
 			 return builder.clone(*this->getOperation(), mapping);
 		 }]
 		>,
+		InterfaceMethod<
+		  /*description=*/[{
+		    Insert into `out` every tuples::Column read by this op. The
+		    default walks every Attribute attached to the op and picks
+		    out ColumnRefAttr (and the fromExisting chain of any
+		    ColumnDefAttr it finds). When an op moves a column-bearing
+		    argument from an Attribute to a Property, the default no
+		    longer sees that column - the op must override this method
+		    to add the property's columns explicitly.
+		  }],
+		  /*retTy=*/"void",
+		  /*methodName=*/"addUsedColumns",(ins "llvm::DenseSet<lingodb::compiler::dialect::tuples::Column*>&":$out),"",
+		 /*defaultImplementation=*/[{
+			 ::lingodb::compiler::dialect::subop::collectUsedColumnsFromAttrs(this->getOperation(), out);
+		 }]
+		>,
+		InterfaceMethod<
+		  /*description=*/[{
+		    Insert into `out` every tuples::Column produced by this op.
+		    Same default-walk semantics as addUsedColumns, looking for
+		    ColumnDefAttr instead.
+		  }],
+		  /*retTy=*/"void",
+		  /*methodName=*/"addCreatedColumns",(ins "llvm::DenseSet<lingodb::compiler::dialect::tuples::Column*>&":$out),"",
+		 /*defaultImplementation=*/[{
+			 ::lingodb::compiler::dialect::subop::collectCreatedColumnsFromAttrs(this->getOperation(), out);
+		 }]
+		>,
   ];
 
 }

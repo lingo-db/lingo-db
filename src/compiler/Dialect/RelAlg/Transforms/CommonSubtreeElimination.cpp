@@ -108,6 +108,23 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
             if (leaderBase.getRestriction() != candidateBase.getRestriction()) return false;
          }
 
+         // Counterpart to the property-aware hashing in computeHash:
+         // require canonicalized column-ref / column-def sets to match.
+         // For un-migrated ops this is redundant with the attr comparison
+         // above; for ops that have moved column args into Properties it
+         // is the only thing that catches divergent column wiring.
+         // Skip BaseTableOp — its columns dict is intentionally ignored above
+         // so two scans of the same table can match before any column
+         // equivalences are recorded.
+         if (auto leaderOp = mlir::dyn_cast<Operator>(leader);
+             leaderOp && !mlir::isa<relalg::BaseTableOp>(leader)) {
+            auto candidateOp = mlir::cast<Operator>(candidate);
+            if (pass.canonicalizeColumnSet(leaderOp.getUsedColumns()) !=
+                pass.canonicalizeColumnSet(candidateOp.getUsedColumns())) return false;
+            if (pass.canonicalizeColumnSet(leaderOp.getCreatedColumns()) !=
+                pass.canonicalizeColumnSet(candidateOp.getCreatedColumns())) return false;
+         }
+
          return true;
       }
 
@@ -145,6 +162,27 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
 
    ColumnMappingContext colContext;
    llvm::DenseMap<mlir::Value, mlir::Value> valueEquivalenceMap;
+
+   /// Map a Column* to the leader of its equivalence class (or itself if no
+   /// equivalence is recorded). Used so CSE treats two ops as equivalent
+   /// when they reference different members of the same equivalence class.
+   const tuples::Column* canonicalizeColumn(const tuples::Column* c) const {
+      auto it = colContext.colMapping.find(c);
+      return it != colContext.colMapping.end() ? it->second.col.get() : c;
+   }
+
+   /// Sorted vector of canonical column pointers - the form CSE compares
+   /// and hashes for two ops to be considered column-equivalent.
+   /// Includes columns reached through Operator's getUsedColumns/
+   /// getCreatedColumns, which post-Phase-1 will surface property-stored
+   /// column refs that are invisible to the attribute-walker.
+   llvm::SmallVector<const tuples::Column*> canonicalizeColumnSet(const relalg::ColumnSet& cols) const {
+      llvm::SmallVector<const tuples::Column*> result;
+      result.reserve(cols.size());
+      for (const auto* c : cols) result.push_back(canonicalizeColumn(c));
+      llvm::sort(result);
+      return result;
+   }
 
    public:
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(CommonSubtreeElimination)
@@ -266,6 +304,25 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
             for (auto& nestedOp : block) {
                hash = llvm::hash_combine(hash, nestedOp.getName().getAsOpaquePointer());
             }
+         }
+      }
+
+      // Property-aware column hashing. After Phase 1 migrations, an op's
+      // column refs may live in inline Properties (invisible to the attr
+      // walker above). The Operator interface's getUsedColumns /
+      // getCreatedColumns already report through both attrs and properties,
+      // so canonicalizing and hashing those sets prevents false-positive
+      // CSE merges between ops that differ only in their property refs.
+      // Skip BaseTableOp — its columns dict is intentionally ignored above
+      // so two scans of the same table can match before any column
+      // equivalences are recorded.
+      if (auto opIface = mlir::dyn_cast<Operator>(op);
+          opIface && !mlir::isa<relalg::BaseTableOp>(op)) {
+         for (const auto* c : canonicalizeColumnSet(opIface.getUsedColumns())) {
+            hash = llvm::hash_combine(hash, c);
+         }
+         for (const auto* c : canonicalizeColumnSet(opIface.getCreatedColumns())) {
+            hash = llvm::hash_combine(hash, c);
          }
       }
       return hash;

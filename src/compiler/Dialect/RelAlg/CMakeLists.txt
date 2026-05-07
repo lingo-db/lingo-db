@@ -2,6 +2,7 @@ add_mlir_dialect_library(MLIRRelAlg
         RelAlgDialect.cpp
         RelAlgOps.cpp
         RelAlgOpsEnums.cpp
+        ColumnRefHelpers.cpp
         OperatorInterfaceImpl.cpp
         Transforms/MetaData.cpp
         Transforms/InferNotNullConditions.cpp

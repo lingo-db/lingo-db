@@ -1389,13 +1389,15 @@ class MarkJoinLowering : public OpConversionPattern<relalg::MarkJoinOp> {
       auto leftHash = markJoinOp->getAttrOfType<mlir::ArrayAttr>("leftHash");
       auto nullsEqual = markJoinOp->getAttrOfType<mlir::ArrayAttr>("nullsEqual");
 
+      auto& colManager = rewriter.getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+      auto markAttrDef = colManager.createDef(markJoinOp.getMarkattr());
       if (!reverse) {
-         rewriter.replaceOp(markJoinOp, translateNL(adaptor.getLeft(), adaptor.getRight(), useHash, useIndexNestedLoop, nullsEqual, leftHash, rightHash, requiredColumns.lookup(mlir::cast<Operator>(markJoinOp.getRight().getDefiningOp())), rewriter, markJoinOp, [loc, &markJoinOp](mlir::Value v, mlir::ConversionPatternRewriter& rewriter) -> mlir::Value {
+         rewriter.replaceOp(markJoinOp, translateNL(adaptor.getLeft(), adaptor.getRight(), useHash, useIndexNestedLoop, nullsEqual, leftHash, rightHash, requiredColumns.lookup(mlir::cast<Operator>(markJoinOp.getRight().getDefiningOp())), rewriter, markJoinOp, [loc, &markJoinOp, markAttrDef](mlir::Value v, mlir::ConversionPatternRewriter& rewriter) -> mlir::Value {
                                auto filtered = translateSelection(v, markJoinOp.getPredicate(), rewriter, loc);
-                               return anyTuple(filtered, markJoinOp.getMarkattr(), rewriter, loc);
+                               return anyTuple(filtered, markAttrDef, rewriter, loc);
                             }));
       } else {
-         auto [_, scan] = translateNLWithMarker(adaptor.getLeft(), adaptor.getRight(), useHash, nullsEqual, leftHash, rightHash, requiredColumns.lookup(mlir::cast<Operator>(markJoinOp.getLeft().getDefiningOp())), rewriter, loc, markJoinOp.getMarkattr(), [loc, &markJoinOp](mlir::Value v, mlir::Value, mlir::ConversionPatternRewriter& rewriter, tuples::ColumnRefAttr ref, Member flagMember) -> mlir::Value {
+         auto [_, scan] = translateNLWithMarker(adaptor.getLeft(), adaptor.getRight(), useHash, nullsEqual, leftHash, rightHash, requiredColumns.lookup(mlir::cast<Operator>(markJoinOp.getLeft().getDefiningOp())), rewriter, loc, markAttrDef, [loc, &markJoinOp](mlir::Value v, mlir::Value, mlir::ConversionPatternRewriter& rewriter, tuples::ColumnRefAttr ref, Member flagMember) -> mlir::Value {
             auto filtered = translateSelection(v, markJoinOp.getPredicate(), rewriter, loc);
             auto [markerDefAttr, markerRefAttr] = createColumn(rewriter.getI1Type(), "marker", "marker");
             auto afterBool = mapBool(filtered, rewriter, loc, true, &markerDefAttr.getColumn());

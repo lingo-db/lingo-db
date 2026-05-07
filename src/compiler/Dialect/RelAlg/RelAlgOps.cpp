@@ -46,6 +46,42 @@ mlir::LogicalResult readFromMlirBytecode(mlir::DialectBytecodeReader& reader, co
    return mlir::failure();
 }
 
+//===--------------------------------------------------------------------===//
+// Property hooks for tuples::Column* (used by relalg.markjoin.markattr).
+// Lifetime: tuples::Column is owned by ColumnManager (dialect-scoped), so a
+// raw Column* is stable for the lifetime of the IR. Generic-form bridging
+// goes via ColumnDefAttr (matching the textual representation).
+//===--------------------------------------------------------------------===//
+mlir::Attribute convertToAttribute(MLIRContext* ctx, ::lingodb::compiler::dialect::tuples::Column* col) {
+   if (!col) return {};
+   auto& colManager = ctx->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+   return colManager.createDef(col);
+}
+mlir::LogicalResult convertFromAttribute(::lingodb::compiler::dialect::tuples::Column*& col, mlir::Attribute attr,
+                                         std::function<mlir::InFlightDiagnostic()> emitError) {
+   if (!attr) {
+      col = nullptr;
+      return mlir::success();
+   }
+   if (auto defAttr = mlir::dyn_cast<tuples::ColumnDefAttr>(attr)) {
+      col = &defAttr.getColumn();
+      return mlir::success();
+   }
+   if (auto refAttr = mlir::dyn_cast<tuples::ColumnRefAttr>(attr)) {
+      col = &refAttr.getColumn();
+      return mlir::success();
+   }
+   return emitError() << "expected tuples::ColumnDefAttr or ColumnRefAttr for Column* property";
+}
+void writeToMlirBytecode(mlir::DialectBytecodeWriter& writer, ::lingodb::compiler::dialect::tuples::Column* col) {
+   //TODO: bytecode round-trip for Column* (write scope+name, resolve via
+   //      ColumnManager on read). Not exercised by current pipeline.
+}
+mlir::LogicalResult readFromMlirBytecode(mlir::DialectBytecodeReader& reader, ::lingodb::compiler::dialect::tuples::Column*& col) {
+   //TODO: see writeToMlirBytecode.
+   return mlir::failure();
+}
+
 tuples::ColumnManager& getColumnManager(::mlir::OpAsmParser& parser) {
    return parser.getBuilder().getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
 }
@@ -213,6 +249,21 @@ void printCustDef(OpAsmPrinter& p, mlir::Operation* op, tuples::ColumnDefAttr at
       p << "=";
       printCustRefArr(p, op, fromExistingArr);
    }
+}
+
+// Overloads of parseCustDef / printCustDef for tuples::Column* properties.
+// Reuses the ColumnDefAttr text format and the ColumnManager that owns the
+// columns; the lossless conversion ColumnDefAttr <-> Column* keeps the
+// custom assembly format identical to the pre-migration form.
+ParseResult parseCustDef(OpAsmParser& parser, tuples::Column*& col) {
+   tuples::ColumnDefAttr attr;
+   if (parseCustDef(parser, attr)) return failure();
+   col = &attr.getColumn();
+   return success();
+}
+void printCustDef(OpAsmPrinter& p, mlir::Operation* op, tuples::Column* col) {
+   auto& colManager = op->getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+   printCustDef(p, op, colManager.createDef(col));
 }
 
 ParseResult parseCustDefArr(OpAsmParser& parser, ArrayAttr& attr) {

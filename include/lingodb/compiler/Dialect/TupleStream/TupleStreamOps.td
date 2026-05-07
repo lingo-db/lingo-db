@@ -34,7 +34,7 @@ def TupleStream_ReturnOp : TupleStream_Op<"return", [Pure,ReturnLike,Terminator]
 def GetColumnOp : TupleStream_Op<"getcol", [Pure]> {
     let summary = "get column operation";
 
-    let arguments = (ins ColumnRefAttr:$attr,TupleStream_Tuple:$tuple);
+    let arguments = (ins Property<"::lingodb::compiler::dialect::tuples::Column*">:$attr,TupleStream_Tuple:$tuple);
     let results = (outs AnyType : $res);
     let assemblyFormat = [{  $tuple custom<CustRef>($attr) `:` type($res) attr-dict }];
 }

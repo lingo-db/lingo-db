@@ -151,8 +151,8 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
          for (const auto* attr : dependentAttributes) {
             mlir::dyn_cast_or_null<PredicateOperator>(join.getOperation()).addPredicate([&](Value tuple, OpBuilder& builder) {
                auto attrefDependent = attributeManager.createRef(renamed[attr]);
-               Value valLeft = builder.create<tuples::GetColumnOp>(loc, attr->type, attributeManager.createRef(attr), tuple);
-               Value valRight = builder.create<tuples::GetColumnOp>(loc, attr->type, attrefDependent, tuple);
+               Value valLeft = builder.create<tuples::GetColumnOp>(loc, attr->type, const_cast<tuples::Column*>(attr), tuple);
+               Value valRight = builder.create<tuples::GetColumnOp>(loc, attr->type, &attrefDependent.getColumn(), tuple);
                return builder.create<db::CmpOp>(loc, db::DBCmpPredicate::isa, valLeft, valRight);
             });
          }
@@ -212,10 +212,10 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
                auto leftColDef = mlir::dyn_cast_or_null<tuples::GetColumnOp>(cmpOp.getLeft().getDefiningOp());
                auto rightColDef = mlir::dyn_cast_or_null<tuples::GetColumnOp>(cmpOp.getRight().getDefiningOp());
                if (!leftColDef || !rightColDef) return false;
-               if (attributes.contains(&rightColDef.getAttr().getColumn())) {
+               if (attributes.contains(rightColDef.getAttr())) {
                   std::swap(leftColDef, rightColDef);
                }
-               groupByColumns.insert(&rightColDef.getAttr().getColumn());
+               groupByColumns.insert(rightColDef.getAttr());
             }
             selectionOps.insert(selectionOps.end(), extractedSelections.begin(), extractedSelections.end());
             aggregationOp.setGroupByColsAttr(groupByColumns.asRefArrayAttr(&getContext()));

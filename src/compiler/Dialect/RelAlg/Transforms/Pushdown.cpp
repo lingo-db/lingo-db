@@ -24,7 +24,7 @@ bool isNotNullCheckOnColumn(relalg::ColumnSet relevantColumns, relalg::Selection
       if (auto notOp = mlir::dyn_cast_or_null<db::NotOp>(returnOp.getResults()[0].getDefiningOp())) {
          if (auto isNullOp = mlir::dyn_cast_or_null<db::IsNullOp>(notOp.getVal().getDefiningOp())) {
             if (auto getColOp = mlir::dyn_cast_or_null<tuples::GetColumnOp>(isNullOp.getVal().getDefiningOp())) {
-               return relevantColumns.contains(&getColOp.getAttr().getColumn());
+               return relevantColumns.contains(getColOp.getAttr());
             }
          }
       }
@@ -38,7 +38,7 @@ bool isNullCheckOnColumn(relalg::ColumnSet relevantColumns, relalg::SelectionOp 
       if (returnOp.getResults().size() != 1) return false;
       if (auto isNullOp = mlir::dyn_cast_or_null<db::IsNullOp>(returnOp.getResults()[0].getDefiningOp())) {
          if (auto getColOp = mlir::dyn_cast_or_null<tuples::GetColumnOp>(isNullOp.getVal().getDefiningOp())) {
-            return relevantColumns.contains(&getColOp.getAttr().getColumn());
+            return relevantColumns.contains(getColOp.getAttr());
          }
       }
    }
@@ -153,7 +153,7 @@ class OuterJoinToInnerJoin : public mlir::RewritePattern {
          for (auto m : outerJoinOp.getMapping()) {
             auto defAttr = mlir::dyn_cast_or_null<tuples::ColumnDefAttr>(m);
             auto refAttr = mlir::cast<tuples::ColumnRefAttr>(mlir::cast<mlir::ArrayAttr>(defAttr.getFromExisting())[0]);
-            auto colVal = rewriter.create<tuples::GetColumnOp>(op->getLoc(), defAttr.getColumn().type, refAttr, tuple);
+            auto colVal = rewriter.create<tuples::GetColumnOp>(op->getLoc(), defAttr.getColumn().type, &refAttr.getColumn(), tuple);
             if (colVal.getType() != defAttr.getColumn().type) {
                returnValues.push_back(rewriter.create<db::AsNullableOp>(op->getLoc(), defAttr.getColumn().type, colVal, mlir::Value()));
             } else {
@@ -207,7 +207,7 @@ class SingleJoinToInnerJoin : public mlir::RewritePattern {
          for (auto m : outerJoinOp.getMapping()) {
             auto defAttr = mlir::dyn_cast_or_null<tuples::ColumnDefAttr>(m);
             auto refAttr = mlir::cast<tuples::ColumnRefAttr>(mlir::cast<mlir::ArrayAttr>(defAttr.getFromExisting())[0]);
-            auto colVal = rewriter.create<tuples::GetColumnOp>(op->getLoc(), defAttr.getColumn().type, refAttr, tuple);
+            auto colVal = rewriter.create<tuples::GetColumnOp>(op->getLoc(), defAttr.getColumn().type, &refAttr.getColumn(), tuple);
             if (colVal.getType() != defAttr.getColumn().type) {
                returnValues.push_back(rewriter.create<db::AsNullableOp>(op->getLoc(), defAttr.getColumn().type, colVal, mlir::Value()));
             } else {
@@ -271,7 +271,7 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
          }
       }
       if (!getColOp) return false;
-      auto& column = getColOp.getAttr().getColumn();
+      auto& column = *getColOp.getAttr();
       if (mlir::isa<db::NullableType>(column.type)) {
          nullable = true;
       } else {
@@ -444,11 +444,10 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
                           topush.setChildren({asOp});
                           return topush;
                        }
-                       auto& colManager = renamingOp.getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
                        topush->walk([&](tuples::GetColumnOp getColOp) {
-                          auto* col = &getColOp.getAttr().getColumn();
+                          auto* col = getColOp.getAttr();
                           if (colMapping.contains(col)) {
-                             getColOp.setAttrAttr(colManager.createRef(colMapping[col]));
+                             getColOp.setAttr(const_cast<tuples::Column*>(colMapping[col]));
                           }
                        });
                        topush->moveBefore(asOp.getOperation());
@@ -509,11 +508,10 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
                              auto columnRefAttr = mlir::cast<tuples::ColumnRefAttr>(mlir::cast<mlir::ArrayAttr>(columnDefAttr.getFromExisting())[i]);
                              colMapping[&columnDefAttr.getColumn()] = &columnRefAttr.getColumn();
                           }
-                          auto& colManager = unionOp.getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
                           topushnow->walk([&](tuples::GetColumnOp getColOp) {
-                             auto* col = &getColOp.getAttr().getColumn();
+                             auto* col = getColOp.getAttr();
                              if (colMapping.contains(col)) {
-                                getColOp.setAttrAttr(colManager.createRef(colMapping[col]));
+                                getColOp.setAttr(const_cast<tuples::Column*>(colMapping[col]));
                              }
                           });
                           newChildren.push_back(pushdown(topushnow, child, columnCreatorAnalysis));

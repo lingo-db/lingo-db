@@ -125,7 +125,7 @@ class RewriteComplexAggrFuncs : public mlir::RewritePattern {
          {
             mlir::OpBuilder::InsertionGuard guard(rewriter);
             rewriter.setInsertionPointToStart(block);
-            auto x = rewriter.create<tuples::GetColumnOp>(loc, aggrFuncOp.getAttr().getColumn().type, aggrFuncOp.getAttr(), tuple);
+            auto x = rewriter.create<tuples::GetColumnOp>(loc, aggrFuncOp.getAttr().getColumn().type, &aggrFuncOp.getAttr().getColumn(), tuple);
             mlir::Value asDouble = rewriter.create<db::CastOp>(loc, mlir::isa<db::NullableType>(x.getType()) ? (mlir::Type) db::NullableType::get(getContext(), rewriter.getF64Type()) : (mlir::Type) rewriter.getF64Type(), x);
             mlir::Value squared = rewriter.create<db::MulOp>(loc, asDouble, asDouble);
             rewriter.create<tuples::ReturnOp>(loc, mlir::ValueRange{squared, asDouble});
@@ -285,7 +285,7 @@ class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir
                builder.setInsertionPointToStart(&newmap.getPredicate().front());
                std::vector<mlir::Operation*> getOps;
                for (auto [v, c] : aggrMapping) {
-                  auto newVal = builder.create<tuples::GetColumnOp>(loc, v.getType(), c, tuple);
+                  auto newVal = builder.create<tuples::GetColumnOp>(loc, v.getType(), &c.getColumn(), tuple);
                   mapping.map(v, newVal);
                   getOps.push_back(newVal);
                }
@@ -361,7 +361,7 @@ class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir
                builder.setInsertionPointToStart(&newmap.getPredicate().front());
                std::vector<mlir::Operation*> getOps;
                for (auto [v, c] : aggrMapping) {
-                  auto newVal = builder.create<tuples::GetColumnOp>(loc, v.getType(), c, tuple);
+                  auto newVal = builder.create<tuples::GetColumnOp>(loc, v.getType(), &c.getColumn(), tuple);
                   mapping.map(v, newVal);
                   getOps.push_back(newVal);
                }

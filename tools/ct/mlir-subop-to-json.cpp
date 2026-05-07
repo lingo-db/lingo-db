@@ -293,7 +293,8 @@ class ToJson {
             return convertConstant(constantOp.getValue(), constantOp.getType());
          })
          .Case<tuples::GetColumnOp>([&](tuples::GetColumnOp getColumnOp) {
-            return columnToJSON(getColumnOp.getAttr());
+            auto& colManager = getColumnOp.getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+            return columnToJSON(colManager.createRef(getColumnOp.getAttr()));
          })
          .Case<db::AddOp>([&](db::AddOp addOp) {
             return innerExpression({"", " + ", ""}, addOp.getOperands(), resolveBlockArgs);

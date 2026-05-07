@@ -1,4 +1,5 @@
 #include "lingodb/compiler/Dialect/DB/IR/DBOps.h"
+#include "lingodb/compiler/Dialect/RelAlg/ColumnRefHelpers.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "lingodb/compiler/Dialect/RelAlg/Passes.h"
 #include "lingodb/compiler/helper.h"
@@ -15,37 +16,14 @@
 namespace {
 using namespace lingodb::compiler::dialect;
 
-using ReplaceFnT = std::function<tuples::ColumnRefAttr(tuples::ColumnRefAttr)>;
-mlir::Attribute updateAttribute(mlir::Attribute attr, ReplaceFnT replaceFn) {
-   if (auto colRefAttr = mlir::dyn_cast<tuples::ColumnRefAttr>(attr)) {
-      return replaceFn(colRefAttr);
-   }
-   if (auto colDefAttr = mlir::dyn_cast<tuples::ColumnDefAttr>(attr)) {
-      if (colDefAttr.getFromExisting()) {
-         return tuples::ColumnDefAttr::get(attr.getContext(), colDefAttr.getName(), colDefAttr.getColumnPtr(), updateAttribute(colDefAttr.getFromExisting(), replaceFn));
-      } else {
-         return attr;
-      }
-   }
-   if (auto sortSpec = mlir::dyn_cast<relalg::SortSpecificationAttr>(attr)) {
-      return relalg::SortSpecificationAttr::get(attr.getContext(), replaceFn(sortSpec.getAttr()), sortSpec.getSortSpec());
-   }
-   if (auto arrayAttr = mlir::dyn_cast<mlir::ArrayAttr>(attr)) {
-      std::vector<mlir::Attribute> attributes;
-      for (auto elem : arrayAttr) {
-         attributes.push_back(updateAttribute(elem, replaceFn));
-      }
-      return mlir::ArrayAttr::get(attr.getContext(), attributes);
-   }
-   return attr;
-}
-void replaceUsages(mlir::Operation* op, ReplaceFnT replaceFn) {
-   for (auto attr : op->getAttrs()) {
-      op->setAttr(attr.getName(), updateAttribute(attr.getValue(), replaceFn));
+void replaceUsages(mlir::Operation* op, relalg::ColumnRefReplaceFn replaceFn) {
+   relalg::replaceColumnRefsInAttrs(op, replaceFn);
+   if (auto opIface = mlir::dyn_cast<Operator>(op)) {
+      opIface.replaceColumnRefs(replaceFn);
    }
 }
 
-void replaceUsagesAfter(mlir::Operation* op, ReplaceFnT replaceFn) {
+void replaceUsagesAfter(mlir::Operation* op, relalg::ColumnRefReplaceFn replaceFn) {
    mlir::Operation* current = op->getNextNode();
    while (current) {
       current->walk([&replaceFn](mlir::Operation* op) {
@@ -125,7 +103,7 @@ static std::optional<std::pair<const tuples::Column*, const tuples::Column*>> an
       if (!cmpOp.isEqualityPred(false)) return {};
       if (auto leftColref = mlir::dyn_cast_or_null<tuples::GetColumnOp>(cmpOp.getLeft().getDefiningOp())) {
          if (auto rightColref = mlir::dyn_cast_or_null<tuples::GetColumnOp>(cmpOp.getRight().getDefiningOp())) {
-            return std::make_pair<const tuples::Column*, const tuples::Column*>(&leftColref.getAttr().getColumn(), &rightColref.getAttr().getColumn());
+            return std::make_pair<const tuples::Column*, const tuples::Column*>(leftColref.getAttr(), rightColref.getAttr());
          }
       }
    }
@@ -200,8 +178,8 @@ class ExpandTransitiveEqualities : public mlir::PassWrapper<ExpandTransitiveEqua
                mlir::OpBuilder predBuilder(&getContext());
                block->addArgument(tuples::TupleType::get(&getContext()), loc);
                predBuilder.setInsertionPointToStart(block);
-               mlir::Value left = predBuilder.create<tuples::GetColumnOp>(loc, pred.first->type, colManager.createRef(pred.first), block->getArgument(0));
-               mlir::Value right = predBuilder.create<tuples::GetColumnOp>(loc, pred.second->type, colManager.createRef(pred.second), block->getArgument(0));
+               mlir::Value left = predBuilder.create<tuples::GetColumnOp>(loc, pred.first->type, const_cast<tuples::Column*>(pred.first), block->getArgument(0));
+               mlir::Value right = predBuilder.create<tuples::GetColumnOp>(loc, pred.second->type, const_cast<tuples::Column*>(pred.second), block->getArgument(0));
                mlir::Value compared = predBuilder.create<db::CmpOp>(loc, db::DBCmpPredicate::eq, left, right);
                predBuilder.create<tuples::ReturnOp>(builder.getUnknownLoc(), compared);
 

@@ -52,9 +52,8 @@ class EliminateNullableTypes : public mlir::PassWrapper<EliminateNullableTypes, 
          mlir::OpBuilder::InsertionGuard guard(builder);
          builder.setInsertionPointToStart(block);
          for (auto [nullable, nonnullable] : info.directMappings) {
-            auto colRef = colManager.createRef(nonnullable);
             if (required.contains(nullable)) {
-               mlir::Value val = builder.create<tuples::GetColumnOp>(loc, nonnullable->type, colRef, tuple);
+               mlir::Value val = builder.create<tuples::GetColumnOp>(loc, nonnullable->type, nonnullable, tuple);
                toReturn.push_back(builder.create<db::AsNullableOp>(loc, nullable->type, val));
                auto colDef = colManager.createDef(nullable);
                newColDefs.push_back(colDef);
@@ -80,8 +79,8 @@ class EliminateNullableTypes : public mlir::PassWrapper<EliminateNullableTypes, 
          if (auto notOp = mlir::dyn_cast_or_null<db::NotOp>(returnOp.getResults()[0].getDefiningOp())) {
             if (auto isNullOp = mlir::dyn_cast_or_null<db::IsNullOp>(notOp.getVal().getDefiningOp())) {
                if (auto getColOp = mlir::dyn_cast_or_null<tuples::GetColumnOp>(isNullOp.getVal().getDefiningOp())) {
-                  if (!info.directMappings.contains(&getColOp.getAttr().getColumn())) {
-                     return &getColOp.getAttr().getColumn();
+                  if (!info.directMappings.contains(getColOp.getAttr())) {
+                     return getColOp.getAttr();
                   }
                }
             }
@@ -162,8 +161,7 @@ class EliminateNullableTypes : public mlir::PassWrapper<EliminateNullableTypes, 
             {
                mlir::OpBuilder::InsertionGuard guard(builder);
                builder.setInsertionPointToStart(block);
-               auto colRef = colManager.createRef(notNullCheckedCol);
-               mlir::Value val = builder.create<tuples::GetColumnOp>(loc, notNullCheckedCol->type, colRef, tuple);
+               mlir::Value val = builder.create<tuples::GetColumnOp>(loc, notNullCheckedCol->type, notNullCheckedCol, tuple);
                mlir::Value nonNullableVal = builder.create<db::NullableGetVal>(loc, getBaseType(notNullCheckedCol->type), val);
                builder.create<tuples::ReturnOp>(loc, nonNullableVal);
             }

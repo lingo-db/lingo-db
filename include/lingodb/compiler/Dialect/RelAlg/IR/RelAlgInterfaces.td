@@ -141,6 +141,17 @@ InterfaceMethod<
         "lingodb::compiler::dialect::relalg::ColumnSet", "getCreatedColumns",(ins ),"", /*defaultImplementation=*/[{
 return lingodb::compiler::dialect::relalg::ColumnSet();
 }]
+>,
+InterfaceMethod<
+        [{
+          Replace every column ref stored in this op's *properties* via fn.
+          Refs stored in the attribute dictionary are NOT touched here -
+          callers handle attrs separately (e.g. via
+          relalg::replaceColumnRefsInAttrs). Default is empty; ops with
+          column-bearing properties override to mutate them in place.
+        }],
+        "void", "replaceColumnRefs",(ins "lingodb::compiler::dialect::relalg::ColumnRefReplaceFn":$fn),"", /*defaultImplementation=*/[{
+}]
 >
 ];
 }

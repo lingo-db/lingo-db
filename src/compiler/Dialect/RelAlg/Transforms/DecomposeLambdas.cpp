@@ -36,7 +36,8 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
       auto* op = v.getDefiningOp();
       if (!op) return true;
       if (auto refOp = mlir::dyn_cast_or_null<tuples::GetColumnOp>(op)) {
-         auto scope = refOp.getAttr().getName().getRootReference().str();
+         auto& colManager = op->getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+         auto scope = colManager.getName(refOp.getAttr()).first;
          if (str.empty() || str == scope) {
             str = scope;
             return true;

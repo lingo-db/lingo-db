@@ -308,7 +308,7 @@ void SQLMlirTranslator::translateInsertNode(mlir::OpBuilder& builder, std::share
          auto attrRef = context->currentScope->targetInfo.getTargetColumn(i)->createRef(builder, attrManager);
          auto currentType = context->currentScope->targetInfo.getTargetColumn(i)->resultType;
          auto tableType = insertNode->allColumnsAndTypes.at(insertNode->columnsToInsert[i]);
-         mlir::Value expr = mapBuilder.create<tuples::GetColumnOp>(location, attrRef.getColumn().type, attrRef, tuple);
+         mlir::Value expr = mapBuilder.create<tuples::GetColumnOp>(location, attrRef.getColumn().type, &attrRef.getColumn(), tuple);
          if (currentType != tableType) {
             auto attrDef = attrManager.createDef(mapName, std::string("inserted") + std::to_string(i));
             attrDef.getColumn().type = tableType.toMlirType(mlirContext);
@@ -588,7 +588,7 @@ mlir::Value SQLMlirTranslator::translateSubquery(mlir::OpBuilder& builder, std::
 
          assert(subquery->columnReferenceForSubquery);
          auto mlirType = subquery->columnReferenceForSubquery->resultType.toMlirType(mlirContext);
-         mlir::Value colVal = predBuilder.create<tuples::GetColumnOp>(exprLocation, mlirType, subquery->columnReferenceForSubquery->createRef(builder, attrManager), block->getArgument(0));
+         mlir::Value colVal = predBuilder.create<tuples::GetColumnOp>(exprLocation, mlirType, &subquery->columnReferenceForSubquery->createRef(builder, attrManager).getColumn(), block->getArgument(0));
 
          auto ctCol = subquery->columnReference.value()->resultType.castValue(builder, colVal);
          auto ctExpr = subquery->testExpr->resultType->castValue(builder, expr);
@@ -655,7 +655,7 @@ mlir::Value SQLMlirTranslator::translateSubquery(mlir::OpBuilder& builder, std::
 
          assert(subquery->columnReferenceForSubquery);
          auto mlirType = subquery->columnReferenceForSubquery->resultType.toMlirType(mlirContext);
-         mlir::Value colVal = predBuilder.create<tuples::GetColumnOp>(exprLocation, mlirType, subquery->columnReferenceForSubquery->createRef(builder, attrManager), block->getArgument(0));
+         mlir::Value colVal = predBuilder.create<tuples::GetColumnOp>(exprLocation, mlirType, &subquery->columnReferenceForSubquery->createRef(builder, attrManager).getColumn(), block->getArgument(0));
          auto ctCol = subquery->columnReference.value()->resultType.castValue(builder, colVal);
          auto ctExpr = subquery->testExpr->resultType->castValue(builder, expr);
 
@@ -733,7 +733,7 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
          auto attrDef = nameResult->createRef(builder, attrManager);
          return builder.create<tuples::GetColumnOp>(
             exprLocation,
-            type, attrDef, translationContext->getCurrentTuple());
+            type, &attrDef.getColumn(), translationContext->getCurrentTuple());
       }
       case ast::ExpressionClass::BOUND_CONSTANT: {
          auto constExpr = std::static_pointer_cast<ast::BoundConstantExpression>(expression);
@@ -1420,7 +1420,7 @@ mlir::Value SQLMlirTranslator::translateSetOperation(mlir::OpBuilder& builder, s
          auto attrRef = rightResult->createRef(builder, attrManager);
 
          createdColsRight.push_back(attrDef);
-         mlir::Value expr = rightMapBuilder.create<tuples::GetColumnOp>(location, attrRef.getColumn().type, attrRef, rightTuple);
+         mlir::Value expr = rightMapBuilder.create<tuples::GetColumnOp>(location, attrRef.getColumn().type, &attrRef.getColumn(), rightTuple);
          rightMapResults.push_back(commonType.castValueToThisType(rightMapBuilder, expr, rightResult->resultType.isNullable));
 
          rightResult->resultType = commonType;
@@ -1432,7 +1432,7 @@ mlir::Value SQLMlirTranslator::translateSetOperation(mlir::OpBuilder& builder, s
          auto attrRef = leftResult->createRef(builder, attrManager);
 
          createdColsLeft.push_back(attrDef);
-         mlir::Value expr = leftMapBuilder.create<tuples::GetColumnOp>(leftLocation, attrRef.getColumn().type, attrRef, leftTuple);
+         mlir::Value expr = leftMapBuilder.create<tuples::GetColumnOp>(leftLocation, attrRef.getColumn().type, &attrRef.getColumn(), leftTuple);
          leftMapResults.push_back(commonType.castValueToThisType(leftMapBuilder, expr, leftResult->resultType.isNullable));
 
          leftResult->resultType = commonType;
@@ -1609,7 +1609,7 @@ mlir::Value SQLMlirTranslator::translateAggregation(mlir::OpBuilder& builder, st
       for (size_t i = 0; i < toMap.size(); i++) {
          auto colRef = mlir::cast<tuples::ColumnRefAttr>(toMap[i]->createRef(builder, attrManager));
          auto newColDef = mapTo[i]->createDef(builder, attrManager);
-         mlir::Value expr = mapBuilder.create<tuples::GetColumnOp>(location, colRef.getColumn().type, colRef, tuple);
+         mlir::Value expr = mapBuilder.create<tuples::GetColumnOp>(location, colRef.getColumn().type, &colRef.getColumn(), tuple);
          if (colRef.getColumn().type != newColDef.getColumn().type) {
             expr = mapBuilder.create<db::AsNullableOp>(location, newColDef.getColumn().type, expr);
          }
@@ -1696,7 +1696,7 @@ mlir::Value SQLMlirTranslator::translateAggregation(mlir::OpBuilder& builder, st
          std::vector<mlir::Attribute> createdCols;
          auto colRef = columnReferenceColumn->createRef(builder, attrManager);
          mlir::Value shiftVal = mapBuilder.create<mlir::arith::ConstantIntOp>(location, shift, mapBuilder.getI64Type());
-         mlir::Value colVal = mapBuilder.create<tuples::GetColumnOp>(location, colRef.getColumn().type, colRef, tuple);
+         mlir::Value colVal = mapBuilder.create<tuples::GetColumnOp>(location, colRef.getColumn().type, &colRef.getColumn(), tuple);
          mlir::Value shifted = mapBuilder.create<mlir::arith::ShRUIOp>(location, colVal, shiftVal);
          mlir::Value one = mapBuilder.create<mlir::arith::ConstantIntOp>(location, 1, mapBuilder.getI64Type());
          mlir::Value expr = mapBuilder.create<mlir::arith::AndIOp>(location, shifted, one);

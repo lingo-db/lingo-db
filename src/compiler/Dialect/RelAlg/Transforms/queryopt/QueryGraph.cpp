@@ -134,7 +134,7 @@ std::unique_ptr<lingodb::compiler::support::eval::expr> buildEvalExpr(mlir::Valu
       auto type = constantOp.getType();
       return buildConstant(type, parseArg);
    } else if (auto attrRefOp = mlir::dyn_cast_or_null<tuples::GetColumnOp>(op)) {
-      return support::eval::createAttrRef(mapping.at(&attrRefOp.getAttr().getColumn()));
+      return support::eval::createAttrRef(mapping.at(attrRefOp.getAttr()));
    } else if (auto cmpOp = mlir::dyn_cast_or_null<CmpOpInterface>(op)) {
       auto left = cmpOp.getLeft();
       auto right = cmpOp.getRight();

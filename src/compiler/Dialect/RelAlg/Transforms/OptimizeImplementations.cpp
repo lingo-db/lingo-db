@@ -77,7 +77,8 @@ class HashJoinUtils {
                   }
                   if (keyVal) {
                      if (auto getColOp = mlir::dyn_cast_or_null<tuples::GetColumnOp>(keyVal.getDefiningOp())) {
-                        toHash.push_back(getColOp.getAttr());
+                        auto& colManager = getColOp.getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+                        toHash.push_back(colManager.createRef(getColOp.getAttr()));
                      } else {
                         //todo: remove nasty hack:
                         mlir::OpBuilder builder(cmpOp->getContext());
@@ -98,7 +99,7 @@ class HashJoinUtils {
                         {
                            mlir::OpBuilder builder2(cmpOp->getContext());
                            builder2.setInsertionPointToStart(block);
-                           keyVal.replaceAllUsesWith(builder2.create<tuples::GetColumnOp>(builder2.getUnknownLoc(), keyVal.getType(), ref, block->getArgument(0)));
+                           keyVal.replaceAllUsesWith(builder2.create<tuples::GetColumnOp>(builder2.getUnknownLoc(), keyVal.getType(), &ref.getColumn(), block->getArgument(0)));
                         }
                      }
                      nullsEqual.push_back(mlir::IntegerAttr::get(mlir::IntegerType::get(cmpOp.getContext(), 8), !cmpOp.isEqualityPred(false)));
@@ -305,7 +306,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
             auto* defAttr = &relationDefAttr.getColumn();
             auto fromExisting = mlir::cast<tuples::ColumnRefAttr>(mlir::cast<mlir::ArrayAttr>(relationDefAttr.getFromExisting())[exisingOffset]);
             if (excluded.contains(&fromExisting.getColumn())) continue;
-            mlir::Value value = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), fromExisting, tupleArg);
+            mlir::Value value = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), &fromExisting.getColumn(), tupleArg);
             if (fromExisting.getColumn().type != defAttr->type) {
                mlir::Value tmp = rewriter.create<db::AsNullableOp>(loc, defAttr->type, value);
                value = tmp;

@@ -119,7 +119,7 @@ class QueryGraph {
          if (!cmpOp.isEqualityPred(true)) return {};
          if (auto leftColref = mlir::dyn_cast_or_null<lingodb::compiler::dialect::tuples::GetColumnOp>(cmpOp.getLeft().getDefiningOp())) {
             if (auto rightColref = mlir::dyn_cast_or_null<lingodb::compiler::dialect::tuples::GetColumnOp>(cmpOp.getRight().getDefiningOp())) {
-               return std::make_pair<const lingodb::compiler::dialect::tuples::Column*, const lingodb::compiler::dialect::tuples::Column*>(&leftColref.getAttr().getColumn(), &rightColref.getAttr().getColumn());
+               return std::make_pair<const lingodb::compiler::dialect::tuples::Column*, const lingodb::compiler::dialect::tuples::Column*>(leftColref.getAttr(), rightColref.getAttr());
             }
          }
       }

@@ -245,7 +245,8 @@ class ToJson {
             return convertConstant(constantOp.getValue(), constantOp.getType());
          })
          .Case<tuples::GetColumnOp>([&](tuples::GetColumnOp getColumnOp) {
-            return columnToJSON(getColumnOp.getAttr());
+            auto& colManager = getColumnOp.getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+            return columnToJSON(colManager.createRef(getColumnOp.getAttr()));
          })
          .Case<db::AddOp>([&](db::AddOp addOp) {
             return innerExpression({"", " + ", ""}, addOp.getOperands());
@@ -626,10 +627,11 @@ class ToJson {
             convertJoin(result, singleJoinOp, singleJoinOp.getPredicateBlock(), "single");
             return result;
          })
-         .Case<relalg::MarkJoinOp>([&](relalg::MarkJoinOp singleJoinOp) {
-            convertJoin(result, singleJoinOp, singleJoinOp.getPredicateBlock(), "leftmark"); //todo: maybe we need to generate both variants
+         .Case<relalg::MarkJoinOp>([&](relalg::MarkJoinOp markJoinOp) {
+            convertJoin(result, markJoinOp, markJoinOp.getPredicateBlock(), "leftmark"); //todo: maybe we need to generate both variants
             result["operator"] = "markJoin";
-            result["markColumn"] = columnToJSON(mlir::cast<tuples::ColumnDefAttr>(singleJoinOp.getMarkattr()));
+            auto& colManager = markJoinOp.getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+            result["markColumn"] = columnToJSON(colManager.createDef(markJoinOp.getMarkattr()));
             return result;
          })
          .Case<relalg::MapOp>([&](relalg::MapOp mapOp) {

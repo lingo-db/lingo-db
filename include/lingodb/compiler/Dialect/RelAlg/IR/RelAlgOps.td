@@ -380,7 +380,7 @@ def CollectionJoinOp : RelAlg_JoinOp<"collectionjoin"> {
 def MarkJoinOp : RelAlg_JoinOp<"markjoin"> {
     let summary = "mark join operation";
 
-    let arguments = (ins ColumnDefAttr:$markattr,TupleStream:$left,TupleStream:$right);
+    let arguments = (ins Property<"::lingodb::compiler::dialect::tuples::Column*">:$markattr,TupleStream:$left,TupleStream:$right);
     let assemblyFormat = [{ custom<CustDef>($markattr) $left `,` $right custom<CustRegion>($predicate)  attr-dict }];
 
     let extraClassDeclaration = [{

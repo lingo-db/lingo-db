@@ -3,6 +3,7 @@
 
 #include "llvm/ADT/SmallPtrSet.h"
 
+#include "lingodb/compiler/Dialect/RelAlg/ColumnRefHelpers.h"
 #include "lingodb/compiler/Dialect/RelAlg/ColumnSet.h"
 #include "lingodb/compiler/Dialect/RelAlg/FunctionalDependencies.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgTypes.h"
