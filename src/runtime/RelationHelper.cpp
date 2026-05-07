@@ -197,10 +197,10 @@ void RelationHelper::copyToFromTableCSV(runtime::VarLen32 tableName, runtime::Va
       throw std::runtime_error("Error opening file" + openResult.status().ToString());
    }
    outfile = openResult.ValueOrDie();
-   auto write_options = arrow::csv::WriteOptions::Defaults();
-   write_options.delimiter = delimiter.str().front();
-   write_options.include_header = header;
-   auto status = arrow::csv::WriteCSV(*table, write_options, outfile.get());
+   auto writeOptions = arrow::csv::WriteOptions::Defaults();
+   writeOptions.delimiter = delimiter.str().front();
+   writeOptions.include_header = header;
+   auto status = arrow::csv::WriteCSV(*table, writeOptions, outfile.get());
    if (!status.ok()) {
       throw std::runtime_error("copy failed");
    }

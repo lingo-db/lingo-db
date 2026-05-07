@@ -38,7 +38,7 @@ void enqueueTask(std::unique_ptr<Task> task);
 size_t getNumWorkers();
 //returns the id of the current worker thread
 size_t currentWorkerId();
-//yields the current task if running in a fiber context (safe to call from any context)
+//yields the current task if running in a fiber context
 void yieldCurrentTask();
 
 SystemContext& getSystemContext();

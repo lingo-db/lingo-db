@@ -10,13 +10,11 @@
 #include <arrow/io/api.h>
 #include <arrow/type.h>
 
-#include <filesystem>
-#include <iostream>
 #include <parquet/arrow/reader.h>
 
+#include <filesystem>
+#if ENABLE_PARQUET_SCANNER
 namespace {
-using lingodb::catalog::Column;
-using lingodb::catalog::CreateTableDef;
 using lingodb::catalog::DateTypeInfo;
 using lingodb::catalog::LogicalTypeId;
 using lingodb::catalog::TimestampTypeInfo;
@@ -83,7 +81,7 @@ Type mapArrowTypeToCatalogType(const std::shared_ptr<arrow::DataType>& type) {
          throw std::runtime_error("Catalog parquet: unsupported arrow type " + type->ToString());
    }
 }
-#if ENABLE_PARQUET_SCANNER
+
 std::vector<std::filesystem::path> findParquetFiles(const std::string& dbDir) {
    std::vector<std::filesystem::path> parquetFiles;
    for (const auto& entry : std::filesystem::directory_iterator(dbDir)) {
@@ -98,8 +96,9 @@ std::vector<std::filesystem::path> findParquetFiles(const std::string& dbDir) {
    std::sort(parquetFiles.begin(), parquetFiles.end());
    return parquetFiles;
 }
-#endif
+
 } // namespace
+#endif
 
 namespace lingodb::catalog {
 Catalog Catalog::deserialize(lingodb::utility::Deserializer& deSerializer) {

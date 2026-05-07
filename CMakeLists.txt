@@ -86,7 +86,6 @@ elseif(ENABLE_PYTHON STREQUAL "WASM")
     include_directories(${PROJECT_SOURCE_DIR}/vendored/cpython-wasm/wasm-micro-runtime/core/iwasm/include)
     add_subdirectory(${PROJECT_SOURCE_DIR}/vendored/cpython-wasm ${CMAKE_CURRENT_BINARY_DIR}/cpython-wasm)
 endif()
-
 if (ENABLE_MIMALLOC)
     add_subdirectory(vendored/mimalloc EXCLUDE_FROM_ALL)
     message(STATUS "MIMALLOC ENABLED")
