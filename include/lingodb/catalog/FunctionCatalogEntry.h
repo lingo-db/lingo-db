@@ -57,11 +57,14 @@ class PythonFunctionCatalogEntry : public FunctionCatalogEntry {
 };
 
 // Tabular UDFs (currently Python-only) — one input table in, one output table
-// out. No `returnType` here; the output schema lives in returnColumns.
+// out. No `returnType` here; the input/output schemas live in inputColumns /
+// returnColumns.
 class TableFunctionCatalogEntry : public CatalogEntry {
    std::string name;
    std::string language;
    std::string code;
+   std::string inputTableName;
+   std::vector<std::pair<std::string, Type>> inputColumns;
    std::vector<Type> argumentTypes; // declared scalar arguments (after the input table)
    std::vector<std::pair<std::string, Type>> returnColumns;
 
@@ -69,15 +72,20 @@ class TableFunctionCatalogEntry : public CatalogEntry {
    static constexpr std::array<CatalogEntryType, 1> entryTypes = {CatalogEntryType::TABLE_FUNCTION_ENTRY};
 
    TableFunctionCatalogEntry(std::string name, std::string language, std::string code,
+                             std::string inputTableName,
+                             std::vector<std::pair<std::string, Type>> inputColumns,
                              std::vector<Type> argumentTypes,
                              std::vector<std::pair<std::string, Type>> returnColumns)
       : CatalogEntry(CatalogEntryType::TABLE_FUNCTION_ENTRY),
         name(std::move(name)), language(std::move(language)), code(std::move(code)),
+        inputTableName(std::move(inputTableName)), inputColumns(std::move(inputColumns)),
         argumentTypes(std::move(argumentTypes)), returnColumns(std::move(returnColumns)) {}
 
    std::string getName() override { return name; }
    [[nodiscard]] const std::string& getLanguage() const { return language; }
    [[nodiscard]] const std::string& getCode() const { return code; }
+   [[nodiscard]] const std::string& getInputTableName() const { return inputTableName; }
+   [[nodiscard]] const std::vector<std::pair<std::string, Type>>& getInputColumns() const { return inputColumns; }
    [[nodiscard]] const std::vector<Type>& getArgumentTypes() const { return argumentTypes; }
    [[nodiscard]] const std::vector<std::pair<std::string, Type>>& getReturnColumns() const { return returnColumns; }
 
