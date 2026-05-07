@@ -4,8 +4,6 @@
 #include "lingodb/catalog/TableCatalogEntry.h"
 #include "lingodb/compiler/Dialect/Arrow/IR/ArrowOps.h"
 #include "lingodb/compiler/Dialect/Arrow/IR/ArrowTypes.h"
-#include "lingodb/compiler/Dialect/PyInterp/PyInterpOps.h"
-#include "lingodb/compiler/Dialect/PyInterp/PyInterpTypes.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "lingodb/compiler/Dialect/RelAlg/Transforms/queryopt/QueryGraph.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorDialect.h"
@@ -1483,65 +1481,33 @@ mlir::Value SQLMlirTranslator::translateTableFunctionRef(mlir::OpBuilder& builde
       auto arrowTableType = arrow::TableType::get(mlirContext);
       mlir::Value arrowTableIn = builder.create<arrow::TableFromLocalTableOp>(loc, arrowTableType, localTableIn);
 
-      // 5c) Resolve the python function (cached module + getattr).
-      auto pyObjType = py_interp::PyObjectType::get(mlirContext);
-      mlir::Value moduleVal = builder.create<py_interp::CreateModule>(
-         loc, pyObjType,
-         builder.getStringAttr("udf_" + tableFunctionRef->functionName),
-         builder.getStringAttr(tableFunctionEntry->getCode()));
-      mlir::Value functionVal = builder.create<py_interp::GetAttr>(
-         loc, pyObjType, moduleVal, builder.getStringAttr(tableFunctionRef->functionName));
-
-      // 5d) Cast inputs to PyObjects.
-      std::vector<mlir::Value> pyArgs;
-      pyArgs.push_back(builder.create<py_interp::CastToPyObject>(loc, pyObjType, arrowTableIn, "pyarrow.Table"));
-      auto pythonScalarType = [](catalog::Type t) -> std::string {
-         using namespace lingodb::catalog;
-         switch (t.getTypeId()) {
-            case LogicalTypeId::BOOLEAN: return "builtins.bool";
-            case LogicalTypeId::INT: return "builtins.int";
-            case LogicalTypeId::FLOAT: return "builtins.float";
-            case LogicalTypeId::DOUBLE: return "builtins.float";
-            case LogicalTypeId::STRING: return "builtins.str";
-            case LogicalTypeId::DATE: return "datetime.date";
-            default: throw std::runtime_error("Unsupported scalar type for tabular Python UDF: " + t.toString());
-         }
-      };
-      for (size_t i = 0; i < tableFunctionRef->scalarArguments.size(); ++i) {
-         auto& boundArg = tableFunctionRef->scalarArguments[i];
+      // 5c) Translate the scalar args in the outer scope, casting each to its
+      //     declared SQL type. The implementer takes them as native values and
+      //     handles language-specific marshalling.
+      std::vector<mlir::Value> nativeScalarArgs;
+      nativeScalarArgs.reserve(tableFunctionRef->scalarArguments.size());
+      for (auto& boundArg : tableFunctionRef->scalarArguments) {
          mlir::Value translatedArg = translateExpression(builder, boundArg, context);
          translatedArg = boundArg->resultType->castValue(builder, translatedArg);
-         auto declared = tableFunctionEntry->getArgumentTypes()[i];
-         pyArgs.push_back(builder.create<py_interp::CastToPyObject>(
-            loc, pyObjType, translatedArg, pythonScalarType(declared)));
+         nativeScalarArgs.push_back(translatedArg);
       }
 
-      // 5e) Call.
-      mlir::Value pyResult = builder.create<py_interp::Call>(
-         loc, pyObjType, functionVal, mlir::ValueRange(pyArgs), builder.getArrayAttr({}));
+      // 5d) Delegate language-specific lowering (arrow.table in → arrow.table out).
+      auto implementer = compiler::frontend::getTableUDFImplementer(tableFunctionEntry);
+      mlir::Value arrowTableOut = implementer->callFunction(
+         moduleOp, builder, loc, arrowTableIn, mlir::ValueRange(nativeScalarArgs), context->catalog);
 
-      // 5f) Cast back to arrow.table.
-      mlir::Value arrowTableOut = builder.create<py_interp::CastFromPyObject>(
-         loc, arrowTableType, pyResult, "pyarrow.Table");
-
-      // 5g) Bridge arrow.table → subop.local_table (with declared output schema).
+      // 5e) Bridge arrow.table → subop.local_table (with declared output schema).
       mlir::Value localTableOut = builder.create<arrow::TableToLocalTableOp>(
          loc, outputLocalTableType, arrowTableOut);
 
-      // 5h) Build the column-def-member mapping for the scan.
+      // 5f) Build the column-def-member mapping for the scan.
       auto scanMappingAttr = subop::ColumnDefMemberMappingAttr::get(mlirContext, scanMapping);
 
-      // 5i) Scan the output local table back into a tuple stream.
+      // 5g) Scan the output local table back into a tuple stream.
       mlir::Value outStream = builder.create<subop::ScanOp>(loc, tupleStreamType, localTableOut, scanMappingAttr);
 
-      // 5j) TODO: emit dec_ref ops for pyResult / pyArgs / functionVal once the
-      //          SubOp execution-step splitter properly orders side-effect-only
-      //          ops after the last use of their operand (currently it can
-      //          place a dec_ref step ahead of a step that still uses the
-      //          value, leading to use-after-free). Skipping for now leaks
-      //          refcounts per query.
-
-      // 5k) Return the scan tuple stream.
+      // 5h) Return the scan tuple stream.
       builder.create<tuples::ReturnOp>(loc, outStream);
    }
 

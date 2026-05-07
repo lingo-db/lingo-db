@@ -8,6 +8,7 @@
 // The standalone-query build defines MLIR_DISABLED and only ships the
 // catalog/runtime/scheduler subset, where the Python UDF path isn't reachable
 // (queries are pre-compiled at build time).
+#include "lingodb/compiler/Dialect/Arrow/IR/ArrowTypes.h"
 #include "lingodb/compiler/Dialect/DB/IR/DBOps.h"
 #include "lingodb/compiler/Dialect/PyInterp/PyInterpOps.h"
 #endif
@@ -224,6 +225,72 @@ class PythonUDFImplementer : public lingodb::catalog::MLIRUDFImplementor {
       return ifOp.getResult(0);
    }
 };
+
+// Tabular Python UDF: take an arrow.table input + already-cast scalar args,
+// resolve the python function (cached module + getattr), call it, and cast
+// the returned PyObject back to an arrow.table. The translator wraps this
+// in the relalg.nested + materialize/scan scaffolding around it.
+class PythonTableUDFImplementer : public lingodb::catalog::MLIRTableUDFImplementor {
+   std::string functionName;
+   std::string code;
+   std::vector<lingodb::catalog::Type> scalarArgumentTypes;
+
+   static std::string getPythonScalarType(lingodb::catalog::Type type) {
+      using namespace lingodb::catalog;
+      switch (type.getTypeId()) {
+         case LogicalTypeId::BOOLEAN: return "builtins.bool";
+         case LogicalTypeId::INT: return "builtins.int";
+         case LogicalTypeId::FLOAT: return "builtins.float";
+         case LogicalTypeId::DOUBLE: return "builtins.float";
+         case LogicalTypeId::STRING: return "builtins.str";
+         case LogicalTypeId::DATE: return "datetime.date";
+         default:
+            throw std::runtime_error("Unsupported scalar type for tabular Python UDF: " + type.toString());
+      }
+   }
+
+   public:
+   PythonTableUDFImplementer(std::string functionName, std::string code, std::vector<lingodb::catalog::Type> scalarArgumentTypes)
+      : functionName(std::move(functionName)), code(std::move(code)), scalarArgumentTypes(std::move(scalarArgumentTypes)) {}
+
+   mlir::Value callFunction(mlir::ModuleOp& moduleOp, mlir::OpBuilder& builder, mlir::Location loc,
+                            mlir::Value inputArrowTable, mlir::ValueRange scalarArgs,
+                            lingodb::catalog::Catalog* catalog) override {
+      namespace py_interp = lingodb::compiler::dialect::py_interp;
+      namespace arrow_dialect = lingodb::compiler::dialect::arrow;
+      auto* mlirContext = builder.getContext();
+      auto pyObjType = py_interp::PyObjectType::get(mlirContext);
+      auto arrowTableType = arrow_dialect::TableType::get(mlirContext);
+
+      // Resolve the python function (cached module + getattr).
+      mlir::Value moduleVal = builder.create<py_interp::CreateModule>(
+         loc, pyObjType,
+         builder.getStringAttr("udf_" + functionName),
+         builder.getStringAttr(code));
+      mlir::Value functionVal = builder.create<py_interp::GetAttr>(
+         loc, pyObjType, moduleVal, builder.getStringAttr(functionName));
+
+      // Cast inputs to PyObjects: input table first, then scalar args.
+      std::vector<mlir::Value> pyArgs;
+      pyArgs.push_back(builder.create<py_interp::CastToPyObject>(loc, pyObjType, inputArrowTable, "pyarrow.Table"));
+      for (auto [scalarArg, declaredType] : llvm::zip(scalarArgs, scalarArgumentTypes)) {
+         pyArgs.push_back(builder.create<py_interp::CastToPyObject>(
+            loc, pyObjType, scalarArg, getPythonScalarType(declaredType)));
+      }
+
+      mlir::Value pyResult = builder.create<py_interp::Call>(
+         loc, pyObjType, functionVal, mlir::ValueRange(pyArgs), builder.getArrayAttr({}));
+
+      mlir::Value arrowTableOut = builder.create<py_interp::CastFromPyObject>(
+         loc, arrowTableType, pyResult, "pyarrow.Table");
+
+      // TODO: emit dec_ref ops for pyResult / pyArgs / functionVal once the
+      // SubOp execution-step splitter properly orders side-effect-only ops
+      // after the last use of their operand. Skipping for now leaks
+      // refcounts per query.
+      return arrowTableOut;
+   }
+};
 #endif // MLIR_DISABLED
 
 } //namespace
@@ -252,6 +319,21 @@ std::shared_ptr<catalog::MLIRUDFImplementor> createPythonUDFImplementer(std::str
    throw std::runtime_error("Python UDFs are not available in standalone-query builds (MLIR_DISABLED)");
 #else
    return std::make_shared<PythonUDFImplementer>(funcName, pyCode, argumentTypes, returnType);
+#endif
+}
+
+std::shared_ptr<catalog::MLIRTableUDFImplementor> getTableUDFImplementer(std::shared_ptr<catalog::TableFunctionCatalogEntry> entry) {
+   const auto& language = entry->getLanguage();
+   if (language == "python") {
+      return createPythonTableUDFImplementer(entry->getName(), entry->getCode(), entry->getArgumentTypes());
+   }
+   throw std::runtime_error("getTableUDFImplementer: unsupported language '" + language + "'");
+}
+std::shared_ptr<catalog::MLIRTableUDFImplementor> createPythonTableUDFImplementer(std::string funcName, std::string pyCode, std::vector<catalog::Type> scalarArgumentTypes) {
+#ifdef MLIR_DISABLED
+   throw std::runtime_error("Tabular Python UDFs are not available in standalone-query builds (MLIR_DISABLED)");
+#else
+   return std::make_shared<PythonTableUDFImplementer>(funcName, pyCode, scalarArgumentTypes);
 #endif
 }
 
