@@ -899,14 +899,20 @@ std::shared_ptr<ast::CreateNode> SQLQueryAnalyzer::analyzeCreateNode(std::shared
       case catalog::CatalogEntry::CatalogEntryType::C_FUNCTION_ENTRY: {
          auto createFunctionInfo = std::static_pointer_cast<ast::CreateFunctionInfo>(createNode->createInfo);
          auto resolverScope = context->createResolverScope();
-         analyzeFunctionCreate(createNode, createFunctionInfo, context, resolverScope);
+         analyzeScalarFunctionCreate(createNode, createFunctionInfo, context, resolverScope);
+         return createNode;
+      }
+      case catalog::CatalogEntry::CatalogEntryType::TABLE_FUNCTION_ENTRY: {
+         auto createTableFunctionInfo = std::static_pointer_cast<ast::CreateTableFunctionInfo>(createNode->createInfo);
+         auto resolverScope = context->createResolverScope();
+         analyzeTableFunctionCreate(createNode, createTableFunctionInfo, context, resolverScope);
          return createNode;
       }
       default: error("Create info not supported", createNode->loc);
    }
 }
 
-std::shared_ptr<ast::CreateNode> SQLQueryAnalyzer::analyzeFunctionCreate(std::shared_ptr<ast::CreateNode> createNode, std::shared_ptr<ast::CreateFunctionInfo> createFunctionInfo, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope) {
+std::shared_ptr<ast::CreateNode> SQLQueryAnalyzer::analyzeScalarFunctionCreate(std::shared_ptr<ast::CreateNode> createNode, std::shared_ptr<ast::CreateFunctionInfo> createFunctionInfo, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope) {
    auto logicalTypeToCTypeString = [createNode](ast::LogicalTypeWithMods& type) -> std::string {
       switch (type.logicalTypeId) {
          case catalog::LogicalTypeId::INT: {
@@ -966,34 +972,50 @@ std::shared_ptr<ast::CreateNode> SQLQueryAnalyzer::analyzeFunctionCreate(std::sh
       }
    }
 
-   if (language == "c" || language == "python") {
-      bool isTabular = !createFunctionInfo->returnColumns.empty();
-      if (isTabular && language != "python") {
-         error("RETURNS TABLE(...) is only supported for LANGUAGE python", createNode->loc);
-      }
-      NullableType returnType = isTabular
-         ? NullableType(catalog::Type::boolean(), false) // unused for tabular UDFs
-         : SQLTypeUtils::typemodsToCatalogType(createFunctionInfo->returnType.logicalTypeId, createFunctionInfo->returnType.typeModifiers);
-
-      auto boundCreateFunctionInfo = std::make_shared<ast::BoundCreateFunctionInfo>(createFunctionInfo->functionName, createFunctionInfo->replace, returnType);
-      boundCreateFunctionInfo->language = language;
-      boundCreateFunctionInfo->code = code;
-      for (auto& fArgument : createFunctionInfo->argumentTypes) {
-         boundCreateFunctionInfo->argumentTypes.emplace_back(fArgument.name, SQLTypeUtils::typemodsToCatalogType(fArgument.type.logicalTypeId, fArgument.type.typeModifiers).type);
-      }
-      if (isTabular) {
-         for (auto& [colName, colType] : createFunctionInfo->returnColumns) {
-            boundCreateFunctionInfo->returnColumns.emplace_back(
-               colName,
-               SQLTypeUtils::typemodsToCatalogType(colType.logicalTypeId, colType.typeModifiers).type);
-         }
-      }
-
-      createNode->createInfo = boundCreateFunctionInfo;
-      return createNode;
-   } else {
+   if (language != "c" && language != "python") {
       error("language must be 'c' or 'python'", createNode->loc);
    }
+   NullableType returnType = SQLTypeUtils::typemodsToCatalogType(createFunctionInfo->returnType.logicalTypeId, createFunctionInfo->returnType.typeModifiers);
+
+   auto boundCreateFunctionInfo = std::make_shared<ast::BoundCreateFunctionInfo>(createFunctionInfo->functionName, createFunctionInfo->replace, returnType);
+   boundCreateFunctionInfo->language = language;
+   boundCreateFunctionInfo->code = code;
+   for (auto& fArgument : createFunctionInfo->argumentTypes) {
+      boundCreateFunctionInfo->argumentTypes.emplace_back(fArgument.name, SQLTypeUtils::typemodsToCatalogType(fArgument.type.logicalTypeId, fArgument.type.typeModifiers).type);
+   }
+   createNode->createInfo = boundCreateFunctionInfo;
+   return createNode;
+}
+
+std::shared_ptr<ast::CreateNode> SQLQueryAnalyzer::analyzeTableFunctionCreate(std::shared_ptr<ast::CreateNode> createNode, std::shared_ptr<ast::CreateTableFunctionInfo> createTableFunctionInfo, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope) {
+   std::string language = "unknown";
+   std::string code = "";
+   for (auto [optionName, optionValue] : createTableFunctionInfo->options) {
+      if (optionName == "LANGUAGE") {
+         language = optionValue;
+      } else if (optionName == "AS") {
+         code = optionValue;
+      }
+   }
+   if (language != "python") {
+      error("RETURNS TABLE(...) is only supported for LANGUAGE python", createNode->loc);
+   }
+
+   auto bound = std::make_shared<ast::BoundCreateTableFunctionInfo>(createTableFunctionInfo->functionName, createTableFunctionInfo->replace);
+   bound->language = language;
+   bound->code = code;
+   for (auto& fArgument : createTableFunctionInfo->argumentTypes) {
+      bound->argumentTypes.emplace_back(fArgument.name, SQLTypeUtils::typemodsToCatalogType(fArgument.type.logicalTypeId, fArgument.type.typeModifiers).type);
+   }
+   for (auto& [colName, colType] : createTableFunctionInfo->returnColumns) {
+      bound->returnColumns.emplace_back(
+         colName,
+         SQLTypeUtils::typemodsToCatalogType(colType.logicalTypeId, colType.typeModifiers).type);
+   }
+   bound->options = createTableFunctionInfo->options;
+
+   createNode->createInfo = bound;
+   return createNode;
 }
 
 std::shared_ptr<ast::BoundInsertNode> SQLQueryAnalyzer::analyzeInsertNode(std::shared_ptr<ast::InsertNode> insertNode, std::shared_ptr<SQLContext> context, SQLContext::ResolverScope& resolverScope) {
@@ -1715,14 +1737,11 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableRef(std::share
 }
 
 std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableFunctionRef(std::shared_ptr<ast::TableFunctionRef> tableFunctionRef, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope) {
-   auto entry = catalog->getTypedEntry<catalog::FunctionCatalogEntry>(tableFunctionRef->functionName);
+   auto entry = catalog->getTypedEntry<catalog::TableFunctionCatalogEntry>(tableFunctionRef->functionName);
    if (!entry.has_value()) {
-      error("Unknown function in FROM clause: " + tableFunctionRef->functionName, tableFunctionRef->loc);
+      error("Function '" + tableFunctionRef->functionName + "' in FROM clause is not a tabular UDF", tableFunctionRef->loc);
    }
-   auto pyEntry = std::dynamic_pointer_cast<catalog::PythonFunctionCatalogEntry>(entry.value());
-   if (!pyEntry || !pyEntry->isTabular()) {
-      error("Function '" + tableFunctionRef->functionName + "' is not a tabular Python UDF", tableFunctionRef->loc);
-   }
+   auto tableFunctionEntry = entry.value();
    if (tableFunctionRef->arguments.empty()) {
       error("Tabular UDF call requires at least one argument (the input table)", tableFunctionRef->loc);
    }
@@ -1749,8 +1768,8 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableFunctionRef(st
 
    // Analyze remaining (scalar) arguments in the outer scope. The declared
    // signature is `(table, scalar_arg_1, scalar_arg_2, ...)`, so we expect
-   // pyEntry->getArgumentTypes() to have one entry per scalar arg.
-   const auto& declaredArgTypes = pyEntry->getArgumentTypes();
+   // tableFunctionEntry->getArgumentTypes() to have one entry per scalar arg.
+   const auto& declaredArgTypes = tableFunctionEntry->getArgumentTypes();
    size_t expectedScalarArgs = declaredArgTypes.size();
    size_t providedScalarArgs = tableFunctionRef->arguments.size() - 1;
    if (expectedScalarArgs != providedScalarArgs) {
@@ -1774,8 +1793,8 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableFunctionRef(st
    std::string sqlScopeName = tableFunctionRef->alias.empty() ? tableFunctionRef->functionName : tableFunctionRef->alias;
    auto uniqueScope = context->getUniqueScope(sqlScopeName);
    std::vector<std::shared_ptr<ast::ColumnReference>> columnReferences;
-   columnReferences.reserve(pyEntry->getReturnColumns().size());
-   for (const auto& [colName, colType] : pyEntry->getReturnColumns()) {
+   columnReferences.reserve(tableFunctionEntry->getReturnColumns().size());
+   for (const auto& [colName, colType] : tableFunctionEntry->getReturnColumns()) {
       auto colRef = std::make_shared<ast::ColumnReference>(uniqueScope, NullableType(colType, true), colName);
       colRef->displayName = colName;
       columnReferences.push_back(colRef);
@@ -1793,7 +1812,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableFunctionRef(st
       columnReferences,
       innerScope,
       uniqueScope);
-   bound->udfFunction = entry.value();
+   bound->udfFunction = tableFunctionEntry;
    bound->alias = tableFunctionRef->alias;
    return bound;
 }

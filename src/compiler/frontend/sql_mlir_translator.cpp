@@ -184,14 +184,19 @@ void SQLMlirTranslator::translateCreateNode(mlir::OpBuilder& builder, std::share
       }
       case catalog::CatalogEntry::CatalogEntryType::C_FUNCTION_ENTRY: {
          auto boundCreateFunctionInfo = std::static_pointer_cast<ast::BoundCreateFunctionInfo>(createNode->createInfo);
-         translateCreateFunction(builder, createNode, boundCreateFunctionInfo, context);
+         translateCreateScalarFunction(builder, createNode, boundCreateFunctionInfo, context);
+         break;
+      }
+      case catalog::CatalogEntry::CatalogEntryType::TABLE_FUNCTION_ENTRY: {
+         auto boundCreateTableFunctionInfo = std::static_pointer_cast<ast::BoundCreateTableFunctionInfo>(createNode->createInfo);
+         translateCreateTableFunction(builder, createNode, boundCreateTableFunctionInfo, context);
          break;
       }
       default: translatorError("CreateInfo type not implemented", createNode->loc);
    }
 }
 
-void SQLMlirTranslator::translateCreateFunction(mlir::OpBuilder& builder, std::shared_ptr<ast::CreateNode> createNode, std::shared_ptr<ast::BoundCreateFunctionInfo> boundCreateFunctionInfo, std::shared_ptr<analyzer::SQLContext> context) {
+void SQLMlirTranslator::translateCreateScalarFunction(mlir::OpBuilder& builder, std::shared_ptr<ast::CreateNode> createNode, std::shared_ptr<ast::BoundCreateFunctionInfo> boundCreateFunctionInfo, std::shared_ptr<analyzer::SQLContext> context) {
    auto functionName = boundCreateFunctionInfo->functionName;
    auto code = boundCreateFunctionInfo->code;
    auto language = boundCreateFunctionInfo->language;
@@ -245,13 +250,13 @@ void SQLMlirTranslator::translateCreateFunction(mlir::OpBuilder& builder, std::s
       }
       argumentsStringRepresentation += ")";
       code = returnTypeStringRepresentation + " " + boundCreateFunctionInfo->functionName + argumentsStringRepresentation + " { " + code + "}";
-      lingodb::catalog::CreateFunctionDef createFunctionDef(
+      lingodb::catalog::CreateScalarFunctionDef createFunctionDef(
          functionName,
          boundCreateFunctionInfo->language,
          code,
          returnType.type, std::move(standaloneArgumentTypes));
       auto descriptionValue = createStringValue(builder, utility::serializeToHexString(createFunctionDef));
-      compiler::runtime::RelationHelper::createFunction(builder, builder.getUnknownLoc())(mlir::ValueRange({descriptionValue}));
+      compiler::runtime::RelationHelper::createScalarFunction(builder, builder.getUnknownLoc())(mlir::ValueRange({descriptionValue}));
 
    } else if (language == "python") {
       std::vector<catalog::Type> standaloneArgumentTypes;
@@ -259,17 +264,35 @@ void SQLMlirTranslator::translateCreateFunction(mlir::OpBuilder& builder, std::s
       for (size_t i = 0; i < boundCreateFunctionInfo->argumentTypes.size(); i++) {
          standaloneArgumentTypes.emplace_back(boundCreateFunctionInfo->argumentTypes[i].second);
       }
-      lingodb::catalog::CreateFunctionDef createFunctionDef(
+      lingodb::catalog::CreateScalarFunctionDef createFunctionDef(
          functionName,
          boundCreateFunctionInfo->language,
          code,
-         returnType.type, std::move(standaloneArgumentTypes),
-         boundCreateFunctionInfo->returnColumns);
+         returnType.type, std::move(standaloneArgumentTypes));
       auto descriptionValue = createStringValue(builder, utility::serializeToHexString(createFunctionDef));
-      compiler::runtime::RelationHelper::createFunction(builder, builder.getUnknownLoc())(mlir::ValueRange({descriptionValue}));
+      compiler::runtime::RelationHelper::createScalarFunction(builder, builder.getUnknownLoc())(mlir::ValueRange({descriptionValue}));
    } else {
       translatorError("UDF language not supported " << language, createNode->loc);
    }
+}
+
+void SQLMlirTranslator::translateCreateTableFunction(mlir::OpBuilder& builder, std::shared_ptr<ast::CreateNode> createNode, std::shared_ptr<ast::BoundCreateTableFunctionInfo> boundInfo, std::shared_ptr<analyzer::SQLContext> context) {
+   if (boundInfo->language != "python") {
+      translatorError("Tabular UDF language not supported " << boundInfo->language, createNode->loc);
+   }
+   std::vector<catalog::Type> standaloneArgumentTypes;
+   standaloneArgumentTypes.reserve(boundInfo->argumentTypes.size());
+   for (auto& arg : boundInfo->argumentTypes) {
+      standaloneArgumentTypes.emplace_back(arg.second);
+   }
+   lingodb::catalog::CreateTableFunctionDef def(
+      boundInfo->functionName,
+      boundInfo->language,
+      boundInfo->code,
+      std::move(standaloneArgumentTypes),
+      boundInfo->returnColumns);
+   auto descriptionValue = createStringValue(builder, utility::serializeToHexString(def));
+   compiler::runtime::RelationHelper::createTableFunction(builder, builder.getUnknownLoc())(mlir::ValueRange({descriptionValue}));
 }
 
 void SQLMlirTranslator::translateInsertNode(mlir::OpBuilder& builder, std::shared_ptr<ast::BoundInsertNode> insertNode, std::shared_ptr<analyzer::SQLContext> context) {
@@ -1376,8 +1399,8 @@ mlir::Value SQLMlirTranslator::translateTableFunctionRef(mlir::OpBuilder& builde
    auto loc = getLocationFromBison(tableFunctionRef->loc, mlirContext);
    auto tupleStreamType = tuples::TupleStreamType::get(mlirContext);
 
-   auto pyEntry = std::dynamic_pointer_cast<catalog::PythonFunctionCatalogEntry>(tableFunctionRef->udfFunction);
-   if (!pyEntry || !pyEntry->isTabular()) {
+   auto tableFunctionEntry = tableFunctionRef->udfFunction;
+   if (!tableFunctionEntry) {
       translatorError("Tabular UDF call lost its catalog binding", tableFunctionRef->loc);
    }
 
@@ -1463,7 +1486,7 @@ mlir::Value SQLMlirTranslator::translateTableFunctionRef(mlir::OpBuilder& builde
       mlir::Value moduleVal = builder.create<py_interp::CreateModule>(
          loc, pyObjType,
          builder.getStringAttr("udf_" + tableFunctionRef->functionName),
-         builder.getStringAttr(pyEntry->getCode()));
+         builder.getStringAttr(tableFunctionEntry->getCode()));
       mlir::Value functionVal = builder.create<py_interp::GetAttr>(
          loc, pyObjType, moduleVal, builder.getStringAttr(tableFunctionRef->functionName));
 
@@ -1486,7 +1509,7 @@ mlir::Value SQLMlirTranslator::translateTableFunctionRef(mlir::OpBuilder& builde
          auto& boundArg = tableFunctionRef->scalarArguments[i];
          mlir::Value translatedArg = translateExpression(builder, boundArg, context);
          translatedArg = boundArg->resultType->castValue(builder, translatedArg);
-         auto declared = pyEntry->getArgumentTypes()[i];
+         auto declared = tableFunctionEntry->getArgumentTypes()[i];
          pyArgs.push_back(builder.create<py_interp::CastToPyObject>(
             loc, pyObjType, translatedArg, pythonScalarType(declared)));
       }

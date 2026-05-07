@@ -82,6 +82,7 @@ class FunctionArgument {
    std::shared_ptr<ParsedExpression> defaultValue;
 };
 
+// Scalar `CREATE FUNCTION` (`RETURNS <scalar-type>`).
 class CreateFunctionInfo : public CreateInfo {
    public:
    CreateFunctionInfo(std::string functionName, bool replace)
@@ -93,9 +94,19 @@ class CreateFunctionInfo : public CreateInfo {
    //Parameters with Default values if exists
    std::vector<FunctionArgument> argumentTypes;
    LogicalTypeWithMods returnType;
-   // For tabular UDFs (`RETURNS TABLE(col t, ...)`), the per-column output
-   // schema. When non-empty, this signals a tabular UDF and `returnType` is
-   // unused.
+   std::vector<std::pair<std::string, std::string>> options;
+};
+
+// Tabular `CREATE FUNCTION ... RETURNS TABLE(col t, ...)`.
+class CreateTableFunctionInfo : public CreateInfo {
+   public:
+   CreateTableFunctionInfo(std::string functionName, bool replace)
+      : CreateInfo(catalog::CatalogEntry::CatalogEntryType::TABLE_FUNCTION_ENTRY, std::move(""), std::move(""), false), functionName(functionName), replace(replace) {}
+
+   std::string functionName;
+   bool replace;
+   std::vector<FunctionArgument> argumentTypes;
+   //! Per-column output schema declared in `RETURNS TABLE(...)`.
    std::vector<std::pair<std::string, LogicalTypeWithMods>> returnColumns;
    std::vector<std::pair<std::string, std::string>> options;
 };

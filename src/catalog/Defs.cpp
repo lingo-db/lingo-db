@@ -13,21 +13,34 @@ lingodb::catalog::CreateTableDef lingodb::catalog::CreateTableDef::deserialize(u
    return CreateTableDef{name, columns, primaryKey};
 }
 
-void lingodb::catalog::CreateFunctionDef::serialize(utility::Serializer& serializer) const {
+void lingodb::catalog::CreateScalarFunctionDef::serialize(utility::Serializer& serializer) const {
    serializer.writeProperty(1, name);
    serializer.writeProperty(2, language);
    serializer.writeProperty(3, code);
    serializer.writeProperty(4, returnType);
    serializer.writeProperty(5, argumentTypes);
-   serializer.writeProperty(6, returnColumns);
 }
-lingodb::catalog::CreateFunctionDef lingodb::catalog::CreateFunctionDef::deserialize(utility::Deserializer& deserializer) {
+lingodb::catalog::CreateScalarFunctionDef lingodb::catalog::CreateScalarFunctionDef::deserialize(utility::Deserializer& deserializer) {
    auto name = deserializer.readProperty<std::string>(1);
    auto language = deserializer.readProperty<std::string>(2);
    auto code = deserializer.readProperty<std::string>(3);
    auto returnType = deserializer.readProperty<Type>(4);
    auto argumentTypes = deserializer.readProperty<std::vector<Type>>(5);
-   auto returnColumns = deserializer.readProperty<std::vector<std::pair<std::string, Type>>>(6);
+   return CreateScalarFunctionDef{name, language, code, returnType, argumentTypes};
+}
 
-   return CreateFunctionDef{name, language, code, returnType, argumentTypes, returnColumns};
+void lingodb::catalog::CreateTableFunctionDef::serialize(utility::Serializer& serializer) const {
+   serializer.writeProperty(1, name);
+   serializer.writeProperty(2, language);
+   serializer.writeProperty(3, code);
+   serializer.writeProperty(4, argumentTypes);
+   serializer.writeProperty(5, returnColumns);
+}
+lingodb::catalog::CreateTableFunctionDef lingodb::catalog::CreateTableFunctionDef::deserialize(utility::Deserializer& deserializer) {
+   auto name = deserializer.readProperty<std::string>(1);
+   auto language = deserializer.readProperty<std::string>(2);
+   auto code = deserializer.readProperty<std::string>(3);
+   auto argumentTypes = deserializer.readProperty<std::vector<Type>>(4);
+   auto returnColumns = deserializer.readProperty<std::vector<std::pair<std::string, Type>>>(5);
+   return CreateTableFunctionDef{name, language, code, argumentTypes, returnColumns};
 }
