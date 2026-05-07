@@ -30,11 +30,11 @@ void RelationHelper::createTable(lingodb::runtime::VarLen32 meta) {
    }
    catalog->persist();
 }
-void RelationHelper::createFunction(runtime::VarLen32 meta) {
+void RelationHelper::createScalarFunction(runtime::VarLen32 meta) {
    auto* context = getCurrentExecutionContext();
    auto& session = context->getSession();
    auto catalog = session.getCatalog();
-   auto def = utility::deserializeFromHexString<lingodb::catalog::CreateFunctionDef>(meta.str());
+   auto def = utility::deserializeFromHexString<lingodb::catalog::CreateScalarFunctionDef>(meta.str());
    std::shared_ptr<lingodb::catalog::FunctionCatalogEntry> func;
    if (def.language == "c") {
       func = std::make_shared<lingodb::catalog::CFunctionCatalogEntry>(def.name, def.code, def.returnType, def.argumentTypes);
@@ -48,10 +48,23 @@ void RelationHelper::createFunction(runtime::VarLen32 meta) {
          std::filesystem::remove(catalog->getDbDir() + "/udf/" + def.name + ".so");
       }
    } else if (def.language == "python") {
-      func = std::make_shared<lingodb::catalog::PythonFunctionCatalogEntry>(def.name, def.code, def.returnType, def.argumentTypes, def.returnColumns);
+      func = std::make_shared<lingodb::catalog::PythonFunctionCatalogEntry>(def.name, def.code, def.returnType, def.argumentTypes);
    } else {
       throw std::runtime_error("unsupported function language: " + def.language);
    }
+   catalog->insertEntry(func, true);
+   catalog->persist();
+}
+void RelationHelper::createTableFunction(runtime::VarLen32 meta) {
+   auto* context = getCurrentExecutionContext();
+   auto& session = context->getSession();
+   auto catalog = session.getCatalog();
+   auto def = utility::deserializeFromHexString<lingodb::catalog::CreateTableFunctionDef>(meta.str());
+   if (def.language != "python") {
+      throw std::runtime_error("table functions are currently only supported in language 'python'");
+   }
+   auto func = std::make_shared<lingodb::catalog::TableFunctionCatalogEntry>(
+      def.name, def.language, def.code, def.argumentTypes, def.returnColumns);
    catalog->insertEntry(func, true);
    catalog->persist();
 }

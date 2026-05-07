@@ -19,6 +19,7 @@ class CatalogEntry {
       LINGODB_HASH_INDEX_ENTRY = 2,
       C_FUNCTION_ENTRY = 3,
       PYTHON_FUNCTION_ENTRY = 4,
+      TABLE_FUNCTION_ENTRY = 5,
    };
 
    protected:
@@ -41,7 +42,7 @@ class CatalogEntry {
 };
 
 class Catalog {
-   static constexpr size_t binaryVersion = 3;
+   static constexpr size_t binaryVersion = 4;
    bool shouldPersist;
    std::string dbDir;
 

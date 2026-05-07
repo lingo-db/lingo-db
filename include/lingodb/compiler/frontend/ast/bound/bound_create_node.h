@@ -22,6 +22,7 @@ class BoundColumnElement : public TableElement {
    bool primary;
 };
 
+// Bound form of `CREATE FUNCTION ... RETURNS <scalar>`.
 class BoundCreateFunctionInfo : public CreateInfo {
    public:
    BoundCreateFunctionInfo(std::string functionName, bool replace, NullableType returnType)
@@ -37,7 +38,22 @@ class BoundCreateFunctionInfo : public CreateInfo {
    std::vector<std::pair<std::string, catalog::Type>> argumentTypes;
    std::vector<std::string> argumentNames;
 
-   // For tabular UDFs: per-column output (name, type). Empty == scalar UDF.
+   std::vector<std::pair<std::string, std::string>> options;
+};
+
+// Bound form of `CREATE FUNCTION ... RETURNS TABLE(...)`.
+class BoundCreateTableFunctionInfo : public CreateInfo {
+   public:
+   BoundCreateTableFunctionInfo(std::string functionName, bool replace)
+      : CreateInfo(catalog::CatalogEntry::CatalogEntryType::TABLE_FUNCTION_ENTRY, std::move(""), std::move(""), false), functionName(functionName), replace(replace) {}
+
+   std::string functionName;
+   bool replace;
+
+   std::string language;
+   std::string code;
+   std::vector<std::pair<std::string, catalog::Type>> argumentTypes;
+   //! Per-column output schema declared in `RETURNS TABLE(...)`.
    std::vector<std::pair<std::string, catalog::Type>> returnColumns;
 
    std::vector<std::pair<std::string, std::string>> options;
