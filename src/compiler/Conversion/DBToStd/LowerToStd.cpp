@@ -289,7 +289,11 @@ class AppendArrowLowering : public OpConversionPattern<db::AppendArrowOp> {
          } else {
             rewriter.create<lingodb::compiler::dialect::arrow::AppendVariableSizeBinaryOp>(loc, builder, value, valid);
          }
-      } else {
+      } else if (auto noneType = mlir::dyn_cast_or_null<NoneType>(baseType)) {
+         rewriter.create<lingodb::compiler::dialect::arrow::AppendNullOp>(loc, builder);
+      }
+
+      else {
          return failure();
       }
       rewriter.eraseOp(appendArrowOp);

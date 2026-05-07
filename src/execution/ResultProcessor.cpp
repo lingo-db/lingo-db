@@ -8,6 +8,7 @@
 #include "lingodb/execution/ResultProcessing.h"
 #include "lingodb/runtime/ArrowTable.h"
 #include <functional>
+#include <arrow/array/array_base.h>
 
 namespace {
 unsigned char hexval(unsigned char c) {
@@ -54,7 +55,27 @@ void printTable(const std::shared_ptr<arrow::Table>& table) {
       convertHex.push_back(table->schema()->field(positions.size())->type()->id() == arrow::Type::FIXED_SIZE_BINARY);
       rowSep += std::string(33, '-');
       std::string str;
-      arrow::PrettyPrint(*c.get(), options, &str); //NOLINT (clang-diagnostic-unused-result)
+      // --- Handle NULL values differently ---
+      if (table->schema()->field(positions.size())->type()->id() == arrow::Type::NA) {
+         std::stringstream nullRep;
+         nullRep << "[\n"; // Outer ChunkedArray bracket
+         for (int i = 0; i < c->num_chunks(); ++i) {
+            nullRep << "[\n"; // Inner Array chunk bracket
+            auto chunk = c->chunk(i);
+            for (int64_t j = 0; j < chunk->null_count(); ++j) {
+               nullRep << "null";
+               if (j < chunk->length() - 1) nullRep << ",\n";
+               else nullRep << "\n";
+            }
+            nullRep << "]"; // Close inner Array chunk
+            if (i < c->num_chunks() - 1) nullRep << ",\n";
+            else nullRep << "\n";
+         }
+         nullRep << "]"; // Close outer ChunkedArray
+         str = nullRep.str();
+      } else {
+         arrow::PrettyPrint(*c.get(), options, &str); //NOLINT (clang-diagnostic-unused-result)
+      }
       columnReps.push_back(str);
       positions.push_back(0);
    }

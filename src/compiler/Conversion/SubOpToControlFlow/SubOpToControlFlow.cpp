@@ -1299,6 +1299,8 @@ class CreateTableLowering : public SubOpConversionPattern<subop::GenericCreateOp
          } else {
             return "string";
          }
+      } else if (auto noneType = mlir::dyn_cast_or_null<NoneType>(type)) {
+         return "null";
       }
       assert(false);
       return "";

@@ -473,6 +473,11 @@ select * from studenten s
 24002	Xenokrates	18
 25403	Jonas	12
 
+query
+select null
+----
+1 nulls
+
 #Explicitly expecting a error from the parser or analyzer
 statement frontend-error: No Catalog found with name
 select * from student s

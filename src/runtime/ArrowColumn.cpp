@@ -63,6 +63,8 @@ std::shared_ptr<arrow::DataType> createType(std::string name, uint32_t p1, uint3
       return arrow::decimal128(p1, p2);
    } else if (name == "bool") {
       return arrow::boolean();
+   } else if (name == "null") {
+      return arrow::null();
    }
    throw std::runtime_error("unknown type");
 }
@@ -159,6 +161,11 @@ void ArrowColumnBuilder::addFixedSized(bool isValid, uint8_t* value) {
    } else {
       handleStatus(typedBuilder->Append(value));
    }
+}
+
+void ArrowColumnBuilder::addNull() {
+   next();
+   handleStatus(builder->AppendNull());
 }
 
 void ArrowColumnBuilder::addBinary(bool isValid, lingodb::runtime::VarLen32 string) {
