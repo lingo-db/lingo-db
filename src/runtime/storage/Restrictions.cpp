@@ -83,8 +83,9 @@ class FirstNotNullFilter : public lingodb::runtime::Filter {
          writer += (bool) ((validData[index0 / 8] >> (index0 % 8)) & 1);
       }
       assert((i + offset + arrayView->offset) % 8 == 0 || i == len);
-      size_t len8 = len & ~7;
-      for (; i < len8; i += 8) {
+      // Process whole-byte chunks; stop when fewer than 8 elements remain so the
+      // i+7 reads inside the loop body never run past the unit boundary.
+      for (; i + 8 <= len; i += 8) {
          uint8_t byte = validData[(i + offset + arrayView->offset) / 8];
          *writer = i;
          writer += (bool) (byte & 1);
