@@ -64,7 +64,7 @@ void RelationHelper::createTableFunction(runtime::VarLen32 meta) {
       throw std::runtime_error("table functions are currently only supported in language 'python'");
    }
    auto func = std::make_shared<lingodb::catalog::TableFunctionCatalogEntry>(
-      def.name, def.language, def.code, def.inputTableName, def.inputColumns, def.argumentTypes, def.returnColumns);
+      def.name, def.language, def.code, def.inputTables, def.argumentTypes, def.returnColumns);
    catalog->insertEntry(func, true);
    catalog->persist();
 }

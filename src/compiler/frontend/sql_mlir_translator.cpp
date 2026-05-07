@@ -287,8 +287,7 @@ void SQLMlirTranslator::translateCreateTableFunction(mlir::OpBuilder& builder, s
       boundInfo->functionName,
       boundInfo->language,
       boundInfo->code,
-      boundInfo->inputTableName,
-      boundInfo->inputColumns,
+      boundInfo->inputTables,
       std::move(standaloneArgumentTypes),
       boundInfo->returnColumns);
    auto descriptionValue = createStringValue(builder, utility::serializeToHexString(def));
@@ -1404,27 +1403,41 @@ mlir::Value SQLMlirTranslator::translateTableFunctionRef(mlir::OpBuilder& builde
       translatorError("Tabular UDF call lost its catalog binding", tableFunctionRef->loc);
    }
 
-   // 1) Translate the input table arg subquery → tuple stream (in inner scope).
-   context->pushNewScope(tableFunctionRef->innerScope);
-   auto inputStream = translateTableProducer(builder, tableFunctionRef->tableArgument, context);
-   auto inputTargetColumns = context->currentScope->targetInfo.getTargetColumns();
-   context->popCurrentScope();
-
-   // 2) Pre-build the column-ref attrs and member descriptors for the input.
+   // 1) Translate each input table arg subquery → tuple stream (in its own
+   //    inner scope) and capture per-input column metadata.
+   struct InputBinding {
+      mlir::Value stream;
+      std::vector<mlir::Attribute> columnRefs;
+      std::vector<mlir::Attribute> columnNames;
+      mlir::Type localTableType;
+   };
    auto& memberManager = mlirContext->getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager();
-   std::vector<mlir::Attribute> inputColumnRefs;
-   std::vector<mlir::Attribute> inputColumnNames;
-   llvm::SmallVector<subop::Member> inputMembers;
-   for (auto& col : inputTargetColumns) {
-      inputColumnRefs.push_back(col->createRef(builder, attrManager));
-      auto displayName = col->displayName.empty() ? col->name : col->displayName;
-      inputColumnNames.push_back(builder.getStringAttr(displayName));
-      inputMembers.push_back(memberManager.createMember(displayName, col->resultType.toMlirType(mlirContext)));
+   std::vector<InputBinding> inputBindings;
+   inputBindings.reserve(tableFunctionRef->tableArguments.size());
+   std::vector<mlir::Attribute> allInputColumnRefs;
+   for (size_t i = 0; i < tableFunctionRef->tableArguments.size(); ++i) {
+      context->pushNewScope(tableFunctionRef->innerScopes[i]);
+      auto inputStream = translateTableProducer(builder, tableFunctionRef->tableArguments[i], context);
+      auto inputTargetColumns = context->currentScope->targetInfo.getTargetColumns();
+      context->popCurrentScope();
+
+      InputBinding binding;
+      binding.stream = inputStream;
+      llvm::SmallVector<subop::Member> inputMembers;
+      for (auto& col : inputTargetColumns) {
+         binding.columnRefs.push_back(col->createRef(builder, attrManager));
+         auto displayName = col->displayName.empty() ? col->name : col->displayName;
+         binding.columnNames.push_back(builder.getStringAttr(displayName));
+         inputMembers.push_back(memberManager.createMember(displayName, col->resultType.toMlirType(mlirContext)));
+      }
+      binding.localTableType = subop::LocalTableType::get(
+         mlirContext,
+         subop::StateMembersAttr::get(mlirContext, inputMembers),
+         builder.getArrayAttr(binding.columnNames));
+      // relalg.nested's used_cols is a flat list across all inputs.
+      allInputColumnRefs.insert(allInputColumnRefs.end(), binding.columnRefs.begin(), binding.columnRefs.end());
+      inputBindings.push_back(std::move(binding));
    }
-   auto inputLocalTableType = subop::LocalTableType::get(
-      mlirContext,
-      subop::StateMembersAttr::get(mlirContext, inputMembers),
-      builder.getArrayAttr(inputColumnNames));
 
    // 3) Build the output column defs (used inside the body by the scan op)
    //    + matching refs (used as the nested op's available_cols attr) + member list.
@@ -1450,16 +1463,22 @@ mlir::Value SQLMlirTranslator::translateTableFunctionRef(mlir::OpBuilder& builde
       subop::StateMembersAttr::get(mlirContext, outputMembers),
       builder.getArrayAttr(outputColumnNames));
 
-   // 4) Build the relalg.nested op. used_cols = input refs, available_cols = output refs.
-   //    The body region has one block with a TupleStream argument bound to inputStream.
+   // 4) Build the relalg.nested op. used_cols = flat list of input refs,
+   //    available_cols = output refs. The body region has one block with one
+   //    TupleStream argument per declared input table.
+   std::vector<mlir::Value> inputStreams;
+   inputStreams.reserve(inputBindings.size());
+   for (auto& b : inputBindings) inputStreams.push_back(b.stream);
    auto nestedOp = builder.create<relalg::NestedOp>(
       loc,
       tupleStreamType,
-      mlir::ValueRange{inputStream},
-      builder.getArrayAttr(inputColumnRefs),
+      mlir::ValueRange(inputStreams),
+      builder.getArrayAttr(allInputColumnRefs),
       builder.getArrayAttr(outputColumnRefs));
    auto* bodyBlock = new mlir::Block;
-   bodyBlock->addArgument(tupleStreamType, loc);
+   for (size_t i = 0; i < inputBindings.size(); ++i) {
+      bodyBlock->addArgument(tupleStreamType, loc);
+   }
    nestedOp.getNestedFn().getBlocks().clear();
    nestedOp.getNestedFn().push_back(bodyBlock);
 
@@ -1467,21 +1486,25 @@ mlir::Value SQLMlirTranslator::translateTableFunctionRef(mlir::OpBuilder& builde
    {
       mlir::OpBuilder::InsertionGuard guard(builder);
       builder.setInsertionPointToStart(bodyBlock);
-      mlir::Value innerStream = bodyBlock->getArgument(0);
 
-      // 5a) Materialize input → subop.local_table.
-      mlir::Value localTableIn = builder.create<relalg::MaterializeOp>(
-         loc,
-         inputLocalTableType,
-         innerStream,
-         builder.getArrayAttr(inputColumnRefs),
-         builder.getArrayAttr(inputColumnNames));
-
-      // 5b) Bridge subop.local_table → arrow.table.
+      // 5a) For each input: materialize the inner stream into a subop.local_table
+      //     and bridge it to an arrow.table.
       auto arrowTableType = arrow::TableType::get(mlirContext);
-      mlir::Value arrowTableIn = builder.create<arrow::TableFromLocalTableOp>(loc, arrowTableType, localTableIn);
+      std::vector<mlir::Value> arrowTableIns;
+      arrowTableIns.reserve(inputBindings.size());
+      for (size_t i = 0; i < inputBindings.size(); ++i) {
+         mlir::Value innerStream = bodyBlock->getArgument(i);
+         mlir::Value localTableIn = builder.create<relalg::MaterializeOp>(
+            loc,
+            inputBindings[i].localTableType,
+            innerStream,
+            builder.getArrayAttr(inputBindings[i].columnRefs),
+            builder.getArrayAttr(inputBindings[i].columnNames));
+         arrowTableIns.push_back(
+            builder.create<arrow::TableFromLocalTableOp>(loc, arrowTableType, localTableIn));
+      }
 
-      // 5c) Translate the scalar args in the outer scope, casting each to its
+      // 5b) Translate the scalar args in the outer scope, casting each to its
       //     declared SQL type. The implementer takes them as native values and
       //     handles language-specific marshalling.
       std::vector<mlir::Value> nativeScalarArgs;
@@ -1492,22 +1515,22 @@ mlir::Value SQLMlirTranslator::translateTableFunctionRef(mlir::OpBuilder& builde
          nativeScalarArgs.push_back(translatedArg);
       }
 
-      // 5d) Delegate language-specific lowering (arrow.table in → arrow.table out).
+      // 5c) Delegate language-specific lowering (arrow.tables in → arrow.table out).
       auto implementer = compiler::frontend::getTableUDFImplementer(tableFunctionEntry);
       mlir::Value arrowTableOut = implementer->callFunction(
-         moduleOp, builder, loc, arrowTableIn, mlir::ValueRange(nativeScalarArgs), context->catalog);
+         moduleOp, builder, loc, mlir::ValueRange(arrowTableIns), mlir::ValueRange(nativeScalarArgs), context->catalog);
 
-      // 5e) Bridge arrow.table → subop.local_table (with declared output schema).
+      // 5d) Bridge arrow.table → subop.local_table (with declared output schema).
       mlir::Value localTableOut = builder.create<arrow::TableToLocalTableOp>(
          loc, outputLocalTableType, arrowTableOut);
 
-      // 5f) Build the column-def-member mapping for the scan.
+      // 5e) Build the column-def-member mapping for the scan.
       auto scanMappingAttr = subop::ColumnDefMemberMappingAttr::get(mlirContext, scanMapping);
 
-      // 5g) Scan the output local table back into a tuple stream.
+      // 5f) Scan the output local table back into a tuple stream.
       mlir::Value outStream = builder.create<subop::ScanOp>(loc, tupleStreamType, localTableOut, scanMappingAttr);
 
-      // 5h) Return the scan tuple stream.
+      // 5g) Return the scan tuple stream.
       builder.create<tuples::ReturnOp>(loc, outStream);
    }
 

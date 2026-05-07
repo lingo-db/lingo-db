@@ -1004,11 +1004,15 @@ std::shared_ptr<ast::CreateNode> SQLQueryAnalyzer::analyzeTableFunctionCreate(st
    auto bound = std::make_shared<ast::BoundCreateTableFunctionInfo>(createTableFunctionInfo->functionName, createTableFunctionInfo->replace);
    bound->language = language;
    bound->code = code;
-   bound->inputTableName = createTableFunctionInfo->inputTableName;
-   for (auto& [colName, colType] : createTableFunctionInfo->inputColumns) {
-      bound->inputColumns.emplace_back(
-         colName,
-         SQLTypeUtils::typemodsToCatalogType(colType.logicalTypeId, colType.typeModifiers).type);
+   for (auto& inputDecl : createTableFunctionInfo->inputTables) {
+      catalog::TableFunctionInput resolved;
+      resolved.name = inputDecl.name;
+      for (auto& [colName, colType] : inputDecl.columns) {
+         resolved.columns.emplace_back(
+            colName,
+            SQLTypeUtils::typemodsToCatalogType(colType.logicalTypeId, colType.typeModifiers).type);
+      }
+      bound->inputTables.push_back(std::move(resolved));
    }
    for (auto& fArgument : createTableFunctionInfo->argumentTypes) {
       bound->argumentTypes.emplace_back(fArgument.name, SQLTypeUtils::typemodsToCatalogType(fArgument.type.logicalTypeId, fArgument.type.typeModifiers).type);
@@ -1748,74 +1752,83 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableFunctionRef(st
       error("Function '" + tableFunctionRef->functionName + "' in FROM clause is not a tabular UDF", tableFunctionRef->loc);
    }
    auto tableFunctionEntry = entry.value();
-   if (tableFunctionRef->arguments.empty()) {
-      error("Tabular UDF call requires at least one argument (the input table)", tableFunctionRef->loc);
-   }
-   // First argument must be a parenthesised query producing the table input.
-   auto firstArg = tableFunctionRef->arguments.front();
-   if (firstArg->exprClass != ast::ExpressionClass::SUBQUERY) {
-      error("First argument to a tabular UDF must be a parenthesised query (the input table)", firstArg->loc);
-   }
-   auto subqueryExpr = std::static_pointer_cast<ast::SubqueryExpression>(firstArg);
+   const auto& declaredInputs = tableFunctionEntry->getInputTables();
+   const size_t numInputs = declaredInputs.size();
 
-   // Analyze the table-producing subquery in a nested scope.
-   std::shared_ptr<ast::TableProducer> tableArgument;
-   std::shared_ptr<SQLScope> innerScope;
-   ast::TargetInfo innerTargetInfo;
-   {
-      auto innerResolverScope = context->createResolverScope();
-      auto defineScope = context->createDefineScope();
-      context->pushNewScope();
-      innerScope = context->currentScope;
-      tableArgument = analyzeTableProducer(subqueryExpr->subquery, context, innerResolverScope);
-      innerTargetInfo = innerScope->targetInfo;
-      context->popCurrentScope();
-   }
-
-   // Validate the subquery shape against the declared input-table schema.
-   // Same column count; pair-wise type compatibility (we only allow lossless
-   // implicit casts here — getCommonBaseType throws on incompatibility).
-   const auto& declaredInputColumns = tableFunctionEntry->getInputColumns();
-   const auto& providedInputColumns = innerTargetInfo.getTargetColumns();
-   if (declaredInputColumns.size() != providedInputColumns.size()) {
-      error("Tabular UDF '" + tableFunctionRef->functionName + "' expects " +
-               std::to_string(declaredInputColumns.size()) + " input column(s); subquery produced " +
-               std::to_string(providedInputColumns.size()),
-            firstArg->loc);
-   }
-   for (size_t i = 0; i < declaredInputColumns.size(); ++i) {
-      auto declared = NullableType(declaredInputColumns[i].second, true);
-      auto provided = providedInputColumns[i]->resultType;
-      // Reject any pair that has no common base type — toCommonTypes throws.
-      try {
-         (void) SQLTypeUtils::toCommonTypes(std::vector{declared, provided});
-      } catch (const std::exception& e) {
-         error("Tabular UDF '" + tableFunctionRef->functionName + "' input column " + std::to_string(i + 1) +
-                  " ('" + declaredInputColumns[i].first + "'): declared type " + declared.type.toString() +
-                  " incompatible with subquery type " + provided.type.toString(),
-               firstArg->loc);
-      }
-   }
-
-   // Analyze remaining (scalar) arguments in the outer scope. The declared
-   // signature is `(table, scalar_arg_1, scalar_arg_2, ...)`, so we expect
-   // tableFunctionEntry->getArgumentTypes() to have one entry per scalar arg.
    const auto& declaredArgTypes = tableFunctionEntry->getArgumentTypes();
-   size_t expectedScalarArgs = declaredArgTypes.size();
-   size_t providedScalarArgs = tableFunctionRef->arguments.size() - 1;
-   if (expectedScalarArgs != providedScalarArgs) {
-      error("Tabular UDF '" + tableFunctionRef->functionName + "' expects " + std::to_string(expectedScalarArgs) + " scalar argument(s) plus the input table; got " + std::to_string(providedScalarArgs), tableFunctionRef->loc);
+   size_t expectedTotal = numInputs + declaredArgTypes.size();
+   if (tableFunctionRef->arguments.size() != expectedTotal) {
+      error("Tabular UDF '" + tableFunctionRef->functionName + "' expects " +
+               std::to_string(numInputs) + " input table argument(s) and " +
+               std::to_string(declaredArgTypes.size()) + " scalar argument(s); got " +
+               std::to_string(tableFunctionRef->arguments.size()) + " argument(s) total",
+            tableFunctionRef->loc);
    }
-   std::vector<std::shared_ptr<ast::BoundExpression>> scalarArgs;
-   scalarArgs.reserve(providedScalarArgs);
-   for (size_t i = 1; i < tableFunctionRef->arguments.size(); ++i) {
-      auto bound = analyzeExpression(tableFunctionRef->arguments[i], context, resolverScope);
-      if (!bound->resultType.has_value()) {
-         error("Could not infer type of argument " + std::to_string(i) + " for tabular UDF", tableFunctionRef->arguments[i]->loc);
+
+   // Bind each declared input table from a parenthesised subquery, in its own
+   // nested scope, and validate it against the declared per-column schema.
+   std::vector<std::shared_ptr<ast::TableProducer>> tableArguments;
+   std::vector<std::shared_ptr<SQLScope>> innerScopes;
+   tableArguments.reserve(numInputs);
+   innerScopes.reserve(numInputs);
+   for (size_t i = 0; i < numInputs; ++i) {
+      auto arg = tableFunctionRef->arguments[i];
+      if (arg->exprClass != ast::ExpressionClass::SUBQUERY) {
+         error("Argument " + std::to_string(i + 1) + " of tabular UDF '" + tableFunctionRef->functionName +
+                  "' must be a parenthesised query (the input table for parameter '" + declaredInputs[i].name + "')",
+               arg->loc);
       }
-      // Cast to declared argument type.
-      auto declared = NullableType(declaredArgTypes[i - 1]);
-      bound->resultType = declared;
+      auto subqueryExpr = std::static_pointer_cast<ast::SubqueryExpression>(arg);
+
+      std::shared_ptr<ast::TableProducer> tableArgument;
+      std::shared_ptr<SQLScope> innerScope;
+      ast::TargetInfo innerTargetInfo;
+      {
+         auto innerResolverScope = context->createResolverScope();
+         auto defineScope = context->createDefineScope();
+         context->pushNewScope();
+         innerScope = context->currentScope;
+         tableArgument = analyzeTableProducer(subqueryExpr->subquery, context, innerResolverScope);
+         innerTargetInfo = innerScope->targetInfo;
+         context->popCurrentScope();
+      }
+
+      const auto& declaredCols = declaredInputs[i].columns;
+      const auto& providedCols = innerTargetInfo.getTargetColumns();
+      if (declaredCols.size() != providedCols.size()) {
+         error("Tabular UDF '" + tableFunctionRef->functionName + "' input '" + declaredInputs[i].name +
+                  "' expects " + std::to_string(declaredCols.size()) + " column(s); subquery produced " +
+                  std::to_string(providedCols.size()),
+               arg->loc);
+      }
+      for (size_t c = 0; c < declaredCols.size(); ++c) {
+         auto declared = NullableType(declaredCols[c].second, true);
+         auto provided = providedCols[c]->resultType;
+         try {
+            (void) SQLTypeUtils::toCommonTypes(std::vector{declared, provided});
+         } catch (const std::exception& e) {
+            error("Tabular UDF '" + tableFunctionRef->functionName + "' input '" + declaredInputs[i].name +
+                     "' column " + std::to_string(c + 1) + " ('" + declaredCols[c].first +
+                     "'): declared type " + declared.type.toString() +
+                     " incompatible with subquery type " + provided.type.toString(),
+                  arg->loc);
+         }
+      }
+
+      tableArguments.push_back(tableArgument);
+      innerScopes.push_back(innerScope);
+   }
+
+   // Analyze the trailing scalar arguments in the outer scope.
+   std::vector<std::shared_ptr<ast::BoundExpression>> scalarArgs;
+   scalarArgs.reserve(declaredArgTypes.size());
+   for (size_t i = 0; i < declaredArgTypes.size(); ++i) {
+      auto& argExpr = tableFunctionRef->arguments[numInputs + i];
+      auto bound = analyzeExpression(argExpr, context, resolverScope);
+      if (!bound->resultType.has_value()) {
+         error("Could not infer type of scalar argument " + std::to_string(i + 1) + " for tabular UDF", argExpr->loc);
+      }
+      bound->resultType = NullableType(declaredArgTypes[i]);
       scalarArgs.push_back(bound);
    }
 
@@ -1839,9 +1852,9 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeTableFunctionRef(st
       tableFunctionRef->loc,
       tableFunctionRef->functionName,
       scalarArgs,
-      tableArgument,
+      tableArguments,
       columnReferences,
-      innerScope,
+      innerScopes,
       uniqueScope);
    bound->udfFunction = tableFunctionEntry;
    bound->alias = tableFunctionRef->alias;
