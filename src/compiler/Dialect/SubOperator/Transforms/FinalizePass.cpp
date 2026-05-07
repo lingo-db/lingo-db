@@ -13,9 +13,36 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "llvm/ADT/DenseSet.h"
 #include <queue>
 namespace {
 using namespace lingodb::compiler::dialect;
+
+// True if any tuple-stream consumer chain rooted at `v` reaches a
+// `tuples.return` terminator. Such unions cannot be eliminated by
+// consumer-cloning (you'd need to duplicate the terminator) and are
+// instead handled later by InlineNestedMapPass, which reshapes the
+// chain by inserting a `subop.combine_tuple` before the return.
+static bool consumerChainReachesTuplesReturn(mlir::Value v) {
+   std::queue<mlir::Operation*> queue;
+   llvm::DenseSet<mlir::Operation*> seen;
+   for (auto* user : v.getUsers()) {
+      if (seen.insert(user).second) queue.push(user);
+   }
+   while (!queue.empty()) {
+      auto* op = queue.front();
+      queue.pop();
+      if (mlir::isa<tuples::ReturnOp>(op)) return true;
+      for (auto result : op->getResults()) {
+         if (mlir::isa<tuples::TupleStreamType>(result.getType())) {
+            for (auto* user : result.getUsers()) {
+               if (seen.insert(user).second) queue.push(user);
+            }
+         }
+      }
+   }
+   return false;
+}
 
 class FinalizePass : public mlir::PassWrapper<FinalizePass, mlir::OperationPass<mlir::ModuleOp>> {
    public:
@@ -37,7 +64,17 @@ class FinalizePass : public mlir::PassWrapper<FinalizePass, mlir::OperationPass<
       });
       for (size_t i = 0; i < unionOps.size(); i++) {
          auto currentUnion = unionOps[unionOps.size() - 1 - i];
+         // Leave "end-of-nested_map" unions for InlineNestedMapPass — we cannot
+         // clone consumer chains that terminate in `tuples.return`.
+         if (consumerChainReachesTuplesReturn(currentUnion.getResult())) {
+            continue;
+         }
          std::vector<mlir::Value> operands(currentUnion.getOperands().begin(), currentUnion.getOperands().end());
+         if (operands.empty()) {
+            // Defensive: a 0-operand union has no replacement value. Skip
+            // rather than dereferencing past the end of `operands`.
+            continue;
+         }
          std::sort(operands.begin(), operands.end(), [&](mlir::Value a, mlir::Value b) {
             return a.getDefiningOp() && b.getDefiningOp() && a.getDefiningOp()->getBlock() == b.getDefiningOp()->getBlock() && a.getDefiningOp()->isBeforeInBlock(b.getDefiningOp());
          });

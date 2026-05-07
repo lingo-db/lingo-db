@@ -23,6 +23,45 @@ class InlineNestedMapPass : public mlir::PassWrapper<InlineNestedMapPass, mlir::
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(InlineNestedMapPass)
    virtual llvm::StringRef getArgument() const override { return "subop-nested-map-inline"; }
 
+   // Mirror of FinalizePass::cloneRec — used to fold a "union at the end of
+   // a nested_map body" once we've reshaped its consumer to a SubOperator
+   // (`subop.combine_tuple`) and can therefore safely clone the chain.
+   void cloneRec(mlir::Operation* op, mlir::IRMapping mapping, mlir::Value val, subop::ColumnMapping columnMapping) {
+      mlir::OpBuilder builder(op->getContext());
+      builder.setInsertionPointAfter(mapping.lookup(val).getDefiningOp() ? mapping.lookup(val).getDefiningOp() : op);
+      mlir::cast<subop::SubOperator>(op).cloneSubOp(builder, mapping, columnMapping);
+      for (auto& use : op->getUses()) {
+         cloneRec(use.getOwner(), mapping, use.get(), columnMapping);
+      }
+   }
+
+   // Eliminate a union whose only consumer chain (post-inlining) is a
+   // SubOperator chain — same algorithm FinalizePass uses on inter-pipeline
+   // unions, but applied here because Finalize had to skip this one.
+   void foldEndUnion(subop::UnionOp unionOp) {
+      std::vector<mlir::Value> operands(unionOp.getOperands().begin(), unionOp.getOperands().end());
+      if (operands.empty()) {
+         return;
+      }
+      if (operands.size() == 1) {
+         unionOp->replaceAllUsesWith(mlir::ValueRange{operands[0]});
+         unionOp->erase();
+         return;
+      }
+      std::sort(operands.begin(), operands.end(), [&](mlir::Value a, mlir::Value b) {
+         return a.getDefiningOp() && b.getDefiningOp() && a.getDefiningOp()->getBlock() == b.getDefiningOp()->getBlock() && a.getDefiningOp()->isBeforeInBlock(b.getDefiningOp());
+      });
+      for (size_t i = 0; i + 1 < operands.size(); i++) {
+         mlir::IRMapping mapping;
+         mapping.map(unionOp.getResult(), operands[i]);
+         for (auto* user : unionOp.getResult().getUsers()) {
+            cloneRec(user, mapping, unionOp.getResult(), {});
+         }
+      }
+      unionOp->replaceAllUsesWith(mlir::ValueRange{operands.back()});
+      unionOp->erase();
+   }
+
    void runOnOperation() override {
       std::queue<subop::NestedMapOp> nestedMapOps;
       getOperation()->walk([&](subop::NestedMapOp nestedMapOp) {
@@ -41,8 +80,13 @@ class InlineNestedMapPass : public mlir::PassWrapper<InlineNestedMapPass, mlir::
          }
 
          mlir::Value streamResult = nestedMap.getResult();
+         // Captured pre-mutation: if the body's tuples.return operand was a
+         // `subop.union`, FinalizePass had to leave it alone (it cannot clone
+         // past a terminator). We fold it after the rest of the pass shapes
+         // its consumer into a `subop.combine_tuple`.
+         mlir::Value innerStream = returnOp.getOperand(0);
          auto builder = mlir::OpBuilder(returnOp);
-         mlir::Value replacement = builder.create<subop::CombineTupleOp>(nestedMap.getLoc(), returnOp.getOperand(0), nestedMap.getRegion().front().getArgument(0));
+         mlir::Value replacement = builder.create<subop::CombineTupleOp>(nestedMap.getLoc(), innerStream, nestedMap.getRegion().front().getArgument(0));
          std::vector<mlir::Operation*> opsToMove;
          std::queue<std::tuple<mlir::OpOperand&, mlir::Value, bool, subop::ColumnMapping>> opsToProcess;
          for (auto& use : streamResult.getUses()) {
@@ -97,6 +141,11 @@ class InlineNestedMapPass : public mlir::PassWrapper<InlineNestedMapPass, mlir::
          }
          streamResult.replaceAllUsesWith(replacement);
          returnOp->setOperands({});
+         // The union (if any) is now consumed by `replacement` (a SubOperator).
+         // FinalizePass's algorithm is applicable now.
+         if (auto innerUnion = innerStream.getDefiningOp<subop::UnionOp>()) {
+            foldEndUnion(innerUnion);
+         }
          for (auto unionOp : unions) {
             if (unionOp.getNumOperands() == 1) {
                unionOp->replaceAllUsesWith(unionOp.getOperands());
