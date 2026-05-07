@@ -12,7 +12,7 @@ INSERT INTO words_tab VALUES (1, 'alpha'), (2, 'beta'), (3, 'gamma'), (4, 'delta
 
 # identity (pass-through using pyarrow only)
 statement ok
-CREATE OR REPLACE FUNCTION py_identity()
+CREATE OR REPLACE FUNCTION py_identity(t TABLE(id int, score float8))
 RETURNS TABLE(id int, score float8)
 AS $$
 def py_identity(t):
@@ -35,7 +35,7 @@ SELECT id, score FROM py_identity((SELECT id, score FROM rows)) ORDER BY id;
 
 # pandas roundtrip (numeric columns): to_pandas then back via pyarrow
 statement ok
-CREATE OR REPLACE FUNCTION py_pandas_passthrough()
+CREATE OR REPLACE FUNCTION py_pandas_passthrough(t TABLE(id int, score float8))
 RETURNS TABLE(id int, score float8)
 AS $$
 import pyarrow as pa
@@ -60,7 +60,7 @@ SELECT id, score FROM py_pandas_passthrough((SELECT id, score FROM rows)) ORDER 
 
 # pandas-side compute: square the score column
 statement ok
-CREATE OR REPLACE FUNCTION py_square_score()
+CREATE OR REPLACE FUNCTION py_square_score(t TABLE(id int, score float8))
 RETURNS TABLE(id int, score float8)
 AS $$
 import pyarrow as pa
@@ -86,7 +86,7 @@ SELECT id, score FROM py_square_score((SELECT id, score FROM rows)) ORDER BY id;
 
 # pandas-side filter: keep rows with score > 2.0; row count drops
 statement ok
-CREATE OR REPLACE FUNCTION py_pandas_filter()
+CREATE OR REPLACE FUNCTION py_pandas_filter(t TABLE(id int, score float8))
 RETURNS TABLE(id int, score float8)
 AS $$
 import pyarrow as pa
@@ -114,7 +114,7 @@ SELECT count(*) FROM py_pandas_filter((SELECT id, score FROM rows));
 # round-trip of string columns currently mangles output and is a known issue
 # in the runtime varchar reader, separate from the tabular UDF wiring).
 statement ok
-CREATE OR REPLACE FUNCTION py_str_id()
+CREATE OR REPLACE FUNCTION py_str_id(t TABLE(id int, w varchar))
 RETURNS TABLE(id int, w varchar)
 AS $$
 def py_str_id(t):

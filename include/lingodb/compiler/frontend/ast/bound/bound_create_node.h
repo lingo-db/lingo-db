@@ -52,6 +52,10 @@ class BoundCreateTableFunctionInfo : public CreateInfo {
 
    std::string language;
    std::string code;
+   //! Declared input table: parameter name + per-column (name, type) schema.
+   std::string inputTableName;
+   std::vector<std::pair<std::string, catalog::Type>> inputColumns;
+   //! Scalar arguments after the input table.
    std::vector<std::pair<std::string, catalog::Type>> argumentTypes;
    //! Per-column output schema declared in `RETURNS TABLE(...)`.
    std::vector<std::pair<std::string, catalog::Type>> returnColumns;

@@ -33,14 +33,18 @@ void lingodb::catalog::CreateTableFunctionDef::serialize(utility::Serializer& se
    serializer.writeProperty(1, name);
    serializer.writeProperty(2, language);
    serializer.writeProperty(3, code);
-   serializer.writeProperty(4, argumentTypes);
-   serializer.writeProperty(5, returnColumns);
+   serializer.writeProperty(4, inputTableName);
+   serializer.writeProperty(5, inputColumns);
+   serializer.writeProperty(6, argumentTypes);
+   serializer.writeProperty(7, returnColumns);
 }
 lingodb::catalog::CreateTableFunctionDef lingodb::catalog::CreateTableFunctionDef::deserialize(utility::Deserializer& deserializer) {
    auto name = deserializer.readProperty<std::string>(1);
    auto language = deserializer.readProperty<std::string>(2);
    auto code = deserializer.readProperty<std::string>(3);
-   auto argumentTypes = deserializer.readProperty<std::vector<Type>>(4);
-   auto returnColumns = deserializer.readProperty<std::vector<std::pair<std::string, Type>>>(5);
-   return CreateTableFunctionDef{name, language, code, argumentTypes, returnColumns};
+   auto inputTableName = deserializer.readProperty<std::string>(4);
+   auto inputColumns = deserializer.readProperty<std::vector<std::pair<std::string, Type>>>(5);
+   auto argumentTypes = deserializer.readProperty<std::vector<Type>>(6);
+   auto returnColumns = deserializer.readProperty<std::vector<std::pair<std::string, Type>>>(7);
+   return CreateTableFunctionDef{name, language, code, inputTableName, inputColumns, argumentTypes, returnColumns};
 }

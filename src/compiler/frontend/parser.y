@@ -351,6 +351,7 @@
 %type<std::vector<lingodb::ast::FunctionArgument>> func_args_with_defaults func_args_with_defaults_list
 %type<lingodb::ast::FunctionArgument> func_arg_with_default func_arg
 %type<std::vector<std::pair<std::string, lingodb::ast::LogicalTypeWithMods>>> table_func_column_list
+%type<std::pair<std::string, std::vector<std::pair<std::string, lingodb::ast::LogicalTypeWithMods>>>> tabular_func_input_arg
 
 
 /* Precedence: lowest to highest */
@@ -3575,14 +3576,33 @@ CreateFunctionStmt:
         $$ = mkNode<lingodb::ast::CreateNode>(@$, createFunctionInfo);
 
     }
-    | CREATE opt_or_replace FUNCTION func_name func_args_with_defaults
+    | CREATE opt_or_replace FUNCTION func_name LP tabular_func_input_arg RP
       RETURNS TABLE LP table_func_column_list RP opt_createfunc_opt_list opt_routine_body
     {
         auto createTableFunctionInfo = std::make_shared<lingodb::ast::CreateTableFunctionInfo>($func_name, $opt_or_replace);
-        createTableFunctionInfo->argumentTypes = $func_args_with_defaults;
+        createTableFunctionInfo->inputTableName = $tabular_func_input_arg.first;
+        createTableFunctionInfo->inputColumns = $tabular_func_input_arg.second;
         createTableFunctionInfo->returnColumns = $table_func_column_list;
         createTableFunctionInfo->options = $opt_createfunc_opt_list;
         $$ = mkNode<lingodb::ast::CreateNode>(@$, createTableFunctionInfo);
+    }
+    | CREATE opt_or_replace FUNCTION func_name LP tabular_func_input_arg COMMA func_args_with_defaults_list[scalar_args] RP
+      RETURNS TABLE LP table_func_column_list RP opt_createfunc_opt_list opt_routine_body
+    {
+        auto createTableFunctionInfo = std::make_shared<lingodb::ast::CreateTableFunctionInfo>($func_name, $opt_or_replace);
+        createTableFunctionInfo->inputTableName = $tabular_func_input_arg.first;
+        createTableFunctionInfo->inputColumns = $tabular_func_input_arg.second;
+        createTableFunctionInfo->argumentTypes = $scalar_args;
+        createTableFunctionInfo->returnColumns = $table_func_column_list;
+        createTableFunctionInfo->options = $opt_createfunc_opt_list;
+        $$ = mkNode<lingodb::ast::CreateNode>(@$, createTableFunctionInfo);
+    }
+    ;
+
+tabular_func_input_arg:
+    param_name TABLE LP table_func_column_list RP
+    {
+        $$ = std::make_pair($param_name, $table_func_column_list);
     }
     ;
 
