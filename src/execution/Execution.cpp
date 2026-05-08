@@ -128,10 +128,6 @@ class SubOpLoweringStep : public LoweringStep {
       optSubOpPm.addPass(subop::createNormalizeSubOpPass());
       if (enabledPasses.contains("PullGatherUp"))
          optSubOpPm.addPass(subop::createPullGatherUpPass());
-      // Note: createFinalizePass + createSplitIntoExecutionStepsPass are no
-      // longer invoked here. They're subsumed by createOrganizeExecutionStepsPass
-      // below; the old passes remain registered for debugging diffs
-      // (mlir-db-opt -subop-finalize / -subop-split-into-steps).
       optSubOpPm.addPass(subop::createOrganizeExecutionStepsPass());
       optSubOpPm.addPass(subop::createInlineNestedMapPass());
       if (!moduleOp->hasAttr("subop.sequential")) {

@@ -1,5 +1,6 @@
-// OrganizeExecutionStepsPass — single pass replacing the
-// EnforceOrder + Finalize + SplitIntoExecutionSteps trio.
+// OrganizeExecutionStepsPass — splits an ExecutionGroupOp body into per-
+// pipeline ExecutionStepOps. (Replaces the historical EnforceOrder +
+// Finalize + SplitIntoExecutionSteps trio.)
 //
 // Approach:
 //   Phase 0: reify multi-emit subop.generate into a temp buffer + per-stream
