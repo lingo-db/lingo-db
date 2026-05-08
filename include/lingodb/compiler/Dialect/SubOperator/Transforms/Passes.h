@@ -15,6 +15,7 @@ std::unique_ptr<mlir::Pass> createParallelizePass();
 std::unique_ptr<mlir::Pass> createSpecializeParallelPass();
 std::unique_ptr<mlir::Pass> createSplitIntoExecutionStepsPass();
 std::unique_ptr<mlir::Pass> createSplitIntoNestedExecutionStepsPass();
+std::unique_ptr<mlir::Pass> createOrganizeExecutionStepsPass();
 std::unique_ptr<mlir::Pass> createInlineNestedMapPass();
 std::unique_ptr<mlir::Pass> createFinalizePass();
 std::unique_ptr<mlir::Pass> createPrepareLoweringPass();
