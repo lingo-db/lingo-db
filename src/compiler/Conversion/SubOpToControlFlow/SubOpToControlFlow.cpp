@@ -4561,20 +4561,17 @@ void subop::setCompressionEnabled(bool compressionEnabled) {
    EntryStorageHelper::compressionEnabled = compressionEnabled;
 }
 void subop::createLowerSubOpPipeline(mlir::OpPassManager& pm) {
-   //pm.addPass(subop::createGlobalOptPass());
    pm.addPass(subop::createFoldColumnsPass());
    pm.addPass(subop::createReuseLocalPass());
    pm.addPass(subop::createSpecializeSubOpPass(true));
    pm.addPass(subop::createNormalizeSubOpPass());
    pm.addPass(subop::createPullGatherUpPass());
-   pm.addPass(subop::createParallelizePass());
-   pm.addPass(subop::createEnforceOrderPass());
+   pm.addPass(subop::createOrganizeExecutionStepsPass());
    pm.addPass(subop::createInlineNestedMapPass());
-   pm.addPass(subop::createFinalizePass());
-   pm.addPass(subop::createSplitIntoExecutionStepsPass());
    pm.addNestedPass<mlir::func::FuncOp>(subop::createParallelizePass());
    pm.addPass(subop::createSpecializeParallelPass());
    pm.addPass(subop::createPrepareLoweringPass());
+   pm.addPass(subop::createSplitIntoNestedExecutionStepsPass());
    pm.addPass(subop::createLowerSubOpPass());
    pm.addPass(mlir::createCanonicalizerPass());
    pm.addPass(mlir::createCSEPass());
