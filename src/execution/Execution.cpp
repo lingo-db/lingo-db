@@ -130,13 +130,14 @@ class SubOpLoweringStep : public LoweringStep {
          optSubOpPm.addPass(subop::createPullGatherUpPass());
       optSubOpPm.addPass(subop::createEnforceOrderPass());
       optSubOpPm.addPass(subop::createFinalizePass());
-      optSubOpPm.addPass(subop::createInlineNestedMapPass());
       optSubOpPm.addPass(subop::createSplitIntoExecutionStepsPass());
+      optSubOpPm.addPass(subop::createInlineNestedMapPass());
       if (!moduleOp->hasAttr("subop.sequential")) {
          optSubOpPm.addNestedPass<mlir::func::FuncOp>(subop::createParallelizePass());
          optSubOpPm.addPass(subop::createSpecializeParallelPass());
       }
       optSubOpPm.addPass(subop::createPrepareLoweringPass());
+      optSubOpPm.addPass(subop::createSplitIntoNestedExecutionStepsPass());
       if (mlir::failed(optSubOpPm.run(moduleOp))) {
          error.emit() << "Lowering of Sub-Operators to imperative operations failed";
          return;
