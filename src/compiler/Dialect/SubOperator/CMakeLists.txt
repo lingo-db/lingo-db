@@ -18,6 +18,7 @@ add_mlir_dialect_library(MLIRSubOperator
         Transforms/ParallelizePass.cpp
         Transforms/SpecializeParallelPass.cpp
         Transforms/SplitIntoExecutionSteps.cpp
+        Transforms/SplitIntoNestedExecutionStepsPass.cpp
         Transforms/InlineNestedMapPass.cpp
         Transforms/FinalizePass.cpp
         Transforms/PrepareForLowering.cpp
