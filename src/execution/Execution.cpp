@@ -128,15 +128,6 @@ class SubOpLoweringStep : public LoweringStep {
       optSubOpPm.addPass(subop::createNormalizeSubOpPass());
       if (enabledPasses.contains("PullGatherUp"))
          optSubOpPm.addPass(subop::createPullGatherUpPass());
-      // EnforceOrder runs first to topologically sort every block in the
-      // module, including nested_map / loop bodies. This is needed because
-      // (a) InlineNestedMapPass's end-union fold relies on the body order
-      // to place clones, and (b) SplitIntoNestedExecutionStepsPass below
-      // uses isBeforeInBlock to resolve state-conflict direction inside
-      // those bodies. (At the outer execution_group level, OrganizeExe-
-      // cutionStepsPass below produces its own topological order, so
-      // EnforceOrder's outer-level effect there is redundant but harmless.)
-      optSubOpPm.addPass(subop::createEnforceOrderPass());
       // Note: createFinalizePass + createSplitIntoExecutionStepsPass are no
       // longer invoked here. They're subsumed by createOrganizeExecutionStepsPass
       // below; the old passes remain registered for debugging diffs
