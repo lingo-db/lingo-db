@@ -3,9 +3,6 @@ using namespace lingodb::compiler::dialect;
 
 void subop::registerSubOpTransformations() {
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
-      return subop::createEnforceOrderPass();
-   });
-   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return subop::createNormalizeSubOpPass();
    });
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
@@ -28,12 +25,6 @@ void subop::registerSubOpTransformations() {
    });
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return subop::createInlineNestedMapPass();
-   });
-   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
-      return subop::createFinalizePass();
-   });
-   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
-      return subop::createSplitIntoExecutionStepsPass();
    });
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return subop::createSplitIntoNestedExecutionStepsPass();

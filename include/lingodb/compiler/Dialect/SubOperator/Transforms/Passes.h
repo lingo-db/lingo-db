@@ -5,7 +5,6 @@
 namespace lingodb::compiler::dialect {
 namespace subop {
 std::unique_ptr<mlir::Pass> createFoldColumnsPass();
-std::unique_ptr<mlir::Pass> createEnforceOrderPass();
 std::unique_ptr<mlir::Pass> createNormalizeSubOpPass();
 std::unique_ptr<mlir::Pass> createSpecializeSubOpPass(bool withOptimizations);
 std::unique_ptr<mlir::Pass> createPullGatherUpPass();
@@ -13,11 +12,9 @@ std::unique_ptr<mlir::Pass> createReuseLocalPass();
 //std::unique_ptr<mlir::Pass> createGlobalOptPass();
 std::unique_ptr<mlir::Pass> createParallelizePass();
 std::unique_ptr<mlir::Pass> createSpecializeParallelPass();
-std::unique_ptr<mlir::Pass> createSplitIntoExecutionStepsPass();
 std::unique_ptr<mlir::Pass> createSplitIntoNestedExecutionStepsPass();
 std::unique_ptr<mlir::Pass> createOrganizeExecutionStepsPass();
 std::unique_ptr<mlir::Pass> createInlineNestedMapPass();
-std::unique_ptr<mlir::Pass> createFinalizePass();
 std::unique_ptr<mlir::Pass> createPrepareLoweringPass();
 std::unique_ptr<mlir::Pass> createCommonPiplineEliminationPass();
 void registerSubOpTransformations();

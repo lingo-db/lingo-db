@@ -3,7 +3,6 @@
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/ColumnCreationAnalysis.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/ColumnUsageAnalysis.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/Passes.h"
-#include "lingodb/compiler/Dialect/SubOperator/Transforms/SubOpDependencyAnalysis.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamDialect.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
 #include "lingodb/compiler/helper.h"

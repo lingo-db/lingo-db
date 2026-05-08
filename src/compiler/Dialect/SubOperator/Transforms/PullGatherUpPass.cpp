@@ -1,7 +1,6 @@
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/ColumnUsageAnalysis.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/Passes.h"
-#include "lingodb/compiler/Dialect/SubOperator/Transforms/SubOpDependencyAnalysis.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
 
 #include "mlir/IR/BuiltinOps.h"
