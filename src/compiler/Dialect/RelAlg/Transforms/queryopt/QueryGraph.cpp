@@ -94,8 +94,9 @@ void QueryGraph::print(llvm::raw_ostream& out) {
       out << ", u=";
       printReadable(e.right, out);
       out << ", op=\n";
-      if (e.op) {
-         e.op->print(out);
+      for (auto op : e.ops) {
+         op->print(out);
+         out << ",";
       }
       out << ", selectivity=" << e.selectivity;
 
@@ -396,12 +397,12 @@ void QueryGraph::estimate() {
       }
    }
    for (auto& edge : joins) {
-      edge.selectivity = estimateSelectivity(edge.op, edge.left, edge.right);
+      edge.selectivity = estimateSelectivity(edge.ops, edge.left, edge.right);
    }
    for (auto& edge : selections) {
       if (edge.required.count() == 2) {
          auto left = NodeSet::single(this->numNodes, edge.required.findFirst());
-         edge.selectivity = estimateSelectivity(edge.op, left, edge.required);
+         edge.selectivity = estimateSelectivity({edge.op}, left, edge.required);
       }
    }
 }
@@ -411,15 +412,17 @@ double QueryGraph::calculateSelectivity(SelectionEdge& edge, NodeSet left, NodeS
    if (edge.cachedSel.contains(key)) {
       return edge.cachedSel[key];
    }
-   double selectivity = estimateSelectivity(edge.op, left, right);
+   double selectivity = estimateSelectivity({edge.op}, left, right);
    edge.cachedSel[key] = selectivity;
    return selectivity;
 }
-double QueryGraph::estimateSelectivity(Operator op, NodeSet left, NodeSet right) {
+double QueryGraph::estimateSelectivity(const llvm::SmallVector<Operator>& ops, NodeSet left, NodeSet right) {
    auto availableLeft = getAttributesForNodeSet(left);
    auto availableRight = getAttributesForNodeSet(right);
    std::vector<Predicate> predicates;
-   addPredicates(predicates, op, availableLeft, availableRight);
+   for (auto op : ops) {
+      addPredicates(predicates, op, availableLeft, availableRight);
+   }
    double selectivity = 1.0;
    std::vector<std::pair<double, ColumnSet>> pkeysLeft;
    std::vector<std::pair<double, ColumnSet>> pkeysRight;
