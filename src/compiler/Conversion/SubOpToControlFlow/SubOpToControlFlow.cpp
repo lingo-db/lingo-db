@@ -1343,6 +1343,17 @@ class GetExternalTableLowering : public SubOpConversionPattern<subop::GetExterna
       return mlir::success();
    }
 };
+class SetResultOpLowering : public SubOpConversionPattern<subop::SetResultOp> {
+   public:
+   using SubOpConversionPattern<subop::SetResultOp>::SubOpConversionPattern;
+
+   LogicalResult matchAndRewrite(subop::SetResultOp op, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
+      mlir::Value idVal = rewriter.create<mlir::arith::ConstantIntOp>(op->getLoc(), op.getResultId(), mlir::IntegerType::get(rewriter.getContext(), 32));
+      lingodb::compiler::runtime::ExecutionContext::setResult(rewriter, op->getLoc())({idVal, adaptor.getState()});
+      rewriter.eraseOp(op);
+      return mlir::success();
+   }
+};
 class GenerateLowering : public SubOpConversionPattern<subop::GenerateOp> {
    public:
    using SubOpConversionPattern<subop::GenerateOp>::SubOpConversionPattern;
@@ -4231,6 +4242,7 @@ PatternList getCPUPatternList(TypeConverter& typeConverter, mlir::MLIRContext* c
    //external
    patterns.insertPattern<GetExternalTableLowering>(typeConverter, ctxt);
    patterns.insertPattern<GetExternalHashIndexLowering>(typeConverter, ctxt);
+   patterns.insertPattern<SetResultOpLowering>(typeConverter, ctxt);
    //ResultTable
    patterns.insertPattern<CreateTableLowering>(typeConverter, ctxt);
    patterns.insertPattern<MaterializeTableLowering>(typeConverter, ctxt);
@@ -4524,13 +4536,6 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
       executionGroup.replaceAllUsesWith(results);
       toRemove.push_back(executionGroup);
       return mlir::WalkResult::skip();
-   });
-   getOperation()->walk([&](subop::SetResultOp setResultOp) {
-      mlir::OpBuilder builder(setResultOp);
-      mlir::Value idVal = builder.create<mlir::arith::ConstantIntOp>(setResultOp.getLoc(), setResultOp.getResultId(), mlir::IntegerType::get(builder.getContext(), 32));
-      lingodb::compiler::runtime::ExecutionContext::setResult(builder, setResultOp->getLoc())({idVal, setResultOp.getState()});
-
-      toRemove.push_back(setResultOp);
    });
    for (auto* op : toRemove) {
       op->dropAllReferences();

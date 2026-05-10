@@ -756,17 +756,13 @@ class ToJson {
       moduleOp = moduleOp.clone();
       mlir::func::FuncOp func = mlir::dyn_cast_or_null<mlir::func::FuncOp>(&moduleOp.getRegion().front().front());
       nlohmann::json plan;
-      func->walk([&](mlir::Operation* operation) {
-         if (auto setResultOp = mlir::dyn_cast_or_null<subop::SetResultOp>(operation)) {
-            if (auto relalgQuery = mlir::dyn_cast_or_null<relalg::QueryOp>(setResultOp.getState().getDefiningOp())) {
-               for (auto& op : relalgQuery.getQueryOps().front()) {
-                  if (!mlir::isa<relalg::TrackTuplesOP, relalg::QueryReturnOp>(&op)) {
-                     plan.push_back(convertOperation(&op));
-                  }
-               }
-            }
+      // Dump all relalg ops in the func body (skipping TrackTuplesOP).
+      for (auto& op : func.getBody().front()) {
+         if (op.getDialect() && op.getDialect()->getNamespace() == "relalg" &&
+             !mlir::isa<relalg::TrackTuplesOP>(&op)) {
+            plan.push_back(convertOperation(&op));
          }
-      });
+      }
       return to_string(plan);
    }
 };

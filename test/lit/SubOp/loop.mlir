@@ -7,7 +7,6 @@
 
 module{
     func.func @main(){
-    	%subop_result = subop.execution_group (){
 			%ctri = subop.create_simple_state !subop.simple_state<[ctri:i32]> initial: {
 				 %c0 = db.constant(0) : i32
 				tuples.return %c0 : i32
@@ -41,9 +40,7 @@ module{
 			%s10 = subop.scan %finalCounter : !subop.simple_state<[ctr:i32]> {ctr => @s::@ctr({type=i32})}
 			subop.materialize %s10 {@s::@ctr=>ctr2}, %result_table : !subop.result_table<[ctr2 : i32]>
 			%local_table = subop.create_from ["ctr"] %result_table : !subop.result_table<[ctr2 : i32]> -> !subop.local_table<[ctr2 : i32],["ctr"]>
-			subop.execution_group_return %local_table : !subop.local_table<[ctr2 : i32],["ctr"]>
-        } -> !subop.local_table<[ctr2 : i32],["ctr"]>
-        subop.set_result 0 %subop_result  : !subop.local_table<[ctr2 : i32],["ctr"]>
+                subop.set_result 0 %local_table  : !subop.local_table<[ctr2 : i32],["ctr"]>
         return
     }
 }

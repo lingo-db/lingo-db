@@ -20,7 +20,6 @@
 !c_v_e_r = !subop.continous_entry_ref<!c_v>
 module {
     func.func @main(){
-        %subop_result = subop.execution_group (){
 			%vals = subop.create!subop.buffer<[val : index]>
 			%generated, %streams = subop.generate [@t::@c1({type=index})] {
 				%n = arith.constant 10 : index
@@ -50,8 +49,6 @@ module {
 			%stream4 = subop.gather %stream3 @st::@ref { sum => @st::@sum({type=index})}
 			subop.materialize %stream4 {@scan::@currval => v, @st::@sum => s}, %result_table : !result_table_type
 			%local_table = subop.create_from ["v","s"] %result_table : !result_table_type -> !local_table_type
-        	subop.execution_group_return %local_table : !local_table_type
-        } -> !local_table_type
-        subop.set_result 0 %subop_result  : !local_table_type        return
+                subop.set_result 0 %local_table  : !local_table_type        return
     }
 }
