@@ -13,26 +13,23 @@
 !entry_ref = !subop.entry_ref<!buf>
 
 func.func @union_split() {
-  %r = subop.execution_group () {
-    %dst  = subop.create !subop.buffer<[v : i32]>
-    %src1 = subop.create !subop.buffer<[v : i32]>
-    %src2 = subop.create !subop.buffer<[v : i32]>
+  %dst  = subop.create !subop.buffer<[v : i32]>
+  %src1 = subop.create !subop.buffer<[v : i32]>
+  %src2 = subop.create !subop.buffer<[v : i32]>
 
-    %s1 = subop.scan %src1 : !buf {v => @c1::@v({type = i32})}
-    %s2 = subop.scan %src2 : !buf {v => @c2::@v({type = i32})}
-    // Project both branches' columns into a common name so the union is
-    // type-compatible:
-    %m1 = subop.map %s1 computes : [@u::@v({type = i32})] input : [@c1::@v] (%a: i32){
-      tuples.return %a : i32
-    }
-    %m2 = subop.map %s2 computes : [@u::@v({type = i32})] input : [@c2::@v] (%a: i32){
-      tuples.return %a : i32
-    }
-    %u  = subop.union %m1, %m2
-    subop.materialize %u {@u::@v => v}, %dst : !subop.buffer<[v : i32]>
+  %s1 = subop.scan %src1 : !buf {v => @c1::@v({type = i32})}
+  %s2 = subop.scan %src2 : !buf {v => @c2::@v({type = i32})}
+  // Project both branches' columns into a common name so the union is
+  // type-compatible:
+  %m1 = subop.map %s1 computes : [@u::@v({type = i32})] input : [@c1::@v] (%a: i32){
+    tuples.return %a : i32
+  }
+  %m2 = subop.map %s2 computes : [@u::@v({type = i32})] input : [@c2::@v] (%a: i32){
+    tuples.return %a : i32
+  }
+  %u  = subop.union %m1, %m2
+  subop.materialize %u {@u::@v => v}, %dst : !subop.buffer<[v : i32]>
 
-    subop.execution_group_return %dst : !subop.buffer<[v : i32]>
-  } -> !subop.buffer<[v : i32]>
   return
 }
 

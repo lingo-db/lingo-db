@@ -33,16 +33,16 @@
 
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorDialect.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
-
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/Passes.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamDialect.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
 
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/IRMapping.h"
+
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
-#include "mlir/IR/BuiltinOps.h"
-#include "mlir/IR/IRMapping.h"
 
 #include <queue>
 

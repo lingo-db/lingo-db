@@ -207,7 +207,7 @@ copy test from 't.csv' csv escape '\' delimiter '|' null '';
 --//CHECK:       tuples.return %{{.*}} : i32
 --//CHECK: }
 select x,sum(distinct y) from (values (1,2)) t(x,y) group by x;
---//CHECK: %{{.*}} = relalg.map %1 computes : [@{{.*}}::@{{.*}}({type = i32})] (%arg0: !tuples.tuple){
+--//CHECK: %{{.*}} = relalg.map %{{.*}} computes : [@{{.*}}::@{{.*}}({type = i32})] (%arg0: !tuples.tuple){
 --//CHECK:       %{{.*}} = db.add %{{.*}} : i32, %{{.*}} : i32
 --//CHECK: %{{.*}} = relalg.aggregation %{{.*}} [@{{.*}}{{.*}}::@const{{.*}}] computes : [@{{.*}}::@{{.*}}({type = i32})] (%arg0: !tuples.tuplestream,%arg1: !tuples.tuple){
 --//CHECK:       %{{.*}} = relalg.aggrfn sum @{{.*}}::@{{.*}} %{{.*}} : i32
@@ -327,7 +327,7 @@ select x::float from (values (1)) t(x) group by x::float;
 --//CHECK:  %{{.*}} = db.runtime_call "Concatenate"({{.*}}, {{.*}}) : (!db.string, !db.string) -> !db.string
 --//CHECK:  %{{.*}} = db.runtime_call "ToUpper"({{.*}}) : (!db.string) -> !db.string
 --//CHECK: }
---//CHECK:  %{{.*}} = relalg.aggregation %2 [@{{.*}}::@{{.*}}] computes : [@{{.*}}::@{{.*}}({type = i32})] (%arg0: !tuples.tuplestream,%arg1: !tuples.tuple){
+--//CHECK:  %{{.*}} = relalg.aggregation %{{.*}} [@{{.*}}::@{{.*}}] computes : [@{{.*}}::@{{.*}}({type = i32})] (%arg0: !tuples.tuplestream,%arg1: !tuples.tuple){
 --//CHECK-NOT:  %{{.*}} = db.runtime_call "ToUpper"({{.*}}) : (!db.string) -> !db.string
 --//CHECK-NOT:  %{{.*}} = db.runtime_call "Concatenate"({{.*}}) : (!db.string) -> !db.string
 --//CHECK:      %{{.*}} = relalg.aggrfn min @{{.*}}::@{{.*}} %arg0 : i32
@@ -357,29 +357,29 @@ select UPPER(y || 'extra'), min(y) from (values ('Value1', 1), ('VALUE2', 2), ('
 --//CHECK:      %{{.*}} = arith.andi %{{.*}}, %{{.*}} : i64
 --//CHECK:      tuples.return %{{.*}} : i64
 select x,y, sum(z), grouping(x), grouping(y) from (values (1,2,3)) t(x,y,z) group by rollup(x,y) having  sum(z) > 1 order by x;
---//CHECK: %{{.*}} = db.compare eq {{.*}} : i32, %5 : i32
+--//CHECK: %{{.*}} = db.compare eq {{.*}} : i32, %{{.*}} : i32
 select x from (values (1), (2), (3)) t(x) where x=1;
---//CHECK: %{{.*}} = db.compare lt {{.*}} : i32, %5 : i32
+--//CHECK: %{{.*}} = db.compare lt {{.*}} : i32, %{{.*}} : i32
 select x from (values (1), (2), (3)) t(x) where x<1;
---//CHECK: %{{.*}} = db.compare gt {{.*}} : i32, %5 : i32
+--//CHECK: %{{.*}} = db.compare gt {{.*}} : i32, %{{.*}} : i32
 select x from (values (1), (2), (3)) t(x) where x>1;
---//CHECK: %{{.*}} = db.compare lte {{.*}} : i32, %5 : i32
+--//CHECK: %{{.*}} = db.compare lte {{.*}} : i32, %{{.*}} : i32
 select x from (values (1), (2), (3)) t(x) where x<=1;
---//CHECK: %{{.*}} = db.compare gte {{.*}} : i32, %5 : i32
+--//CHECK: %{{.*}} = db.compare gte {{.*}} : i32, %{{.*}} : i32
 select x from (values (1), (2), (3)) t(x) where x>=1;
---//CHECK: %{{.*}} = db.compare neq {{.*}} : i32, %5 : i32
+--//CHECK: %{{.*}} = db.compare neq {{.*}} : i32, %{{.*}} : i32
 select x from (values (1), (2), (3)) t(x) where x<>1;
 --//CHECK: %{{.*}} = relalg.limit 2 {{.*}}
 select x from (values (1), (2), (3)) t(x) LIMIT 2;
---//CHECK:  %{{.*}} = relalg.materialize %1 [@{{.*}}::@{{.*}}] => ["y"] : !subop.local_table<[const_u_1$0 : i32], ["y"]>
+--//CHECK:  %{{.*}} = relalg.materialize %{{.*}} [@{{.*}}::@{{.*}}] => ["y"] : !subop.local_table<[const_u_1$0 : i32], ["y"]>
 from (values (1,1), (2,2), (3,3)) t(x,y)
 |> select *
 |> DROP x;
---//CHECK:   %{{.*}} = relalg.materialize %1 [@{{.*}}::@const,@{{.*}}::@{{.*}},@{{.*}}::@const] => ["x", "y", "x"] : !subop.local_table<[const$0 : i32, const_u_1$0 : i32, const$1 : i32], ["x", "y", "x"]>
+--//CHECK:   %{{.*}} = relalg.materialize %{{.*}} [@{{.*}}::@const,@{{.*}}::@{{.*}},@{{.*}}::@const] => ["x", "y", "x"] : !subop.local_table<[const$0 : i32, const_u_1$0 : i32, const$1 : i32], ["x", "y", "x"]>
 from (values (1,1), (2,2), (3,3)) t(x,y)
 |> select *
 |> EXTEND x;
---//CHECK:  %{{.*}} = relalg.map %1 computes : [@{{.*}}::@{{.*}}({type = i32})] (%arg0: !tuples.tuple){
+--//CHECK:  %{{.*}} = relalg.map %{{.*}} computes : [@{{.*}}::@{{.*}}({type = i32})] (%arg0: !tuples.tuple){
 --//CHECK:  %{{.*}} = db.add %{{.*}} : i32, %{{.*}} : i32
 from (values (1,1), (2,2), (3,3)) t(x,y)
 |> select *

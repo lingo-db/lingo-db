@@ -12,7 +12,6 @@
 
 module{
     func.func @main(){
-    	%subop_result = subop.execution_group (){
 			%12 = subop.create !subop.result_table<[const0p0 : i32]>
 			%3, %stream1, %stream2, %stream3 = subop.generate[@constrel1::@const0({type = i32})] {
 					%c1 = db.constant(1 : i32) : i32
@@ -40,9 +39,7 @@ module{
 			}
 			subop.materialize %11 {@constrel1::@const0 => const0p0}, %12 : !subop.result_table<[const0p0 : i32]>
 			%local_table = subop.create_from ["const0"] %12 : !subop.result_table<[const0p0 : i32]> -> !subop.local_table<[const0p0 : i32],["const0"]>
-			subop.execution_group_return %local_table : !subop.local_table<[const0p0 : i32],["const0"]>
-        } -> !subop.local_table<[const0p0 : i32],["const0"]>
-        subop.set_result 0 %subop_result  : !subop.local_table<[const0p0 : i32],["const0"]>
+                subop.set_result 0 %local_table  : !subop.local_table<[const0p0 : i32],["const0"]>
     return
 }
 }

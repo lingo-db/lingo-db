@@ -68,55 +68,45 @@ std::optional<mlir::Value> SQLMlirTranslator::translateStart(mlir::OpBuilder& bu
       }
 
    } else {
-      //Root node is a TableProducer
-      mlir::Block* block = new mlir::Block();
-      mlir::Type localTableType;
-      {
-         mlir::OpBuilder::InsertionGuard guard(builder);
-         builder.setInsertionPointToStart(block);
+      //Root node is a TableProducer — emit relalg ops directly into the
+      //surrounding func body. OrganizeExecutionStepsPass later wraps the body
+      //in a single subop.execution_group.
 
-         //Translate the cteNodes
-         for (auto [name, cte] : context->ctes) {
-            auto cteNode = cte.second;
-            context->pushNewScope(std::make_shared<analyzer::SQLScope>(cteNode->subQueryScope));
-            auto tree = translateTableProducer(builder, cteNode->query, context);
-            context->popCurrentScope();
-            context->translatedCtes.insert({name, tree});
-         }
-         context->scopes.clear();
-
-         auto tree = translateTableProducer(builder, tableProducer, context);
-
-         std::vector<mlir::Attribute> attrs;
-         std::vector<mlir::Attribute> names;
-         llvm::SmallVector<subop::Member> members;
-         std::vector<mlir::Attribute> colTypes;
-         auto& memberManager = mlirContext->getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager();
-
-         for (auto& named : context->currentScope->targetInfo.getTargetColumns()) {
-            names.push_back(builder.getStringAttr(named->displayName));
-
-            members.push_back(memberManager.createMember(named->name.empty() ? "unnamed" : named->name, named->resultType.toMlirType(mlirContext)));
-            colTypes.push_back(mlir::TypeAttr::get(named->resultType.toMlirType(mlirContext)));
-            auto attrDef = named->createRef(builder, attrManager);
-            attrs.push_back(attrDef);
-         }
-
-         localTableType = subop::LocalTableType::get(mlirContext, subop::StateMembersAttr::get(mlirContext, members), builder.getArrayAttr(names));
-         mlir::Value result = builder.create<relalg::MaterializeOp>(
-            location,
-            localTableType,
-            tree,
-            builder.getArrayAttr(attrs),
-            builder.getArrayAttr(names));
-
-         // Use the materialized result in the QueryReturnOp instead of the input tree
-         builder.create<relalg::QueryReturnOp>(location, result);
+      //Translate the cteNodes
+      for (auto [name, cte] : context->ctes) {
+         auto cteNode = cte.second;
+         context->pushNewScope(std::make_shared<analyzer::SQLScope>(cteNode->subQueryScope));
+         auto tree = translateTableProducer(builder, cteNode->query, context);
+         context->popCurrentScope();
+         context->translatedCtes.insert({name, tree});
       }
-      relalg::QueryOp queryOp = builder.create<relalg::QueryOp>(location, mlir::TypeRange{localTableType}, mlir::ValueRange{});
-      queryOp.getQueryOps().getBlocks().clear();
-      queryOp.getQueryOps().push_back(block);
-      return queryOp.getResults()[0];
+      context->scopes.clear();
+
+      auto tree = translateTableProducer(builder, tableProducer, context);
+
+      std::vector<mlir::Attribute> attrs;
+      std::vector<mlir::Attribute> names;
+      llvm::SmallVector<subop::Member> members;
+      std::vector<mlir::Attribute> colTypes;
+      auto& memberManager = mlirContext->getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager();
+
+      for (auto& named : context->currentScope->targetInfo.getTargetColumns()) {
+         names.push_back(builder.getStringAttr(named->displayName));
+
+         members.push_back(memberManager.createMember(named->name.empty() ? "unnamed" : named->name, named->resultType.toMlirType(mlirContext)));
+         colTypes.push_back(mlir::TypeAttr::get(named->resultType.toMlirType(mlirContext)));
+         auto attrDef = named->createRef(builder, attrManager);
+         attrs.push_back(attrDef);
+      }
+
+      auto localTableType = subop::LocalTableType::get(mlirContext, subop::StateMembersAttr::get(mlirContext, members), builder.getArrayAttr(names));
+      mlir::Value result = builder.create<relalg::MaterializeOp>(
+         location,
+         localTableType,
+         tree,
+         builder.getArrayAttr(attrs),
+         builder.getArrayAttr(names));
+      return result;
    }
 }
 
@@ -279,82 +269,74 @@ void SQLMlirTranslator::translateCreateFunction(mlir::OpBuilder& builder, std::s
 void SQLMlirTranslator::translateInsertNode(mlir::OpBuilder& builder, std::shared_ptr<ast::BoundInsertNode> insertNode, std::shared_ptr<analyzer::SQLContext> context) {
    auto* mlirContext = builder.getContext();
    auto location = getLocationFromBison(insertNode->loc, mlirContext);
+   //Emit relalg ops directly into the surrounding func body; OrganizeExecutionSteps
+   //later wraps the body in one subop.execution_group.
+   auto tree = translateTableProducer(builder, insertNode->producer, context);
+   auto rel = context->catalog->getTypedEntry<catalog::TableCatalogEntry>(insertNode->tableName).value();
+
+   std::vector<mlir::Value> createdValues;
+   std::unordered_map<std::string, mlir::Value> columnNameToCreatedValue;
+
+   //Build map
    mlir::Block* block = new mlir::Block;
-   mlir::Type localTableType;
-   {
-      mlir::OpBuilder::InsertionGuard guard(builder);
-      builder.setInsertionPointToStart(block);
-      auto tree = translateTableProducer(builder, insertNode->producer, context);
-      auto rel = context->catalog->getTypedEntry<catalog::TableCatalogEntry>(insertNode->tableName).value();
+   mlir::OpBuilder mapBuilder(mlirContext);
+   block->addArgument(tuples::TupleType::get(mlirContext), location);
+   auto tupleScope = translationContext->createTupleScope();
+   mlir::Value tuple = block->getArgument(0);
+   translationContext->setCurrentTuple(tuple);
 
-      std::vector<mlir::Value> createdValues;
-      std::unordered_map<std::string, mlir::Value> columnNameToCreatedValue;
+   mapBuilder.setInsertionPointToStart(block);
 
-      //Build map
-      mlir::Block* block = new mlir::Block;
-      mlir::OpBuilder mapBuilder(mlirContext);
-      block->addArgument(tuples::TupleType::get(mlirContext), location);
-      auto tupleScope = translationContext->createTupleScope();
-      mlir::Value tuple = block->getArgument(0);
-      translationContext->setCurrentTuple(tuple);
+   std::unordered_map<std::string, mlir::Attribute> insertedCols;
 
-      mapBuilder.setInsertionPointToStart(block);
+   std::vector<mlir::Attribute> createdCols;
+   auto mapName = attrManager.getUniqueScope("map");
+   for (size_t i = 0; i < insertNode->columnsToInsert.size(); i++) {
+      auto attrRef = context->currentScope->targetInfo.getTargetColumn(i)->createRef(builder, attrManager);
+      auto currentType = context->currentScope->targetInfo.getTargetColumn(i)->resultType;
+      auto tableType = insertNode->allColumnsAndTypes.at(insertNode->columnsToInsert[i]);
+      mlir::Value expr = mapBuilder.create<tuples::GetColumnOp>(location, attrRef.getColumn().type, attrRef, tuple);
+      if (currentType != tableType) {
+         auto attrDef = attrManager.createDef(mapName, std::string("inserted") + std::to_string(i));
+         attrDef.getColumn().type = tableType.toMlirType(mlirContext);
 
-      std::unordered_map<std::string, mlir::Attribute> insertedCols;
+         createdCols.push_back(attrDef);
+         mlir::Value casted = tableType.castValueToThisType(mapBuilder, expr, context->currentScope->targetInfo.getTargetColumn(i)->resultType.isNullable); // SQLTypeInference::castValueToType(mapBuilder, expr, tableType);
 
-      std::vector<mlir::Attribute> createdCols;
-      auto mapName = attrManager.getUniqueScope("map");
-      for (size_t i = 0; i < insertNode->columnsToInsert.size(); i++) {
-         auto attrRef = context->currentScope->targetInfo.getTargetColumn(i)->createRef(builder, attrManager);
-         auto currentType = context->currentScope->targetInfo.getTargetColumn(i)->resultType;
-         auto tableType = insertNode->allColumnsAndTypes.at(insertNode->columnsToInsert[i]);
-         mlir::Value expr = mapBuilder.create<tuples::GetColumnOp>(location, attrRef.getColumn().type, attrRef, tuple);
-         if (currentType != tableType) {
-            auto attrDef = attrManager.createDef(mapName, std::string("inserted") + std::to_string(i));
-            attrDef.getColumn().type = tableType.toMlirType(mlirContext);
+         createdValues.push_back(casted);
+         columnNameToCreatedValue[insertNode->columnsToInsert[i]] = casted;
+         insertedCols[insertNode->columnsToInsert[i]] = attrManager.createRef(&attrDef.getColumn());
 
-            createdCols.push_back(attrDef);
-            mlir::Value casted = tableType.castValueToThisType(mapBuilder, expr, context->currentScope->targetInfo.getTargetColumn(i)->resultType.isNullable); // SQLTypeInference::castValueToType(mapBuilder, expr, tableType);
-
-            createdValues.push_back(casted);
-            columnNameToCreatedValue[insertNode->columnsToInsert[i]] = casted;
-            insertedCols[insertNode->columnsToInsert[i]] = attrManager.createRef(&attrDef.getColumn());
-
-         } else {
-            columnNameToCreatedValue[insertNode->columnsToInsert[i]] = expr;
-            insertedCols[insertNode->columnsToInsert[i]] = attrRef;
-         }
+      } else {
+         columnNameToCreatedValue[insertNode->columnsToInsert[i]] = expr;
+         insertedCols[insertNode->columnsToInsert[i]] = attrRef;
       }
-
-      auto mapOp = builder.create<relalg::MapOp>(getLocationFromBison(insertNode->producer->loc, mlirContext), tuples::TupleStreamType::get(mlirContext), tree, builder.getArrayAttr(createdCols));
-      mapOp.getPredicate().push_back(block);
-      mapBuilder.create<tuples::ReturnOp>(getLocationFromBison(insertNode->producer->loc, mlirContext), createdValues);
-
-      llvm::SmallVector<subop::Member> members;
-      std::vector<mlir::Attribute> orderedColNamesAttrs;
-      std::vector<mlir::Attribute> orderedColAttrs;
-      std::vector<mlir::Attribute> colTypes;
-      auto& memberManager = mlirContext->getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager();
-
-      for (auto x : rel->getColumnNames()) {
-         mlir::Type type = mlir::cast<tuples::ColumnRefAttr>(insertedCols.at(x)).getColumn().type;
-         members.push_back(memberManager.createMember(x, type));
-         orderedColNamesAttrs.push_back(builder.getStringAttr(x));
-         orderedColAttrs.push_back(insertedCols.at(x));
-         colTypes.push_back(mlir::TypeAttr::get(type));
-      }
-
-      localTableType = subop::LocalTableType::get(mlirContext, subop::StateMembersAttr::get(mlirContext, members), builder.getArrayAttr(orderedColNamesAttrs));
-      mlir::Value newRows = builder.create<relalg::MaterializeOp>(location, localTableType, mapOp.getResult(), builder.getArrayAttr(orderedColAttrs), builder.getArrayAttr(orderedColNamesAttrs));
-      builder.create<relalg::QueryReturnOp>(location, newRows);
    }
 
-   relalg::QueryOp queryOp = builder.create<relalg::QueryOp>(location, mlir::TypeRange{localTableType}, mlir::ValueRange{});
-   queryOp.getQueryOps().getBlocks().clear();
-   queryOp.getQueryOps().push_back(block);
+   auto mapOp = builder.create<relalg::MapOp>(getLocationFromBison(insertNode->producer->loc, mlirContext), tuples::TupleStreamType::get(mlirContext), tree, builder.getArrayAttr(createdCols));
+   mapOp.getPredicate().push_back(block);
+   mapBuilder.create<tuples::ReturnOp>(getLocationFromBison(insertNode->producer->loc, mlirContext), createdValues);
+
+   llvm::SmallVector<subop::Member> members;
+   std::vector<mlir::Attribute> orderedColNamesAttrs;
+   std::vector<mlir::Attribute> orderedColAttrs;
+   std::vector<mlir::Attribute> colTypes;
+   auto& memberManager = mlirContext->getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager();
+
+   for (auto x : rel->getColumnNames()) {
+      mlir::Type type = mlir::cast<tuples::ColumnRefAttr>(insertedCols.at(x)).getColumn().type;
+      members.push_back(memberManager.createMember(x, type));
+      orderedColNamesAttrs.push_back(builder.getStringAttr(x));
+      orderedColAttrs.push_back(insertedCols.at(x));
+      colTypes.push_back(mlir::TypeAttr::get(type));
+   }
+
+   auto localTableType = subop::LocalTableType::get(mlirContext, subop::StateMembersAttr::get(mlirContext, members), builder.getArrayAttr(orderedColNamesAttrs));
+   mlir::Value newRows = builder.create<relalg::MaterializeOp>(location, localTableType, mapOp.getResult(), builder.getArrayAttr(orderedColAttrs), builder.getArrayAttr(orderedColNamesAttrs));
+
    auto tableNameValue = createStringValue(builder, insertNode->tableName);
    auto resultIdValue = builder.create<mlir::arith::ConstantIntOp>(location, 0, builder.getI32Type());
-   builder.create<subop::SetResultOp>(location, 0, queryOp.getResults()[0]);
+   builder.create<subop::SetResultOp>(location, 0, newRows);
 
    compiler::runtime::RelationHelper::appendTableFromResult(builder, location)(mlir::ValueRange{tableNameValue, resultIdValue});
    compiler::runtime::ExecutionContext::clearResult(builder, location)({resultIdValue});
