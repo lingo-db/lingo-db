@@ -75,7 +75,16 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
                      b.setInsertionPointToStart(mapBlock);
                      auto& colManager = getContext().getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
                      std::vector<mlir::Value> mapOpReturnVals;
-                     for (auto* r : requiredColumns) { // we need to introduce every required column to the MapOp (MapOp will replace CombineTupleOp)
+                     // requiredColumns is an unordered_set of pointers; sort
+                     // by (scope, name) so the emitted MapOp's input/computes
+                     // attribute order — and the nested_map's parameter order
+                     // — are deterministic across runs.
+                     std::vector<tuples::Column*> sortedRequired(requiredColumns.begin(), requiredColumns.end());
+                     std::sort(sortedRequired.begin(), sortedRequired.end(),
+                               [&](tuples::Column* a, tuples::Column* b) {
+                                  return colManager.getName(a) < colManager.getName(b);
+                               });
+                     for (auto* r : sortedRequired) { // we need to introduce every required column to the MapOp (MapOp will replace CombineTupleOp)
                         auto colRefAttr = colManager.createRef(r);
                         auto colDefAttr = colManager.createDef(r);
 

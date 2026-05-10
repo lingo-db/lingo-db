@@ -155,9 +155,6 @@ class OrganizeExecutionStepsPass : public mlir::PassWrapper<OrganizeExecutionSte
       // For each op with multiple roots: which root is "last" in topo order.
       // The op gets MOVED into that pipeline's step; all earlier pipelines get clones.
       llvm::DenseMap<mlir::Operation*, mlir::Operation*> lastPipelineFor;
-      // For each tuple-stream value that's a subop.union result: per pipeline-root,
-      // the operand to use instead of the union.
-      llvm::DenseMap<std::pair<mlir::Value, mlir::Operation*>, mlir::Value> unionRewire;
    };
 
    // True if `v` is a tuple-stream value.
@@ -271,9 +268,13 @@ class OrganizeExecutionStepsPass : public mlir::PassWrapper<OrganizeExecutionSte
          for (auto* op : ops) pipelineOpSet[root].insert(op);
       }
 
+      // SetVector: insertion order (= IR walk order, since `ops` is in IR
+      // order and `op->walk` is deterministic) is preserved when we copy out.
+      // Using a plain DenseSet would emit step inputs/results in DenseMap
+      // hash order, leading to nondeterministic IR.
       for (auto& [root, ops] : a.pipelines) {
-         llvm::DenseSet<mlir::Value> requiredSet;
-         llvm::DenseSet<mlir::Value> producedSet;
+         llvm::SetVector<mlir::Value> requiredSet;
+         llvm::SetVector<mlir::Value> producedSet;
          for (auto* op : ops) {
             // Produced: non-tuple-stream results that are USED outside the
             // pipeline. (Imperative pipelines can have many internal results;
@@ -299,8 +300,8 @@ class OrganizeExecutionStepsPass : public mlir::PassWrapper<OrganizeExecutionSte
                }
             });
          }
-         for (auto v : requiredSet) a.requiredState[root].push_back(v);
-         for (auto v : producedSet) a.producedState[root].push_back(v);
+         a.requiredState[root].assign(requiredSet.begin(), requiredSet.end());
+         a.producedState[root].assign(producedSet.begin(), producedSet.end());
       }
    }
 
@@ -379,8 +380,15 @@ class OrganizeExecutionStepsPass : public mlir::PassWrapper<OrganizeExecutionSte
       }
    }
 
-   // Topological sort via Kahn's. On cycle: emit diagnostic, fail.
-   bool topoSort(Analysis& a, mlir::Operation* errLoc) {
+   // Topological sort via Kahn's, with ties broken by IR walk position so the
+   // emitted topoOrder (and therefore the resulting IR) is deterministic.
+   // Each pipeline root is itself an op in the body; its position there is a
+   // unique deterministic key.
+   bool topoSort(subop::ExecutionGroupOp eg, Analysis& a) {
+      llvm::DenseMap<mlir::Operation*, size_t> walkPos;
+      size_t pos = 0;
+      for (mlir::Operation& op : eg.getSubOps().front()) walkPos[&op] = pos++;
+
       llvm::DenseMap<mlir::Operation*, size_t> inDegree;
       llvm::DenseMap<mlir::Operation*, llvm::DenseSet<mlir::Operation*>> reverseDeps;
       for (auto& [root, _] : a.pipelines) inDegree[root] = 0;
@@ -390,12 +398,15 @@ class OrganizeExecutionStepsPass : public mlir::PassWrapper<OrganizeExecutionSte
             inDegree[root]++;
          }
       }
-      std::queue<mlir::Operation*> queue;
+      auto cmp = [&](mlir::Operation* a, mlir::Operation* b) {
+         return walkPos.lookup(a) > walkPos.lookup(b); // min-heap by position
+      };
+      std::priority_queue<mlir::Operation*, std::vector<mlir::Operation*>, decltype(cmp)> queue(cmp);
       for (auto& [root, n] : inDegree) {
          if (n == 0) queue.push(root);
       }
       while (!queue.empty()) {
-         auto* root = queue.front();
+         auto* root = queue.top();
          queue.pop();
          a.topoOrder.push_back(root);
          for (auto* succ : reverseDeps[root]) {
@@ -403,10 +414,10 @@ class OrganizeExecutionStepsPass : public mlir::PassWrapper<OrganizeExecutionSte
          }
       }
       if (a.topoOrder.size() != a.pipelines.size()) {
-         errLoc->emitError("OrganizeExecutionStepsPass: cycle in pipeline dependency graph; "
-                           "the inter-pipeline state-conflict graph is not topologically sortable. "
-                           "This usually indicates conflicting state operations whose direction "
-                           "cannot be resolved by walk order.");
+         eg->emitError("OrganizeExecutionStepsPass: cycle in pipeline dependency graph; "
+                       "the inter-pipeline state-conflict graph is not topologically sortable. "
+                       "This usually indicates conflicting state operations whose direction "
+                       "cannot be resolved by walk order.");
          return false;
       }
       return true;
@@ -551,9 +562,6 @@ class OrganizeExecutionStepsPass : public mlir::PassWrapper<OrganizeExecutionSte
                   }
                });
                builder.insert(op);
-               for (auto result : op->getResults()) {
-                  mapping.map(result, result);
-               }
             } else {
                // CLONE: only multi-rooted SubOp ops reach here (imperative
                // ops are merged via SSA closure into a single root, so they
@@ -603,7 +611,8 @@ class OrganizeExecutionStepsPass : public mlir::PassWrapper<OrganizeExecutionSte
       auto retOp = mlir::cast<subop::ExecutionGroupReturnOp>(eg.getSubOps().front().getTerminator());
       std::vector<mlir::Value> remapped;
       for (auto v : retOp.getInputs()) {
-         remapped.push_back(stateMapping.count(v) ? stateMapping[v] : v);
+         auto it = stateMapping.find(v);
+         remapped.push_back(it == stateMapping.end() ? v : it->second);
       }
       retOp->setOperands(remapped);
    }
@@ -746,7 +755,7 @@ class OrganizeExecutionStepsPass : public mlir::PassWrapper<OrganizeExecutionSte
          buildPipelines(eg, a);
          computeStates(eg, a);
          buildDependencies(eg, a);
-         if (!topoSort(a, eg)) return;
+         if (!topoSort(eg, a)) return;
          computeLastPipelines(a);
          llvm::DenseMap<mlir::Operation*, StepCtx> ctxByRoot;
          llvm::DenseMap<mlir::Value, mlir::Value> stateMapping;

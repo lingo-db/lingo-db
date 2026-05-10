@@ -1,4 +1,5 @@
 #include "lingodb/compiler/Dialect/DB/IR/DBOps.h"
+#include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "lingodb/compiler/Dialect/RelAlg/Passes.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
@@ -758,7 +759,7 @@ class ToJson {
       nlohmann::json plan;
       // Dump all relalg ops in the func body (skipping TrackTuplesOP).
       for (auto& op : func.getBody().front()) {
-         if (op.getDialect() && op.getDialect()->getNamespace() == "relalg" &&
+         if (mlir::isa<relalg::RelAlgDialect>(op.getDialect()) &&
              !mlir::isa<relalg::TrackTuplesOP>(&op)) {
             plan.push_back(convertOperation(&op));
          }
