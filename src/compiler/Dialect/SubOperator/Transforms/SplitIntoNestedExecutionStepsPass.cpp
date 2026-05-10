@@ -108,9 +108,11 @@ class SplitIntoNestedExecutionStepsPass : public mlir::PassWrapper<SplitIntoNest
          for (auto* op : ops) pipelineOpSet[root].insert(op);
       }
 
+      // SetVector preserves insertion order so that downstream IR
+      // construction (step inputs / results) is deterministic.
       for (auto& [root, ops] : a.pipelines) {
-         llvm::DenseSet<mlir::Value> requiredSet;
-         llvm::DenseSet<mlir::Value> producedSet;
+         llvm::SetVector<mlir::Value> requiredSet;
+         llvm::SetVector<mlir::Value> producedSet;
          for (auto* op : ops) {
             for (auto result : op->getResults()) {
                if (!isStream(result)) producedSet.insert(result);
@@ -162,8 +164,8 @@ class SplitIntoNestedExecutionStepsPass : public mlir::PassWrapper<SplitIntoNest
                }
             });
          }
-         for (auto v : requiredSet) a.requiredState[root].push_back(v);
-         for (auto v : producedSet) a.producedState[root].push_back(v);
+         a.requiredState[root].assign(requiredSet.begin(), requiredSet.end());
+         a.producedState[root].assign(producedSet.begin(), producedSet.end());
       }
    }
 
@@ -254,10 +256,9 @@ class SplitIntoNestedExecutionStepsPass : public mlir::PassWrapper<SplitIntoNest
             indegree[r]++;
          }
       }
+      // `priority` is `firstPos`, populated for every root before this call.
       auto cmp = [&](mlir::Operation* a, mlir::Operation* b) {
-         size_t pa = priority.count(a) ? priority.lookup(a) : SIZE_MAX;
-         size_t pb = priority.count(b) ? priority.lookup(b) : SIZE_MAX;
-         return pa > pb; // min-heap
+         return priority.lookup(a) > priority.lookup(b); // min-heap
       };
       std::priority_queue<mlir::Operation*, std::vector<mlir::Operation*>, decltype(cmp)> pq(cmp);
       for (auto& [r, n] : indegree) {
