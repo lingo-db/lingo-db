@@ -11,7 +11,6 @@
 !local_table_type = !subop.local_table<[ir : index],["i"]>
 module {
     func.func @main(){
-    	%subop_result = subop.execution_group (){
 			%heap = subop.create_heap !subop.heap<4,[ih : index]> ["ih"] ([%left],[%right]){
 				%lt = arith.cmpi ult, %left, %right : index
 				tuples.return %lt : i1
@@ -31,9 +30,7 @@ module {
 
 			subop.materialize %stream {@scan::@ih => ir}, %result_table : !result_table_type
 			%local_table = subop.create_from ["i"] %result_table : !result_table_type -> !local_table_type
-			subop.execution_group_return %local_table : !local_table_type
-        } -> !local_table_type
-        subop.set_result 0 %subop_result  : !local_table_type
+                subop.set_result 0 %local_table  : !local_table_type
          return
     }
 }

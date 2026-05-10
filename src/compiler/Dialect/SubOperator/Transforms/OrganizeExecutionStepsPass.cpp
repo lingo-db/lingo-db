@@ -28,17 +28,19 @@
 
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorDialect.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
-#include "llvm/Support/Debug.h"
-
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/Passes.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamDialect.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
 
-#include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/DenseSet.h"
-#include "llvm/ADT/SmallVector.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/IRMapping.h"
+
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/SetVector.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/Support/Debug.h"
 
 #include <queue>
 #include <unordered_set>
@@ -610,8 +612,132 @@ class OrganizeExecutionStepsPass : public mlir::PassWrapper<OrganizeExecutionSte
    // Driver
    //===----------------------------------------------------------------===//
 
+   // Wrap a func body into a single subop.execution_group. Moves the SSA
+   // closure of all subop ops at body level — the subop ops themselves (incl.
+   // subop.set_result, which lowers via SetResultOpLowering) plus any
+   // top-level non-subop op that produces or consumes a value flowing from/to
+   // them. The latter handles imperative DAGs threaded through subop steps
+   // (util.pack/unpack between simple_state ↔ tuple conversions, scf.for/scf
+   // bodies that compute on those values, …). Strictly post-set_result
+   // runtime plumbing (util.varlen32_create_const, arith.constant, util.invoke
+   // for appendTableFromResult/clearResult) is SSA-disconnected from the
+   // subop graph and stays at func body level.
+   void ensureWrapped(mlir::func::FuncOp funcOp) {
+      if (funcOp.getBody().empty()) return;
+      auto& body = funcOp.getBody().front();
+      auto* terminator = body.getTerminator();
+
+      llvm::DenseSet<mlir::Operation*> moveSet;
+      std::vector<mlir::Operation*> worklist;
+      for (auto& op : body) {
+         if (&op == terminator) continue;
+         if (mlir::isa<subop::SubOperatorDialect>(op.getDialect())) {
+            moveSet.insert(&op);
+            worklist.push_back(&op);
+         }
+      }
+      if (worklist.empty()) return;
+
+      // Top-level ancestor of `op` in `body`, or null if `op` isn't in this
+      // func.
+      auto topLevel = [&](mlir::Operation* op) -> mlir::Operation* {
+         while (op && op->getBlock() != &body) op = op->getParentOp();
+         return op;
+      };
+      auto enqueue = [&](mlir::Operation* op) {
+         if (!op || op == terminator) return;
+         if (op->getBlock() != &body) return;
+         if (moveSet.insert(op).second) worklist.push_back(op);
+      };
+      while (!worklist.empty()) {
+         auto* op = worklist.back();
+         worklist.pop_back();
+         op->walk([&](mlir::Operation* nested) {
+            for (auto operand : nested->getOperands()) {
+               if (auto* defOp = operand.getDefiningOp()) enqueue(topLevel(defOp));
+            }
+            for (auto result : nested->getResults()) {
+               for (auto* user : result.getUsers()) enqueue(topLevel(user));
+            }
+         });
+      }
+
+      std::vector<mlir::Operation*> opsToMove;
+      for (auto& op : body) {
+         if (moveSet.contains(&op)) opsToMove.push_back(&op);
+      }
+
+      // An op is "inside the moved set" if it is a top-level moved op OR is
+      // transitively nested under one — needed because moved ops carry their
+      // region trees with them.
+      auto isInsideMoveSet = [&](mlir::Operation* op) {
+         while (op) {
+            if (moveSet.contains(op)) return true;
+            op = op->getParentOp();
+         }
+         return false;
+      };
+      auto isExternal = [&](mlir::Value v) {
+         if (auto blockArg = mlir::dyn_cast<mlir::BlockArgument>(v))
+            return !isInsideMoveSet(blockArg.getOwner()->getParentOp());
+         if (auto* defOp = v.getDefiningOp()) return !isInsideMoveSet(defOp);
+         return true;
+      };
+
+      llvm::SetVector<mlir::Value> externalInputs;
+      llvm::SetVector<mlir::Value> groupResults;
+      for (auto* op : opsToMove) {
+         op->walk([&](mlir::Operation* nested) {
+            for (auto operand : nested->getOperands()) {
+               if (isExternal(operand)) externalInputs.insert(operand);
+            }
+         });
+         for (auto result : op->getResults()) {
+            for (auto* user : result.getUsers()) {
+               if (!moveSet.contains(user)) {
+                  groupResults.insert(result);
+                  break;
+               }
+            }
+         }
+      }
+
+      mlir::OpBuilder builder(funcOp);
+      builder.setInsertionPointToStart(&body);
+      llvm::SmallVector<mlir::Type> resultTypes;
+      for (auto v : groupResults) resultTypes.push_back(v.getType());
+      llvm::SmallVector<mlir::Value> inputs(externalInputs.begin(), externalInputs.end());
+      auto execGroup = builder.create<subop::ExecutionGroupOp>(funcOp.getLoc(), resultTypes, inputs);
+      auto* newBody = new mlir::Block();
+      for (auto v : externalInputs) newBody->addArgument(v.getType(), funcOp.getLoc());
+      execGroup.getSubOps().push_back(newBody);
+
+      for (auto* op : opsToMove) op->moveBefore(newBody, newBody->end());
+
+      builder.setInsertionPointToEnd(newBody);
+      builder.create<subop::ExecutionGroupReturnOp>(funcOp.getLoc(), groupResults.getArrayRef());
+
+      // Rewire external operand uses inside the group → block args.
+      for (size_t i = 0; i < externalInputs.size(); i++) {
+         auto inp = externalInputs[i];
+         auto blockArg = newBody->getArgument(i);
+         inp.replaceUsesWithIf(blockArg, [&](mlir::OpOperand& opOperand) {
+            return execGroup->isAncestor(opOperand.getOwner());
+         });
+      }
+      // Rewire group-result uses outside the group → execGroup results.
+      for (size_t i = 0; i < groupResults.size(); i++) {
+         auto inner = groupResults[i];
+         auto outer = execGroup.getResult(i);
+         inner.replaceUsesWithIf(outer, [&](mlir::OpOperand& opOperand) {
+            return !execGroup->isAncestor(opOperand.getOwner());
+         });
+      }
+   }
+
    void runOnOperation() override {
       reifyGenerates();
+      getOperation()->walk([&](mlir::func::FuncOp funcOp) { ensureWrapped(funcOp); });
       std::vector<subop::ExecutionGroupOp> egs;
       getOperation()->walk([&](subop::ExecutionGroupOp eg) { egs.push_back(eg); });
       for (auto eg : egs) {

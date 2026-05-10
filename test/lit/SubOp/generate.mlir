@@ -15,7 +15,6 @@
 //CHECK: |                             9  |
 module{
     func.func @main(){
-    	%subop_result = subop.execution_group (){
 			%result_table = subop.create !subop.result_table<[test : index]>
 			%generated, %streams = subop.generate [@t::@c1({type=index})] {
 				%n = arith.constant 10 : index
@@ -28,9 +27,7 @@ module{
 			}
 			subop.materialize %generated {@t::@c1 => test}, %result_table : !subop.result_table<[test : index]>
 			%local_table = subop.create_from ["test"] %result_table : !subop.result_table<[test : index]> -> !subop.local_table<[test : index],["test"]>
-			subop.execution_group_return %local_table : !subop.local_table<[test : index],["test"]>
-        } -> !subop.local_table<[test : index],["test"]>
-        subop.set_result 0 %subop_result  : !subop.local_table<[test : index],["test"]>
+                subop.set_result 0 %local_table  : !subop.local_table<[test : index],["test"]>
         return
     }
 }

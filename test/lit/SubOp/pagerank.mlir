@@ -10,7 +10,6 @@
 //CHECK: |                             3  |          0.042749999999999996  |                             1  |
 module{
     func.func @main(){
-        	%subop_result = subop.execution_group (){
         %numVertices = subop.create_simple_state !subop.simple_state<[numVertices: index]> initial: {
              %c0 = arith.constant 0  : index
             tuples.return %c0 : index
@@ -191,9 +190,7 @@ module{
          %result_table = subop.create !subop.result_table<[id0:i32, rank0 : f64, l0 :i32]>
          subop.materialize %fstream6 { @weights::@id => id0, @weights::@rank => rank0, @weights::@l => l0}, %result_table : !subop.result_table<[id0:i32,rank0 : f64, l0 :i32]>
         %local_table = subop.create_from ["id","rank","l"] %result_table : !subop.result_table<[id0:i32,rank0 : f64, l0 :i32]> -> !subop.local_table<[id0:i32,rank0 : f64, l0 :i32],["id","rank","l"]>
-        subop.execution_group_return %local_table : !subop.local_table<[id0:i32,rank0 : f64, l0 :i32],["id","rank","l"]>
-		} -> !subop.local_table<[id0:i32,rank0 : f64, l0 :i32],["id","rank","l"]>
-		subop.set_result 0 %subop_result  : !subop.local_table<[id0:i32,rank0 : f64, l0 :i32],["id","rank","l"]>
+				subop.set_result 0 %local_table  : !subop.local_table<[id0:i32,rank0 : f64, l0 :i32],["id","rank","l"]>
         return
     }
 }

@@ -17,7 +17,6 @@
 !local_table_type = !subop.local_table<[v : index,b : index, e : index,r:index],["v","b","e","r"]>
 module {
     func.func @main(){
-    	%subop_result = subop.execution_group (){
 			%vals = subop.create !subop.buffer<[val : index]>
 			%generated, %streams= subop.generate [@t::@c1({type=index})] {
 				%n = arith.constant 10 : index
@@ -41,9 +40,7 @@ module {
 			%stream6 = subop.entries_between %stream5 @view::@begin @scan::@ref @scan::@rank({type=index})
 			subop.materialize %stream6 {@scan::@currval => v, @scan::@firstval => b, @scan::@lastval => e, @scan::@rank => r}, %result_table : !result_table_type
 			%local_table = subop.create_from ["v","b","e","r"] %result_table : !result_table_type -> !local_table_type
-			subop.execution_group_return %local_table : !local_table_type
-        } -> !local_table_type
-        subop.set_result 0 %subop_result  : !local_table_type
+                subop.set_result 0 %local_table  : !local_table_type
         return
     }
 }
