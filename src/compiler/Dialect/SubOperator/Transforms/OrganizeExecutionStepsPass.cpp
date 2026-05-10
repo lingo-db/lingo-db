@@ -29,6 +29,7 @@
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorDialect.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/Passes.h"
+#include "lingodb/compiler/Dialect/SubOperator/Transforms/StepGraphUtils.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamDialect.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
 
@@ -42,7 +43,6 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Debug.h"
 
-#include <queue>
 #include <unordered_set>
 
 namespace {
@@ -389,30 +389,10 @@ class OrganizeExecutionStepsPass : public mlir::PassWrapper<OrganizeExecutionSte
       size_t pos = 0;
       for (mlir::Operation& op : eg.getSubOps().front()) walkPos[&op] = pos++;
 
-      llvm::DenseMap<mlir::Operation*, size_t> inDegree;
-      llvm::DenseMap<mlir::Operation*, llvm::DenseSet<mlir::Operation*>> reverseDeps;
-      for (auto& [root, _] : a.pipelines) inDegree[root] = 0;
-      for (auto& [root, deps] : a.dependencies) {
-         for (auto* d : deps) {
-            reverseDeps[d].insert(root);
-            inDegree[root]++;
-         }
-      }
-      auto cmp = [&](mlir::Operation* a, mlir::Operation* b) {
-         return walkPos.lookup(a) > walkPos.lookup(b); // min-heap by position
-      };
-      std::priority_queue<mlir::Operation*, std::vector<mlir::Operation*>, decltype(cmp)> queue(cmp);
-      for (auto& [root, n] : inDegree) {
-         if (n == 0) queue.push(root);
-      }
-      while (!queue.empty()) {
-         auto* root = queue.top();
-         queue.pop();
-         a.topoOrder.push_back(root);
-         for (auto* succ : reverseDeps[root]) {
-            if (--inDegree[succ] == 0) queue.push(succ);
-         }
-      }
+      llvm::SmallVector<mlir::Operation*> roots;
+      for (auto& [root, _] : a.pipelines) roots.push_back(root);
+
+      a.topoOrder = subop::kahnTopoSort(roots, a.dependencies, walkPos);
       if (a.topoOrder.size() != a.pipelines.size()) {
          eg->emitError("OrganizeExecutionStepsPass: cycle in pipeline dependency graph; "
                        "the inter-pipeline state-conflict graph is not topologically sortable. "
