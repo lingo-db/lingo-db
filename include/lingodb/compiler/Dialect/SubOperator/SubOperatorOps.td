@@ -676,7 +676,7 @@ def CreateFrom: SubOperator_Op<"create_from", [Pure,SubOperator]> {
           llvm::SmallVector<Member> getReadMembers();
       }];
 }
-def CreateSimpleStateOp : SubOperator_Op<"create_simple_state", [Pure]> {
+def CreateSimpleStateOp : SubOperator_Op<"create_simple_state", [Pure,SubOperator]> {
     let summary = "create new state";
     let results = (outs SimpleState : $res);
     let regions = (region AnyRegion:$initFn);

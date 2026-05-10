@@ -1,29 +1,41 @@
 // RUN: mlir-db-opt %s -mlir-print-local-scope | FileCheck %s
 // RUN: mlir-db-opt %s -subop-organize-execution-steps -mlir-print-local-scope | FileCheck %s --check-prefix=ORGANIZED
 //
-// Demonstrates the pattern: subop pipeline → imperative DAG → subop pipeline.
-// The imperative section reads from a `subop.simple_state` via
-// `subop.state_to_native`, runs an iterative Fibonacci computation
-// (whose body has multiple SSA values flowing through scf.for iter_args, so
-// the data flow is not a single SSA chain), and writes back a fresh
-// `subop.simple_state` via `subop.state_from_native`. A follow-up
-// `subop.state_to_native` extracts the result.
+// End-to-end shape: real subop pipeline → imperative DAG → real subop
+// pipeline. Stage A counts rows of a buffer into a simple_state. Stage B
+// reads that count via `subop.state_to_native`, runs an iterative
+// Fibonacci over scf.for, and writes the result back via
+// `subop.state_from_native` into a fresh simple_state. Stage C scans
+// the fib state and materializes a one-row result table.
 
-!s_in  = !subop.simple_state<[n : i32]>
-!s_out = !subop.simple_state<[fib : i32, n : i32]>
+!s_in   = !subop.simple_state<[n : i32]>
+!s_out  = !subop.simple_state<[fib : i32]>
+!buf    = !subop.buffer<[v : i32]>
+!result_table = !subop.result_table<[fib : i32]>
+!local_table  = !subop.local_table<[fib : i32], ["fib"]>
 
 // CHECK-LABEL: func.func @fib_pipeline
-func.func @fib_pipeline() -> i32 {
+func.func @fib_pipeline() {
 
-  // ----- Stage 1: subop creates a simple_state holding `n`.
-  %st_in = subop.create_simple_state !s_in initial : {
-    %n0 = arith.constant 10 : i32
-    tuples.return %n0 : i32
+  // ----- Stage A: real subop pipeline — count(*) of a buffer scan into n_state.
+  %src = subop.create !buf
+  %n_state = subop.create_simple_state !s_in initial : {
+    %z = arith.constant 0 : i32
+    tuples.return %z : i32
+  }
+  // CHECK: subop.scan
+  %scan = subop.scan %src : !buf {v => @s::@v({type = i32})}
+  %lk = subop.lookup %scan %n_state[] : !s_in @s::@ref({type = !subop.entry_ref<!s_in>})
+  // CHECK: subop.reduce
+  subop.reduce %lk @s::@ref [] ["n"] ([], [%cur]) {
+    %c1 = arith.constant 1 : i32
+    %nn = arith.addi %cur, %c1 : i32
+    tuples.return %nn : i32
   }
 
-  // ----- Stage 2: imperative iterative Fibonacci over scf.for.
+  // ----- Stage B: imperative iterative Fibonacci over scf.for.
   // CHECK: subop.state_to_native
-  %t_in = subop.state_to_native %st_in : !s_in -> tuple<i32>
+  %t_in = subop.state_to_native %n_state : !s_in -> tuple<i32>
   %n_val = util.unpack %t_in : tuple<i32> -> i32
 
   %c0_i32 = arith.constant 0 : i32
@@ -32,8 +44,8 @@ func.func @fib_pipeline() -> i32 {
   %c1_idx = arith.constant 1 : index
   %ub = arith.index_cast %n_val : i32 to index
 
-  // Two iter_args (%a, %b) — body computes %t from BOTH, then yields
-  // (%b, %t) so each iter_arg's value next step is a different live value.
+  // Two iter_args (%a, %b) — body uses BOTH, then yields (%b, %t) so each
+  // iter_arg's value next step is a different live value.
   %fib:2 = scf.for %i = %c0_idx to %ub step %c1_idx
       iter_args(%a = %c0_i32, %b = %c1_i32) -> (i32, i32) {
     %t = arith.addi %a, %b : i32
@@ -42,38 +54,56 @@ func.func @fib_pipeline() -> i32 {
 
   // Diamond: both loop results feed an extra computation.
   %sum_chk = arith.addi %fib#0, %fib#1 : i32
-  // Pack TWO independent values into the output tuple: the n we read back,
-  // and the diamond result.
-  %t_out = util.pack %sum_chk, %n_val : i32, i32 -> tuple<i32, i32>
+  %t_out = util.pack %sum_chk : i32 -> tuple<i32>
   // CHECK: subop.state_from_native
-  %st_out = subop.state_from_native %t_out : tuple<i32, i32> -> !s_out
+  %fib_state = subop.state_from_native %t_out : tuple<i32> -> !s_out
 
-  // ----- Stage 3: read the result back through state_to_native + unpack.
-  // CHECK: subop.state_to_native
-  %t_out_read = subop.state_to_native %st_out : !s_out -> tuple<i32, i32>
-  %fib_val, %n_unused = util.unpack %t_out_read : tuple<i32, i32> -> i32, i32
-  return %fib_val : i32
+  // ----- Stage C: real subop pipeline — scan fib state into a result table.
+  // CHECK: subop.scan
+  %scan_fib = subop.scan %fib_state : !s_out {fib => @r::@fib({type = i32})}
+  %table = subop.create !result_table
+  // CHECK: subop.materialize
+  subop.materialize %scan_fib {@r::@fib => fib}, %table : !result_table
+  %local = subop.create_from ["fib"] %table : !result_table -> !local_table
+  // CHECK: subop.set_result
+  subop.set_result 0 %local : !local_table
+
+  return
 }
 
-// After OrganizeExecutionStepsPass, the imperative DAG collapses into a
-// SINGLE execution_step via SSA closure — even though the ops have no
-// tuple-stream chain between them. `subop.state_to_native` /
-// `subop.state_from_native` and `subop.create_simple_state` are
-// non-`SubOperator` ops, so they merge into the same imperative pipeline.
+// After OrganizeExecutionStepsPass, expect (in order):
+//   - state-creator steps for `!buf` and `!s_in` (each in its own step,
+//     since CreateSimpleStateOp / GenericCreateOp are SubOp-interface ops).
+//   - Stage A: scan + lookup + reduce (count) — one step.
+//   - Imperative middle: state_to_native + util.unpack + scf.for + util.pack
+//     + state_from_native — collapsed into a single step via SSA closure
+//     over non-SubOperator ops (the `state_to_native`/`state_from_native`
+//     bridge ops do NOT implement SubOperator, so they merge into the
+//     imperative pipeline rather than living in their own steps).
+//   - Stage C: scan + materialize for the fib state — one step. The
+//     surrounding result_table create / create_from / set_result each end
+//     up in their own little step.
+//
+// Walk-position tiebreak preserves source order, so the steps appear in
+// stage order even though there are no member-conflict edges between
+// `subop.reduce` (writes `n`) and `subop.state_to_native` (reads `n`).
 
 // ORGANIZED-LABEL: func.func @fib_pipeline
-// ORGANIZED:       subop.execution_step
-// ORGANIZED:         subop.create_simple_state
-// ORGANIZED:         subop.state_to_native
-// ORGANIZED:         util.unpack
-// ORGANIZED:         scf.for
-// ORGANIZED:           arith.addi
-// ORGANIZED:           scf.yield
-// ORGANIZED:         arith.addi
-// ORGANIZED:         util.pack
-// ORGANIZED:         subop.state_from_native
-// ORGANIZED:         subop.state_to_native
-// ORGANIZED:         util.unpack
-// ORGANIZED:         subop.execution_step_return
-// ORGANIZED-NEXT:   } -> i32
-// ORGANIZED-NEXT:   subop.execution_group_return
+// ORGANIZED:       subop.execution_group
+// Stage A: count pipeline.
+// ORGANIZED:         subop.execution_step
+// ORGANIZED:           subop.scan
+// ORGANIZED:           subop.lookup
+// ORGANIZED:           subop.reduce
+// Imperative middle.
+// ORGANIZED:         subop.execution_step
+// ORGANIZED:           subop.state_to_native
+// ORGANIZED:           util.unpack
+// ORGANIZED:           scf.for
+// ORGANIZED:           util.pack
+// ORGANIZED:           subop.state_from_native
+// Stage C: scan fib state + materialize.
+// ORGANIZED:         subop.execution_step
+// ORGANIZED:           subop.scan
+// ORGANIZED:           subop.materialize
+// ORGANIZED:         subop.set_result
