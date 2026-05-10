@@ -7,7 +7,6 @@ include "mlir/IR/AttrTypeBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/LoopLikeInterface.td"
-include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgInterfaces.td"
 include "lingodb/compiler/Dialect/Arrow/IR/ArrowBase.td"
 include "lingodb/compiler/Dialect/util/UtilBase.td"
 
@@ -86,47 +85,37 @@ def Arrow_BuilderFromPtr : Arrow_Op<"array_builder.from_ptr", [Pure] > {
     let assemblyFormat = " $ptr `->` type($builder) attr-dict";
 }
 
-def SubOp_LocalTable : Type<CPred<"mlir::isa<::lingodb::compiler::dialect::subop::LocalTableType>($_self)">,"sub-op local table type">;
-
-def Arrow_TableFromLocalTableOp : Arrow_Op<"table.from_local_table", [Pure]> {
-    let summary = "View a sub-op local table as an opaque arrow.table handle";
+def Arrow_TableFromPtrOp : Arrow_Op<"table.from_ptr", [Pure]> {
+    let summary = "Materialize a typed arrow.table handle from a raw runtime pointer";
     let description = [{
-        Both types are runtime-equivalent (a `lingodb::runtime::ArrowTable*`),
-        but at the MLIR-type level the conversion is explicit so we can hand the
-        opaque handle to operations that don't carry a per-column schema
-        (e.g. py_interp casts).
+        At runtime an `arrow.table` is just a `lingodb::runtime::ArrowTable*`,
+        same shape as a generic `!util.ref<i8>`. This op promotes such a raw
+        pointer to a strongly-typed `arrow.table` so the imperative middle
+        (e.g. py_interp casts) can operate on a typed handle.
 
-        The operand is typed `AnyType` rather than the strict `subop.local_table`
-        because the bridge op survives past `lower-subop-to-cf`, which lowers
-        the local_table into a plain `i8*` while the bridge op is still in
-        place; using `AnyType` keeps the IR verifiable across that window.
+        Inserted by the SubOp→ControlFlow lowering of
+        `subop.state_to_native (LocalTable -> arrow.table)`: the LocalTable
+        side has by then converted to `!util.ref<i8>`, and this op wraps it
+        as the typed arrow.table the subsequent imperative code expects.
     }];
-    let arguments = (ins AnyType:$local_table);
+    let arguments = (ins RefType:$ptr);
     let results = (outs Arrow_Table:$arrow_table);
-    let assemblyFormat = " $local_table `:` type($local_table) attr-dict";
+    let assemblyFormat = " $ptr `:` type($ptr) attr-dict";
 }
 
-def Arrow_TableToLocalTableOp : Arrow_Op<"table.to_local_table"> {
-    let summary = "Annotate an opaque arrow.table with a schema, producing a sub-op local table";
+def Arrow_TableToPtrOp : Arrow_Op<"table.to_ptr", [Pure]> {
+    let summary = "Demote a typed arrow.table handle to its raw runtime pointer";
     let description = [{
-        The target `local_table` type carries the column names + member types
-        the surrounding pipeline (sub-op scans) expects.
+        Inverse of `arrow.table.from_ptr`. Produces the underlying
+        `lingodb::runtime::ArrowTable*` (as `!util.ref<i8>`) so subsequent
+        SubOp-converted code can treat it as an i8*-shaped state.
 
-        When `schema_descriptor` is set (a hex-serialized
-        `vector<pair<string, catalog::Type>>`), the SubOp→ControlFlow lowering
-        emits a runtime call to `lingodb::runtime::ArrowTable::verifySchema`
-        ahead of the bridge that throws a clear error if the wrapped
-        `arrow::Table` does not match the declared schema. Used by tabular
-        UDFs to catch return-type drift at the UDF/runtime boundary instead
-        of letting it become wrong answers downstream.
-
-        Result is `AnyType` for the same reason as `from_local_table` above.
-
-        Not marked `Pure`: the runtime schema check is a side effect.
+        Inserted by the SubOp→ControlFlow lowering of
+        `subop.state_from_native (arrow.table -> LocalTable)`.
     }];
-    let arguments = (ins Arrow_Table:$arrow_table, OptionalAttr<StrAttr>:$schema_descriptor);
-    let results = (outs AnyType:$local_table);
-    let assemblyFormat = " $arrow_table `->` type($local_table) attr-dict";
+    let arguments = (ins Arrow_Table:$arrow_table);
+    let results = (outs RefType:$ptr);
+    let assemblyFormat = " $arrow_table `->` type($ptr) attr-dict";
 }
 
 #endif// OPS

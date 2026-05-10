@@ -1,4 +1,5 @@
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
+#include "lingodb/compiler/Dialect/Arrow/IR/ArrowTypes.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorDialect.h"
 #include "lingodb/compiler/Dialect/TupleStream/ColumnManager.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamDialect.h"
@@ -1247,35 +1248,40 @@ llvm::SmallVector<subop::Member> subop::CreateContinuousView::getReadMembers() {
 }
 
 namespace {
-// Verify that `state` is a `SimpleState` and `native` is a `tuple` whose
-// element types match the state's members in declaration order. (For now the
-// only supported state↔native shape; widened as needed.)
-mlir::LogicalResult verifySimpleStateNativeShape(
+// Verify the state↔native pairing. Supported shapes:
+//   - `SimpleState` <-> `tuple<...>` (members in declaration order)
+//   - `LocalTable`  <-> `arrow.table`
+mlir::LogicalResult verifyStateNativeShape(
    mlir::Operation* op, mlir::Type stateTy, mlir::Type nativeTy) {
-   auto simpleStateTy = mlir::dyn_cast<subop::SimpleStateType>(stateTy);
-   if (!simpleStateTy)
-      return op->emitOpError("only `SimpleState` <-> tuple is supported");
-   auto tupleTy = mlir::dyn_cast<mlir::TupleType>(nativeTy);
-   if (!tupleTy)
-      return op->emitOpError("native side must be a tuple");
-   auto members = simpleStateTy.getMembers().getMembers();
-   if (members.size() != tupleTy.size())
-      return op->emitOpError("tuple arity must match number of state members");
-   auto& memberManager = op->getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
-   for (size_t i = 0; i < members.size(); ++i) {
-      if (memberManager.getType(members[i]) != tupleTy.getType(i))
-         return op->emitOpError("tuple element ")
-            << i << " type does not match member type";
+   if (auto simpleStateTy = mlir::dyn_cast<subop::SimpleStateType>(stateTy)) {
+      auto tupleTy = mlir::dyn_cast<mlir::TupleType>(nativeTy);
+      if (!tupleTy)
+         return op->emitOpError("native side must be a tuple for SimpleState");
+      auto members = simpleStateTy.getMembers().getMembers();
+      if (members.size() != tupleTy.size())
+         return op->emitOpError("tuple arity must match number of state members");
+      auto& memberManager = op->getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
+      for (size_t i = 0; i < members.size(); ++i) {
+         if (memberManager.getType(members[i]) != tupleTy.getType(i))
+            return op->emitOpError("tuple element ")
+               << i << " type does not match member type";
+      }
+      return mlir::success();
    }
-   return mlir::success();
+   if (mlir::isa<subop::LocalTableType>(stateTy)) {
+      if (!mlir::isa<arrow::TableType>(nativeTy))
+         return op->emitOpError("native side must be `arrow.table` for LocalTable");
+      return mlir::success();
+   }
+   return op->emitOpError("unsupported state type — expected SimpleState or LocalTable");
 }
 } // namespace
 
 mlir::LogicalResult subop::StateToNativeOp::verify() {
-   return verifySimpleStateNativeShape(*this, getState().getType(), getRes().getType());
+   return verifyStateNativeShape(*this, getState().getType(), getRes().getType());
 }
 mlir::LogicalResult subop::StateFromNativeOp::verify() {
-   return verifySimpleStateNativeShape(*this, getRes().getType(), getValues().getType());
+   return verifyStateNativeShape(*this, getRes().getType(), getValues().getType());
 }
 llvm::SmallVector<subop::Member> subop::CreateSortedViewOp::getReadMembers() {
    llvm::SmallVector<Member> res;
