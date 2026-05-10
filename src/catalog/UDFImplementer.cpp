@@ -297,10 +297,14 @@ class PythonTableUDFImplementer : public lingodb::catalog::MLIRTableUDFImplement
       mlir::Value arrowTableOut = builder.create<py_interp::CastFromPyObject>(
          loc, arrowTableType, pyResult, "pyarrow.Table");
 
-      // TODO: emit dec_ref ops for pyResult / pyArgs / functionVal once the
-      // SubOp execution-step splitter properly orders side-effect-only ops
-      // after the last use of their operand. Skipping for now leaks
-      // refcounts per query.
+      // Manual cleanup: result first, then arg conversions, then function attr.
+      // The cached module returned by create_module is owned by the
+      // interpreter cache, so we must NOT decref it.
+      builder.create<py_interp::DecRef>(loc, pyResult);
+      for (auto a : pyArgs) {
+         builder.create<py_interp::DecRef>(loc, a);
+      }
+      builder.create<py_interp::DecRef>(loc, functionVal);
       return arrowTableOut;
    }
 };
