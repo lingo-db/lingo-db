@@ -34,6 +34,7 @@
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorDialect.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/Passes.h"
+#include "lingodb/compiler/Dialect/SubOperator/Transforms/StepGraphUtils.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamDialect.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
 
@@ -43,8 +44,6 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
-
-#include <queue>
 
 namespace {
 using namespace lingodb::compiler::dialect;
@@ -240,42 +239,6 @@ class SplitIntoNestedExecutionStepsPass : public mlir::PassWrapper<SplitIntoNest
       }
    }
 
-   // Kahn's topo sort with ties broken by `priority` (smaller value = earlier
-   // in the result). Returns the ordered list; if a cycle prevents full
-   // ordering, the returned vector has size < roots.size().
-   std::vector<mlir::Operation*>
-   kahn(const std::vector<mlir::Operation*>& roots,
-        const llvm::DenseMap<mlir::Operation*, llvm::DenseSet<mlir::Operation*>>& deps,
-        const llvm::DenseMap<mlir::Operation*, size_t>& priority) {
-      llvm::DenseMap<mlir::Operation*, size_t> indegree;
-      llvm::DenseMap<mlir::Operation*, llvm::DenseSet<mlir::Operation*>> reverse;
-      for (auto* r : roots) indegree[r] = 0;
-      for (auto& [r, ds] : deps) {
-         for (auto* d : ds) {
-            reverse[d].insert(r);
-            indegree[r]++;
-         }
-      }
-      // `priority` is `firstPos`, populated for every root before this call.
-      auto cmp = [&](mlir::Operation* a, mlir::Operation* b) {
-         return priority.lookup(a) > priority.lookup(b); // min-heap
-      };
-      std::priority_queue<mlir::Operation*, std::vector<mlir::Operation*>, decltype(cmp)> pq(cmp);
-      for (auto& [r, n] : indegree) {
-         if (n == 0) pq.push(r);
-      }
-      std::vector<mlir::Operation*> out;
-      while (!pq.empty()) {
-         auto* r = pq.top();
-         pq.pop();
-         out.push_back(r);
-         for (auto* s : reverse[r]) {
-            if (--indegree[s] == 0) pq.push(s);
-         }
-      }
-      return out;
-   }
-
    // Materialize the new IR: NestedExecutionGroupOp containing ExecutionStepOps
    // in topo order, body terminator rewired through state mapping.
    void materialize(subop::ContainsNestedSubOps cn, mlir::Block* body, Analysis& a) {
@@ -384,7 +347,7 @@ class SplitIntoNestedExecutionStepsPass : public mlir::PassWrapper<SplitIntoNest
       computeStates(cn, body, a);
       buildSSADeps(a);
       auto firstPos = computeFirstPos(body, a);
-      a.topoOrder = kahn(a.roots, a.dependencies, firstPos);
+      a.topoOrder = subop::kahnTopoSort(a.roots, a.dependencies, firstPos);
       if (a.topoOrder.size() != a.roots.size()) {
          cn.emitError("SplitIntoNestedExecutionStepsPass: cycle in SSA dependencies of nested body");
          return signalPassFailure();
