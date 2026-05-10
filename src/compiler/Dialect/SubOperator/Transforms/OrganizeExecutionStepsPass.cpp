@@ -39,6 +39,7 @@
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/EquivalenceClasses.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Debug.h"
@@ -54,28 +55,6 @@ using namespace lingodb::compiler::dialect;
 static bool isImperative(mlir::Operation* op) {
    return !mlir::isa<subop::SubOperator>(op);
 }
-
-// Tiny union-find over `mlir::Operation*` for grouping imperative ops via
-// shared SSA values. Nodes are added on first reference.
-struct OpUnionFind {
-   llvm::DenseMap<mlir::Operation*, mlir::Operation*> parent;
-   mlir::Operation* find(mlir::Operation* x) {
-      auto it = parent.find(x);
-      if (it == parent.end()) {
-         parent[x] = x;
-         return x;
-      }
-      if (it->second == x) return x;
-      auto* root = find(it->second);
-      parent[x] = root;
-      return root;
-   }
-   void unite(mlir::Operation* a, mlir::Operation* b) {
-      a = find(a);
-      b = find(b);
-      if (a != b) parent[a] = b;
-   }
-};
 
 class OrganizeExecutionStepsPass : public mlir::PassWrapper<OrganizeExecutionStepsPass, mlir::OperationPass<mlir::ModuleOp>> {
    public:
@@ -193,27 +172,29 @@ class OrganizeExecutionStepsPass : public mlir::PassWrapper<OrganizeExecutionSte
          a.opToRoots[&op] = roots;
       }
 
-      // Pass 2: union-find over imperative ops via SSA edges. An imperative
-      // op merges with any imperative producer of any of its operands, so
-      // diamond and side-effect-via-shared-object patterns end up in one
-      // pipeline.
-      OpUnionFind uf;
+      // Pass 2: equivalence classes over imperative ops via SSA edges. An
+      // imperative op merges with any imperative producer of any of its
+      // operands, so diamond and side-effect-via-shared-object patterns end
+      // up in one pipeline.
+      llvm::EquivalenceClasses<mlir::Operation*> ec;
       for (mlir::Operation& op : eg.getSubOps().front()) {
          if (mlir::isa<subop::ExecutionGroupReturnOp>(op)) continue;
          if (!isImperative(&op)) continue;
+         ec.insert(&op);
          for (auto operand : op.getOperands()) {
             auto* prod = operand.getDefiningOp();
             if (!prod) continue;
             if (!isImperative(prod)) continue;
-            uf.unite(&op, prod);
+            ec.unionSets(&op, prod);
          }
       }
 
-      // Pass 3: rewrite imperative roots to UF representatives.
+      // Pass 3: rewrite imperative roots to equivalence-class leaders.
       for (auto& [op, roots] : a.opToRoots) {
          if (!isImperative(op)) continue;
          assert(roots.size() == 1);
-         roots[0] = uf.find(roots[0]);
+         auto leader = ec.findLeader(roots[0]);
+         if (leader != ec.member_end()) roots[0] = *leader;
       }
    }
 
