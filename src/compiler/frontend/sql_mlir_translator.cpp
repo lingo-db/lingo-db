@@ -1488,7 +1488,7 @@ mlir::Value SQLMlirTranslator::translateTableFunctionRef(mlir::OpBuilder& builde
       builder.setInsertionPointToStart(bodyBlock);
 
       // 5a) For each input: materialize the inner stream into a subop.local_table
-      //     and bridge it to an arrow.table.
+      //     and bridge it to an arrow.table via subop.state_to_native.
       auto arrowTableType = arrow::TableType::get(mlirContext);
       std::vector<mlir::Value> arrowTableIns;
       arrowTableIns.reserve(inputBindings.size());
@@ -1501,7 +1501,7 @@ mlir::Value SQLMlirTranslator::translateTableFunctionRef(mlir::OpBuilder& builde
             builder.getArrayAttr(inputBindings[i].columnRefs),
             builder.getArrayAttr(inputBindings[i].columnNames));
          arrowTableIns.push_back(
-            builder.create<arrow::TableFromLocalTableOp>(loc, arrowTableType, localTableIn));
+            builder.create<subop::StateToNativeOp>(loc, arrowTableType, localTableIn));
       }
 
       // 5b) Translate the scalar args in the outer scope, casting each to its
@@ -1521,18 +1521,19 @@ mlir::Value SQLMlirTranslator::translateTableFunctionRef(mlir::OpBuilder& builde
          moduleOp, builder, loc, mlir::ValueRange(arrowTableIns), mlir::ValueRange(nativeScalarArgs), context->catalog);
 
       // 5d) Bridge arrow.table → subop.local_table (with declared output
-      //     schema). Stash the expected (column-name, lingodb-type) list as
-      //     a hex-serialized attribute; SubOpToControlFlow emits a runtime
-      //     verifySchema call ahead of the bridge so the UDF's return type
-      //     is checked at the boundary (catches the easy class of mistakes:
-      //     wrong column count, wrong names, type drift — most commonly the
-      //     pyarrow large_string-vs-string mismatch after a pandas roundtrip).
+      //     schema) via subop.state_from_native. Stash the expected
+      //     (column-name, lingodb-type) list as a hex-serialized descriptor
+      //     attribute; SubOpToControlFlow emits a runtime verifySchema call
+      //     ahead of the bridge so the UDF's return type is checked at the
+      //     boundary (catches the easy class of mistakes: wrong column
+      //     count, wrong names, type drift — most commonly the pyarrow
+      //     large_string-vs-string mismatch after a pandas roundtrip).
       std::vector<std::pair<std::string, catalog::Type>> expectedSchema;
       expectedSchema.reserve(tableFunctionRef->columnReferenceEntries.size());
       for (auto& col : tableFunctionRef->columnReferenceEntries) {
          expectedSchema.emplace_back(col->displayName, col->resultType.type);
       }
-      mlir::Value localTableOut = builder.create<arrow::TableToLocalTableOp>(
+      mlir::Value localTableOut = builder.create<subop::StateFromNativeOp>(
          loc, outputLocalTableType, arrowTableOut,
          builder.getStringAttr(utility::serializeToHexString(expectedSchema)));
 

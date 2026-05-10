@@ -960,9 +960,9 @@ def StateToNativeOp : SubOperator_Op<"state_to_native",[Pure]> {
       let summary = "convert a subop state into a native SSA value";
       let description = [{
           Crosses the boundary from `subop` data flow into plain SSA /
-          imperative code. For now only `SimpleState` is supported; the native
-          representation is a tuple whose element types match the state's
-          members in declaration order.
+          imperative code. Supported shapes:
+            - `SimpleState`  -> `tuple<...>` (members in declaration order)
+            - `LocalTable`   -> `arrow.table` (the underlying ArrowTable*)
       }];
 
       let arguments = (ins AnyType : $state );
@@ -975,12 +975,21 @@ def StateFromNativeOp : SubOperator_Op<"state_from_native",[Pure]> {
       let summary = "build a subop state from a native SSA value";
       let description = [{
           Crosses the boundary from plain SSA / imperative code back into
-          `subop` data flow. For now only `SimpleState` is supported; the
-          native representation is a tuple whose element types match the
-          state's members in declaration order.
+          `subop` data flow. Supported shapes:
+            - `tuple<...>`  -> `SimpleState`
+            - `arrow.table` -> `LocalTable`
+
+          For the LocalTable case, an optional `descriptor` attribute (a
+          hex-serialized `vector<pair<string, catalog::Type>>`) drives a
+          runtime schema check inserted by the SubOp lowering: a
+          `lingodb::runtime::ArrowTable::verifySchema` call ahead of the
+          bridge that throws a clear error if the wrapped `arrow::Table`
+          does not match the declared schema. Used by tabular UDFs to catch
+          return-type drift at the UDF/runtime boundary instead of letting
+          it become wrong answers downstream.
       }];
 
-      let arguments = (ins AnyType : $values );
+      let arguments = (ins AnyType : $values, OptionalAttr<StrAttr> : $descriptor );
       let results = (outs AnyType : $res);
       let assemblyFormat = [{ $values `:` type($values) `->` type($res) attr-dict }];
       let hasVerifier = 1;

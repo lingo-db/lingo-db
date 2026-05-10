@@ -811,12 +811,6 @@ class SubOpRewriter {
                    return t.getDialect().getNamespace() == "subop";
                 });
       }
-      // Bridge ops between subop.local_table and arrow.table need rewriting
-      // when one side is a sub-op type.
-      if (mlir::isa<lingodb::compiler::dialect::arrow::TableFromLocalTableOp,
-                    lingodb::compiler::dialect::arrow::TableToLocalTableOp>(op)) {
-         return true;
-      }
       return false;
    }
    void rewrite(mlir::Block* block) {
@@ -1092,43 +1086,46 @@ class CreateThreadLocalLowering : public SubOpConversionPattern<subop::CreateThr
       return mlir::success();
    }
 };
-// arrow.table.from_local_table / arrow.table.to_local_table are pure type-
-// witnesses: the underlying SSA value is an `i8*` (runtime::ArrowTable*) on
-// both sides. During subop->control-flow lowering, the SubOp side of the
-// bridge gets converted to `i8*` while the bridge op remains. Replace the
-// bridge with an unrealized_conversion_cast between the (type-converted)
-// operand and the result type — `reconcile-unrealized-casts` later folds the
-// chain (since both convert to i8*).
-class TableFromLocalTableSubOpLowering : public SubOpConversionPattern<lingodb::compiler::dialect::arrow::TableFromLocalTableOp> {
-   using SubOpConversionPattern<lingodb::compiler::dialect::arrow::TableFromLocalTableOp>::SubOpConversionPattern;
-   LogicalResult matchAndRewrite(lingodb::compiler::dialect::arrow::TableFromLocalTableOp op, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
-      auto cast = rewriter.create<mlir::UnrealizedConversionCastOp>(op.getLoc(), op.getArrowTable().getType(), adaptor.getLocalTable());
-      rewriter.replaceOp(op, cast.getResult(0));
+// subop.state_to_native / subop.state_from_native bridge SubOp's LocalTable
+// state and the imperative-side arrow.table handle. At runtime both are a
+// `lingodb::runtime::ArrowTable*` (i8*-shaped); the typed `arrow.table` only
+// exists in MLIR so the imperative middle (e.g. py_interp casts) can operate
+// on a strongly-typed value. The lowerings emit `arrow.table.from_ptr` /
+// `arrow.table.to_ptr` to make that promotion/demotion explicit.
+//
+// state_from_native may carry a `descriptor` attribute (a hex-serialized
+// `vector<pair<string, catalog::Type>>`) that drives a runtime
+// `ArrowTable::verifySchema` call ahead of the bridge — used by tabular UDFs
+// to catch return-type drift at the UDF/runtime boundary.
+class StateToNativeLowering : public SubOpConversionPattern<subop::StateToNativeOp> {
+   using SubOpConversionPattern<subop::StateToNativeOp>::SubOpConversionPattern;
+   LogicalResult matchAndRewrite(subop::StateToNativeOp op, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
+      auto arrowTableType = mlir::dyn_cast<lingodb::compiler::dialect::arrow::TableType>(op.getRes().getType());
+      if (!arrowTableType) return failure();
+      auto fromPtr = rewriter.create<lingodb::compiler::dialect::arrow::TableFromPtrOp>(
+         op.getLoc(), arrowTableType, adaptor.getState());
+      rewriter.replaceOp(op, fromPtr.getResult());
       return success();
    }
 };
-class TableToLocalTableSubOpLowering : public SubOpConversionPattern<lingodb::compiler::dialect::arrow::TableToLocalTableOp> {
-   using SubOpConversionPattern<lingodb::compiler::dialect::arrow::TableToLocalTableOp>::SubOpConversionPattern;
-   LogicalResult matchAndRewrite(lingodb::compiler::dialect::arrow::TableToLocalTableOp op, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
-      // If a schema descriptor was attached upstream, emit a runtime call
-      // that throws on mismatch. The runtime ABI sees arrow::Table* as a
-      // generic ref<i8>; bridge through an unrealized_conversion_cast so the
-      // strongly-typed `arrow.table` operand reaches the func.call as ref<i8>.
+class StateFromNativeLowering : public SubOpConversionPattern<subop::StateFromNativeOp> {
+   using SubOpConversionPattern<subop::StateFromNativeOp>::SubOpConversionPattern;
+   LogicalResult matchAndRewrite(subop::StateFromNativeOp op, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
+      if (!mlir::isa<lingodb::compiler::dialect::arrow::TableType>(op.getValues().getType()))
+         return failure();
       auto i8RefType = lingodb::compiler::dialect::util::RefType::get(rewriter.getContext(), rewriter.getI8Type());
-      mlir::Value arrowTableAsRef = rewriter.create<mlir::UnrealizedConversionCastOp>(
-                                              op.getLoc(), i8RefType, adaptor.getArrowTable())
-                                       .getResult(0);
-      if (auto descriptor = op.getSchemaDescriptorAttr()) {
+      auto toPtr = rewriter.create<lingodb::compiler::dialect::arrow::TableToPtrOp>(
+         op.getLoc(), i8RefType, adaptor.getValues());
+      mlir::Value asRef = toPtr.getResult();
+      if (auto descriptor = op.getDescriptorAttr()) {
          auto descriptorVal = rewriter.create<lingodb::compiler::dialect::util::CreateConstVarLen>(
             op.getLoc(),
             lingodb::compiler::dialect::util::VarLen32Type::get(rewriter.getContext()),
             descriptor);
          lingodb::compiler::runtime::ArrowTable::verifySchema(rewriter, op.getLoc())(
-            mlir::ValueRange{arrowTableAsRef, descriptorVal});
+            mlir::ValueRange{asRef, descriptorVal});
       }
-      auto convertedResultType = typeConverter->convertType(op.getLocalTable().getType());
-      auto cast = rewriter.create<mlir::UnrealizedConversionCastOp>(op.getLoc(), convertedResultType, arrowTableAsRef);
-      rewriter.replaceOp(op, cast.getResult(0));
+      rewriter.replaceOp(op, asRef);
       return success();
    }
 };
@@ -4412,8 +4409,8 @@ PatternList getCPUPatternList(TypeConverter& typeConverter, mlir::MLIRContext* c
    patterns.insertPattern<ReduceOpLowering>(typeConverter, ctxt);
    patterns.insertPattern<NestedMapLowering>(typeConverter, ctxt);
    patterns.insertPattern<UnrealizedConversionCastLowering>(typeConverter, ctxt);
-   patterns.insertPattern<TableFromLocalTableSubOpLowering>(typeConverter, ctxt);
-   patterns.insertPattern<TableToLocalTableSubOpLowering>(typeConverter, ctxt);
+   patterns.insertPattern<StateToNativeLowering>(typeConverter, ctxt);
+   patterns.insertPattern<StateFromNativeLowering>(typeConverter, ctxt);
    patterns.insertPattern<UnwrapOptionalHashmapRefLowering>(typeConverter, ctxt);
    patterns.insertPattern<OffsetReferenceByLowering>(typeConverter, ctxt);
    patterns.insertPattern<GetBeginLowering>(typeConverter, ctxt);

@@ -26,10 +26,12 @@ add_mlir_dialect_library(MLIRSubOperator
 
         DEPENDS
         MLIRSubOperatorOpsIncGen
+        MLIRArrowOpsIncGen
         MLIRDBOpsIncGen
 
         LINK_LIBS mlir-support PUBLIC
         MLIRIR
+        MLIRArrow
         MLIRCompilerHelper
         runtime_funcs_ptr
 )
