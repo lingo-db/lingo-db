@@ -34,17 +34,46 @@
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamDialect.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
 
-#include "mlir/IR/BuiltinOps.h"
-#include "mlir/IR/IRMapping.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/IRMapping.h"
 
 #include <queue>
 #include <unordered_set>
 
 namespace {
 using namespace lingodb::compiler::dialect;
+
+// True if `op` is "imperative" — i.e., not a SubOperator-implementing op. Such
+// ops (arith, scf, util, memref, …) are grouped into pipelines via SSA closure
+// rather than tuple-stream chains.
+static bool isImperative(mlir::Operation* op) {
+   return !mlir::isa<subop::SubOperator>(op);
+}
+
+// Tiny union-find over `mlir::Operation*` for grouping imperative ops via
+// shared SSA values. Nodes are added on first reference.
+struct OpUnionFind {
+   llvm::DenseMap<mlir::Operation*, mlir::Operation*> parent;
+   mlir::Operation* find(mlir::Operation* x) {
+      auto it = parent.find(x);
+      if (it == parent.end()) {
+         parent[x] = x;
+         return x;
+      }
+      if (it->second == x) return x;
+      auto* root = find(it->second);
+      parent[x] = root;
+      return root;
+   }
+   void unite(mlir::Operation* a, mlir::Operation* b) {
+      a = find(a);
+      b = find(b);
+      if (a != b) parent[a] = b;
+   }
+};
 
 class OrganizeExecutionStepsPass : public mlir::PassWrapper<OrganizeExecutionStepsPass, mlir::OperationPass<mlir::ModuleOp>> {
    public:
@@ -105,7 +134,8 @@ class OrganizeExecutionStepsPass : public mlir::PassWrapper<OrganizeExecutionSte
    // Phase A — analyze (per ExecutionGroupOp body, no mutations)
    //===----------------------------------------------------------------===//
 
-   enum Kind { READ, WRITE };
+   enum Kind { READ,
+               WRITE };
 
    struct Analysis {
       // Pipeline root → ordered list of ops in that pipeline (in original IR order).
@@ -134,10 +164,18 @@ class OrganizeExecutionStepsPass : public mlir::PassWrapper<OrganizeExecutionSte
    }
 
    // Compute roots[op] for every op in the execution group body.
-   // - Op with no tuple-stream operand → its own root.
-   // - Op with tuple-stream operand(s) → inherit roots from each producer's set
-   //   (deduplicated). Unions accumulate roots from all their operands.
+   //
+   // SubOperator ops:
+   //   - With tuple-stream operand(s): inherit roots from each producer's set
+   //     (deduplicated). UnionOps accumulate roots from all their operands.
+   //   - With no tuple-stream operand: their own (singleton) root.
+   //
+   // Imperative ops (arith / scf / util / …):
+   //   - Grouped via SSA closure: any two imperative ops sharing an SSA value
+   //     end up with the same root. Implemented as a separate union-find pass
+   //     after the stream-chain assignment.
    void computeRoots(subop::ExecutionGroupOp eg, Analysis& a) {
+      // Pass 1: stream-chain-based root assignment.
       for (mlir::Operation& op : eg.getSubOps().front()) {
          if (mlir::isa<subop::ExecutionGroupReturnOp>(op)) continue;
          llvm::SmallVector<mlir::Operation*, 2> roots;
@@ -154,6 +192,29 @@ class OrganizeExecutionStepsPass : public mlir::PassWrapper<OrganizeExecutionSte
             roots.push_back(&op);
          }
          a.opToRoots[&op] = roots;
+      }
+
+      // Pass 2: union-find over imperative ops via SSA edges. An imperative
+      // op merges with any imperative producer of any of its operands, so
+      // diamond and side-effect-via-shared-object patterns end up in one
+      // pipeline.
+      OpUnionFind uf;
+      for (mlir::Operation& op : eg.getSubOps().front()) {
+         if (mlir::isa<subop::ExecutionGroupReturnOp>(op)) continue;
+         if (!isImperative(&op)) continue;
+         for (auto operand : op.getOperands()) {
+            auto* prod = operand.getDefiningOp();
+            if (!prod) continue;
+            if (!isImperative(prod)) continue;
+            uf.unite(&op, prod);
+         }
+      }
+
+      // Pass 3: rewrite imperative roots to UF representatives.
+      for (auto& [op, roots] : a.opToRoots) {
+         if (!isImperative(op)) continue;
+         assert(roots.size() == 1);
+         roots[0] = uf.find(roots[0]);
       }
    }
 
@@ -177,7 +238,7 @@ class OrganizeExecutionStepsPass : public mlir::PassWrapper<OrganizeExecutionSte
    // operands. The mapping chain handles values that have already been
    // moved/cloned during this pipeline's processing.
    mlir::Value resolveStreamForPipeline(mlir::Value v, mlir::Operation* pipelineRoot,
-                                         mlir::IRMapping& mapping, Analysis& a) {
+                                        mlir::IRMapping& mapping, Analysis& a) {
       if (auto unionOp = v.getDefiningOp<subop::UnionOp>()) {
          for (auto operand : unionOp.getOperands()) {
             auto* prod = operand.getDefiningOp();
@@ -212,10 +273,16 @@ class OrganizeExecutionStepsPass : public mlir::PassWrapper<OrganizeExecutionSte
          llvm::DenseSet<mlir::Value> requiredSet;
          llvm::DenseSet<mlir::Value> producedSet;
          for (auto* op : ops) {
-            // Produced: non-tuple-stream results.
+            // Produced: non-tuple-stream results that are USED outside the
+            // pipeline. (Imperative pipelines can have many internal results;
+            // skipping unused ones keeps the step's result list small.)
             for (auto result : op->getResults()) {
-               if (!isStream(result)) {
-                  producedSet.insert(result);
+               if (isStream(result)) continue;
+               for (auto* user : result.getUsers()) {
+                  if (!pipelineOpSet[root].contains(user)) {
+                     producedSet.insert(result);
+                     break;
+                  }
                }
             }
             // Required: walk operands (incl. nested regions).
@@ -301,8 +368,8 @@ class OrganizeExecutionStepsPass : public mlir::PassWrapper<OrganizeExecutionSte
                if (std::find(rootsJ.begin(), rootsJ.end(), pi) != rootsJ.end()) continue;
                // i is before j in walk order; conflict ⇒ pj depends on pi.
                bool conflict = (ki == WRITE && kj == WRITE) ||
-                               (ki == WRITE && kj == READ) ||
-                               (ki == READ && kj == WRITE);
+                  (ki == WRITE && kj == READ) ||
+                  (ki == READ && kj == WRITE);
                if (!conflict) continue;
                a.dependencies[pj].insert(pi);
             }
@@ -359,7 +426,10 @@ class OrganizeExecutionStepsPass : public mlir::PassWrapper<OrganizeExecutionSte
          size_t bestIdx = topoIndex[best];
          for (size_t i = 1; i < roots.size(); ++i) {
             size_t idx = topoIndex[roots[i]];
-            if (idx > bestIdx) { best = roots[i]; bestIdx = idx; }
+            if (idx > bestIdx) {
+               best = roots[i];
+               bestIdx = idx;
+            }
          }
          a.lastPipelineFor[op] = best;
       }
@@ -402,8 +472,8 @@ class OrganizeExecutionStepsPass : public mlir::PassWrapper<OrganizeExecutionSte
             ctx.stateInputBlockArgs[v] = blockArg;
          }
          auto stepOp = outerBuilder.create<subop::ExecutionStepOp>(
-             root->getLoc(), resultTypes, inputs,
-             outerBuilder.getBoolArrayAttr(threadLocal));
+            root->getLoc(), resultTypes, inputs,
+            outerBuilder.getBoolArrayAttr(threadLocal));
          stepOp.getSubOps().getBlocks().push_back(block);
          // Provisional terminator — operands filled in Phase C after producing-state values are mapped.
          mlir::OpBuilder innerBuilder(eg.getContext());
@@ -483,10 +553,19 @@ class OrganizeExecutionStepsPass : public mlir::PassWrapper<OrganizeExecutionSte
                   mapping.map(result, result);
                }
             } else {
-               // CLONE: cloneSubOp uses `mapping` for operand lookup AND
-               // updates `mapping` with new result mappings. ColumnMapping
-               // is shared across this pipeline (see above).
-               mlir::cast<subop::SubOperator>(op).cloneSubOp(builder, mapping, columnMapping);
+               // CLONE: only multi-rooted SubOp ops reach here (imperative
+               // ops are merged via SSA closure into a single root, so they
+               // are always last for their pipeline → MOVE path).
+               auto subOp = mlir::dyn_cast<subop::SubOperator>(op);
+               if (!subOp) {
+                  op->emitError("OrganizeExecutionStepsPass: imperative op unexpectedly multi-rooted");
+                  signalPassFailure();
+                  return;
+               }
+               // cloneSubOp uses `mapping` for operand lookup AND updates
+               // `mapping` with new result mappings. ColumnMapping is shared
+               // across this pipeline (see above).
+               subOp.cloneSubOp(builder, mapping, columnMapping);
             }
          }
 

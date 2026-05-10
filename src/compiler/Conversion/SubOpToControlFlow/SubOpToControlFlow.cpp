@@ -4328,7 +4328,6 @@ PatternList getCPUPatternList(TypeConverter& typeConverter, mlir::MLIRContext* c
    patterns.insertPattern<NestedExecutionGroupLowering>(typeConverter, ctxt);
    //rewriter.insertPattern<GetSingleValLowering>(typeConverter, ctxt);
    patterns.insertPattern<SetTrackedCountLowering>(typeConverter, ctxt);
-   //rewriter.insertPattern<SimpleStateGetScalarLowering>(typeConverter, ctxt);
    return patterns;
 }
 void handleExecutionStepCPU(PatternList& patternList, subop::ExecutionStepOp step, subop::ExecutionGroupOp executionGroup, mlir::IRMapping& mapping, mlir::TypeConverter& typeConverter) {
