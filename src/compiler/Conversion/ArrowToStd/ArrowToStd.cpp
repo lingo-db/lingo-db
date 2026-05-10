@@ -180,6 +180,27 @@ class BuilderFromPtrLowering : public OpConversionPattern<arrow::BuilderFromPtr>
       return success();
    }
 };
+// arrow.table.from_ptr / to_ptr are pure typed-pointer casts (both sides are
+// `runtime::ArrowTable*` at runtime). Replace them with an
+// unrealized_conversion_cast so reconcile-unrealized-casts can later fold the
+// chain — typically together with the cast inserted by PyInterpLowering when
+// an arrow.table value flowed into a (now i8*-typed) consumer.
+class TableFromPtrLowering : public OpConversionPattern<arrow::TableFromPtrOp> {
+   public:
+   using OpConversionPattern<arrow::TableFromPtrOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(arrow::TableFromPtrOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      rewriter.replaceOpWithNewOp<mlir::UnrealizedConversionCastOp>(op, op.getResult().getType(), adaptor.getPtr());
+      return success();
+   }
+};
+class TableToPtrLowering : public OpConversionPattern<arrow::TableToPtrOp> {
+   public:
+   using OpConversionPattern<arrow::TableToPtrOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(arrow::TableToPtrOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      rewriter.replaceOpWithNewOp<mlir::UnrealizedConversionCastOp>(op, op.getResult().getType(), adaptor.getArrowTable());
+      return success();
+   }
+};
 class BuilderAppendFixedSizedLowering : public OpConversionPattern<arrow::AppendFixedSizedOp> {
    public:
    using OpConversionPattern<arrow::AppendFixedSizedOp>::OpConversionPattern;
@@ -342,12 +363,11 @@ void ArrowToStdLoweringPass::runOnOperation() {
    patterns.insert<ArrayLoadVariableSizeBinaryLowering>(typeConverter, &getContext());
    patterns.insert<ArrayLoadBoolLowering>(typeConverter, &getContext());
    patterns.insert<BuilderFromPtrLowering>(typeConverter, &getContext());
+   patterns.insert<TableFromPtrLowering>(typeConverter, &getContext());
+   patterns.insert<TableToPtrLowering>(typeConverter, &getContext());
    patterns.insert<BuilderAppendFixedSizedLowering>(typeConverter, &getContext());
    patterns.insert<BuilderAppendBoolLowering>(typeConverter, &getContext());
    patterns.insert<BuilderAppendVariableSizeBinaryLowering>(typeConverter, &getContext());
-   // The bridge ops (arrow.table.{from,to}_local_table) get lowered earlier in
-   // SubOpToControlFlow; if any survives to here, leave it alone — ArrowToStd
-   // doesn't convert arrow.table at all, so they remain valid IR.
    if (failed(applyFullConversion(module, target, std::move(patterns))))
       signalPassFailure();
 }
