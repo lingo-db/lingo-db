@@ -1,0 +1,159 @@
+# Tabular Python UDFs against the WASM Python backend. Mirrors a subset of
+# python-udfs-tabular.test but uses only pyarrow (the WASIX site-packages
+# carries pyarrow + numpy; pandas is intentionally not bundled).
+
+statement ok
+CREATE TABLE rows(id int not null, score float8 not null);
+
+statement ok
+INSERT INTO rows VALUES (1, 0.5), (2, 1.5), (3, 2.5), (4, 3.5), (5, 4.5);
+
+statement ok
+CREATE TABLE words_tab(id int not null, w varchar not null);
+
+statement ok
+INSERT INTO words_tab VALUES (1, 'alpha'), (2, 'beta'), (3, 'gamma'), (4, 'delta');
+
+statement ok
+CREATE TABLE bonus(id int not null, bonus float8 not null);
+
+statement ok
+INSERT INTO bonus VALUES (1, 10.0), (2, 20.0), (3, 30.0), (4, 40.0), (5, 50.0);
+
+# identity (pa.Table passthrough — exercises the IPC bridge in both directions
+# with no transformation)
+statement ok
+CREATE OR REPLACE FUNCTION py_identity(t TABLE(id int, score float8))
+RETURNS TABLE(id int, score float8)
+AS $$
+def py_identity(t):
+    return t
+$$ LANGUAGE python;
+
+query py-tab-wasm-1 nosort
+SELECT id, score FROM py_identity((SELECT id, score FROM rows)) ORDER BY id;
+----
+1
+0.5
+2
+1.5
+3
+2.5
+4
+3.5
+5
+4.5
+
+# pa.compute-driven column transform: square the score column.
+statement ok
+CREATE OR REPLACE FUNCTION py_square_score(t TABLE(id int, score float8))
+RETURNS TABLE(id int, score float8)
+AS $$
+import pyarrow as pa
+import pyarrow.compute as pc
+def py_square_score(t):
+    score2 = pc.multiply(t.column("score"), t.column("score"))
+    return pa.Table.from_arrays([t.column("id"), score2], names=["id", "score"])
+$$ LANGUAGE python;
+
+query py-tab-wasm-2 nosort
+SELECT id, score FROM py_square_score((SELECT id, score FROM rows)) ORDER BY id;
+----
+1
+0.25
+2
+2.25
+3
+6.25
+4
+12.25
+5
+20.25
+
+# pa.compute-driven row filter: keep score > 2.0.
+statement ok
+CREATE OR REPLACE FUNCTION py_filter_high(t TABLE(id int, score float8))
+RETURNS TABLE(id int, score float8)
+AS $$
+import pyarrow as pa
+import pyarrow.compute as pc
+def py_filter_high(t):
+    mask = pc.greater(t.column("score"), pa.scalar(2.0))
+    return t.filter(mask)
+$$ LANGUAGE python;
+
+query py-tab-wasm-3 nosort
+SELECT id, score FROM py_filter_high((SELECT id, score FROM rows)) ORDER BY id;
+----
+3
+2.5
+4
+3.5
+5
+4.5
+
+# varchar passthrough — exercises offset-buffer + utf8 buffer roundtripping
+# through the IPC stream.
+statement ok
+CREATE OR REPLACE FUNCTION py_str_id(t TABLE(id int, w varchar))
+RETURNS TABLE(id int, w varchar)
+AS $$
+def py_str_id(t):
+    return t
+$$ LANGUAGE python;
+
+query py-tab-wasm-4 nosort
+SELECT id, w FROM py_str_id((SELECT id, w FROM words_tab)) ORDER BY id;
+----
+1
+alpha
+2
+beta
+3
+gamma
+4
+delta
+
+# Two-input tabular UDF: zip the two tables column-by-column (no join — both
+# inputs come in id-sorted by construction). Confirms the multi-input plumbing
+# also goes through the IPC bridge once per input table.
+statement ok
+CREATE OR REPLACE FUNCTION py_zip_add(
+    a TABLE(id int, score float8),
+    b TABLE(id int, bonus float8)
+)
+RETURNS TABLE(id int, total float8)
+AS $$
+import pyarrow as pa
+import pyarrow.compute as pc
+def py_zip_add(a, b):
+    total = pc.add(a.column("score"), b.column("bonus"))
+    return pa.Table.from_arrays([a.column("id"), total], names=["id", "total"])
+$$ LANGUAGE python;
+
+query py-tab-wasm-5 nosort
+SELECT id, total FROM py_zip_add((SELECT id, score FROM rows), (SELECT id, bonus FROM bonus)) ORDER BY id;
+----
+1
+10.5
+2
+21.5
+3
+32.5
+4
+43.5
+5
+54.5
+
+# Tabular UDF output fed into a downstream SQL filter — verifies the
+# host-side IPC import yields a real arrow::Table that the SubOp pipeline
+# can scan + filter.
+query py-tab-wasm-6 nosort
+SELECT id, total FROM py_zip_add((SELECT id, score FROM rows), (SELECT id, bonus FROM bonus)) WHERE total > 30.0 ORDER BY id;
+----
+3
+32.5
+4
+43.5
+5
+54.5

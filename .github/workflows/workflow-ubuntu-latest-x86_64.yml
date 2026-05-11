@@ -410,15 +410,22 @@ jobs:
         if: matrix.python_mode == 'WASM'
         run: |
           build/lingodb-release/sqlite-tester test/sqlite-small-python/python-udfs-numpy.test
-      - name: Test python-udfs (tabular)
+      - name: Test python-udfs (tabular, CPYTHON)
         # Tabular UDFs need pyarrow (loaded above) and the "compatible"
         # sub-interpreter mode; pyarrow's C extension is single-phase
-        # init and refuses to load into the WASM backend's sandbox.
+        # init and refuses to load into a CPython sub-interpreter.
         if: matrix.python_mode == 'CPYTHON'
         env:
           LINGODB_PYTHON_SUBINTERPRETER_MODE: compatible
         run: |
           build/lingodb-release/sqlite-tester test/sqlite-small-python/python-udfs-tabular.test
+      - name: Test python-udfs (tabular, WASM)
+        # WASM mode bridges arrow::Table <-> pa.Table via Arrow IPC bytes;
+        # the pyarrow wasix wheel is fetched + unpacked by cmake into the
+        # site-packages mount the sandbox sees at /site-packages.
+        if: matrix.python_mode == 'WASM'
+        run: |
+          build/lingodb-release/sqlite-tester test/sqlite-small-python/python-udfs-tabular-wasm.test
       - name: Test sqlite-small (regression with Python enabled)
         # Confirm we did not break the existing tests when Python is on.
         run: |
