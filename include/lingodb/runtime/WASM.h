@@ -44,6 +44,9 @@ enum CommonPyFunc : uint8_t {
    PyFloat_AsDouble = 22,
    PyFloat_FromDouble = 23,
    PyImport_ImportModule = 24,
+   PyBytes_FromStringAndSize = 25,
+   PyBytes_AsString = 26,
+   PyBytes_Size = 27,
 };
 static std::vector<std::pair<CommonPyFunc, std::string>> commonPyFuncNames = {
    {CommonPyFunc::Py_Initialize, "Py_Initialize"},
@@ -71,6 +74,11 @@ static std::vector<std::pair<CommonPyFunc, std::string>> commonPyFuncNames = {
    {CommonPyFunc::PyFloat_AsDouble, "PyFloat_AsDouble"},
    {CommonPyFunc::PyFloat_FromDouble, "PyFloat_FromDouble"},
    {CommonPyFunc::PyImport_ImportModule, "PyImport_ImportModule"},
+   // Used by tabular Python UDFs (PythonRuntime::{from,to}ArrowTable) to
+   // ship Arrow IPC bytes across the host/wasm boundary.
+   {CommonPyFunc::PyBytes_FromStringAndSize, "PyBytes_FromStringAndSize"},
+   {CommonPyFunc::PyBytes_AsString, "PyBytes_AsString"},
+   {CommonPyFunc::PyBytes_Size, "PyBytes_Size"},
 };
 
 struct WASMSession {

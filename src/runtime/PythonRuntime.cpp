@@ -12,6 +12,16 @@
 #include <arrow/c/abi.h>
 #include <arrow/c/bridge.h>
 #include <arrow/record_batch.h>
+#endif
+// Tabular UDFs bridge arrow::Table on the host with pyarrow.Table inside the
+// embedded interpreter. CPython mode uses the Arrow C Data Interface above;
+// WASM mode falls back to Arrow IPC bytes (C Data Interface is unworkable in
+// wasm32: pointer-width mismatch + release callbacks are wasm function-table
+// indices the host cannot call back into).
+#if defined(USE_CPYTHON_RUNTIME) || defined(USE_CPYTHON_WASM_RUNTIME)
+#include <arrow/buffer.h>
+#include <arrow/io/api.h>
+#include <arrow/ipc/api.h>
 #include <arrow/table.h>
 #endif
 #include <iostream>
@@ -456,15 +466,133 @@ void PythonRuntime::incref(PyObjectPtr obj) {
    wasm::WASMSession& wasmSession = *currentWasmSession;
    wasmSession.callPyFunc<void>(wasm::Py_IncRef, obj);
 }
-PyObjectPtr PythonRuntime::fromArrowTable(ArrowTable*) {
-   throw std::runtime_error(
-      "Tabular Python UDFs are not supported in the WASM Python backend. "
-      "Build with -DENABLE_PYTHON=CPYTHON to enable them.");
+namespace {
+// Tabular UDFs across the wasm boundary: ship the table as Arrow IPC bytes
+// and rebuild on the other side. The Python side of the bridge is a tiny
+// module compiled lazily on first call (the existing createModule fast-path
+// hits sys.modules on every subsequent call, so the source string is only
+// compiled once per worker session).
+constexpr const char* kArrowBridgeName = "lingodb_wasm_arrow_bridge";
+constexpr const char* kArrowBridgeSource = R"PY(
+import io
+import pyarrow as pa
+def _ipc_bytes_to_table(b):
+    return pa.ipc.open_stream(io.BytesIO(b)).read_all()
+def _ipc_table_to_bytes(t):
+    sink = pa.BufferOutputStream()
+    with pa.ipc.new_stream(sink, t.schema) as w:
+        w.write_table(t)
+    return bytes(sink.getvalue())
+)PY";
+
+// Per-worker (thread_local) cache of the two bridge functions. Leaks at
+// thread teardown — matches the lifetime trade-off of the CPython mode's
+// getReaderImportFromC.
+thread_local PyObjectPtr cachedIpcBytesToTable = 0;
+thread_local PyObjectPtr cachedIpcTableToBytes = 0;
+
+void ensureArrowBridgeLoaded() {
+   if (cachedIpcBytesToTable && cachedIpcTableToBytes) return;
+   PyObjectPtr mod = PythonRuntime::createModule(
+      /*cache slot, unused in WASM mode=*/0,
+      runtime::VarLen32::fromString(kArrowBridgeName),
+      runtime::VarLen32::fromString(kArrowBridgeSource));
+   if (!mod) {
+      throw std::runtime_error(
+         "Tabular Python UDFs (WASM): failed to compile the Arrow IPC bridge "
+         "module inside the WASIX Python guest. Most likely the pyarrow wasix "
+         "wheel is missing from the site-packages dir mounted into the sandbox.");
+   }
+   cachedIpcBytesToTable = PythonRuntime::getAttr(mod, runtime::VarLen32::fromString("_ipc_bytes_to_table"));
+   cachedIpcTableToBytes = PythonRuntime::getAttr(mod, runtime::VarLen32::fromString("_ipc_table_to_bytes"));
+   PythonRuntime::decref(mod);
+   if (!cachedIpcBytesToTable || !cachedIpcTableToBytes) {
+      throw std::runtime_error("Tabular Python UDFs (WASM): bridge module is missing one of its expected entry points");
+   }
 }
-ArrowTable* PythonRuntime::toArrowTable(PyObjectPtr) {
-   throw std::runtime_error(
-      "Tabular Python UDFs are not supported in the WASM Python backend. "
-      "Build with -DENABLE_PYTHON=CPYTHON to enable them.");
+
+[[noreturn]] void throwArrowError(const arrow::Status& s, const char* what) {
+   throw std::runtime_error(std::string(what) + ": " + s.ToString());
+}
+} // namespace
+
+PyObjectPtr PythonRuntime::fromArrowTable(ArrowTable* table) {
+   ensureArrowBridgeLoaded();
+   wasm::WASMSession& s = *currentWasmSession;
+
+   // 1. Host-side IPC serialize.
+   auto sinkResult = arrow::io::BufferOutputStream::Create();
+   if (!sinkResult.ok()) throwArrowError(sinkResult.status(), "BufferOutputStream::Create");
+   auto sink = sinkResult.ValueOrDie();
+   auto writerResult = arrow::ipc::MakeStreamWriter(sink.get(), table->get()->schema());
+   if (!writerResult.ok()) throwArrowError(writerResult.status(), "ipc::MakeStreamWriter");
+   auto writer = writerResult.ValueOrDie();
+   auto wstatus = writer->WriteTable(*table->get());
+   if (!wstatus.ok()) throwArrowError(wstatus, "RecordBatchWriter::WriteTable");
+   auto cstatus = writer->Close();
+   if (!cstatus.ok()) throwArrowError(cstatus, "RecordBatchWriter::Close");
+   auto bufResult = sink->Finish();
+   if (!bufResult.ok()) throwArrowError(bufResult.status(), "BufferOutputStream::Finish");
+   auto buf = bufResult.ValueOrDie();
+
+   // 2. Copy host IPC bytes into a wasm scratch buffer, then materialise a
+   //    guest-side `bytes` object that *owns* its own copy. After that we
+   //    can drop the scratch buffer; the bytes object survives independently.
+   const uint32_t size = static_cast<uint32_t>(buf->size());
+   uint32_t wasmAddr = s.createWasmBuffer(size);
+   std::memcpy(s.nativeAddr(wasmAddr), buf->data(), size);
+   PyObjectPtr bytesObj = s.callPyFunc<PyObjectPtr>(wasm::PyBytes_FromStringAndSize, wasmAddr, size).at(0).of.i32;
+   s.freeWasmBuffer(wasmAddr);
+   if (!bytesObj) {
+      throw std::runtime_error("Tabular Python UDFs (WASM): PyBytes_FromStringAndSize returned null inside the guest");
+   }
+
+   // 3. Invoke the bridge: bytes → pa.Table.
+   PyObjectPtr result = call1(cachedIpcBytesToTable, bytesObj);
+   decref(bytesObj);
+   if (!result) {
+      throw std::runtime_error("Tabular Python UDFs (WASM): pa.ipc.open_stream(...).read_all() failed inside the guest (likely a malformed Arrow IPC stream from the host serialiser)");
+   }
+   return result;
+}
+
+ArrowTable* PythonRuntime::toArrowTable(PyObjectPtr obj) {
+   ensureArrowBridgeLoaded();
+   wasm::WASMSession& s = *currentWasmSession;
+
+   // 1. Bridge: pa.Table → bytes (raises if the UDF returned something else).
+   PyObjectPtr bytesObj = call1(cachedIpcTableToBytes, obj);
+   if (!bytesObj) {
+      throw std::runtime_error("Tabular Python UDF must return a pyarrow.Table; the WASM Arrow IPC bridge could not serialise the returned object");
+   }
+
+   // 2. Discover the bytes' guest address + length, then copy out.
+   uint32_t bytesAddr = s.callPyFunc<uint32_t>(wasm::PyBytes_AsString, bytesObj).at(0).of.i32;
+   // PyBytes_Size returns Py_ssize_t (64-bit on host CPython, but the guest
+   // is wasm32 where Py_ssize_t is 32-bit signed — read as i32).
+   int32_t bytesSize = s.callPyFunc<int32_t>(wasm::PyBytes_Size, bytesObj).at(0).of.i32;
+   if (!bytesAddr || bytesSize < 0) {
+      decref(bytesObj);
+      throw std::runtime_error("Tabular Python UDFs (WASM): PyBytes_AsString/Size returned null/negative for the UDF output bytes");
+   }
+   auto hostBufResult = arrow::AllocateBuffer(bytesSize);
+   if (!hostBufResult.ok()) {
+      decref(bytesObj);
+      throwArrowError(hostBufResult.status(), "arrow::AllocateBuffer");
+   }
+   auto hostBuf = std::move(hostBufResult).ValueOrDie();
+   std::memcpy(hostBuf->mutable_data(), s.nativeAddr(bytesAddr), bytesSize);
+   decref(bytesObj);
+
+   // 3. Host-side IPC deserialise. The reader keeps the buffer alive via
+   //    the shared_ptr stored inside BufferReader; we don't need to retain
+   //    a separate handle.
+   auto bufReader = std::make_shared<arrow::io::BufferReader>(std::shared_ptr<arrow::Buffer>(std::move(hostBuf)));
+   auto readerResult = arrow::ipc::RecordBatchStreamReader::Open(bufReader);
+   if (!readerResult.ok()) throwArrowError(readerResult.status(), "ipc::RecordBatchStreamReader::Open");
+   auto tableResult = readerResult.ValueOrDie()->ToTable();
+   if (!tableResult.ok()) throwArrowError(tableResult.status(), "RecordBatchStreamReader::ToTable");
+   return new ArrowTable(tableResult.ValueOrDie());
 }
 
 #else
