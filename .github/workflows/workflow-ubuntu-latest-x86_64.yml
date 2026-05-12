@@ -38,6 +38,7 @@ jobs:
           CC: ccache clang-20
           CXX: ccache clang++-20
           ENABLE_BASELINE_BACKEND: "ON"
+          ENABLE_PARQUET_SCANNER: "ON"
       - uses: actions/upload-artifact@master
         with:
           name: ${{ matrix.build_type }}-build
@@ -175,8 +176,11 @@ jobs:
         run: |
           export BASE_PATH=$(pwd)
           mkdir -p /db/tpch-1
+          mkdir -p /db/tpch-1-parquet
           cd /datasets/tpch-1
           $BASE_PATH/build/lingodb-${{ matrix.build_type }}/sql /db/tpch-1 < $BASE_PATH/resources/sql/tpch/initialize.sql
+          $BASE_PATH/build/lingodb-${{ matrix.build_type }}/sql /db/tpch-1 < $BASE_PATH/resources/sql/tpch/export-to-parquet.sql
+          mv *.parquet /db/tpch-1-parquet
       - name: Load dataset tpcds
         run: |
           export BASE_PATH=$(pwd)
@@ -187,8 +191,16 @@ jobs:
         run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpchSf1.test /db/tpch-1
         env:
           LINGODB_EXECUTION_MODE: DEFAULT
+      - name: Test tpch parquet (llvm)
+        run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpchSf1.test /db/tpch-1-parquet
+        env:
+          LINGODB_EXECUTION_MODE: DEFAULT
       - name: Test tpch (baseline)
         run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpchSf1.test /db/tpch-1
+        env:
+          LINGODB_EXECUTION_MODE: BASELINE
+      - name: Test tpch parquet (baseline)
+        run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpchSf1.test /db/tpch-1-parquet
         env:
           LINGODB_EXECUTION_MODE: BASELINE
 

@@ -1,6 +1,9 @@
 #include "lingodb/runtime/storage/LingoDBTable.h"
 #include "lingodb/catalog/Defs.h"
 #include "lingodb/runtime/ArrowView.h"
+#if ENABLE_PARQUET_SCANNER
+#include "lingodb/runtime/storage/ExternalTableScan.h"
+#endif
 #include "lingodb/runtime/storage/Restrictions.h"
 #include "lingodb/scheduler/Tasks.h"
 #include "lingodb/utility/Serialization.h"
@@ -283,6 +286,10 @@ void LingoDBTable::flush() {
    storeTable(dbDir + "/" + fileName, schema, tableData);
 }
 
+std::vector<LingoDBTable::TableChunk>* LingoDBTable::getTableChunks() {
+   return &tableData;
+}
+
 std::shared_ptr<arrow::DataType> LingoDBTable::getColumnStorageType(std::string_view columnName) const {
    // this unnecessary to-string-allocation must be fixed in arrow. for now, we use this workaround
    auto field = schema->GetFieldByName(std::string{columnName});
@@ -532,14 +539,37 @@ class ScanBatchesSingleThreadedTask : public lingodb::scheduler::TaskWithImplici
 };
 
 std::unique_ptr<scheduler::Task> LingoDBTable::createScanTask(const ScanConfig& scanConfig) {
-   ensureLoaded();
+   auto restrictions = lingodb::runtime::Restrictions::create(scanConfig.filters, *schema);
+#if ENABLE_PARQUET_SCANNER
+   if (useParquetScan) {
+      std::vector<int> colIds;
+      for (const auto& c : scanConfig.columns) {
+         auto colId = schema->GetFieldIndex(c);
+         assert(colId >= 0);
+         colIds.push_back(colId);
+      }
+      //Remove .arrow and replace with .parquet
+      std::string parquetFileName = fileName;
+      size_t lastDot = parquetFileName.find_last_of(".");
+      if (lastDot != std::string::npos) {
+         parquetFileName.replace(lastDot, std::string::npos, ".parquet");
+      } else {
+         // If there's no extension at all, just append it
+         parquetFileName += ".parquet";
+      }
+      auto parquetPath = dbDir + "/" + parquetFileName;
+      auto scanParquetFileTask = std::make_unique<ScanParquetFileTask>(parquetPath, colIds, scanConfig.cb, std::move(restrictions), scanConfig.filters);
+      return scanParquetFileTask;
+   }
+#endif
    std::vector<size_t> colIds;
    for (const auto& c : scanConfig.columns) {
       auto colId = schema->GetFieldIndex(c);
       assert(colId >= 0);
       colIds.push_back(colId);
    }
-   auto restrictions = lingodb::runtime::Restrictions::create(scanConfig.filters, *schema);
+   ensureLoaded();
+
    if (scanConfig.parallel) {
       return std::make_unique<ScanBatchesTask>(*this, tableData, colIds, std::move(restrictions), scanConfig.cb);
    } else {

@@ -36,11 +36,14 @@ message("Using Python3: ${Python3_EXECUTABLE}")
 
 find_package(Arrow 24 REQUIRED)
 find_package(ArrowCompute 24 REQUIRED)
+find_package(Parquet REQUIRED)
+
+
 option(ENABLE_GPU_BACKEND "enable GPU backend" OFF)
 option(ENABLE_BASELINE_BACKEND "enable tpde baseline backend" OFF)
 option(ENABLE_TESTS "enable tests" ON)
 option(ENABLE_MIMALLOC "enable mimalloc allocator" ON)
-
+option(ENABLE_PARQUET_SCANNER "enable experimental external table  scanner for parquet files" OFF)
 # Python UDF support: OFF (default), CPYTHON (embed system CPython), or WASM
 # (run a sandboxed CPython compiled to WebAssembly via the bundled cpython-wasm
 # submodule + WAMR runtime).

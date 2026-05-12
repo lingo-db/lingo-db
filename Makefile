@@ -10,6 +10,7 @@ SQLITE_TEST_BUILD_TYPE ?= release
 ENABLE_BASELINE_BACKEND ?= OFF
 ENABLE_MIMALLOC ?= ON
 ENABLE_PYTHON ?= OFF
+ENABLE_PARQUET_SCANNER ?= OFF
 
 build:
 	mkdir -p $@
@@ -43,13 +44,24 @@ resources/data/%/.stamp: resources/data/%/.rawdata build/lingodb-$(DATA_BUILD_TY
 	touch $@
 	rm -rf resources/data/$*/.rawdata
 
+resources/data/%/.pq: resources/data/%/.stamp resources/data/%/.rawdata build/lingodb-$(DATA_BUILD_TYPE)/.buildstamp
+	@dir_name=$(shell dirname $@) && \
+	base_name=$$(basename $$dir_name) && \
+	dataset_name=$$(echo $$base_name | sed -E 's/-[0-9]+$$//') && \
+	cd resources/data/$*/ && $(ROOT_DIR)/build/lingodb-$(DATA_BUILD_TYPE)/sql . < $(ROOT_DIR)/resources/sql/$$dataset_name/export-to-parquet.sql
+	touch $@
+	rm -f resources/data/$*/*.arrow
+	rm -f resources/data/$*/*.hashidx
+	rm -f resources/data/$*/*.lingodb
+	rm -rf resources/data/$*/.stamp
 
 
 LDB_ARGS= -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  \
 	   	 -DCMAKE_BUILD_TYPE=Debug \
 	   	 -DENABLE_BASELINE_BACKEND=$(ENABLE_BASELINE_BACKEND) \
 	   	 -DENABLE_MIMALLOC=$(ENABLE_MIMALLOC) \
-	   	 -DENABLE_PYTHON=$(ENABLE_PYTHON)
+	   	 -DENABLE_PYTHON=$(ENABLE_PYTHON) \
+	   	 -DENABLE_PARQUET_SCANNER=$(ENABLE_PARQUET_SCANNER)
 
 build/lingodb-debug/.stamp: build
 	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS) -DCMAKE_BUILD_TYPE=Debug $(CMAKE_PREFIX_PATH_FLAG)
