@@ -165,6 +165,7 @@ void testSubstrWithCleanup(const VarLen32& testString, const std::string& expect
    VarLen32 exp = VarLen32::fromString(expected);
    VarLen32 res = StringRuntime::substr(testString, from, len);
    REQUIRE(StringRuntime::compareEq(res, exp));
+   VarLen32::decRefCount(res);
 }
 
 void testSubstringFromChar(std::string characters[], size_t length) {
@@ -195,6 +196,7 @@ void testSubstringFromChar(std::string characters[], size_t length) {
          REQUIRE(StringRuntime::compareEq(
             res,
             subString));
+         VarLen32::decRefCount(res);
       }
    }
 }

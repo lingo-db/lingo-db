@@ -43,7 +43,9 @@ bool comparator(const std::string& input, const std::string& pattern, const std:
    const VarLen32 expectedVarLen32 = VarLen32::fromString(expected);
 
    const VarLen32 result = StringRuntime::regexpReplace(inputVarLen32, patternVarLen32, replaceVarLen32);
-   return StringRuntime::compareEq(result, expectedVarLen32);
+   auto eq = StringRuntime::compareEq(result, expectedVarLen32);
+   VarLen32::decRefCount(result);
+   return eq;
 }
 
 } // namespace
