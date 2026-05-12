@@ -6,6 +6,8 @@
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/OpDefinition.h"
 
+#include "lingodb/compiler/Dialect/DB/IR/DBOpsTypeInterfaces.h.inc"
+
 #define GET_TYPEDEF_CLASSES
 #include "lingodb/compiler/Dialect/DB/IR/DBOpsTypes.h.inc"
 

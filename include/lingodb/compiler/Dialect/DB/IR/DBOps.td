@@ -44,11 +44,11 @@ class DB_Op<string mnemonic, list<Trait> traits = []> : Op<DB_Dialect, mnemonic,
 }
 
 
-class DB_Type<string name, string typeMnemonic> : TypeDef<DB_Dialect, name> {
+class DB_Type<string name, string typeMnemonic, list<Trait> traits = []> : TypeDef<DB_Dialect, name, traits> {
     let mnemonic = typeMnemonic;
 }
 
-def NullableType : DB_Type<"Nullable","nullable"> {
+def NullableType : DB_Type<"Nullable","nullable", [DB_ManagedType]> {
     let summary = "nullable";
 
     let parameters = (ins "mlir::Type":$type);
@@ -59,12 +59,15 @@ def NullableType : DB_Type<"Nullable","nullable"> {
             return $_get(type.getContext(), type);
         }]>
     ];
+    let extraClassDeclaration = [{
+        bool needsManagement() const;
+    }];
     // XXX: remove builder that takes context parameter
     // let skipDefaultBuilders = 1;
 }
 
 
-def DB_CharType : DB_Type<"Char","char"> {
+def DB_CharType : DB_Type<"Char","char", [DB_ManagedType]> {
     let summary = "char";
     let description = [{
         Fixed-size array of chars.
@@ -72,6 +75,9 @@ def DB_CharType : DB_Type<"Char","char"> {
 
     let parameters = (ins "unsigned":$len);
     let assemblyFormat="`<` $len `>` ";
+    let extraClassDeclaration = [{
+        bool needsManagement() const { return getLen() > 1; }
+    }];
 }
 
 def DB_DateUnit_DAY  : I64EnumAttrCase<"day", 0>;
@@ -122,16 +128,22 @@ def DB_DecimalType : DB_Type<"Decimal","decimal"> {
     let assemblyFormat="`<` $p `,` $s  `>` ";
 }
 
-def DB_StringType : DB_Type<"String","string"> {
+def DB_StringType : DB_Type<"String","string", [DB_ManagedType]> {
     let summary = "string";
     let description = [{
         Variable-length string.
     }];
+    let extraClassDeclaration = [{
+        bool needsManagement() const { return true; }
+    }];
 }
 
-def ListType: DB_Type<"List", "list">{
+def ListType: DB_Type<"List", "list", [DB_ManagedType]>{
   let parameters = (ins "mlir::Type":$elementType);
   let assemblyFormat = "`<` $elementType `>`";
+  let extraClassDeclaration = [{
+      bool needsManagement() const { return true; }
+  }];
 }
 def DictType : DB_Type<"Dict", "dict">{
   let parameters = (ins "mlir::Type":$keyType, "mlir::Type":$valueType);
@@ -165,26 +177,41 @@ def CreateListOp : DB_Op<"create_list", []> {
     let assemblyFormat = "type($list) attr-dict";
 }
 
-def DB_ListGetOp : DB_Op<"list_get", []> {
+def DB_ListGetOp : DB_Op<"list_get", [DeclareOpInterfaceMethods<DB_RefCountedOp, ["getBorrowedResults"]>]> {
     let summary = "Get element from list";
 
     let arguments = (ins ListType:$list, Index:$index);
     let results = (outs AnyType:$element);
     let assemblyFormat = "$list `:` type($list) `[` $index `]` `:` type($element) attr-dict";
+    let extraClassDefinition = [{
+        void $cppClass::getBorrowedResults(llvm::SmallVectorImpl<mlir::Value>& result) {
+            result.push_back(getElement());
+        }
+    }];
 }
 
-def DB_ListSetOp : DB_Op<"list_set", []> {
+def DB_ListSetOp : DB_Op<"list_set", [DeclareOpInterfaceMethods<DB_RefCountedOp, ["getOwnedOperands"]>]> {
     let summary = "Set element in list";
 
     let arguments = (ins ListType:$list, Index:$index, AnyType:$element);
     let assemblyFormat = "$list `:` type($list) `[` $index `]` `=` $element `:` type($element) attr-dict";
+    let extraClassDefinition = [{
+        void $cppClass::getOwnedOperands(llvm::SmallVectorImpl<mlir::Value>& result) {
+            result.push_back(getElement());
+        }
+    }];
 }
 
-def DB_ListAppendOp : DB_Op<"list_append"> {
+def DB_ListAppendOp : DB_Op<"list_append", [DeclareOpInterfaceMethods<DB_RefCountedOp, ["getOwnedOperands"]>]> {
     let summary = "Append element to list";
 
     let arguments = (ins ListType:$list, AnyType:$element);
     let assemblyFormat = "$list `:` type($list)  `,` $element `:` type($element) attr-dict";
+    let extraClassDefinition = [{
+        void $cppClass::getOwnedOperands(llvm::SmallVectorImpl<mlir::Value>& result) {
+            result.push_back(getElement());
+        }
+    }];
 }
 
 def ListLengthOp : DB_Op<"list_length", []> {
@@ -287,12 +314,17 @@ def DB_SortCompare : DB_Op<"sort_compare", [Pure]> {
 }
 
 
-def DB_AsNullableOp : DB_Op<"as_nullable", [Pure]> {
+def DB_AsNullableOp : DB_Op<"as_nullable", [Pure, DeclareOpInterfaceMethods<DB_RefCountedOp, ["getOwnedOperands"]>]> {
     let summary = "Convert to nullable type";
 
     let arguments = (ins AnyType: $val,Optional<I1>: $null);
     let results = (outs NullableType : $res);
     let assemblyFormat = "$val `:` type($val) ( `,` $null^ )?  `->` type($res) attr-dict";
+    let extraClassDefinition = [{
+        void $cppClass::getOwnedOperands(llvm::SmallVectorImpl<mlir::Value>& result) {
+            result.push_back(getVal());
+        }
+    }];
 }
 
 def DB_IsNullOp : DB_Op<"isnull", [Pure]> {
@@ -304,13 +336,18 @@ def DB_IsNullOp : DB_Op<"isnull", [Pure]> {
      let hasFolder = 1;
 }
 
-def DB_NullableGetVal : DB_Op<"nullable_get_val", [Pure,DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
+def DB_NullableGetVal : DB_Op<"nullable_get_val", [Pure,
+                                                   DeclareOpInterfaceMethods<InferTypeOpInterface>,
+                                                   DeclareOpInterfaceMethods<DB_RefCountedOp, ["getBorrowedResults"]>]> {
     let summary = "Get value of nullable type";
 
     let arguments = (ins NullableType: $val);
     let results = (outs AnyType : $res);
     let assemblyFormat = "$val `:` type($val)  attr-dict";
     let extraClassDefinition = [{
+        void $cppClass::getBorrowedResults(llvm::SmallVectorImpl<mlir::Value>& result) {
+            result.push_back(getRes());
+        }
         LogicalResult $cppClass::inferReturnTypes(
                 MLIRContext* context, std::optional<Location> location,
                 ValueRange operands, DictionaryAttr attributes, OpaqueProperties opaqueProperties,
