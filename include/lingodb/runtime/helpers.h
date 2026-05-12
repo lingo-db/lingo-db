@@ -2,17 +2,19 @@
 #define LINGODB_RUNTIME_HELPERS_H
 #include "ExecutionContext.h"
 
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <string.h> // for memcpy
 #include <sys/mman.h>
 
 #define EXPORT extern "C" __attribute__((visibility("default")))
-#define INLINE __attribute__((always_inline))
+#define INLINE __attribute__((always_inline)) inline
 namespace lingodb::runtime {
 alignas(4096) extern uint16_t bloomMasks[2048];
 
@@ -67,6 +69,12 @@ static uint64_t read8PadZero(const uint8_t* p, uint32_t len) {
    return unalignedLoad64(p + len - 8) >> (64 - len * 8);
 #endif
 }
+enum class StorageClass : uint8_t {
+   GLOBAL = 0, // valid over the entire query runtime (e.g., constants, registered values)
+   TRANSIENT = 1, // externally managed, but only valid during the current "morsel"
+   REFCOUNTED = 2, // reference counted memory, freed when no references remain
+   RESERVED = 3, // reserved for future use
+};
 
 class VarLen32 {
    private:
@@ -87,25 +95,37 @@ class VarLen32 {
    };
 
    private:
-   void storePtr(const uint8_t* ptr) {
-      const uint8_t** ptrloc = reinterpret_cast<const uint8_t**>((&bytes[4]));
-      *ptrloc = ptr;
+   void storePtr(const uint8_t* ptr, StorageClass storageClass) {
+      uintptr_t* ptrloc = reinterpret_cast<uintptr_t*>((&bytes[4]));
+      uintptr_t ptrVal = reinterpret_cast<uintptr_t>(ptr);
+      ptrVal <<= 2; // bottom 2 bits hold the storage class
+      ptrVal |= static_cast<uint8_t>(storageClass);
+      *ptrloc = ptrVal;
    }
 
    public:
-   static VarLen32 fromString(std::string str) {
-      if (str.size() <= shortLen) {
-         return VarLen32(reinterpret_cast<const uint8_t*>(str.data()), str.size());
+   static INLINE VarLen32 fromDataAndLen(const char* data, size_t len, StorageClass storageClass = StorageClass::GLOBAL) {
+      if (len <= shortLen) {
+         return VarLen32(reinterpret_cast<const uint8_t*>(data), len, storageClass);
       }
-      auto* ptr = getCurrentExecutionContext()->allocString(str.size());
-      memcpy(ptr, str.data(), str.size());
-      return VarLen32(ptr, str.size());
+      // refcounted path is wired up in a follow-up commit; for now route through the arena.
+      auto* ptr = getCurrentExecutionContext()->allocString(len);
+      memcpy(ptr, data, len);
+      return VarLen32(ptr, len, storageClass);
+   }
+   static INLINE VarLen32 fromString(std::string_view str, StorageClass storageClass = StorageClass::GLOBAL) {
+      return fromDataAndLen(str.data(), str.size(), storageClass);
+   }
+   static uint8_t* allocateForStorageClass(size_t size, StorageClass storageClass) {
+      if (storageClass == StorageClass::TRANSIENT) return nullptr;
+      // GLOBAL and REFCOUNTED both go through the arena until the refcount path is wired up.
+      return getCurrentExecutionContext()->allocString(size);
    }
    VarLen32() : len(0), first4(0xffffffff), last8(0) {}
-   VarLen32(const uint8_t* ptr, uint32_t len) : len(len) {
+   INLINE VarLen32(const uint8_t* ptr, uint32_t len, StorageClass storageClass = StorageClass::GLOBAL) : len(len) {
       if (len > shortLen) {
          this->first4 = unalignedLoad32(ptr);
-         storePtr(ptr);
+         storePtr(ptr, storageClass);
       } else if (len > 8) {
          this->first4 = unalignedLoad32(ptr);
          this->last8 = unalignedLoad64(ptr + len - 8);
@@ -124,8 +144,11 @@ class VarLen32 {
       if (len <= shortLen) {
          return bytes;
       } else {
-         return reinterpret_cast<uint8_t*>(*(uintptr_t*) (&bytes[4]));
+         return reinterpret_cast<uint8_t*>((*(uintptr_t*) (&bytes[4])) >> 2);
       }
+   }
+   StorageClass getStorageClass() {
+      return static_cast<StorageClass>(last8 & 0x3);
    }
    char* data() {
       return (char*) getPtr();
