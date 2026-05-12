@@ -1141,10 +1141,10 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
       uint64_t c1 = (first4 << 32) | len;
       res_ref.part(0).set_value(ValuePartRef(this, c1, 8, Config::GP_BANK));
 
-      // part1 is the pointer to the content
+      // part1 is the pointer to the content shifted left by 2 (GLOBAL storage class = 0 in low bits)
       // -> content is a StringRef pointing inside the mlir module
       // -> as long as we keep that alive past query execution, we can just hand out the pointer!
-      res_ref.part(1).set_value(ValuePart{std::bit_cast<uint64_t>(content.data()), 8, Config::GP_BANK});
+      res_ref.part(1).set_value(ValuePart{std::bit_cast<uint64_t>(content.data()) << 2, 8, Config::GP_BANK});
       return true;
    }
    bool compile_util_set_bit_const_op(dialect::util::SetBitConstOp op) {

@@ -205,11 +205,11 @@ __int128 lingodb::runtime::StringRuntime::toDecimal(lingodb::runtime::VarLen32 s
       size_t len = 0;                                                                                                                                \
       arrow::Status status = formatter(value, [&](std::string_view v) {                                                                              \
          len = v.length();                                                                                                                           \
-         data = getCurrentExecutionContext()->allocString(len);                                                                                      \
+         data = VarLen32::allocateForStorageClass(len, StorageClass::REFCOUNTED);                                                                    \
          memcpy(data, v.data(), len);                                                                                                                \
          return arrow::Status::OK();                                                                                                                 \
       });                                                                                                                                            \
-      return lingodb::runtime::VarLen32(data, len);                                                                                                  \
+      return lingodb::runtime::VarLen32(data, len, StorageClass::REFCOUNTED);                                                                        \
    }
 
 CAST_NUMERIC_TO_STRING(int64_t, arrow::Int64Type, Int)
@@ -221,7 +221,7 @@ lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::fromDecimal(__int128
 
    arrow::Decimal128 decimalrep(arrow::BasicDecimal128(val >> 64, val));
    std::string str = decimalrep.ToString(scale);
-   return lingodb::runtime::VarLen32::fromString(str);
+   return lingodb::runtime::VarLen32::fromString(str, StorageClass::REFCOUNTED);
 }
 
 lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::fromChar(uint32_t val) { // NOLINT (clang-diagnostic-return-type-c-linkage)
@@ -237,7 +237,7 @@ lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::fromChar(uint32_t va
    } else {
       len = 4;
    }
-   return lingodb::runtime::VarLen32(reinterpret_cast<uint8_t*>(data), len);
+   return lingodb::runtime::VarLen32(reinterpret_cast<uint8_t*>(data), len, StorageClass::REFCOUNTED);
 }
 
 #define STR_CMP(NAME, OP)                                                                                                  \
@@ -319,7 +319,7 @@ lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::substr(lingodb::runt
    size_t byteFrom = charIndexToByteIndex(str, legalizedFrom);
    size_t byteTo = charIndexToByteIndex(str, legalizedTo, byteFrom, legalizedFrom);
 
-   return lingodb::runtime::VarLen32::fromString(str.str().substr(byteFrom, byteTo - byteFrom));
+   return lingodb::runtime::VarLen32::fromString(str.str().substr(byteFrom, byteTo - byteFrom), StorageClass::REFCOUNTED);
 }
 
 // TODO add regexp flags
@@ -334,7 +334,7 @@ lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::regexpReplace(
     * - group capturing uses \1 in sql and $1 in c++ (hence pre-parsing is necessary)
     * - the pattern .* returns different results
     */
-   return VarLen32::fromString(std::regex_replace(text.str(), std::regex(pattern.str()), replace.str(), std::regex_constants::format_default));
+   return VarLen32::fromString(std::regex_replace(text.str(), std::regex(pattern.str()), replace.str(), std::regex_constants::format_default), StorageClass::REFCOUNTED);
 }
 
 size_t lingodb::runtime::StringRuntime::findMatch(VarLen32 str, VarLen32 needle, size_t start, size_t end) {
@@ -401,11 +401,11 @@ lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::toUpper(lingodb::run
       ::toUpper(str.data(), str.getLen());
       return str;
    } else {
-      char* copied = reinterpret_cast<char*>(getCurrentExecutionContext()->allocString(str.getLen()));
+      char* copied = reinterpret_cast<char*>(VarLen32::allocateForStorageClass(str.getLen(), StorageClass::REFCOUNTED));
 
       memcpy(copied, str.data(), str.getLen());
       ::toUpper(copied, str.getLen());
-      return lingodb::runtime::VarLen32(reinterpret_cast<uint8_t*>(copied), str.getLen());
+      return lingodb::runtime::VarLen32(reinterpret_cast<uint8_t*>(copied), str.getLen(), StorageClass::REFCOUNTED);
    }
 }
 lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::toLower(lingodb::runtime::VarLen32 str) {
@@ -413,10 +413,10 @@ lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::toLower(lingodb::run
       ::toLower(str.data(), str.getLen());
       return str;
    } else {
-      char* copied = reinterpret_cast<char*>(getCurrentExecutionContext()->allocString(str.getLen()));
+      char* copied = reinterpret_cast<char*>(VarLen32::allocateForStorageClass(str.getLen(), StorageClass::REFCOUNTED));
       memcpy(copied, str.data(), str.getLen());
       ::toLower(copied, str.getLen());
-      return lingodb::runtime::VarLen32((uint8_t*) copied, str.getLen());
+      return lingodb::runtime::VarLen32((uint8_t*) copied, str.getLen(), StorageClass::REFCOUNTED);
    }
 }
 lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::concat(lingodb::runtime::VarLen32 a, lingodb::runtime::VarLen32 b) {
@@ -425,12 +425,12 @@ lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::concat(lingodb::runt
       uint8_t data[lingodb::runtime::VarLen32::shortLen];
       memcpy(data, a.data(), a.getLen());
       memcpy(&data[a.getLen()], b.data(), b.getLen());
-      return lingodb::runtime::VarLen32(data, totalLength);
+      return lingodb::runtime::VarLen32(data, totalLength, StorageClass::TRANSIENT);
    } else {
-      char* copied = reinterpret_cast<char*>(getCurrentExecutionContext()->allocString(totalLength));
+      auto* copied = VarLen32::allocateForStorageClass(totalLength, StorageClass::REFCOUNTED);
       memcpy(copied, a.data(), a.getLen());
       memcpy(&copied[a.getLen()], b.data(), b.getLen());
-      return lingodb::runtime::VarLen32(reinterpret_cast<uint8_t*>(copied), totalLength);
+      return lingodb::runtime::VarLen32(copied, totalLength, StorageClass::REFCOUNTED);
    }
 }
 
@@ -455,12 +455,12 @@ int64_t lingodb::runtime::StringRuntime::toTimestamp(lingodb::runtime::VarLen32 
 lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::fromDate(int64_t date) {
    static arrow_vendored::date::sys_days epoch = arrow_vendored::date::sys_days{arrow_vendored::date::jan / 1 / 1970};
    auto asString = arrow_vendored::date::format("%F", epoch + std::chrono::nanoseconds{date});
-   return lingodb::runtime::VarLen32::fromString(asString);
+   return lingodb::runtime::VarLen32::fromString(asString, StorageClass::REFCOUNTED);
 }
 lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::fromTimestamp(int64_t timestamp) {
    static arrow_vendored::date::sys_days epoch = arrow_vendored::date::sys_days{arrow_vendored::date::jan / 1 / 1970};
    auto asString = arrow_vendored::date::format("%F %T", epoch + std::chrono::nanoseconds{timestamp});
-   return lingodb::runtime::VarLen32::fromString(asString);
+   return lingodb::runtime::VarLen32::fromString(asString, StorageClass::REFCOUNTED);
 }
 
 int32_t lingodb::runtime::StringRuntime::toChar(VarLen32 str) {
@@ -469,7 +469,7 @@ int32_t lingodb::runtime::StringRuntime::toChar(VarLen32 str) {
 }
 
 extern "C" lingodb::runtime::VarLen32 createVarLen32(uint8_t* ptr, uint32_t len) { //NOLINT(clang-diagnostic-return-type-c-linkage)
-   return lingodb::runtime::VarLen32(ptr, len);
+   return lingodb::runtime::VarLen32(ptr, len, lingodb::runtime::StorageClass::TRANSIENT);
 }
 
 int64_t lingodb::runtime::StringRuntime::pyFind(VarLen32 str, VarLen32 needle, int64_t start, int64_t end) {
@@ -480,7 +480,7 @@ int64_t lingodb::runtime::StringRuntime::pyRFind(VarLen32 str, VarLen32 needle, 
 }
 lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::replace(VarLen32 str, VarLen32 oldVal, VarLen32 newVal) {
    auto res = ::replace(str.str(), oldVal.str(), newVal.str());
-   return lingodb::runtime::VarLen32::fromString(res);
+   return lingodb::runtime::VarLen32::fromString(res, StorageClass::REFCOUNTED);
 }
 
 lingodb::runtime::List* lingodb::runtime::StringRuntime::split(VarLen32 str, VarLen32 needle, size_t maxSplits) {
@@ -500,7 +500,8 @@ lingodb::runtime::List* lingodb::runtime::StringRuntime::split(VarLen32 str, Var
          end = str.getLen();
       }
       auto* val = list->append();
-      new (val) lingodb::runtime::VarLen32(reinterpret_cast<const uint8_t*>(str.data() + start), end - start);
+      auto varlen = VarLen32::fromDataAndLen(str.data() + start, end - start, StorageClass::REFCOUNTED);
+      *reinterpret_cast<VarLen32*>(val) = varlen;
       start = end + needle.getLen();
       splits++;
    }
