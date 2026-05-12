@@ -1400,7 +1400,8 @@ class MemoryCleanupUseLowering : public OpConversionPattern<db::MemoryCleanupUse
    LogicalResult matchAndRewrite(db::MemoryCleanupUse cleanupUse, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto loc = cleanupUse.getLoc();
       auto t = cleanupUse.getValue().getType();
-      if (mlir::isa<db::StringType>(t)) {
+      auto charType = mlir::dyn_cast<db::CharType>(t);
+      if (mlir::isa<db::StringType>(t) || (charType && charType.getLen() > 1)) {
          rt::StringRuntime::cleanupUse(rewriter, loc)({adaptor.getValue()});
          rewriter.eraseOp(cleanupUse);
          return success();
@@ -1425,7 +1426,8 @@ class MemoryAddUseLowering : public OpConversionPattern<db::MemoryAddUse> {
    LogicalResult matchAndRewrite(db::MemoryAddUse addUse, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto loc = addUse.getLoc();
       auto t = addUse.getValue().getType();
-      if (mlir::isa<db::StringType>(t)) {
+      auto charType = mlir::dyn_cast<db::CharType>(t);
+      if (mlir::isa<db::StringType>(t) || (charType && charType.getLen() > 1)) {
          rt::StringRuntime::addUse(rewriter, loc)({adaptor.getValue()});
          rewriter.eraseOp(addUse);
          return success();
@@ -1445,7 +1447,8 @@ class MemoryPromoteToGlobalLowering : public OpConversionPattern<db::MemoryPromo
    LogicalResult matchAndRewrite(db::MemoryPromoteToGlobal promoteOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto loc = promoteOp.getLoc();
       auto t = promoteOp.getValue().getType();
-      if (mlir::isa<db::StringType>(t)) {
+      auto charType = mlir::dyn_cast<db::CharType>(t);
+      if (mlir::isa<db::StringType>(t) || (charType && charType.getLen() > 1)) {
          rewriter.replaceOp(promoteOp, rt::StringRuntime::promoteToGlobal(rewriter, loc)({adaptor.getValue()})[0]);
          return success();
       }

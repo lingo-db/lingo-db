@@ -15,6 +15,7 @@ module {
         %to = db.constant( 2 ) : i32
         %substr = db.runtime_call "Substring" (%conststr1,%from,%to) : (!db.string,i32,i32) -> (!db.string)
         db.runtime_call "DumpValue" (%substr) : (!db.string) -> ()
+        db.memory.cleanup_use %substr : !db.string
 		//CHECK: bool(false)
         %0 = db.compare eq %conststr1 : !db.string, %conststr2 : !db.string
         db.runtime_call "DumpValue" (%0) : (i1) -> ()
@@ -97,15 +98,19 @@ module {
         //CHECK: string("42")
         %18 = db.cast %int : i32 -> !db.string
         db.runtime_call "DumpValue" (%18) : (!db.string) -> ()
+        db.memory.cleanup_use %18 : !db.string
         //CHECK: string("1.01")
         %19 = db.cast %float32 : f32 -> !db.string
         db.runtime_call "DumpValue" (%19) : (!db.string) -> ()
+        db.memory.cleanup_use %19 : !db.string
         //CHECK: string("1.0001")
         %20 = db.cast %float64 : f64 -> !db.string
         db.runtime_call "DumpValue" (%20) : (!db.string) -> ()
+        db.memory.cleanup_use %20 : !db.string
         //CHECK: string("1.0000001")
         %21 = db.cast %decimal : !db.decimal<10,7> -> !db.string
         db.runtime_call "DumpValue" (%21) : (!db.string) -> ()
+        db.memory.cleanup_use %21 : !db.string
 
 
         // Like:Simple

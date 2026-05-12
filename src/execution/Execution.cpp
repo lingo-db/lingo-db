@@ -135,6 +135,9 @@ class SubOpLoweringStep : public LoweringStep {
          optSubOpPm.addPass(subop::createSpecializeParallelPass());
       }
       optSubOpPm.addPass(subop::createPrepareLoweringPass());
+#if ENABLE_REFCOUNT == 1
+      optSubOpPm.addPass(subop::createMemoryMgmtPass());
+#endif
       optSubOpPm.addPass(subop::createSplitIntoNestedExecutionStepsPass());
       if (mlir::failed(optSubOpPm.run(moduleOp))) {
          error.emit() << "Lowering of Sub-Operators to imperative operations failed";
