@@ -9,15 +9,18 @@ class List {
    size_t sizeOfType;
    size_t len;
    std::vector<uint8_t> values;
-   List(size_t sizeOfType) : sizeOfType(sizeOfType), len(), values(2 * sizeOfType) {}
 
    public:
+   List(size_t sizeOfType) : sizeOfType(sizeOfType), len(), values(2 * sizeOfType) {}
    static List* create(size_t sizeOfType);
    uint8_t* at(size_t pos);
    static List* fromBuffer(size_t sizeOfType, Buffer buffer);
    uint8_t* append();
    size_t size();
    Buffer getBuffer();
+   static void cleanupUse(List* list);
+   static void cleanupUseCb(List* list, void (*cleanupFn)(List*));
+   static void addUse(List* list);
 };
 
 }; // namespace lingodb::runtime

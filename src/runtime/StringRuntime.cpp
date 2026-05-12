@@ -528,3 +528,15 @@ int64_t lingodb::runtime::StringRuntime::ord(VarLen32 str) {
    }
    throw std::runtime_error("Cannot get ord of string with length " + std::to_string(str.getLen()));
 }
+
+void lingodb::runtime::StringRuntime::cleanupUse(VarLen32 str) {
+   lingodb::runtime::VarLen32::decRefCount(str);
+}
+
+void lingodb::runtime::StringRuntime::addUse(VarLen32 str) {
+   lingodb::runtime::VarLen32::incRefCount(str);
+}
+
+lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::promoteToGlobal(lingodb::runtime::VarLen32 str) {
+   return lingodb::runtime::VarLen32::promoteToGlobal(str);
+}

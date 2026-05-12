@@ -2,9 +2,7 @@
 using namespace lingodb::runtime;
 
 List* List::create(size_t sizeOfType) {
-   auto* list = new List(sizeOfType);
-   getCurrentExecutionContext()->registerState({list, [](void* ptr) { delete reinterpret_cast<List*>(ptr); }});
-   return list;
+   return createRefCounted<List>(sizeOfType);
 }
 uint8_t* List::append() {
    if ((len + 1) * sizeOfType > values.size()) {
@@ -19,7 +17,7 @@ Buffer List::getBuffer() {
    return Buffer(len * sizeOfType, values.data());
 }
 List* List::fromBuffer(size_t sizeOfType, Buffer buffer) {
-   auto* res = new List(sizeOfType);
+   auto* res = createRefCounted<List>(sizeOfType);
    res->len = buffer.numElements / sizeOfType;
    res->values.resize(buffer.numElements);
    memcpy(res->values.data(), buffer.ptr, buffer.numElements);
@@ -34,4 +32,16 @@ uint8_t* List::at(size_t pos) {
 
 size_t List::size() {
    return len;
+}
+
+void List::cleanupUseCb(List* list, void (*cleanupFn)(List*)) {
+   decRefCount<List>(list, cleanupFn);
+}
+
+void List::cleanupUse(List* list) {
+   decRefCount<List>(list, [](List*) {});
+}
+
+void List::addUse(List* list) {
+   incRefCount<List>(list);
 }

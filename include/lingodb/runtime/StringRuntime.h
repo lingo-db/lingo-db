@@ -44,6 +44,9 @@ struct StringRuntime {
    static size_t findNext(VarLen32 str, VarLen32 needle, size_t start);
    static List* split(VarLen32 str, VarLen32 needle, size_t maxSplits);
    static int64_t ord(VarLen32 str);
+   static void cleanupUse(VarLen32 str);
+   static void addUse(VarLen32 str);
+   static VarLen32 promoteToGlobal(VarLen32 str);
 };
 } // namespace lingodb::runtime
 #endif // LINGODB_RUNTIME_STRINGRUNTIME_H
