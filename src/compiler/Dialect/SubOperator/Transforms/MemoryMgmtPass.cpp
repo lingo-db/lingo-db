@@ -1,14 +1,13 @@
 #include "lingodb/compiler/Dialect/DB/IR/DBOps.h"
-#include "lingodb/compiler/Dialect/SubOperator/SubOperatorInterfaces.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/Passes.h"
 #include "lingodb/compiler/Dialect/util/UtilOps.h"
 #include "lingodb/compiler/helper.h"
 
+#include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/BuiltinOps.h"
-
-#include <llvm/ADT/TypeSwitch.h>
 
 namespace {
 using namespace lingodb::compiler::dialect;
@@ -17,25 +16,15 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
    public:
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(MemoryMgmtPass)
    llvm::StringRef getArgument() const override { return "subop-memory-mgmt"; }
+   void getDependentDialects(mlir::DialectRegistry& registry) const override {
+      registry.insert<mlir::scf::SCFDialect>();
+      registry.insert<mlir::func::FuncDialect>();
+      registry.insert<mlir::arith::ArithDialect>();
+   }
 
    bool typeNeedsManagement(mlir::Type t) {
-      if (auto nullableType = mlir::dyn_cast<db::NullableType>(t)) {
-         t = nullableType.getType();
-      }
-      if (mlir::isa<db::StringType, db::ListType>(t)) {
-         return true;
-      }
-      // db.char<N> with N>1 lowers to the same refcounted VarLen32 as db.string.
-      // db.char<1> is inline (i32) and doesn't need management.
-      if (auto charType = mlir::dyn_cast<db::CharType>(t)) {
-         return charType.getLen() > 1;
-      }
-      if (auto tupleType = mlir::dyn_cast<mlir::TupleType>(t)) {
-         for (auto elementType : tupleType.getTypes()) {
-            if (typeNeedsManagement(elementType)) {
-               return true;
-            }
-         }
+      if (auto managed = mlir::dyn_cast<db::ManagedType>(t)) {
+         return managed.needsManagement();
       }
       return false;
    }
@@ -122,7 +111,7 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
 
    void handleBlock(mlir::Block* block, mlir::Block* mapBlock, llvm::DenseSet<mlir::Value>& notCounted) {
       llvm::DenseSet<mlir::Value> returnedValues;
-      auto terminator = block->getTerminator();
+      auto* terminator = block->getTerminator();
       for (auto retVal : terminator->getOperands()) {
          returnedValues.insert(retVal);
       }
@@ -131,67 +120,20 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
       for (auto& op : block->getOperations()) {
          ops.push_back(&op);
       }
-      for (auto op : ops) {
-         llvm::TypeSwitch<mlir::Operation*, void>(op)
-            .Case<mlir::scf::ForOp>([&](mlir::scf::ForOp forOp) {
-               for (auto arg : forOp.getInitArgs()) {
-                  addUse(arg, op, notCounted);
-               }
-            })
-            .Case<mlir::scf::WhileOp>([&](mlir::scf::WhileOp whileOp) {
-               for (auto arg : whileOp.getInits()) {
-                  addUse(arg, op, notCounted);
-               }
-            })
-            .Case<db::ListAppendOp>([&](db::ListAppendOp appendOp) {
-               addUse(appendOp.getElement(), op, notCounted);
-            })
-            .Case<db::ListGetOp>([&](db::ListGetOp listGetOp) {
-               addUseAfter(listGetOp.getElement(), op, notCounted);
-            })
-            .Case<util::UnPackOp>([&](util::UnPackOp unpackOp) {
-               for (auto value : unpackOp.getVals()) {
-                  addUseAfter(value, op, notCounted);
-               }
-            })
-            .Case<util::GetTupleOp>([&](util::GetTupleOp getTupleOp) {
-               addUseAfter(getTupleOp.getVal(), op, notCounted);
-            })
-            .Case<db::ListSetOp>([&](db::ListSetOp setOp) {
-               addUse(setOp.getElement(), op, notCounted);
-            })
-            .Case<db::AsNullableOp>([&](db::AsNullableOp asNullableOp) {
-               addUse(asNullableOp.getVal(), op, notCounted);
-            })
-            .Case<util::PackOp>([&](util::PackOp packOp) {
-               for (auto value : packOp.getVals()) {
-                  addUse(value, op, notCounted);
-               }
-            })
-            .Case<mlir::arith::SelectOp>([&](mlir::arith::SelectOp selectOp) {
-               // arith.select can't grow ref counts; rewrite as scf.if and bump in each arm.
-               if (!typeNeedsManagement(selectOp.getType())) return;
-               mlir::OpBuilder builder(selectOp);
-               auto ifOp = builder.create<mlir::scf::IfOp>(selectOp->getLoc(), selectOp.getType(), selectOp.getCondition(), true);
-               {
-                  mlir::OpBuilder thenBuilder = ifOp.getThenBodyBuilder();
-                  thenBuilder.create<db::MemoryAddUse>(selectOp->getLoc(), selectOp.getTrueValue());
-                  thenBuilder.create<mlir::scf::YieldOp>(selectOp->getLoc(), selectOp.getTrueValue());
-               }
-               {
-                  mlir::OpBuilder elseBuilder = ifOp.getElseBodyBuilder();
-                  elseBuilder.create<db::MemoryAddUse>(selectOp->getLoc(), selectOp.getFalseValue());
-                  elseBuilder.create<mlir::scf::YieldOp>(selectOp->getLoc(), selectOp.getFalseValue());
-               }
-               selectOp.replaceAllUsesWith(ifOp.getResult(0));
-               if (returnedValues.contains(selectOp.getResult())) {
-                  returnedValues.erase(selectOp.getResult());
-                  returnedValues.insert(ifOp.getResult(0));
-               }
-               selectOp.erase();
-               op = ifOp;
-            })
-            .Default([&](mlir::Operation*) {});
+      for (auto* op : ops) {
+         if (auto refCounted = mlir::dyn_cast<db::RefCountedOp>(op)) {
+            mlir::OpBuilder builder(op);
+            if (auto* rewritten = refCounted.rewriteForRefCount(builder, returnedValues)) {
+               op = rewritten;
+            } else {
+               llvm::SmallVector<mlir::Value> owned;
+               refCounted.getOwnedOperands(owned);
+               for (auto v : owned) addUse(v, op, notCounted);
+               llvm::SmallVector<mlir::Value> borrowed;
+               refCounted.getBorrowedResults(borrowed);
+               for (auto v : borrowed) addUseAfter(v, op, notCounted);
+            }
+         }
          for (auto result : op->getResults()) {
             if (typeNeedsManagement(result.getType())) {
                if (returnedValues.contains(result)) {
