@@ -40,6 +40,14 @@ option(ENABLE_GPU_BACKEND "enable GPU backend" OFF)
 option(ENABLE_BASELINE_BACKEND "enable tpde baseline backend" OFF)
 option(ENABLE_TESTS "enable tests" ON)
 option(ENABLE_MIMALLOC "enable mimalloc allocator" ON)
+option(ENABLE_REFCOUNT "enable reference counting for managed runtime values" ON)
+if (ENABLE_REFCOUNT)
+    add_compile_definitions(ENABLE_REFCOUNT=1)
+    message(STATUS "REFERENCE COUNTING ENABLED")
+else ()
+    add_compile_definitions(ENABLE_REFCOUNT=0)
+    message(STATUS "REFERENCE COUNTING DISABLED")
+endif ()
 
 # Python UDF support: OFF (default), CPYTHON (embed system CPython), or WASM
 # (run a sandboxed CPython compiled to WebAssembly via the bundled cpython-wasm
@@ -124,7 +132,15 @@ add_subdirectory(${PROJECT_SOURCE_DIR}/vendored/linenoise-ng/ EXCLUDE_FROM_ALL)
 
 include_directories(${PROJECT_BINARY_DIR}/include)
 link_directories(${LLVM_BUILD_LIBRARY_DIR})
-add_definitions(${LLVM_DEFINITIONS})
+# Note: `add_definitions(${LLVM_DEFINITIONS})` would be the conventional next
+# line here, but it is both redundant and broken. HandleLLVMOptions (included
+# above) already calls `add_compile_definitions(__STDC_{CONSTANT,FORMAT,LIMIT}_MACROS)`
+# into the directory; and its `get_compile_definitions()` helper overwrites
+# `LLVM_DEFINITIONS` with the current directory's COMPILE_DEFINITIONS folded
+# into a single space-joined string. Re-adding that string would (a) drop the
+# original `-D_GNU_SOURCE`, (b) glue subsequent flags onto the first user
+# definition's value (e.g. `-DENABLE_REFCOUNT="1 -D__STDC_..."`), tripping
+# `-Wmacro-redefined`.
 set(LLVM_LINK_COMPONENTS
         Support
         Core

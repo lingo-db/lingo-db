@@ -2,12 +2,15 @@
 #define LINGODB_RUNTIME_HELPERS_H
 #include "ExecutionContext.h"
 
+#include <atomic>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
+#include <new>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <string.h> // for memcpy
@@ -108,18 +111,85 @@ class VarLen32 {
       if (len <= shortLen) {
          return VarLen32(reinterpret_cast<const uint8_t*>(data), len, storageClass);
       }
-      // refcounted path is wired up in a follow-up commit; for now route through the arena.
-      auto* ptr = getCurrentExecutionContext()->allocString(len);
-      memcpy(ptr, data, len);
-      return VarLen32(ptr, len, storageClass);
+#if ENABLE_REFCOUNT == 1
+      if (storageClass == StorageClass::GLOBAL) {
+#else
+      if (storageClass == StorageClass::GLOBAL || storageClass == StorageClass::REFCOUNTED) {
+#endif
+         auto* ptr = getCurrentExecutionContext()->allocString(len);
+         memcpy(ptr, data, len);
+         return VarLen32(ptr, len, storageClass);
+      }
+      if (storageClass == StorageClass::TRANSIENT) {
+         return VarLen32(reinterpret_cast<const uint8_t*>(data), len, storageClass);
+      }
+#if ENABLE_REFCOUNT == 1
+      if (storageClass == StorageClass::REFCOUNTED) {
+         uint8_t* allocated = static_cast<uint8_t*>(malloc(len + 4));
+         reinterpret_cast<uint32_t*>(allocated)[0] = 1; // refcount starts at 1
+         memcpy(allocated + 4, data, len);
+         return VarLen32(allocated + 4, len, storageClass);
+      }
+#endif
+      assert(false);
+      return VarLen32();
    }
    static INLINE VarLen32 fromString(std::string_view str, StorageClass storageClass = StorageClass::GLOBAL) {
       return fromDataAndLen(str.data(), str.size(), storageClass);
    }
    static uint8_t* allocateForStorageClass(size_t size, StorageClass storageClass) {
-      if (storageClass == StorageClass::TRANSIENT) return nullptr;
-      // GLOBAL and REFCOUNTED both go through the arena until the refcount path is wired up.
-      return getCurrentExecutionContext()->allocString(size);
+#if ENABLE_REFCOUNT == 1
+      if (storageClass == StorageClass::GLOBAL) {
+#else
+      if (storageClass == StorageClass::GLOBAL || storageClass == StorageClass::REFCOUNTED) {
+#endif
+         return getCurrentExecutionContext()->allocString(size);
+      }
+      if (storageClass == StorageClass::TRANSIENT) {
+         return nullptr;
+      }
+#if ENABLE_REFCOUNT == 1
+      if (storageClass == StorageClass::REFCOUNTED) {
+         uint8_t* allocated = static_cast<uint8_t*>(malloc(size + 4));
+         reinterpret_cast<uint32_t*>(allocated)[0] = 1;
+         return allocated + 4;
+      }
+#endif
+      assert(false);
+      return nullptr;
+   }
+   static void decRefCount(runtime::VarLen32 varLen32) {
+      if (varLen32.getLen() <= shortLen) return;
+      if (varLen32.getStorageClass() != StorageClass::REFCOUNTED) return;
+      uint8_t* ptr = varLen32.getPtr();
+      auto* refCountPtr = reinterpret_cast<std::atomic<uint32_t>*>(ptr) - 1;
+      uint32_t oldRefCount = refCountPtr->fetch_sub(1);
+      if (oldRefCount == 1) {
+         free(refCountPtr);
+      }
+   }
+   static void incRefCount(runtime::VarLen32 varLen32) {
+      if (varLen32.getLen() <= shortLen) return;
+      if (varLen32.getStorageClass() != StorageClass::REFCOUNTED) return;
+      uint8_t* ptr = varLen32.getPtr();
+      auto* refCountPtr = reinterpret_cast<std::atomic<uint32_t>*>(ptr) - 1;
+      refCountPtr->fetch_add(1);
+   }
+   static runtime::VarLen32 promoteToGlobal(runtime::VarLen32 varLen32) {
+      if (varLen32.getLen() <= shortLen) return varLen32;
+      if (varLen32.getStorageClass() == StorageClass::GLOBAL) return varLen32;
+      if (varLen32.getStorageClass() == StorageClass::TRANSIENT) {
+         // TODO: materialize into the arena when transient strings need to outlive the morsel.
+         return varLen32;
+      }
+      if (varLen32.getStorageClass() == StorageClass::REFCOUNTED) {
+         auto* newPtr = allocateForStorageClass(varLen32.getLen(), StorageClass::GLOBAL);
+         memcpy(newPtr, varLen32.getPtr(), varLen32.getLen());
+         decRefCount(varLen32);
+         return VarLen32(newPtr, varLen32.getLen(), StorageClass::GLOBAL);
+      }
+      assert(false);
+      return varLen32;
    }
    VarLen32() : len(0), first4(0xffffffff), last8(0) {}
    INLINE VarLen32(const uint8_t* ptr, uint32_t len, StorageClass storageClass = StorageClass::GLOBAL) : len(len) {
@@ -168,6 +238,41 @@ class VarLen32 {
    std::string str() { return std::string((char*) getPtr(), getLen()); }
    std::string_view strView() { return std::string_view((char*) getPtr(), getLen()); }
 };
+
+// Allocate an object with a 4-byte refcount header stored immediately before
+// the returned pointer. When ENABLE_REFCOUNT is off the object lives in the
+// per-query arena and the refcount is unused.
+template <typename T, typename... Args>
+T* createRefCounted(Args&&... args) {
+#if ENABLE_REFCOUNT == 1
+   uint8_t* allocated = static_cast<uint8_t*>(malloc(sizeof(T) + 4));
+   reinterpret_cast<uint32_t*>(allocated)[0] = 1;
+   void* objPtr = allocated + 4;
+   return new (objPtr) T(std::forward<Args>(args)...);
+#else
+   void* objPtr = getCurrentExecutionContext()->allocStateRaw(sizeof(T));
+   return new (objPtr) T(std::forward<Args>(args)...);
+#endif
+}
+
+template <typename T>
+inline void incRefCount(T* obj) {
+   if (!obj) return;
+   auto* refPtr = reinterpret_cast<std::atomic<uint32_t>*>(reinterpret_cast<uint8_t*>(obj) - 4);
+   refPtr->fetch_add(1);
+}
+
+template <typename T>
+inline void decRefCount(T* obj, void (*cleanupFn)(T*)) {
+   if (!obj) return;
+   auto* refPtr = reinterpret_cast<std::atomic<uint32_t>*>(reinterpret_cast<uint8_t*>(obj) - 4);
+   uint32_t old = refPtr->fetch_sub(1);
+   if (old == 1) {
+      cleanupFn(obj);
+      obj->~T();
+      free(reinterpret_cast<void*>(refPtr));
+   }
+}
 
 template <class T>
 struct LegacyFixedSizedBuffer {

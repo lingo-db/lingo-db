@@ -529,4 +529,23 @@ def AppendArrowOp : DB_Op<"arrow.append"> {
     let assemblyFormat = "$builder `,` $value `->` type($value) attr-dict";
 }
 
+def MemoryCleanupUse : DB_Op<"memory.cleanup_use", [DB_NeedsNullWrap]> {
+    let summary = "release a use of a managed value (e.g. decrement refcount, free at 0)";
+    let arguments = (ins AnyType:$value, OptionalAttr<SymbolRefAttr>:$cleanupFn);
+    let assemblyFormat = "$value `:` type($value) ($cleanupFn^)? attr-dict";
+}
+
+def MemoryAddUse : DB_Op<"memory.add_use", [DB_NeedsNullWrap]> {
+    let summary = "acquire a use of a managed value (e.g. increment refcount)";
+    let arguments = (ins AnyType:$value);
+    let assemblyFormat = "$value `:` type($value) attr-dict";
+}
+
+def MemoryPromoteToGlobal : DB_Op<"memory.promote_to_global", [DB_NeedsNullWrap]> {
+    let summary = "promote a refcounted value to global lifetime (register with the execution context)";
+    let arguments = (ins AnyType:$value);
+    let results = (outs AnyType:$res);
+    let assemblyFormat = "$value `:` type($value) `->` type($res) attr-dict";
+}
+
 #endif// OPS
