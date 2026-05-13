@@ -102,12 +102,43 @@ def DB_ManagedType : TypeInterface<"ManagedType"> {
         tracking in the memory management pass (add_use / cleanup_use /
         promote_to_global). Plain inline types (i32, index, ...) do not
         implement this interface.
+
+        The four emit methods are called by the pass to materialize the
+        reference-count adjustments for a value of this type. By default they
+        emit the high-level `db.memory.{add_use, cleanup_use, promote_to_global}`
+        ops; types whose runtime model differs (e.g. CPython objects with
+        Py_INCREF / Py_DECREF) override the defaults to emit their own ops.
     }];
     let cppNamespace = "::lingodb::compiler::dialect::db";
 
     let methods = [
         InterfaceMethod<"Returns true if values of this type require ref-count management.",
             "bool", "needsManagement"
+        >,
+        InterfaceMethod<"Emit a ref-count increment for this value at the builder's insertion point.",
+            "void", "emitAddUse",
+            (ins "mlir::OpBuilder&":$builder, "mlir::Location":$loc, "mlir::Value":$value),
+            /*body=*/[{}],
+            /*defaultImplementation=*/[{
+                ::lingodb::compiler::dialect::db::emitDefaultAddUse(builder, loc, value);
+            }]
+        >,
+        InterfaceMethod<"Emit a ref-count cleanup for this value at the builder's insertion point. `elementFn` is the optional per-element cleanup symbol used for list-of-managed-type values; types that don't need it can ignore it.",
+            "void", "emitCleanupUse",
+            (ins "mlir::OpBuilder&":$builder, "mlir::Location":$loc, "mlir::Value":$value,
+                 "mlir::SymbolRefAttr":$elementFn),
+            /*body=*/[{}],
+            /*defaultImplementation=*/[{
+                ::lingodb::compiler::dialect::db::emitDefaultCleanupUse(builder, loc, value, elementFn);
+            }]
+        >,
+        InterfaceMethod<"Promote a value of this type to a query-global lifetime. Returns the new value to use in place of the original.",
+            "mlir::Value", "emitPromoteToGlobal",
+            (ins "mlir::OpBuilder&":$builder, "mlir::Location":$loc, "mlir::Value":$value),
+            /*body=*/[{}],
+            /*defaultImplementation=*/[{
+                return ::lingodb::compiler::dialect::db::emitDefaultPromoteToGlobal(builder, loc, value);
+            }]
         >,
     ];
 }

@@ -193,3 +193,37 @@ func.func @select_unmanaged_passes_through(%c: i1, %a: i32, %b: i32) -> i32 {
   %0 = arith.select %c, %a, %b : i32
   return %0 : i32
 }
+
+// !py_interp.py_object implements ManagedType via an external model: emitters
+// produce `py_interp.{inc_ref, dec_ref}` instead of `db.memory.*`.
+//
+// In this function: %0 (get_attr) and %arg0 (block arg) are managed locals,
+// %1 (py_call result) is returned and bypasses cleanup. Both managed locals
+// get an auto-emitted dec_ref before the return.
+//
+// CHECK-LABEL: func.func @pyobject_auto_decref
+// CHECK: py_interp.get_attr
+// CHECK: py_interp.py_call
+// CHECK-DAG: py_interp.dec_ref %0
+// CHECK-DAG: py_interp.dec_ref %arg0
+// CHECK: return
+func.func @pyobject_auto_decref(%mod: !py_interp.py_object, %arg: !py_interp.py_object) -> !py_interp.py_object {
+  %fn = py_interp.get_attr %mod -> "foo"
+  %r = py_interp.py_call %fn(%arg) []
+  return %r : !py_interp.py_object
+}
+
+// py_interp.create_module is excluded from refcount tracking (cached, owned
+// by the interpreter). Its result must NOT be dec_ref'd, even though its
+// type is managed.
+// CHECK-LABEL: func.func @pyobject_create_module_not_counted
+// CHECK: %[[M:.+]] = py_interp.create_module
+// CHECK: py_interp.get_attr %[[M]]
+// CHECK-NOT: py_interp.dec_ref %[[M]]
+// CHECK: return
+func.func @pyobject_create_module_not_counted(%arg: !py_interp.py_object) -> !py_interp.py_object {
+  %m = py_interp.create_module "udf_foo", "def foo(x): return x"
+  %fn = py_interp.get_attr %m -> "foo"
+  %r = py_interp.py_call %fn(%arg) []
+  return %r : !py_interp.py_object
+}
