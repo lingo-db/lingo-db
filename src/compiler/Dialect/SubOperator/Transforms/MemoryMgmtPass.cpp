@@ -1,4 +1,5 @@
 #include "lingodb/compiler/Dialect/DB/IR/DBOps.h"
+#include "lingodb/compiler/Dialect/PyInterp/PyInterpOps.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/Passes.h"
 #include "lingodb/compiler/Dialect/util/UtilOps.h"
@@ -40,7 +41,7 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
             addUse(element, insertBeforeOp, notCounted);
          }
       } else {
-         builder.create<db::MemoryAddUse>(insertBeforeOp->getLoc(), val);
+         mlir::cast<db::ManagedType>(val.getType()).emitAddUse(builder, insertBeforeOp->getLoc(), val);
       }
    }
 
@@ -57,7 +58,7 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
             addUseAfter(element, insertionPoint, notCounted);
          }
       } else {
-         builder.create<db::MemoryAddUse>(insertAfterOp->getLoc(), val);
+         mlir::cast<db::ManagedType>(val.getType()).emitAddUse(builder, insertAfterOp->getLoc(), val);
       }
    }
 
@@ -76,6 +77,7 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
       }
       if (!typeNeedsManagement(val.getType())) return;
       mlir::OpBuilder builder(insertBeforeOp);
+      mlir::SymbolRefAttr elementFn;
       if (auto listType = mlir::dyn_cast<db::ListType>(val.getType())) {
          if (mlir::isa<db::StringType>(listType.getElementType())) {
             // Lists of strings need a per-element cleanup. Emit a shared helper
@@ -101,12 +103,12 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
                });
                builder.create<mlir::func::ReturnOp>(loc);
             }
-            builder.create<db::MemoryCleanupUse>(insertBeforeOp->getLoc(), val, mlir::SymbolRefAttr::get(builder.getContext(), name));
-            return;
+            elementFn = mlir::SymbolRefAttr::get(builder.getContext(), name);
+         } else {
+            assert(!typeNeedsManagement(listType.getElementType()));
          }
-         assert(!typeNeedsManagement(listType.getElementType()));
       }
-      builder.create<db::MemoryCleanupUse>(insertBeforeOp->getLoc(), val, mlir::SymbolRefAttr());
+      mlir::cast<db::ManagedType>(val.getType()).emitCleanupUse(builder, insertBeforeOp->getLoc(), val, elementFn);
    }
 
    void handleBlock(mlir::Block* block, mlir::Block* mapBlock, llvm::DenseSet<mlir::Value>& notCounted) {
@@ -158,11 +160,11 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
          // values returned from the subop.map fn outlive the per-row scope;
          // promote them to a global lifetime instead of bumping the refcount.
          for (auto& operand : terminator->getOpOperands()) {
-            if (!typeNeedsManagement(operand.get().getType())) continue;
+            auto managed = mlir::dyn_cast<db::ManagedType>(operand.get().getType());
+            if (!managed || !managed.needsManagement()) continue;
             if (notCounted.contains(operand.get())) continue;
             mlir::OpBuilder builder(block->getTerminator());
-            mlir::Value newVal = builder.create<db::MemoryPromoteToGlobal>(
-               block->getTerminator()->getLoc(), operand.get().getType(), operand.get());
+            mlir::Value newVal = managed.emitPromoteToGlobal(builder, block->getTerminator()->getLoc(), operand.get());
             operand.set(newVal);
          }
       } else {
@@ -179,6 +181,16 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
    void seedNotCounted(mlir::Region& region, llvm::DenseSet<mlir::Value>& notCounted) {
       region.walk([&](mlir::Operation* op) {
          if (mlir::isa<db::ConstantOp, db::NullOp>(op)) {
+            notCounted.insert(op->getResult(0));
+            return;
+         }
+         // py_interp.create_module returns a cached module owned by the
+         // interpreter — do NOT decref it.
+         // TODO: replace this hardcoded check with a proper "cached result"
+         // marker on the op (e.g. a NotCounted trait or a dedicated entry on
+         // RefCountedOpInterface), so the pass doesn't need to know about
+         // specific ops.
+         if (mlir::isa<py_interp::CreateModule>(op)) {
             notCounted.insert(op->getResult(0));
             return;
          }

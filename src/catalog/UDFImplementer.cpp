@@ -153,19 +153,18 @@ class PythonUDFImplementer : public lingodb::catalog::MLIRUDFImplementor {
    PythonUDFImplementer(std::string functionName, std::string code, std::vector<lingodb::catalog::Type> argumentTypes, lingodb::catalog::Type returnType)
       : functionName(std::move(functionName)), code(std::move(code)), argumentTypes(std::move(argumentTypes)), returnType(std::move(returnType)) {}
 
-   // Emit the body of a Python UDF call, with manual reference-count management.
-   // Without an automatic memory-management pass, every PyObject we obtain from
-   // py_call/get_attr/cast_to_pyobject must be released via py_interp.dec_ref
-   // before its SSA value goes out of scope. The cached module returned by
-   // create_module is owned by the interpreter cache, so we must NOT decref it.
+   // Emit the body of a Python UDF call. Reference counting is handled
+   // automatically by the SubOperator memory-management pass: every PyObject
+   // value produced here is cleaned up via py_interp.dec_ref at end of scope.
+   // The cached module returned by create_module is excluded from refcount
+   // management (seedNotCounted in MemoryMgmtPass) so the interpreter cache
+   // retains ownership.
    mlir::Value emitCall(mlir::OpBuilder& builder, mlir::Location loc, mlir::ValueRange rawArgs) {
       using namespace lingodb::compiler::dialect;
       auto pyObjType = py_interp::PyObjectType::get(builder.getContext());
 
-      // Cached module — do not decref.
       mlir::Value moduleVal = builder.create<py_interp::CreateModule>(
          loc, pyObjType, builder.getStringAttr("udf_" + functionName), builder.getStringAttr(code));
-      // GetAttr returns a new reference — we'll decref after the call.
       mlir::Value functionVal = builder.create<py_interp::GetAttr>(
          loc, pyObjType, moduleVal, builder.getStringAttr(functionName));
 
@@ -176,16 +175,8 @@ class PythonUDFImplementer : public lingodb::catalog::MLIRUDFImplementor {
       }
       mlir::Value res = builder.create<py_interp::Call>(
          loc, pyObjType, functionVal, mlir::ValueRange(castedArgs), builder.getArrayAttr({}));
-      mlir::Value nativeRes = builder.create<py_interp::CastFromPyObject>(
+      return builder.create<py_interp::CastFromPyObject>(
          loc, returnType.getMLIRTypeCreator()->createType(builder.getContext()), res, getPythonType(returnType));
-
-      // Manual cleanup: result first, then arg conversions, then function attr.
-      builder.create<py_interp::DecRef>(loc, res);
-      for (auto a : castedArgs) {
-         builder.create<py_interp::DecRef>(loc, a);
-      }
-      builder.create<py_interp::DecRef>(loc, functionVal);
-      return nativeRes;
    }
 
    mlir::Value callFunction(mlir::ModuleOp& moduleOp, mlir::OpBuilder& builder, mlir::Location loc, mlir::ValueRange args, lingodb::catalog::Catalog* catalog) override {

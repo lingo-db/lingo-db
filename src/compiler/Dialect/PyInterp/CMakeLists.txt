@@ -11,4 +11,5 @@ add_mlir_dialect_library(MLIRPyInterp
         LINK_LIBS PUBLIC
         MLIRIR
         MLIRFuncTransforms
+        MLIRDB
 )

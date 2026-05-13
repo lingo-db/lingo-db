@@ -32,5 +32,6 @@ add_mlir_dialect_library(MLIRSubOperator
         LINK_LIBS mlir-support PUBLIC
         MLIRIR
         MLIRCompilerHelper
+        MLIRPyInterp
         runtime_funcs_ptr
 )

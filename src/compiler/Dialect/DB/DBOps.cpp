@@ -499,3 +499,24 @@ LogicalResult db::AndOp::canonicalize(db::AndOp andOp, mlir::PatternRewriter& re
 #define GET_OP_CLASSES
 #include "lingodb/compiler/Dialect/DB/IR/DBOps.cpp.inc"
 #include "lingodb/compiler/Dialect/DB/IR/DBOpsInterfaces.cpp.inc"
+
+namespace lingodb::compiler::dialect::db {
+// Default emitters used by the ManagedType interface. Defined here so the
+// inline default bodies in `DBOpsTypeInterfaces.h.inc` only need a forward
+// declaration (in `DBTypes.h`) — the `db.memory.*` op classes are fully
+// visible at this point.
+void emitDefaultAddUse(::mlir::OpBuilder& builder, ::mlir::Location loc,
+                       ::mlir::Value value) {
+   builder.create<MemoryAddUse>(loc, value);
+}
+void emitDefaultCleanupUse(::mlir::OpBuilder& builder, ::mlir::Location loc,
+                           ::mlir::Value value,
+                           ::mlir::SymbolRefAttr elementFn) {
+   builder.create<MemoryCleanupUse>(loc, value, elementFn);
+}
+::mlir::Value emitDefaultPromoteToGlobal(::mlir::OpBuilder& builder,
+                                         ::mlir::Location loc,
+                                         ::mlir::Value value) {
+   return builder.create<MemoryPromoteToGlobal>(loc, value.getType(), value);
+}
+} // namespace lingodb::compiler::dialect::db
