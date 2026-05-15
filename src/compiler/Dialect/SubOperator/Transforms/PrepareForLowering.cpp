@@ -68,23 +68,21 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
                   continue;
                } else {
                   std::vector<mlir::Attribute> createdByMap;
+                  std::vector<mlir::Value> mapOpReturnVals;
+
                   mlir::OpBuilder b(combineOp);
-                  mlir::Block* mapBlock = new mlir::Block;
                   {
-                     mlir::OpBuilder::InsertionGuard guard(b);
-                     b.setInsertionPointToStart(mapBlock);
                      auto& colManager = getContext().getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
-                     std::vector<mlir::Value> mapOpReturnVals;
                      // requiredColumns is an unordered_set of pointers; sort
-                     // by (scope, name) so the emitted MapOp's input/computes
-                     // attribute order — and the nested_map's parameter order
-                     // — are deterministic across runs.
+                     // by (scope, name) so the emitted columns — and the
+                     // nested_map's parameter order — are deterministic
+                     // across runs.
                      std::vector<tuples::Column*> sortedRequired(requiredColumns.begin(), requiredColumns.end());
                      std::sort(sortedRequired.begin(), sortedRequired.end(),
                                [&](tuples::Column* a, tuples::Column* b) {
                                   return colManager.getName(a) < colManager.getName(b);
                                });
-                     for (auto* r : sortedRequired) { // we need to introduce every required column to the MapOp (MapOp will replace CombineTupleOp)
+                     for (auto* r : sortedRequired) { // we need to introduce every required column (CombineTupleWithValues will replace CombineTupleOp)
                         auto colRefAttr = colManager.createRef(r);
                         auto colDefAttr = colManager.createDef(r);
 
@@ -96,10 +94,9 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
                         createdByMap.push_back(colDefAttr); // every required column is created/returned by the MapOp
                         mapOpReturnVals.push_back(nestedMapOp.getBody()->getArgument(colArgs[r]));
                      }
-                     b.create<tuples::ReturnOp>(b.getUnknownLoc(), mapOpReturnVals);
                   }
-                  auto mapOp = b.create<subop::MapOp>(b.getUnknownLoc(), tuples::TupleStreamType::get(b.getContext()), combineOp.getStream(), b.getArrayAttr(createdByMap), b.getArrayAttr({}));
-                  mapOp.getFn().push_back(mapBlock);
+
+                  auto mapOp = b.create<subop::CombineTupleWithValues>(b.getUnknownLoc(), tuples::TupleStreamType::get(b.getContext()), combineOp.getStream(), mapOpReturnVals, b.getArrayAttr(createdByMap));
                   combineOp->replaceAllUsesWith(mlir::ValueRange{mapOp.getResult()}); // replace combineOp with mapOp
                   opsToErase.push_back(combineOp);
                   createdColumns.update(mapOp);
