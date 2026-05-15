@@ -91,9 +91,13 @@ module{
                       }
 
                       %cstream = subop.scan %centroids : !subop.buffer<[clusterX : f32, clusterY : f32, clusterId : i32]> {clusterX => @cluster::@x({type=f32}),clusterY => @cluster::@y({type=f32}),clusterId => @cluster::@id({type=i32})}
-                      %cstream2 = subop.map %cstream computes : [@m::@dist({type=f32})] input : [@cluster::@x, @cluster::@y] (%clusterX : f32, %clusterY : f32){
-                         %diffX = arith.subf %clusterX, %x : f32
-                         %diffY = arith.subf %clusterY, %y : f32
+                      // subop.map is IsolatedFromAbove: bring the nested_map's
+                      // point coordinates into the centroid stream as columns
+                      // instead of capturing %x / %y directly.
+                      %cstreamXY = subop.combine_tuple_with_values %cstream, %x, %y : f32, f32 => [@captured::@x({type=f32}), @captured::@y({type=f32})]
+                      %cstream2 = subop.map %cstreamXY computes : [@m::@dist({type=f32})] input : [@cluster::@x, @cluster::@y, @captured::@x, @captured::@y] (%clusterX : f32, %clusterY : f32, %px : f32, %py : f32){
+                         %diffX = arith.subf %clusterX, %px : f32
+                         %diffY = arith.subf %clusterY, %py : f32
                          %diffX2 = arith.mulf %diffX, %diffX :f32
                          %diffY2 = arith.mulf %diffY, %diffY : f32
                          %dist = arith.addf %diffX2, %diffY2 : f32
