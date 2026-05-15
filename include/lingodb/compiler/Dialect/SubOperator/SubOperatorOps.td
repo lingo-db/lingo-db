@@ -592,7 +592,7 @@ def UnionOp : SubOperator_Op<"union", [Pure,SubOperator]> {
     let assemblyFormat = [{  $streams attr-dict }];
 }
 
-def MapOp : SubOperator_Op<"map", [Pure,SubOperator,DeclareOpInterfaceMethods<ColumnFoldable>]> {
+def MapOp : SubOperator_Op<"map", [Pure,SubOperator,IsolatedFromAbove,DeclareOpInterfaceMethods<ColumnFoldable>]> {
     let summary = "map operation";
 
     let arguments = (ins TupleStream:$stream,ArrayAttr:$computed_cols, ArrayAttr:$input_cols);
