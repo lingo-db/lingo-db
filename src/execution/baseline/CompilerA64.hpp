@@ -27,20 +27,22 @@ struct IRCompilerA64
 
    std::unique_ptr<IRAdaptor> adaptor;
 
-   // since this needs to life past the create_call_builder function call, we store it here
-   std::variant<std::monostate, tpde::a64::CCAssignerAAPCS> cc_assigners;
+   // since this needs to life past the create_call_builder function call, we store it here.
+   // DefaultCCAssigner is AAPCS on Linux and darwinpcs (CCAssignerDarwinAArch64) on macOS.
+   std::variant<std::monostate, typename CompilerConfig::DefaultCCAssigner> cc_assigners;
 
    explicit IRCompilerA64(std::unique_ptr<IRAdaptor>&& adaptor)
       : Base{adaptor.get()},
         adaptor(std::move(adaptor)) { static_assert(tpde::Compiler<IRCompilerA64, tpde::a64::PlatformConfig>); }
 
    void load_address_of_global(const SymRef global_sym, const AsmReg dst) {
-      // emit lea with relocation
+      // emit lea with relocation -- reloc kinds are assembler-neutral
+      // (ELF: R_AARCH64_*, Mach-O: ARM64_RELOC_*).
       reloc_text(
-         global_sym, tpde::elf::R_AARCH64_ADR_PREL_PG_HI21, this->text_writer.offset());
+         global_sym, CompilerConfig::Assembler::RELOC_PAGE21, this->text_writer.offset());
       ASM(ADRP, dst, 0, 0);
       reloc_text(
-         global_sym, tpde::elf::R_AARCH64_ADD_ABS_LO12_NC, this->text_writer.offset());
+         global_sym, CompilerConfig::Assembler::RELOC_PAGEOFF12_ADD, this->text_writer.offset());
       ASM(ADDxi, dst, dst, 0);
    }
 
@@ -246,13 +248,21 @@ struct IRCompilerA64
 
    void load_address_of_got_sym(const SymRef sym, const AsmReg dst) noexcept {
       assert(sym.valid());
+#if defined(__APPLE__)
+      // The only caller (compile_func_constant_op) passes a locally-defined
+      // function symbol. The Mach-O JIT mapper does not apply GOT_LOAD
+      // relocations, and a local function is always within ADRP+ADD reach of
+      // the (single, contiguous) JIT region -- so address it directly.
+      load_address_of_global(sym, dst);
+#else
       // mov the ptr from the GOT
       reloc_text(
-         sym, tpde::elf::R_AARCH64_ADR_GOT_PAGE, this->text_writer.offset());
+         sym, CompilerConfig::Assembler::RELOC_GOT_PAGE21, this->text_writer.offset());
       ASM(ADRP, dst, 0, 0);
       reloc_text(
-         sym, tpde::elf::R_AARCH64_LD64_GOT_LO12_NC, this->text_writer.offset());
+         sym, CompilerConfig::Assembler::RELOC_GOT_PAGEOFF12, this->text_writer.offset());
       ASM(LDRxu, dst, dst, 0);
+#endif
    }
 
    void reset() noexcept {
@@ -263,8 +273,9 @@ struct IRCompilerA64
    Error& getError() { return Base::getError(); }
 
    CallBuilder create_call_builder() {
-      cc_assigners = tpde::a64::CCAssignerAAPCS();
-      return CallBuilder{*this, std::get<tpde::a64::CCAssignerAAPCS>(cc_assigners)};
+      using CCAssigner = typename CompilerConfig::DefaultCCAssigner;
+      cc_assigners = CCAssigner();
+      return CallBuilder{*this, std::get<CCAssigner>(cc_assigners)};
    }
 };
 

@@ -57,3 +57,14 @@ add_executable(run-sql run-sql.cpp)
 target_link_libraries(run-sql PUBLIC ${COMMON_LIBS})
 set_target_properties(run-sql PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 target_compile_definitions(run-sql PRIVATE ${COMPILE_DEFS})
+
+# The TPDE baseline backend JITs code into a MAP_JIT region on Apple
+# Silicon, which requires the executing binary to carry a (ad-hoc) code
+# signature. Re-sign the query-executing tools after linking.
+if (APPLE AND ENABLE_BASELINE_BACKEND)
+    foreach (_tool sql sqlite-tester run-mlir run-sql)
+        add_custom_command(TARGET ${_tool} POST_BUILD
+            COMMAND codesign --sign - --force $<TARGET_FILE:${_tool}>
+            VERBATIM)
+    endforeach ()
+endif ()

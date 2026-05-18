@@ -1,7 +1,8 @@
 [submodule "vendored/tpde"]
 	path = vendored/tpde
 	url = https://github.com/lingo-db/tpde.git
-	branch = master
+	# Experimental branch adding the arm64-apple-macosx (Mach-O) back-end.
+	branch = macos-lingodb
 [submodule "vendored/mimalloc"]
 	path = vendored/mimalloc
 	url = https://github.com/microsoft/mimalloc.git

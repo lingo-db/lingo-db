@@ -1,5 +1,9 @@
-if(NOT (CMAKE_SYSTEM_NAME STREQUAL "Linux"))
-    message(FATAL_ERROR "The TPDE baseline backend can only be built for linux targets.")
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    # supported
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
+    # supported: macOS on Apple Silicon (TPDE Mach-O back-end)
+else()
+    message(FATAL_ERROR "The TPDE baseline backend can only be built for Linux, or macOS on Apple Silicon.")
 endif()
 
 ## Add baseline backend to the runner target
@@ -26,9 +30,9 @@ set(SNIPPED_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
 file(MAKE_DIRECTORY ${SNIPPED_INCLUDE_DIR})
 
 # Step 1: Create LLVM bitcode from encoder snippets
-find_program(CLANG_EXECUTABLE NAMES clang-20 clang-19)
+find_program(CLANG_EXECUTABLE NAMES clang-20 clang-19 clang)
 if (NOT CLANG_EXECUTABLE)
-    message(FATAL_ERROR "Neither clang-20 nor clang-19 was found in PATH.")
+    message(FATAL_ERROR "No suitable clang (clang-20 / clang-19 / clang) was found in PATH.")
 endif ()
 
 if(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "x86_64")
@@ -36,8 +40,13 @@ if(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "x86_64")
     set(TPDE_ARCH "opteron")
     set(BC_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/snippets_x64.bc")
     set(HPP_OUTPUT "${SNIPPED_INCLUDE_DIR}/snippet_encoders_x64.hpp")
-elseif(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "aarch64")
-    set(TPDE_TARGET "aarch64-linux")
+elseif(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
+    if(APPLE)
+        # darwinpcs ABI: snippets must follow the Apple AArch64 calling convention.
+        set(TPDE_TARGET "arm64-apple-macosx")
+    else()
+        set(TPDE_TARGET "aarch64-linux")
+    endif()
     set(TPDE_ARCH "armv8.5-a")
     set(BC_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/snippets_arm.bc")
     set(HPP_OUTPUT "${SNIPPED_INCLUDE_DIR}/snippet_encoders_arm.hpp")
