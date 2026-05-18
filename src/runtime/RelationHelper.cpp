@@ -51,11 +51,17 @@ void RelationHelper::createScalarFunction(runtime::VarLen32 meta) {
    } else if (def.language == "python") {
       func = std::make_shared<lingodb::catalog::PythonFunctionCatalogEntry>(def.name, def.code, def.returnType, def.argumentTypes);
    } else if (def.language == "hipy" || def.language == "hipy_fallback") {
+#ifdef MLIR_DISABLED
+      // hipy UDFs are compiled via MLIR; unreachable in standalone-query
+      // builds, which run pre-compiled queries (see UDFImplementer.cpp).
+      throw std::runtime_error("hipy UDFs are not available in standalone-query builds (MLIR_DISABLED)");
+#else
       // hipy is compiled ahead of time: lower the Python source to a LingoDB
       // MLIR module now and store it as bytecode in the catalog entry.
       bool fallback = def.language == "hipy_fallback";
       std::string byteCode = compiler::frontend::compileHiPyUDF(def.name, def.code, def.argumentTypes, def.returnType, fallback);
       func = std::make_shared<lingodb::catalog::HiPyFunctionCatalogEntry>(def.name, def.code, def.returnType, def.argumentTypes, byteCode);
+#endif
    } else {
       throw std::runtime_error("unsupported function language: " + def.language);
    }
