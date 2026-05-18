@@ -2,6 +2,10 @@ name: build+test (macOS 15 aarch64)
 
 on:
   pull_request:
+  push:
+    branches:
+      # Any branch whose name contains "macos" (e.g. tpde-macos-draft).
+      - '**macos**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -52,6 +56,7 @@ jobs:
           CCACHE_DIR: "~/.ccache"
           CMAKE_PREFIX_PATH: "/opt/homebrew/"
           ENABLE_MIMALLOC: "OFF"
+          ENABLE_BASELINE_BACKEND: "ON"
         run: |
           mkdir -p ~/.ccache
           make clean
