@@ -2,6 +2,7 @@
 
 #include "json.h"
 #include "lingodb/catalog/FunctionCatalogEntry.h"
+#include "lingodb/compiler/frontend/UDFImplementer.h"
 
 #include "lingodb/catalog/IndexCatalogEntry.h"
 #include "lingodb/catalog/TableCatalogEntry.h"
@@ -49,6 +50,12 @@ void RelationHelper::createScalarFunction(runtime::VarLen32 meta) {
       }
    } else if (def.language == "python") {
       func = std::make_shared<lingodb::catalog::PythonFunctionCatalogEntry>(def.name, def.code, def.returnType, def.argumentTypes);
+   } else if (def.language == "hipy" || def.language == "hipy_fallback") {
+      // hipy is compiled ahead of time: lower the Python source to a LingoDB
+      // MLIR module now and store it as bytecode in the catalog entry.
+      bool fallback = def.language == "hipy_fallback";
+      std::string byteCode = compiler::frontend::compileHiPyUDF(def.name, def.code, def.argumentTypes, def.returnType, fallback);
+      func = std::make_shared<lingodb::catalog::HiPyFunctionCatalogEntry>(def.name, def.code, def.returnType, def.argumentTypes, byteCode);
    } else {
       throw std::runtime_error("unsupported function language: " + def.language);
    }

@@ -3,6 +3,7 @@
 #include "arrow/util/value_parsing.h"
 #include "lingodb/runtime/helpers.h"
 
+#include <format>
 #include <regex>
 
 #include <arrow/type.h>
@@ -430,6 +431,29 @@ lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::concat(lingodb::runt
       return lingodb::runtime::VarLen32(copied, totalLength, StorageClass::REFCOUNTED);
    }
 }
+lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::concatMultiple(lingodb::runtime::VarLen32* strings, size_t numStrings) {
+   size_t totalLength = 0;
+   for (size_t i = 0; i < numStrings; i++) {
+      totalLength += strings[i].getLen();
+   }
+   if (totalLength <= lingodb::runtime::VarLen32::shortLen) {
+      uint8_t data[lingodb::runtime::VarLen32::shortLen];
+      size_t offset = 0;
+      for (size_t i = 0; i < numStrings; i++) {
+         memcpy(&data[offset], strings[i].data(), strings[i].getLen());
+         offset += strings[i].getLen();
+      }
+      return lingodb::runtime::VarLen32(data, totalLength, StorageClass::TRANSIENT);
+   } else {
+      auto* copied = VarLen32::allocateForStorageClass(totalLength, StorageClass::REFCOUNTED);
+      size_t offset = 0;
+      for (size_t i = 0; i < numStrings; i++) {
+         memcpy(&copied[offset], strings[i].data(), strings[i].getLen());
+         offset += strings[i].getLen();
+      }
+      return lingodb::runtime::VarLen32(copied, totalLength, StorageClass::REFCOUNTED);
+   }
+}
 
 bool lingodb::runtime::StringRuntime::contains(VarLen32 str, VarLen32 substr) {
    if (str.getLen() < substr.getLen()) return false;
@@ -536,4 +560,58 @@ void lingodb::runtime::StringRuntime::addUse(VarLen32 str) {
 
 lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::promoteToGlobal(lingodb::runtime::VarLen32 str) {
    return lingodb::runtime::VarLen32::promoteToGlobal(str);
+}
+lingodb::runtime::List* lingodb::runtime::StringRuntime::regexSearch(lingodb::runtime::VarLen32 pattern, lingodb::runtime::VarLen32 str) {
+   struct Range {
+      int64_t start;
+      int64_t end;
+   };
+   try {
+      auto* list = lingodb::runtime::List::create(sizeof(Range));
+      std::regex reg(pattern.str());
+      std::smatch match;
+      auto strVal = str.str();
+      if (std::regex_search(strVal, match, reg)) {
+         int64_t start = match.position(0);
+         int64_t end = start + match.length(0);
+         *reinterpret_cast<Range*>(list->append()) = {start, end};
+         for (size_t i = 1; i < match.size(); ++i) {
+            // If a group didn't participate, position() returns string::npos
+            auto pos = match.position(i);
+            if (pos != static_cast<std::smatch::difference_type>(std::string::npos)) {
+               *reinterpret_cast<Range*>(list->append()) = {pos, pos + match.length(i)};
+            }
+         }
+      }
+      return list;
+   } catch (const std::regex_error&) {
+      throw std::runtime_error("unsupported regex pattern");
+   }
+}
+
+namespace {
+inline std::string_view ltrim(std::string_view str) {
+   const auto pos(str.find_first_not_of(" \t\n\r\f\v"));
+   str.remove_prefix(std::min(pos, str.length()));
+   return str;
+}
+inline std::string_view rtrim(std::string_view str) {
+   const auto pos(str.find_last_not_of(" \t\n\r\f\v"));
+   str.remove_suffix(std::min(str.length() - pos - 1, str.length()));
+   return str;
+}
+inline std::string_view trim(std::string_view str) {
+   return rtrim(ltrim(str));
+}
+} // namespace
+
+lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::strip(lingodb::runtime::VarLen32 str) {
+   auto trimmed = trim(std::string_view(reinterpret_cast<const char*>(str.data()), str.getLen()));
+   return VarLen32::fromString(trimmed, StorageClass::REFCOUNTED);
+}
+lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::formatInt(VarLen32 format, int64_t value) {
+   return VarLen32::fromString(std::vformat(std::string_view(reinterpret_cast<const char*>(format.data()), format.getLen()), std::make_format_args(value)), StorageClass::REFCOUNTED);
+}
+lingodb::runtime::VarLen32 lingodb::runtime::StringRuntime::formatDouble(VarLen32 format, double value) {
+   return VarLen32::fromString(std::vformat(std::string_view(reinterpret_cast<const char*>(format.data()), format.getLen()), std::make_format_args(value)), StorageClass::REFCOUNTED);
 }

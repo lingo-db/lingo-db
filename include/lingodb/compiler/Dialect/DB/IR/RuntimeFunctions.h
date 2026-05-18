@@ -22,7 +22,7 @@ struct RuntimeFunction {
    };
    std::string name;
    NullHandleType nullHandleType;
-   bool hasSideEffects;
+   bool sideEffects = false;
 
    public:
    using TypeMatcher = std::function<bool(mlir::Type)>;
@@ -67,6 +67,10 @@ struct RuntimeFunction {
    }
    RuntimeFunction& needsWrapping() {
       nullHandleType = NeedsWrapping;
+      return *this;
+   }
+   RuntimeFunction& hasSideEffects(bool hasEffects = true) {
+      this->sideEffects = hasEffects;
       return *this;
    }
    RuntimeFunction& folds(std::function<mlir::LogicalResult(mlir::TypeRange typeRange, ::llvm::ArrayRef<::mlir::Attribute>, ::llvm::SmallVectorImpl<::mlir::OpFoldResult>&)> foldFn) {

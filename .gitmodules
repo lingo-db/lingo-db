@@ -15,3 +15,6 @@
 	# job initializes the bits it needs explicitly.
 	fetchRecurseSubmodules = false
 	update = none
+[submodule "vendored/hipy"]
+	path = vendored/hipy
+	url = https://github.com/lingo-db/hipy.git

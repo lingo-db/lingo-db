@@ -972,8 +972,8 @@ std::shared_ptr<ast::CreateNode> SQLQueryAnalyzer::analyzeScalarFunctionCreate(s
       }
    }
 
-   if (language != "c" && language != "python") {
-      error("language must be 'c' or 'python'", createNode->loc);
+   if (language != "c" && language != "python" && language != "hipy" && language != "hipy_fallback") {
+      error("language must be 'c', 'python', 'hipy' or 'hipy_fallback'", createNode->loc);
    }
    NullableType returnType = SQLTypeUtils::typemodsToCatalogType(createFunctionInfo->returnType.logicalTypeId, createFunctionInfo->returnType.typeModifiers);
 

@@ -19,6 +19,7 @@ struct DumpRuntime {
    static void dumpFloat(bool null, double val);
    static void dumpString(bool null, runtime::VarLen32 string);
    static void dumpChar(bool null, uint64_t val, size_t bytes);
+   static bool error(VarLen32 message);
 };
 } // namespace lingodb::runtime
 #endif // LINGODB_RUNTIME_DUMPRUNTIME_H

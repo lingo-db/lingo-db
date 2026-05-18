@@ -3,6 +3,7 @@
 #include "lingodb/compiler/Dialect/DB/IR/RuntimeFunctions.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
 #include <unordered_set>
 
 #include "lingodb/compiler/mlir-support/parsing.h"
@@ -282,6 +283,14 @@ LogicalResult inferRemReturnType(MLIRContext* context, std::optional<Location> l
       return failure();
    }
    return success();
+}
+void db::RuntimeCall::getEffects(::llvm::SmallVectorImpl<::mlir::SideEffects::EffectInstance<::mlir::MemoryEffects::Effect>>& effects) {
+   auto reg = getContext()->getLoadedDialect<db::DBDialect>()->getRuntimeFunctionRegistry();
+   if (auto* fn = reg->lookup(getFn().str())) {
+      if (fn->sideEffects) {
+         effects.emplace_back(MemoryEffects::Write::get());
+      }
+   }
 }
 bool db::RuntimeCall::supportsInvalidValues() {
    auto reg = getContext()->getLoadedDialect<db::DBDialect>()->getRuntimeFunctionRegistry();

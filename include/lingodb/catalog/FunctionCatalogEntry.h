@@ -7,11 +7,11 @@
 #include <mlir/IR/BuiltinOps.h.inc>
 #include <vector>
 namespace lingodb::catalog {
-// Scalar UDFs (C or Python) — one row in, one value out. Tabular UDFs live in
-// TableFunctionCatalogEntry; the two never share a base because the surface
-// (return type vs. return-schema, scalar-call vs. table-function-call) and the
-// places they're consumed (expression analysis vs. FROM-clause analysis) are
-// disjoint.
+// Scalar UDFs (C, Python, or hipy) — one row in, one value out. Tabular UDFs
+// live in TableFunctionCatalogEntry; the two never share a base because the
+// surface (return type vs. return-schema, scalar-call vs. table-function-call)
+// and the places they're consumed (expression analysis vs. FROM-clause
+// analysis) are disjoint.
 class FunctionCatalogEntry : public CatalogEntry {
    protected:
    std::string name;
@@ -20,7 +20,7 @@ class FunctionCatalogEntry : public CatalogEntry {
    std::vector<Type> argumentTypes;
 
    public:
-   static constexpr std::array<CatalogEntryType, 2> entryTypes = {CatalogEntryType::C_FUNCTION_ENTRY, CatalogEntryType::PYTHON_FUNCTION_ENTRY};
+   static constexpr std::array<CatalogEntryType, 3> entryTypes = {CatalogEntryType::C_FUNCTION_ENTRY, CatalogEntryType::PYTHON_FUNCTION_ENTRY, CatalogEntryType::HIPY_FUNCTION_ENTRY};
    struct UDFHandle {
       void* handle;
       void* addrPtr;
@@ -53,6 +53,24 @@ class PythonFunctionCatalogEntry : public FunctionCatalogEntry {
    PythonFunctionCatalogEntry(std::string name, std::string code, Type returnType, std::vector<Type> argumentTypes)
       : FunctionCatalogEntry(CatalogEntryType::PYTHON_FUNCTION_ENTRY, name, code, returnType, argumentTypes) {}
 
+   static std::shared_ptr<FunctionCatalogEntry> deserialize(lingodb::utility::Deserializer& deserializer);
+};
+
+// hipy UDF — the Python source is compiled ahead-of-time (at CREATE FUNCTION
+// time) into a LingoDB MLIR module, stored here as MLIR bytecode. At query
+// translation the bytecode is parsed and the function inlined, so unlike
+// PythonFunctionCatalogEntry there is no runtime CPython interpreter involved
+// (except for `hipy_fallback` UDFs, whose un-compilable parts stay as
+// py_interp ops). `code` keeps the original source for introspection/replace.
+class HiPyFunctionCatalogEntry : public FunctionCatalogEntry {
+   std::string byteCode;
+
+   public:
+   HiPyFunctionCatalogEntry(std::string name, std::string code, Type returnType, std::vector<Type> argumentTypes, std::string byteCode)
+      : FunctionCatalogEntry(CatalogEntryType::HIPY_FUNCTION_ENTRY, name, code, returnType, argumentTypes), byteCode(std::move(byteCode)) {}
+
+   [[nodiscard]] const std::string& getByteCode() const { return byteCode; }
+   void serializeEntry(lingodb::utility::Serializer& serializer) const override;
    static std::shared_ptr<FunctionCatalogEntry> deserialize(lingodb::utility::Deserializer& deserializer);
 };
 

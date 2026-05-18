@@ -20,6 +20,7 @@ class CatalogEntry {
       C_FUNCTION_ENTRY = 3,
       PYTHON_FUNCTION_ENTRY = 4,
       TABLE_FUNCTION_ENTRY = 5,
+      HIPY_FUNCTION_ENTRY = 6,
    };
 
    protected:

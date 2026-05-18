@@ -317,6 +317,9 @@ jobs:
   python_udfs:
     # Same gating as the wheel jobs — UDF-specific.
     if: github.event_name == 'pull_request' || contains(github.ref, 'python')
+    # CPYTHON entry runs the hipy UDF tests, which need the lingodbbridge wheel
+    # produced by build_lingodb_python.
+    needs: build_lingodb_python
     strategy:
       matrix:
         include:
@@ -334,6 +337,12 @@ jobs:
           REPO_ROOT=$(pwd)
           git config --global --add safe.directory "$REPO_ROOT"
           git submodule update --init vendored/tpde vendored/mimalloc
+          if [ "${{ matrix.python_mode }}" = "CPYTHON" ]; then
+            # hipy UDFs are compiled by vendored/hipy/compile.py at CREATE
+            # FUNCTION time.
+            git submodule update --init vendored/hipy
+            git -C vendored/hipy config --add safe.directory "$REPO_ROOT/vendored/hipy"
+          fi
           if [ "${{ matrix.python_mode }}" = "WASM" ]; then
             # cpython-wasm holds the wasix-python-bridge Rust shim crate.
             # No nested submodules needed — the python interpreter (a webc)
@@ -375,6 +384,23 @@ jobs:
               sh -s -- -y --profile minimal --default-toolchain stable
             echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           fi
+      - name: Download lingodbbridge wheel (hipy)
+        if: matrix.python_mode == 'CPYTHON'
+        uses: actions/download-artifact@v4
+        with:
+          name: lingodb-python-build
+          path: lingodb-python-build
+      - name: Set up hipy environment
+        # hipy compiles `LANGUAGE hipy` UDFs to MLIR at CREATE FUNCTION time;
+        # compile.py runs under this venv, which carries hipy's dependencies
+        # plus the lingodbbridge wheel it uses to construct MLIR.
+        if: matrix.python_mode == 'CPYTHON'
+        run: |
+          apt-get update
+          apt-get install -y python3-venv
+          python3 -m venv /hipy-venv
+          /hipy-venv/bin/pip install --no-cache-dir lingodb-python-build/lingodb_bridge*.whl
+          /hipy-venv/bin/pip install --no-cache-dir jinja2 networkx numpy pandas scikit-learn scipy
       - name: CPU info
         # ubuntu-24.04 GitHub-Actions runners are not feature-uniform; print
         # the CPU info so any future cpu-feature-related issues are easy
@@ -403,6 +429,15 @@ jobs:
           # the default test job (which builds with ENABLE_PYTHON=OFF) does
           # not try to execute Python UDFs and abort.
           build/lingodb-release/sqlite-tester test/sqlite-small-python/python-udfs.test
+      - name: Test hipy-udfs (CPYTHON)
+        # hipy UDFs are compiled ahead of time by compile.py (run under the
+        # hipy venv) and need no interpreter at query runtime, except the
+        # hipy_fallback case.
+        if: matrix.python_mode == 'CPYTHON'
+        env:
+          LINGODB_HIPY_PYTHON_BINARY: /hipy-venv/bin/python3
+        run: |
+          build/lingodb-release/sqlite-tester test/sqlite-small-python/hipy-udfs.test
       - name: Test python-udfs (numpy, WASM only)
         # Exercises the numpy wheel mounted at /site-packages in the WASIX
         # sandbox (fetched + unpacked by cmake). CPYTHON mode embeds the

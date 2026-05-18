@@ -11,11 +11,18 @@ struct DateRuntime {
    static int64_t extractYear(int64_t date);
    static int64_t subtractMonths(int64_t date, int64_t months);
    static int64_t addMonths(int64_t date, int64_t months);
+   static int64_t dateDiffNanoSeconds(int64_t start, int64_t end);
    static int64_t dateDiffSecond(int64_t start, int64_t end);
    static int64_t dateDiffMinute(int64_t start, int64_t end);
    static int64_t dateDiffHour(int64_t start, int64_t end);
    static int64_t dateDiffDay(int64_t start, int64_t end);
    static int64_t dateTrunc(VarLen32 part, int64_t date);
+};
+struct IntervalRuntime {
+   static int64_t weeks(int64_t interval);
+   static int64_t days(int64_t interval);
+   static int64_t hours(int64_t interval);
+   static int64_t minutes(int64_t interval);
 };
 } // namespace lingodb::runtime
 #endif // LINGODB_RUNTIME_DATERUNTIME_H

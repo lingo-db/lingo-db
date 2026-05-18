@@ -256,7 +256,9 @@ void SQLMlirTranslator::translateCreateScalarFunction(mlir::OpBuilder& builder, 
       auto descriptionValue = createStringValue(builder, utility::serializeToHexString(createFunctionDef));
       compiler::runtime::RelationHelper::createScalarFunction(builder, builder.getUnknownLoc())(mlir::ValueRange({descriptionValue}));
 
-   } else if (language == "python") {
+   } else if (language == "python" || language == "hipy" || language == "hipy_fallback") {
+      // python and hipy share the wire format; the runtime dispatches on the
+      // `language` field (hipy is compiled to bytecode in createScalarFunction).
       std::vector<catalog::Type> standaloneArgumentTypes;
       standaloneArgumentTypes.reserve(boundCreateFunctionInfo->argumentTypes.size());
       for (size_t i = 0; i < boundCreateFunctionInfo->argumentTypes.size(); i++) {

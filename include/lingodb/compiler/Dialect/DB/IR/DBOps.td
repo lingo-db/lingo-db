@@ -360,7 +360,7 @@ def DB_NullableGetVal : DB_Op<"nullable_get_val", [Pure,
 
 }
 
-def DB_RuntimeCall : DB_Op<"runtime_call", [DB_MayNeedNullWrap,DB_MaySupportInvalidValues]> {
+def DB_RuntimeCall : DB_Op<"runtime_call", [DB_MayNeedNullWrap,DB_MaySupportInvalidValues,DeclareOpInterfaceMethods<MemoryEffectsOpInterface>]> {
     let summary = "Call runtime function";
 
     let arguments = (ins StrAttr:$fn,Variadic<AnyType>: $args);
@@ -583,6 +583,12 @@ def MemoryPromoteToGlobal : DB_Op<"memory.promote_to_global", [DB_NeedsNullWrap]
     let arguments = (ins AnyType:$value);
     let results = (outs AnyType:$res);
     let assemblyFormat = "$value `:` type($value) `->` type($res) attr-dict";
+}
+
+def TryExcept : DB_Op<"try_except", [AttrSizedOperandSegments]> {
+    let arguments = (ins FunctionType:$try_fn, FunctionType:$except_fn, Optional<AnyType>:$try_arg, Optional<AnyType>:$except_arg);
+    let results = (outs AnyType:$res);
+    let assemblyFormat = "$try_fn `:` type($try_fn) `,` $except_fn `:` type($except_fn) `,` ($try_arg^ `:` type($try_arg))? `,` ($except_arg^ `:` type($except_arg))? `->` type($res) attr-dict";
 }
 
 #endif// OPS

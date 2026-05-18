@@ -5,6 +5,7 @@
 
 #include "custom_dialects.h"
 #include "lingodb/compiler/Dialect/DB/IR/DBOps.h"
+#include "lingodb/compiler/Dialect/PyInterp/PyInterpOps.h"
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorDialect.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
@@ -453,4 +454,18 @@ MlirTypeID mlirSubOpEntryListTypeGetTypeID() {
 }
 bool mlirTypeIsASubOpEntryListType(MlirType type) {
    return llvm::isa<subop::ListType>(unwrap(type));
+}
+
+//----------------------------------------------------------------------------------------------------------------------
+// PyInterp Dialect
+//----------------------------------------------------------------------------------------------------------------------
+
+MlirType mlirPyInterpPyObjectTypeGet(MlirContext context) {
+   return wrap(py_interp::PyObjectType::get(unwrap(context)));
+}
+MlirTypeID mlirPyInterpPyObjectTypeGetTypeID() {
+   return wrap(py_interp::PyObjectType::getTypeID());
+}
+bool mlirTypeIsAPyInterpPyObjectType(MlirType type) {
+   return llvm::isa<py_interp::PyObjectType>(unwrap(type));
 }

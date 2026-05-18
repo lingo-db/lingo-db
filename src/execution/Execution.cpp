@@ -11,6 +11,7 @@
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/Passes.h"
 #include "lingodb/compiler/helper.h"
+#include "lingodb/execution/BackendPasses.h"
 #include "lingodb/execution/BaselineBackend.h"
 #include "lingodb/execution/CBackend.h"
 #include "lingodb/execution/LLVMBackends.h"
@@ -48,8 +49,12 @@ class DefaultQueryOptimizer : public QueryOptimizer {
       mlir::PassManager pm(moduleOp.getContext());
       pm.enableVerifier(verify);
       addLingoDBInstrumentation(pm, getSerializationState());
-      //pm.addPass(mlir::createInlinerPass());
-      //pm.addPass(mlir::createSymbolDCEPass());
+      // Inline (e.g. hipy UDF functions) + drop the now-dead symbols, then
+      // decompose the tuple plumbing hipy UDFs emit so it never reaches the
+      // backend (see createDecomposeTuplePass).
+      pm.addPass(mlir::createInlinerPass());
+      pm.addPass(mlir::createSymbolDCEPass());
+      pm.addPass(createDecomposeTuplePass());
       relalg::createQueryOptPipeline(pm, catalog);
       if (mlir::failed(pm.run(moduleOp))) {
          error.emit() << " Query Optimization failed";

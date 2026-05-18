@@ -30,6 +30,14 @@ class MLIRTableUDFImplementor {
 } // namespace lingodb::catalog
 
 namespace lingodb::compiler::frontend {
+// Compile a hipy UDF ahead of time: feed `code` to vendored/hipy/compile.py,
+// which lowers the annotated Python function to a LingoDB MLIR module, and
+// return that module serialized as MLIR bytecode. `fallback` enables hipy's
+// fallback mode (un-compilable parts stay as py_interp ops). Runs at CREATE
+// FUNCTION time; the bytecode is stored in the HiPyFunctionCatalogEntry.
+std::string compileHiPyUDF(std::string functionName, std::string code,
+                           std::vector<lingodb::catalog::Type> argumentTypes,
+                           lingodb::catalog::Type returnType, bool fallback);
 std::shared_ptr<catalog::MLIRUDFImplementor> getUDFImplementer(std::shared_ptr<catalog::FunctionCatalogEntry> entry);
 std::shared_ptr<catalog::MLIRUDFImplementor> createCUDFImplementer(
    std::string funcName, std::string cCode, std::vector<lingodb::catalog::Type> argumentTypes, lingodb::catalog::Type returnType);

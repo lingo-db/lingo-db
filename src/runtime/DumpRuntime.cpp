@@ -1,6 +1,7 @@
 #include "lingodb/runtime/helpers.h"
 
 #include <iostream>
+#include <stdexcept>
 
 #include "lingodb/runtime/DumpRuntime.h"
 #include <arrow/util/decimal.h>
@@ -107,4 +108,9 @@ void lingodb::runtime::DumpRuntime::dumpChar(bool null, uint64_t val, size_t byt
       memcpy(chars, &val, sizeof(val));
       std::cout << "(\"" << std::string(chars, bytes) << "\")" << std::endl;
    }
+}
+
+bool lingodb::runtime::DumpRuntime::error(lingodb::runtime::VarLen32 message) {
+   throw std::runtime_error(message.str());
+   return false;
 }
