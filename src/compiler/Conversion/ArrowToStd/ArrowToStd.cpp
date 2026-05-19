@@ -207,6 +207,21 @@ class BuilderAppendFixedSizedLowering : public OpConversionPattern<arrow::Append
       return success();
    }
 };
+
+class BuilderAppendNullLowering : public OpConversionPattern<arrow::AppendNullOp> {
+   public:
+   using OpConversionPattern<arrow::AppendNullOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(arrow::AppendNullOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op.getLoc();
+      auto builderVal = adaptor.getBuilder();
+
+      rt::ArrowColumnBuilder::addNull(rewriter, loc)({builderVal});
+      rewriter.eraseOp(op);
+
+      return success();
+   }
+};
+
 class BuilderAppendBoolLowering : public OpConversionPattern<arrow::AppendBoolOp> {
    public:
    using OpConversionPattern<arrow::AppendBoolOp>::OpConversionPattern;
@@ -339,6 +354,7 @@ void ArrowToStdLoweringPass::runOnOperation() {
    patterns.insert<ArrayLoadBoolLowering>(typeConverter, &getContext());
    patterns.insert<BuilderFromPtrLowering>(typeConverter, &getContext());
    patterns.insert<BuilderAppendFixedSizedLowering>(typeConverter, &getContext());
+   patterns.insert<BuilderAppendNullLowering>(typeConverter, &getContext());
    patterns.insert<BuilderAppendBoolLowering>(typeConverter, &getContext());
    patterns.insert<BuilderAppendVariableSizeBinaryLowering>(typeConverter, &getContext());
    if (failed(applyFullConversion(module, target, std::move(patterns))))
