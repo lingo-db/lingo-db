@@ -3048,13 +3048,9 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeFunctionExpressio
       if (function->arguments.size() != 1) {
          error("Function LENGTH needs exactly one argument", function->loc);
       }
-      if (function->arguments[0]->type != ast::ExpressionType::COLUMN_REF) {
-         error("Function LENGTH needs argument of type column", function->loc);
-      }
+      // LENGTH accepts any string-typed expression, not just a bare column
+      // reference — e.g. LENGTH(some_udf(...)) or LENGTH(a || b).
       auto arg = analyzeExpression(function->arguments[0], context, resolverScope);
-      if (arg->exprClass != ast::ExpressionClass::BOUND_COLUMN_REF) {
-         error("Function grouping needs argument of type column", function->loc);
-      }
       resultType = catalog::Type::int64();
       boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, std::vector{arg});
    } else if (upperCaseFName == "REGEXP_REPLACE") {
