@@ -197,11 +197,30 @@ PyObject* PythonRuntime::fromDouble(double value) {
 }
 
 PyObjectPtr PythonRuntime::fromDate(int64_t value) {
-   auto* dateTimeAPI = (PyDateTime_CAPI*) PyCapsule_Import(PyDateTime_CAPSULE_NAME, 0);
+   // Build the date via the Python-level `datetime.date` class rather than the
+   // `PyDateTime_CAPI` capsule. The C accelerator `_datetime` is single-phase
+   // init: with `check_multi_interp_extensions=1` it loads into only one
+   // sub-interpreter, so any other worker's `datetime` falls back to the pure
+   // Python implementation, which has no `datetime_CAPI` capsule. Going through
+   // the `date` class works in either case.
    auto year = DateRuntime::extractYear(value);
    auto month = DateRuntime::extractMonth(value);
    auto day = DateRuntime::extractDay(value);
-   return dateTimeAPI->Date_FromDate((year), (month), (day), dateTimeAPI->DateType);
+   PyObject* module = PyImport_ImportModule("datetime");
+   if (!module) {
+      throw_python_error();
+   }
+   PyObject* dateClass = PyObject_GetAttrString(module, "date");
+   Py_DECREF(module);
+   if (!dateClass) {
+      throw_python_error();
+   }
+   PyObject* result = PyObject_CallFunction(dateClass, "iii", static_cast<int>(year), static_cast<int>(month), static_cast<int>(day));
+   Py_DECREF(dateClass);
+   if (!result) {
+      throw_python_error();
+   }
+   return result;
 }
 
 namespace {
