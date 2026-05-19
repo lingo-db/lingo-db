@@ -1,0 +1,258 @@
+# Flights UDF benchmark (LANGUAGE python) — from udf-benchmark/benchmarks/lingodb/flights
+# Smoke test: the benchmark UDFs compile and run on tiny inline data.
+# The `flights` table is reduced to only the columns the benchmark query
+# references (the original benchmark loads a 109-column CSV); the query text
+# is unchanged.
+
+statement ok
+create table airports(ICAOCode TEXT, IATACode TEXT, AirportName TEXT, AirportCity TEXT, Country TEXT,
+                LatitudeDegrees TEXT, LatitudeMinutes TEXT, LatitudeSeconds TEXT, LatitudeDirection TEXT,
+                LongitudeDegrees TEXT, LongitudeMinutes TEXT, LongitudeSeconds TEXT,
+                LongitudeDirection TEXT, Altitude TEXT, LatitudeDecimal TEXT, LongitudeDecimal TEXT);
+
+statement ok
+INSERT INTO airports VALUES
+  ('KJFK','JFK','John F Kennedy Intl','New York','USA','40','38','23','N','73','46','44','W','4','40.639','-73.778'),
+  ('KLAX','LAX','Los Angeles Intl','Los Angeles','USA','33','56','33','N','118','24','29','W','38','33.942','-118.408'),
+  ('KMIA','MIA','Miami Intl','Miami','USA','25','47','35','N','80','17','26','W','3','25.793','-80.290');
+
+statement ok
+create table carrier_history(code TEXT, description TEXT);
+
+statement ok
+INSERT INTO carrier_history VALUES
+  ('AA','American Airlines Inc. (1960 - )'),
+  ('PA','Pan American World Airways (1927 - 1991)');
+
+statement ok
+create table flights(MYEAR INT, MMONTH TEXT, DAYOFWEEK TEXT, DAYOFMONTH TEXT,
+  OPUNIQUECARRIER TEXT, OPCARRIERFLNUM TEXT, ORIGIN TEXT, DEST TEXT,
+  ORIGINCITYNAME TEXT, DESTCITYNAME TEXT, CRSDEPTIME INT, CRSARRTIME INT,
+  CANCELLED FLOAT, CANCELLATIONCODE TEXT, DIVERTED FLOAT, CRSELAPSEDTIME TEXT,
+  ACTUALELAPSEDTIME FLOAT, AIRTIME TEXT, ARRDELAY TEXT, CARRIERDELAY TEXT,
+  DEPDELAY TEXT, LATEAIRCRAFTDELAY TEXT, NASDELAY TEXT, SECURITYDELAY TEXT,
+  TAXIIN TEXT, TAXIOUT TEXT, WEATHERDELAY TEXT, DISTANCE TEXT,
+  DIVREACHEDDEST TEXT, DIVACTUALELAPSEDTIME TEXT);
+
+statement ok
+INSERT INTO flights VALUES
+  (2015,'6','3','15','AA','100','JFK','LAX','New York, NY','Los Angeles, CA',830,1145,0.0,'',0.0,'350',360.0,'340','5','0','2','0','0','0','10','20','0','2475','',''),
+  (1985,'7','5','4','PA','200','MIA','JFK','Miami, FL','New York, NY',1400,1700,0.0,'A',1.0,'170',180.0,'150','','','10','','','','8','15','','1090','1','200'),
+  (2005,'8','1','9','PA','300','LAX','MIA','Los Angeles, CA','Miami, FL',900,1300,0.0,'',0.0,'240',250.0,'230','3','0','1','0','0','0','9','12','0','2342','','');
+
+statement ok
+CREATE OR REPLACE FUNCTION getcity(val TEXT)
+RETURNS TEXT
+AS $$
+def getcity(x):
+    return  x[:x.rfind(',')]
+$$ LANGUAGE python;
+
+statement ok
+CREATE OR REPLACE FUNCTION getstate(val TEXT)
+RETURNS TEXT
+AS $$
+def getstate(x):
+    return x[x.rfind(',')+1:]
+$$ LANGUAGE python;
+
+statement ok
+CREATE OR REPLACE FUNCTION toint(val TEXT)
+RETURNS INT8
+AS $$
+def toint(val):
+    return int(float(val)) if val else 0
+$$ LANGUAGE python;
+
+statement ok
+CREATE OR REPLACE FUNCTION getairlineyear(val TEXT)
+RETURNS INT8
+AS $$
+def getairlineyear(arg):
+    try:
+        return int(arg[arg.rfind('(') + 1:arg.rfind('-')])
+    except:
+        return -1
+$$ LANGUAGE python;
+
+statement ok
+CREATE OR REPLACE FUNCTION getairlinename(val TEXT)
+RETURNS TEXT
+AS $$
+def getairlinename(inp):
+    inp = inp[:inp.rfind('(')].strip()
+    return inp.replace('Inc.', '').replace('LLC', '').replace('Co.', '').strip()
+$$ LANGUAGE python;
+
+statement ok
+CREATE OR REPLACE FUNCTION defunctyear(val TEXT)
+RETURNS INT8
+AS $$
+def defunctyear(arg):
+    desc = arg[arg.rfind('-') + 1:arg.rfind(')')].strip()
+    try:
+        return int(desc) if len(desc) > 0 else -1
+    except:
+        return -1
+$$ LANGUAGE python;
+
+statement ok
+CREATE OR REPLACE FUNCTION gettime(val FLOAT8)
+RETURNS TEXT
+AS $$
+def gettime(val):
+    return '{:02}:{:02}'.format(int(val / 100), val % 100) if val else ''
+$$ LANGUAGE python;
+
+statement ok
+CREATE OR REPLACE FUNCTION cancelledbool(val FLOAT8)
+RETURNS BOOL
+AS $$
+def cancelledbool(arg):
+    return bool(arg)
+$$ LANGUAGE python;
+
+statement ok
+CREATE OR REPLACE FUNCTION divertedmap(val FLOAT8, val2 TEXT)
+RETURNS TEXT
+AS $$
+def cancelledbool(arg):
+    return bool(arg)
+
+def cleanCode(code):
+    if code == 'A':
+        return 'carrier'
+    elif code == 'B':
+        return 'weather'
+    elif code == 'C':
+        return 'national air system'
+    elif code == 'D':
+        return 'security'
+    else:
+        return ''
+
+def divertedmap(arg1, arg2):
+    if cancelledbool(arg1):
+        return 'diverted'
+    else:
+        ccode = cleanCode(arg2)
+        if ccode != '':
+            return ccode
+        else:
+            return 'None'
+$$ LANGUAGE python;
+
+statement ok
+CREATE OR REPLACE FUNCTION fillintimes(c FLOAT8, d TEXT, e TEXT)
+RETURNS FLOAT8
+AS $$
+def fillintimes(c, d, e):
+      if d != "":
+          if float(d) > 0:
+              return  float(e)
+          else:
+              return c
+      else:
+            return c
+$$ LANGUAGE python;
+
+# --- per-UDF smoke checks ---
+
+query tsv rowsort getcity-lit
+select getcity('New York, NY'::text);
+----
+New York
+
+query tsv rowsort getstate-lit
+select getstate('New York, NY'::text);
+----
+ NY
+
+query tsv rowsort toint-lit
+select toint('42.7'::text);
+----
+42
+
+query tsv rowsort getairlineyear-lit
+select getairlineyear('American Airlines Inc. (1960 - )'::text);
+----
+1960
+
+query tsv rowsort getairlinename-lit
+select getairlinename('American Airlines Inc. (1960 - )'::text);
+----
+American Airlines
+
+query tsv rowsort defunctyear-lit
+select defunctyear('Pan American World Airways (1927 - 1991)'::text);
+----
+1991
+
+query tsv rowsort cancelledbool-lit
+select cancelledbool(1.0::float8);
+----
+t
+
+query tsv rowsort divertedmap-lit
+select divertedmap(0.0::float8, 'B'::text);
+----
+weather
+
+query tsv rowsort fillintimes-lit
+select fillintimes(180.0::float8, '1'::text, '200'::text);
+----
+200
+
+# --- benchmark query (flights/flights.sql) ---
+
+query tsv rowsort flights
+SELECT airlinename AS CarrierName,
+      mmonth,myear,dayofweek,origincity,originstate,destcity,deststate,
+        distance,cancellationreason,cancelled,diverted,crsarrtime,crsdeptime,airtimeint,arrdelayint,carrierdelayint,actualelapsedtime,
+       crselapsedtimeint,depdelayint,lateaircraftdelayint,nasdelayint,securitydelayint,taxinint,taxioutint,weatherdelayint,airlineyearfounded,myyear AS AirlineYearDefunct,
+            originlongitudedecimal AS OriginLongitude, originlatitudedecimal AS OriginLatitude, originaltitude, destaltitude,
+               destlongitudedecimal AS DestLongitude,  destlatitudedecimal AS DestLatitude, opuniquecarrier AS CarrierCode, opcarrierflnum AS FlightNumber, dayofmonth AS myDay,
+               origin AS OriginAirportIATACode, dest AS DestAirportIATACode
+        FROM   (SELECT *
+                FROM   (SELECT  opuniquecarrier, opcarrierflnum,dayofmonth, mmonth, myear, dayofweek, origincity, originstate, origin, origin.longitudedecimal as originlongitudedecimal,
+                       origin.latitudedecimal as originlatitudedecimal,  origin.altitude as originaltitude, destcity, deststate, dest, dest.longitudedecimal as destlongitudedecimal, dest.latitudedecimal as destlatitudedecimal,dest.altitude as destaltitude, cancellationreason, cancelled, diverted, crsarrtime,
+                       crsdeptime, actualelapsedtime, airtimeint, arrdelayint, carrierdelayint, crselapsedtimeint, depdelayint, lateaircraftdelayint, nasdelayint, securitydelayint, taxinint, taxioutint,
+                       weatherdelayint, distance / 0.00062137119224 AS distance
+                        FROM   (SELECT         myear, origin, dest,
+                                               gettime(crsdeptime) AS crsdeptime,
+                                               gettime(crsarrtime) AS crsarrtime,
+                                               getcity(origincityname) AS origincity,
+                                               getstate(origincityname) AS originstate,
+                                               getcity(destcityname) AS destcity,
+                                               getstate(destcityname) AS deststate,
+                                               cancelledbool(cancelled) AS cancelled,
+                                               divertedmap(diverted, cancellationcode) AS CancellationReason,  diverted,
+                                               fillintimes(actualelapsedtime, divreacheddest, divactualelapsedtime) AS ActualElapsedTime,
+                                               opuniquecarrier, distance, mmonth, dayofweek,opcarrierflnum, dayofmonth,
+                                               case when airtime='' then 0 else cast(cast (airtime as float) as int) end  AS airtimeint,
+                                                case when arrdelay='' then 0 else cast(cast (arrdelay as float) as int) end  AS arrdelayint,
+                                                case when carrierdelay='' then 0 else cast(cast (carrierdelay as float) as int) end            AS carrierdelayint,
+                                                case when crselapsedtime='' then 0 else cast(cast (crselapsedtime as float) as int) end          AS crselapsedtimeint,
+                                                case when depdelay='' then 0 else cast(cast (depdelay as float) as int) end                AS depdelayint,
+                                                case when LateAircraftDelay='' then 0 else cast(cast (LateAircraftDelay as float) as int) end       AS LateAircraftDelayint,
+                                                case when nasdelay='' then 0 else cast(cast (nasdelay as float) as int) end                AS nasdelayint,
+                                                case when securitydelay='' then 0 else cast(cast (securitydelay as float) as int) end           AS securitydelayint,
+                                                 case when taxiin='' then 0 else cast(cast (taxiin as float) as int) end                  AS taxinint,
+                                                case when taxiout='' then 0 else cast(cast (taxiout as float) as int) end  AS taxioutint,
+                                                case when weatherdelay='' then 0 else cast(cast (weatherdelay as float) as int) end            AS weatherdelayint
+                                       FROM flights) FF
+                                           LEFT JOIN airports ORIGIN
+                                              ON origin = ORIGIN.iatacode
+                                           LEFT JOIN airports DEST
+                                              ON dest = DEST.iatacode) FFF,
+                                       (SELECT getairlineyear(description) AS
+                                               airlineyearfounded,
+                                               defunctyear(description)    AS
+                                               myyear,
+                                               getairlinename(description) AS
+                                               airlinename, code
+                                        FROM   carrier_history) XX
+                                WHERE  opuniquecarrier = code and (myear < myyear OR myyear = -1) )  TTT;
+----
+American Airlines	6	2015	3	New York	 NY	Los Angeles	 CA	3983126.399982	None	f	0	11:45.0	08:30.0	340	5	0	360	350	2	0	0	0	10	20	0	1960	-1	-73.778	40.639	4	38	-118.408	33.942	AA	100	15	JFK	LAX
+Pan American World Airways	7	1985	5	Miami	 FL	New York	 NY	1754184.959992	diverted	f	1	17:0.0	14:0.0	150	0	0	200	170	10	0	0	0	8	15	0	1927	1991	-80.290	25.793	3	4	-73.778	40.639	PA	200	4	MIA	JFK

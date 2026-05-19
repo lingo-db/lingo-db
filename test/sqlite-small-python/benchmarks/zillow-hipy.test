@@ -1,0 +1,210 @@
+# Zillow UDF benchmark (LANGUAGE hipy) — from udf-benchmark/benchmarks/lingodb/zillow-hipy
+# Smoke test: the benchmark UDFs compile and run on tiny inline data.
+
+statement ok
+create table zillow(title text, address text, city text, state text, postal_code text, price text, facts_and_features text, real_estate_provider text, url text);
+
+statement ok
+INSERT INTO zillow VALUES
+  ('Condo for sale in downtown', '1 Main St', 'Springfield', 'IL', '6701', '$250,000', '3 bd , 2 ba , 1500 sqft', 'ACME', 'https://www.zillow.com/homedetails/111_zpid/'),
+  ('House for sale large yard', '7 Hill Rd', 'Beverly', 'CA', '90210', '$800,000', '4 bd , 3 ba , 2400 sqft', 'HomeCo', 'https://www.zillow.com/homedetails/222_zpid/'),
+  ('Apartment for rent cozy', '9 Elm St', 'Metropolis', 'NY', '10001', '$1,800', '2 bd , 1 ba , 850 sqft', 'RentInc', 'https://www.zillow.com/homedetails/333_zpid/'),
+  ('Condo for sale uptown loft', '42 Oak Ave', 'Portland', 'OR', '97201', '$1,950,000', '2 bd , 2 ba , 1100 sqft', 'BestRealty', 'https://www.zillow.com/homedetails/444_zpid/');
+
+statement ok
+CREATE OR REPLACE FUNCTION extractbd(val TEXT)
+RETURNS INT8
+AS $$
+import hipy
+import math
+@hipy.compiled_function
+def extractbd(val):
+      try:
+        max_idx = val.find(' bd')
+        if max_idx < 0:
+            max_idx = len(val)
+        s = val[:max_idx]
+        split_idx = s.rfind(',')
+        if split_idx < 0:
+            split_idx = 0
+        else:
+            split_idx += 2
+        r = s[split_idx:]
+        return int(r)
+      except:
+        return -1
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION extractba(val TEXT)
+RETURNS INT8
+AS $$
+import hipy
+import hipy.lib.math
+import math
+@hipy.compiled_function
+def extractba(val):
+      try:
+        max_idx = val.find(' ba')
+        if max_idx < 0:
+            max_idx = len(val)
+        s = val[:max_idx]
+        split_idx = s.rfind(',')
+        if split_idx < 0:
+            split_idx = 0
+        else:
+            split_idx += 2
+        r = s[split_idx:]
+        ba = math.ceil(2.0 * float(r)) / 2.0
+        return int(ba)
+      except:
+        return -1
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION extractsqfeet(val TEXT)
+RETURNS INT8
+AS $$
+import hipy
+@hipy.compiled_function
+def extractsqfeet(val):
+      try:
+        max_idx = val.find(' sqft')
+        if max_idx < 0:
+            max_idx = len(val)
+        s = val[:max_idx]
+        split_idx = s.rfind('ba ,')
+        if split_idx < 0:
+            split_idx = 0
+        else:
+            split_idx += 5
+        r = s[split_idx:]
+        r = r.replace(',', '')
+        return int(r)
+      except:
+        return -1
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION extractid(val TEXT)
+RETURNS INT8
+AS $$
+import hipy
+import hipy.lib.re
+import re
+@hipy.compiled_function
+def extractid(val):
+    match = re.search("(\d+)_zpid/$", val)
+    try:
+        return int(match.group(1))
+    except:
+        return 0
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION extractprice_sell(val TEXT)
+RETURNS INT8
+AS $$
+import hipy
+@hipy.compiled_function
+def extractprice_sell(val):
+    try:
+        return int(val[1:].replace(',', ''))
+    except:
+        return -1
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION extracttype(val TEXT)
+RETURNS text
+AS $$
+import hipy
+@hipy.compiled_function
+def extracttype(val):
+    try:
+        t = val.lower()
+        type = 'unknown'
+        if 'condo' in t or 'apartment' in t:
+            type = 'condo'
+        if 'house' in t:
+            type = 'house'
+        return type
+    except:
+        return 'null'
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION extractpcode(text_input TEXT)
+RETURNS TEXT
+AS $$
+import hipy
+@hipy.compiled_function
+def extractpcode(val):
+      try:
+        return '%05d' % int(val)
+      except:
+        return ''
+$$ LANGUAGE hipy;
+
+# --- per-UDF smoke checks ---
+
+query tsv rowsort extractbd-lit
+select extractbd('3 bd , 2 ba , 1500 sqft'::text);
+----
+3
+
+query tsv rowsort extractba-lit
+select extractba('3 bd , 2 ba , 1500 sqft'::text);
+----
+2
+
+query tsv rowsort extractsqfeet-lit
+select extractsqfeet('3 bd , 2 ba , 1500 sqft'::text);
+----
+1500
+
+query tsv rowsort extractid-lit
+select extractid('https://www.zillow.com/homedetails/111_zpid/'::text);
+----
+111
+
+query tsv rowsort extractprice-lit
+select extractprice_sell('$1,950,000'::text);
+----
+1950000
+
+query tsv rowsort extracttype-lit
+select extracttype('Condo for sale in downtown'::text);
+----
+condo
+
+query tsv rowsort extractpcode-lit
+select extractpcode('6701'::text);
+----
+06701
+
+# --- benchmark query (zillow-hipy/zillow.sql) ---
+
+query tsv rowsort zillow
+SELECT * FROM
+    (SELECT ba, url as id, address, postal_code, bds, city, state, offer, type1, sqfeet, price
+     FROM   (SELECT url, address, postal_code, bds, ba, city, state, offer, type1, sqfeet,
+                    CASE WHEN offer = 'sale' THEN Extractprice_sell(price) ELSE 0 END AS price
+             FROM   (SELECT price, url, address, postal_code, bds, ba, city, state, offer, type1,
+                            Extractsqfeet(facts_and_features) AS sqfeet
+                     FROM   (SELECT title, address, city, state, postal_code, price, facts_and_features, type1, real_estate_provider, url, bds,
+                                    CASE WHEN title LIKE '%sale%' THEN 'sale' WHEN title LIKE '%sold%' THEN 'sold' WHEN title LIKE '%rent%' THEN 'rent'
+                                         WHEN title LIKE '%forclose%' THEN 'forclosed' END  AS offer,
+                                    Extractba(facts_and_features) AS ba
+                             FROM   (SELECT title, address, city, state, postal_code, price, facts_and_features, real_estate_provider, url, type1,
+                                            Extractbd(facts_and_features) AS bds
+                                     FROM   (SELECT title, address, city, state, postal_code, price, facts_and_features, real_estate_provider, url, type1
+                                             FROM   (SELECT title, address, city, state, Extractpcode(postal_code) AS postal_code, price, facts_and_features,
+                                                            real_estate_provider, url, Extracttype(title) AS type1
+                                                     FROM   (SELECT * FROM zillow) Z) T
+                                             WHERE  type1 = 'condo') p) S
+                             WHERE  bds < 10) Q) I) A
+     WHERE  price < 20000000 AND price > 100000) H;
+----
+2	https://www.zillow.com/homedetails/111_zpid/	1 Main St	06701	3	Springfield	IL	sale	condo	1500	250000
+2	https://www.zillow.com/homedetails/444_zpid/	42 Oak Ave	97201	2	Portland	OR	sale	condo	1100	1950000

@@ -1,0 +1,156 @@
+# Scalar UDF benchmark (LANGUAGE hipy) — from udf-benchmark/benchmarks/lingodb/scalar-hipy
+# Also covers the precond benchmark (parse_url_host COUNT query).
+# `predict` (sklearn) is intentionally omitted.
+
+statement ok
+CREATE TABLE random_ibans (iban TEXT NOT NULL);
+
+statement ok
+INSERT INTO random_ibans VALUES
+  ('DE89370400440532013000'),
+  ('DE91100000000123456789'),
+  ('DE89370400440532013001'),
+  ('DE00111122223333444455'),
+  ('GB82WEST12345698765432');
+
+statement ok
+CREATE TABLE random_strings(s TEXT NOT NULL);
+
+statement ok
+INSERT INTO random_strings VALUES
+  ('benchmark'),
+  ('benchmork'),
+  ('bench'),
+  ('benchmarking'),
+  ('completelydifferent'),
+  ('xyz');
+
+statement ok
+CREATE TABLE random_urls(url TEXT NOT NULL);
+
+statement ok
+INSERT INTO random_urls VALUES
+  ('http://www.yandex.ru/page'),
+  ('https://mail.yandex.ru/inbox'),
+  ('ftp://news.yandex.ru/feed'),
+  ('http://google.com/search'),
+  ('http://yandex.ru.evil.com/phish');
+
+statement ok
+CREATE OR REPLACE FUNCTION check_iban (text_input TEXT)
+RETURNS bool
+AS $$
+import hipy
+@hipy.compiled_function
+def check_iban(iban):
+    iban = iban.replace(" ", "").replace("-", "").replace(".", "")
+    iban = iban.upper()
+    iban = iban[4:] + iban[:4]
+    r = 0
+    for c in iban:
+        if c.isdigit():
+            c = int(c)
+            r *= 10
+        else:
+            c = ord(c) - ord("A") + 10
+            r *= 100
+        r += c
+        r %= 97
+    return r % 97 == 1
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION levenshtein_dist(text_input1 TEXT, text_input2 TEXT)
+RETURNS int8
+AS $$
+import hipy
+
+@hipy.compiled_function
+def levenshtein_dist(a, b):
+    """
+    Compute the Levenshtein distance between two given
+    strings (a and b). Taken from m.l. hetland
+    """
+    n, m = len(a), len(b)
+    if n > m:
+        # Make sure n <= m, to use O(min(n,m)) space
+        a,b = b,a
+        n,m = m,n
+    current = list(range(n+1))
+    for i in range(1,m+1):
+        previous, current = current, [i]+[0] * m
+        for j in range(1, n+1):
+            add, delete = previous[j] + 1, current[j-1] + 1
+            change = previous[j-1]
+            if a[j-1] != b[i-1]:
+                change +=1
+            current[j] = min(add, delete, change)
+    return current[n]
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION parse_url_host(text_input TEXT)
+RETURNS TEXT
+AS $$
+import hipy
+from hipy.lib.urllib.parse import urlparse
+
+@hipy.compiled_function
+def parse_url_host(string):
+    return urlparse(string).hostname
+
+$$ LANGUAGE hipy;
+
+# --- per-UDF smoke checks ---
+
+query tsv rowsort check-iban-valid
+select check_iban('DE89370400440532013000'::text);
+----
+t
+
+query tsv rowsort check-iban-invalid
+select check_iban('DE89370400440532013001'::text);
+----
+f
+
+query tsv rowsort levenshtein-lit
+SELECT levenshtein_dist('kitten'::text, 'sitting'::text);
+----
+3
+
+query tsv rowsort url-host-lit
+select parse_url_host('http://www.yandex.ru/page'::text);
+----
+www.yandex.ru
+
+# --- benchmark queries (scalar-hipy/iban.sql, levenshtein.sql, urls.sql) ---
+
+query tsv rowsort iban
+SELECT COUNT(*) FROM (
+        SELECT check_iban(iban) AS valid FROM random_ibans
+    ) t        WHERE valid = TRUE;
+----
+3
+
+query tsv rowsort levenshtein
+SELECT COUNT(*) FROM (
+    SELECT levenshtein_dist(s, 'benchmark') AS dist FROM random_strings
+) t WHERE dist < 5;
+----
+4
+
+query tsv rowsort urls
+SELECT COUNT(*) FROM (
+    SELECT parse_url_host(url) AS host FROM random_urls
+) t WHERE host LIKE '%yandex.ru';
+----
+3
+
+# --- precond benchmark (precond/url.sql) ---
+
+query tsv rowsort precond-url
+SELECT COUNT(*)
+FROM random_urls
+where parse_url_host(url) LIKE '%yandex.ru';
+----
+3

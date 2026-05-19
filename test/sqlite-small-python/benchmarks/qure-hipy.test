@@ -1,0 +1,967 @@
+# qure / qure-aggr UDF benchmark (LANGUAGE hipy) — from
+# udf-benchmark/benchmarks/lingodb/qure-aggr-hipy. Query form is the
+# qure-aggr aggregate so each UDF runs over the whole table.
+
+statement ok
+create table orders (
+    o_orderkey      integer        not null,
+    o_custkey       integer        not null,
+    o_orderstatus   char(1)        not null,
+    o_totalprice    decimal(12, 2) not null,
+    o_orderdate     date           not null,
+    o_orderpriority char(15)       not null,
+    o_clerk         char(15)       not null,
+    o_shippriority  integer        not null,
+    o_comment       varchar(79)    not null,
+    primary key (o_orderkey)
+);
+
+statement ok
+INSERT INTO orders VALUES
+  (1,1,'O',172799.49,'1996-01-02','5-LOW','Clerk#001',0,'nstructions sleep furiously'),
+  (2,2,'O',38426.09,'1996-12-01','1-URGENT','Clerk#002',0,'foxes sleep'),
+  (3,3,'F',205654.30,'1993-10-14','5-LOW','Clerk#003',0,'accounts wake');
+
+statement ok
+create table lineitem (
+    l_orderkey      integer        not null,
+    l_partkey       integer        not null,
+    l_suppkey       integer        not null,
+    l_linenumber    integer        not null,
+    l_quantity      decimal(12, 2) not null,
+    l_extendedprice decimal(12, 2) not null,
+    l_discount      decimal(12, 2) not null,
+    l_tax           decimal(12, 2) not null,
+    l_returnflag    char(1)        not null,
+    l_linestatus    char(1)        not null,
+    l_shipdate      date           not null,
+    l_commitdate    date           not null,
+    l_receiptdate   date           not null,
+    l_shipinstruct  char(25)       not null,
+    l_shipmode      char(10)       not null,
+    l_comment       varchar(44)    not null,
+    primary key (l_orderkey, l_linenumber)
+);
+
+statement ok
+INSERT INTO lineitem VALUES
+  (1,11,1,1,17.0,21168.23,0.04,0.02,'N','O','1996-03-13','1996-02-12','1996-03-22','DELIVER IN PERSON','TRUCK','to beans x-ray carefully'),
+  (1,12,2,2,36.0,45983.16,0.09,0.06,'R','F','1996-04-12','1996-02-28','1996-04-20','TAKE BACK RETURN','MAIL','urgent slyly bold late deposits'),
+  (2,13,3,1,8.0,13309.60,0.10,0.02,'A','F','1997-01-28','1997-01-14','1997-02-02','NONE','REG AIR','damaged express packages'),
+  (3,14,4,1,55.0,68295.00,0.06,0.08,'R','F','1994-02-02','1994-03-01','1994-02-05','COLLECT COD','AIR','confidential important damaged goods');
+
+statement ok
+CREATE OR REPLACE FUNCTION q1_udf (l_extendedprice FLOAT, l_discount FLOAT, l_quantity FLOAT, l_returnflag TEXT, l_tax FLOAT)
+RETURNS TEXT
+AS $$
+import hipy
+@hipy.compiled_function
+def q1_udf(l_extendedprice, l_discount, l_quantity, l_returnflag, l_tax):
+    if l_extendedprice < 0.0 or l_discount < 0.0 or l_discount > 1.0 or l_tax < 0.0:
+        profit_report = "Invalid input data"
+        return profit_report
+    
+    price_after_discount = l_extendedprice * (1.0 - l_discount)
+    
+    if l_quantity > 50.0:
+        bulk_discount = 0.05
+        price_after_discount = price_after_discount * (1.0 - bulk_discount)
+    else:
+        bulk_discount = 0.0
+    
+    price_with_tax = price_after_discount * (1.0 + l_tax)
+    
+    profit_margin = 0.2
+    profit = price_with_tax * profit_margin
+
+    profit_report = (
+        "Original Price: $" + str(l_extendedprice) +
+        " Discount Applied: " + str(l_discount * 100.0) + "%" +
+        " Bulk Discount Applied: " + str(bulk_discount * 100.0) + "%" +
+        " Price After Discounts: $" + str(price_after_discount) +
+        " Tax Rate: " + str(l_tax * 100.0) + "%" +
+        " Price After Tax: $" + str(price_with_tax) +
+        " Profit: $" + str(profit) +
+        " (Profit Margin: " + str(profit_margin * 100.0) + "%)"
+    )
+    
+    # Handle return flag
+    if l_returnflag == 'R':
+        return_penalty = price_with_tax * 0.1
+        profit_report += (
+            " Return Penalty: $" + str(return_penalty) +
+            " Profit after Penalty: $" + str(profit - return_penalty)
+        )
+
+    # Indicate bulk order if quantity exceeds 50
+    if l_quantity > 50.0:
+        profit_report += " Bulk Order Detected: Extra Discounts Applied."
+    
+    return profit_report
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION q2_udf (o_totalprice FLOAT, l_extendedprice FLOAT)
+RETURNS FLOAT
+AS $$
+import hipy
+from math import sqrt, exp
+import hipy.lib.math
+@hipy.compiled_function
+def q2_udf(o_totalprice, l_extendedprice):
+  
+    decay_rate1 = 0.02
+    decay_rate2 = 0.5
+    factor1 = 0.5
+    factor2 = 0.5
+    external_factor = 1.5
+
+    term1 = o_totalprice *  exp(-decay_rate1) * factor1
+    term2 = l_extendedprice *  exp(-decay_rate2) * factor2
+
+    total_decay = term1 + term2
+    decay_adjustment = sqrt(term1**2.0 + term2**2.0)
+
+    adjusted_value = total_decay * decay_adjustment
+
+    if adjusted_value > 0.0:
+        result_value = round(adjusted_value, 4) 
+    else:
+       result_value = 0.0
+    return result_value
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION q3_udf (l_shipinstruct TEXT)
+RETURNS TEXT
+AS $$
+import hipy
+@hipy.compiled_function
+def q3_udf(l_shipinstruct):
+    
+    instruction_lower = l_shipinstruct.lower().strip()
+    
+    f_express = 'express' in instruction_lower
+    f_standard = 'standard' in instruction_lower
+
+    if f_express:
+        shipping_speed = 'Express Delivery'
+    else:
+       if f_standard:
+            shipping_speed = 'Standard Delivery'
+       else:
+            shipping_speed = 'Unknown Delivery'
+    
+    keyword_count = instruction_lower.count('deliver')
+    
+    result1 = "Shipping Speed: " + shipping_speed + ", Keyword deliver Count: " + str(keyword_count)
+    
+    return result1
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION q4_udf (key TEXT)
+RETURNS INT8
+AS $$
+import hipy
+@hipy.compiled_function
+def q4_udf(key):
+    shipmode_list = [
+        "AIR",
+        "MAIL",
+        "RAIL",
+        "SHIP",
+        "TRUCK",
+        "REG AIR",
+    ]
+    if key in shipmode_list:
+        return shipmode_list.index(key)
+    else:
+        return -1
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION q5_udf (l_shipinstruct TEXT)
+RETURNS TEXT
+AS $$
+import hipy
+@hipy.compiled_function
+def q5_udf(l_shipinstruct):
+    
+    cleaned_instruction = l_shipinstruct.strip().upper()
+
+    is_urgent = 'URGENT' in cleaned_instruction
+    is_standard = 'STANDARD' in cleaned_instruction
+    
+    if is_urgent:
+        urgency = 'High Urgency'
+    elif is_standard:
+        urgency = 'Standard'
+    else:
+        urgency = 'Unknown Urgency'
+    
+    word_count = len(cleaned_instruction.split(" "))
+    
+    if word_count > 5:
+        summary = "Complex instruction"
+    else:
+        summary = "Simple instruction"
+    
+    result_summary = "Cleaned Instruction: " + cleaned_instruction + ", Urgency: " + urgency + ", Words: " + str(word_count) +", Summary: " + summary
+    
+    return result_summary
+$$ LANGUAGE hipy;
+
+# NOTE: q6_udf is omitted from the hipy variant — it uses sorted(),
+# which hipy lowers to a `db.list_sort` op that this branch's DB
+# dialect does not define (only `db.list_set` exists). Tracked as a
+# missing-feature; the LANGUAGE python variant covers q6.
+
+statement ok
+CREATE OR REPLACE FUNCTION q7_udf (l_extendedprice FLOAT, l_discount FLOAT, l_quantity FLOAT)
+RETURNS TEXT
+AS $$
+import hipy
+@hipy.compiled_function
+def q7_udf(l_extendedprice, l_discount, l_quantity):
+    
+    final_price = l_extendedprice * (1.0 - l_discount)
+    if l_quantity > 50.0:
+        final_price = final_price * 0.9  # Bulk discount
+
+    if l_discount < 0.1:
+        discount_category = 'Low' 
+    else: 
+        discount_category = 'High'
+    
+    result_summary = "Original Price: + " + str(l_extendedprice) +  "Discount: " + str(l_discount) + " (" + discount_category + "), " + "Quantity: " + str(l_quantity) + ", " + "Final Price: " + str(final_price)
+   
+    return result_summary
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION q8_udf (l_shipdate DATE, l_receiptdate DATE)
+RETURNS TEXT
+AS $$
+import hipy
+import hipy.lib.datetime
+@hipy.compiled_function
+def q8_udf(l_shipdate, l_receiptdate):
+    
+    days_between = (l_receiptdate - l_shipdate).days
+    
+    if days_between < 0:
+        return 'Error in dates'
+    
+    if days_between <= 5:
+        classification = 'Quick Shipment'
+    elif days_between <= 10:
+        classification = 'Normal Shipment'
+    else:
+        classification = 'Slow Shipment'
+    
+    result_summary = "Days Between: " + str(days_between) + ", Classification: " + classification
+    
+    return result_summary
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION q9_udf (l_comment TEXT)
+RETURNS TEXT
+AS $$
+import hipy
+@hipy.compiled_function
+def q9_udf(l_comment):
+    l_comment = l_comment.strip()
+
+    words = l_comment.split(" ")
+
+    wordlist = (word[0].upper() for word in words if word != '')
+    initials = ''.join(wordlist)
+    word_count = len(words)
+    
+    if word_count > 20:
+        complexity = "High complexity"
+    elif word_count > 10:
+        complexity = "Medium complexity"
+    else:
+        complexity = "Low complexity"
+    
+    return "Initials: " + initials + ", Word Count: " + str(word_count) +", Complexity: " + complexity
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION q10_udf (key TEXT)
+RETURNS TEXT
+AS $$
+import hipy
+@hipy.compiled_function
+def q10_udf(key):
+    mk = str.maketrans("ai", "zz")
+    s1 = key.lower()
+    s2 = s1.translate(mk)
+    return s2
+$$ LANGUAGE hipy_fallback;
+
+statement ok
+CREATE OR REPLACE FUNCTION q11_udf (l_shipinstruct TEXT)
+RETURNS TEXT
+AS $$
+import hipy
+@hipy.compiled_function
+def q11_udf(l_shipinstruct):
+
+    instruction_cleaned = l_shipinstruct.strip().lower()
+
+    urgency_keywords = ['urgent', 'priority', 'express']
+    standard_keywords = ['standard', 'normal', 'routine']
+
+    urgent_count = sum(instruction_cleaned.count(word) for word in urgency_keywords)
+    standard_count = sum(instruction_cleaned.count(word) for word in standard_keywords)
+
+    if urgent_count > 0:
+        urgency_level = "High Urgency"
+    elif standard_count > 0:
+        urgency_level = "Standard"
+    else:
+        urgency_level = "Unknown"
+
+    words = instruction_cleaned.split(" ")
+    word_count = len(words)
+    if word_count > 10:
+        complexity = "Complex Instruction"
+    else:
+        complexity = "Simple Instruction"
+
+    instruction_summary = "Instruction: " + l_shipinstruct + " " + "Urgency Level: " + urgency_level+ " Word Count: " + str(word_count) + ", Complexity: " + complexity + " Urgent Keyword Count: " + str(urgent_count) +" , Standard Keyword Count: " + str(standard_count)
+
+    is_fragile = 'fragile' in instruction_cleaned
+    if is_fragile :
+        instruction_summary = instruction_summary + " Warning: The instruction mentions [fragile] - Handle with care."
+
+    no_bending = 'do not bend' in instruction_cleaned
+    if no_bending:
+        instruction_summary = instruction_summary + " Important: Instruction includes [Do not bend]."
+
+    if urgent_count == 0 and standard_count == 0:
+        instruction_summary = instruction_summary  + " No urgency keywords found in the instruction."
+
+    return instruction_summary
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION q12_udf (key TEXT)
+RETURNS TEXT
+AS $$
+import hipy
+@hipy.compiled_function
+def q12_udf(key):
+    key_list = key.split(" ")
+    code = ["A", "I"]
+    filtered_list = []
+    for c in key_list:
+	    if c in code:
+		    filtered_list.append(c)
+    return "".join(filtered_list)
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION q13_udf (l_comment TEXT)
+RETURNS TEXT
+AS $$
+import hipy
+@hipy.compiled_function
+def q13_udf(l_comment):
+    
+    comment_length = len(l_comment)
+    word_count = len(l_comment.split(" "))
+    
+    cleaned_comment_temp = l_comment.lower().replace('urgent', '')
+    cleaned_comment = cleaned_comment_temp.replace('important', '').strip()
+    vowel_count = sum(1 for char in cleaned_comment if char in ['a','e','i','o','u'])
+
+    is_damaged = 'damaged' in cleaned_comment
+    is_late = 'late' in cleaned_comment
+
+    if is_damaged:
+        status = 'Item Damaged'
+    elif is_late:
+        status = 'Late Delivery'
+    else:
+        status = 'No Issues'
+    
+    analysis_summary = "Original Comment: " + l_comment + " " + "Cleaned Comment: " + cleaned_comment + " " + "Length: " + str(comment_length) + ", Words: " + str(word_count) +", Vowels: " + str(vowel_count) + " " + "Status: " + status
+        
+    return analysis_summary
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION q14_udf (l_quantity FLOAT, l_extendedprice FLOAT)
+RETURNS FLOAT
+AS $$
+import hipy
+from math import sqrt, acos, atan2, cos, sin
+import hipy.lib.math
+@hipy.compiled_function
+def q14_udf(l_quantity, l_extendedprice):
+    a = 1.0
+    b = 1.0
+
+    term1 = (l_quantity / a) ** 2.0 + (l_extendedprice / b) ** 2.0
+    if term1 >= 1.0:
+        root_term = sqrt(term1 - 1.0)
+    else:
+        root_term = 0.0
+
+    eccentricity = sqrt(1.0 - (b / a) ** 2.0)
+    if eccentricity == 0.0:
+        eccentricity = 1e-6  
+
+    distance = a * acos(min(1.0, root_term / eccentricity))
+
+    angle = atan2(l_extendedprice, l_quantity)
+    projection_x = a * cos(angle)
+    projection_y = b * sin(angle)
+
+    final_distance = sqrt((l_quantity - projection_x) ** 2.0 + (l_extendedprice - projection_y) ** 2.0)
+
+    return round(final_distance, 4)
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION q15_udf (l_comment TEXT)
+RETURNS TEXT
+AS $$
+import hipy
+@hipy.compiled_function
+def q15_udf(l_comment):
+    
+    sensitive_words = ['damaged', 'late', 'urgent', 'confidential']
+    positive_keywords = ['excellent', 'good', 'satisfied']
+    negative_keywords = ['bad', 'delayed', 'broken', 'terrible']
+    
+    comment_cleaned = l_comment.strip().lower()
+    
+    positive_count = 0
+    negative_count = 0
+
+    for word in sensitive_words:
+        comment_cleaned = comment_cleaned.replace(word, '******')
+
+    for word_pos in positive_keywords:
+        positive_count += comment_cleaned.count(word_pos)
+    
+    for word_neg in negative_keywords:
+        negative_count += comment_cleaned.count(word_neg)
+
+    if positive_count > negative_count:
+        sentiment = "Positive"
+    elif negative_count > positive_count:
+        sentiment = "Negative"
+    else:
+        sentiment = "Neutral"
+
+    redacted_comment = ''
+
+    l_comment_split = l_comment.split(" ")
+    for word_redacted in l_comment_split:
+        word_redacted_lower = word_redacted.lower()
+        is_sensitive = word_redacted.lower() in sensitive_words
+        if is_sensitive:
+            redacted_comment = redacted_comment + '****** '
+        else:
+            redacted_comment = redacted_comment + word_redacted
+            redacted_comment = redacted_comment + ' '
+
+    summary = "Original Comment: " + l_comment + " " + "Redacted Comment: " + redacted_comment.strip() + " " + "Sentiment: " + sentiment + " " + "Positive Words: " + str(positive_count) + ", Negative Words: " + str(negative_count)
+    
+
+    is_damaged =  'damaged' in l_comment.lower()
+    is_late = 'late' in l_comment.lower()
+
+    if is_damaged:
+        summary = summary + " Warning: The comment mentions a damaged item."
+    if is_late:
+        summary = summary + " Warning: The comment mentions late delivery."
+
+    is_confidential = 'confidential' in l_comment.lower()
+
+    if is_confidential:
+        summary = summary + "Confidential content detected: Handle with care."
+
+    return summary
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION q16_udf (l_shipmode TEXT, l_returnflag TEXT)
+RETURNS TEXT
+AS $$
+import hipy
+@hipy.compiled_function
+def q16_udf(l_shipmode, l_returnflag):
+    
+    shipmode_status = l_shipmode.upper()
+    if l_returnflag == 'R':
+        return_status = 'Returned'  
+    else:
+        return_status = 'Not Returned'
+    
+
+    in_air = 'AIR' in shipmode_status
+    on_rail = 'RAIL' in shipmode_status
+
+    if in_air:
+        transport_mode = "Air Transport"
+    else: 
+        if on_rail:
+            transport_mode = "Rail Transport"
+        else:
+            transport_mode = "Other Transport"
+    
+    result_summary = "Shipping Mode: " + transport_mode + ", Return Status: " + return_status
+    
+    return result_summary
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION q17_udf (l_shipmode TEXT, l_shipdate date, l_receiptdate date, l_commitdate date, l_returnflag TEXT)
+RETURNS TEXT
+AS $$
+import hipy
+import hipy.lib.datetime
+@hipy.compiled_function
+def q17_udf(l_shipmode, l_shipdate, l_receiptdate, l_commitdate, l_returnflag):
+    if not l_shipmode or not l_shipdate or not l_receiptdate or not l_commitdate:
+        return "Missing necessary data"
+
+    days_between_ship_and_receipt = (l_receiptdate - l_shipdate).days
+    days_to_commit = (l_commitdate - l_shipdate).days
+
+    if days_between_ship_and_receipt <= days_to_commit:
+        performance = "On-time"
+    else:
+        performance = "Delayed"
+
+    if l_returnflag == 'R':
+        return_status = "Returned"
+    else:
+        return_status = "Not Returned"
+
+    shipping_class = ''
+    if 'AIR' in l_shipmode.upper():
+        shipping_class = 'Air Shipment'
+    elif 'RAIL' in l_shipmode.upper():
+        shipping_class = 'Rail Shipment'
+    else:
+        shipping_class = 'Other Shipment'
+
+    final_report = (
+        f"Shipping Mode: {shipping_class}\n"
+        f"Days Between Ship and Receipt: {days_between_ship_and_receipt}\n"
+        f"Days to Commit: {days_to_commit}\n"
+        f"Performance: {performance}\n"
+        f"Return Status: {return_status}"
+    )
+
+    if l_returnflag == 'R':
+        return_penalty = days_between_ship_and_receipt * 0.1
+        final_report += f"\nReturn Penalty (in days): {return_penalty:.2f}"
+
+    if days_between_ship_and_receipt > 30:
+        final_report += "\nWarning: Excessive delay in shipment."
+
+    return final_report
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION q18_udf (o_totalprice FLOAT)
+RETURNS FLOAT
+AS $$
+import hipy
+import math
+import hipy.lib.math
+@hipy.compiled_function
+def q18_udf(o_totalprice):
+    period = 0.01
+    term_1 = (1.0 / 1.0) * math.sin(2.0 * math.pi * 1.0 * o_totalprice / period)
+    term_2 = (1.0 / 2.0) * math.sin(2.0 * math.pi * 2.0 * o_totalprice / period)
+    term_3 = (1.0 / 3.0) * math.sin(2.0 * math.pi * 3.0 * o_totalprice / period)
+    term_4 = (1.0 / 4.0) * math.sin(2.0 * math.pi * 4.0 * o_totalprice / period)
+    term_5 = (1.0 / 5.0) * math.sin(2.0 * math.pi * 5.0 * o_totalprice / period)
+
+    result = term_1 + term_2 + term_3 + term_4 + term_5
+
+    price_adjustment = math.cos(o_totalprice / period) * 0.05
+    result += price_adjustment
+
+    normalization_factor = 1.0 + abs(o_totalprice) * 0.01
+    final_result = result / normalization_factor
+
+    return round(final_result, 4)
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION q19_udf (l_orderkey INT8, l_partkey INT8, l_shipmode TEXT)
+RETURNS TEXT
+AS $$
+import hipy
+@hipy.compiled_function
+def q19_udf(l_orderkey, l_partkey, l_shipmode):
+    if not l_shipmode:
+        return 'Missing ship mode'    
+    
+    if 'VIP' in l_shipmode.upper():
+        mode_abbrev = l_shipmode[:3].upper() + '*'  
+    else:
+        mode_abbrev = ''
+    
+    id_part1 = str(l_orderkey).zfill(6)
+    id_part2 = str(l_partkey).zfill(6)
+    
+    # Generate the unique ID
+    unique_id = f"{id_part1}-{id_part2}-{mode_abbrev}"
+    
+    if len(l_shipmode) > 5:
+        extra_code = l_shipmode[-2:].upper()
+        unique_id += f"-{extra_code}"
+    
+    return unique_id
+$$ LANGUAGE hipy_fallback;
+
+statement ok
+CREATE OR REPLACE FUNCTION q20_udf (l_extendedprice FLOAT, l_discount FLOAT, l_quantity FLOAT)
+RETURNS TEXT
+AS $$
+import hipy
+@hipy.compiled_function
+def q20_udf(l_extendedprice, l_discount, l_quantity):
+    if l_discount < 0.0 or l_discount > 1.0 or l_extendedprice < 0.0:
+        result = 'Invalid price or discount'
+        return result 
+    
+    final_price = l_extendedprice * (1.0 - l_discount)
+    if l_quantity > 50.0:
+        bulk_status = 'Bulk Order'
+    else: 
+        bulk_status ='Regular Order'
+    
+    if l_discount < 0.1:
+        discount_category = 'Low Discount'
+    else: 
+        discount_category = 'High Discount'
+    
+    result1 = 'Final Price: ' + str(final_price) + ', ' +  'Quantity: ' + str(l_quantity) + ', ' + 'Order Type: ' + bulk_status + ', ' +  'Discount Category: ' + discount_category  
+
+    return result1
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION q21_udf (o_totalprice FLOAT, l_quantity FLOAT)
+RETURNS FLOAT
+AS $$
+import hipy
+import math
+import hipy.lib.math
+@hipy.compiled_function
+def q21_udf(o_totalprice, l_quantity):
+    
+    growth_rate = 0.03
+    carrying_capacity = 100
+    time = 5 
+    decay_rate = 0.02
+    external_factor = 1.5
+
+    logistic_growth = (carrying_capacity * l_quantity) / (
+        l_quantity + (carrying_capacity - l_quantity) * math.exp(-growth_rate * time)
+    )
+
+    decay_factor = math.exp(-decay_rate * time)
+    total_growth = logistic_growth * decay_factor
+
+    external_adjustment = external_factor * o_totalprice * 0.05
+
+    adjusted_growth = total_growth + external_adjustment - (total_growth ** 2.0) * 0.01
+
+    return round(adjusted_growth, 4)
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION q22_udf (l_shipmode TEXT, l_returnflag TEXT)
+RETURNS TEXT
+AS $$
+import hipy
+@hipy.compiled_function
+def q22_udf(l_shipmode, l_returnflag):
+    
+    shipmode_status = l_shipmode.upper()
+    
+    if l_returnflag == 'R':
+        return_status = 'Returned'  
+    else: 
+        return_status = 'Not Returned'
+    
+    is_air = 'AIR' in shipmode_status
+    is_rail = 'RAIL' in shipmode_status
+
+    if is_air:
+        transport_mode = "Air Transport"
+    elif is_rail:
+        transport_mode = "Rail Transport"
+    else:
+        transport_mode = "Other Transport"
+    
+    result_summary = "Shipping Mode: " + transport_mode + ", Return Status: " + return_status
+    
+    return result_summary
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION q23_udf (l_comment TEXT)
+RETURNS TEXT
+AS $$
+import hipy
+@hipy.compiled_function
+def q23_udf(l_comment):
+    
+    cleaned_comment = l_comment.lower().replace('!', '').replace('@', '')
+    
+    if 'special' in cleaned_comment  or 'urgent' in cleaned_comment:
+        summary = "Keyword found in comment: " +cleaned_comment
+    else:
+        summary = "No special keywords in comment: "+cleaned_comment
+    
+    return summary
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION q24_udf (l_shipmode TEXT, l_returnflag TEXT)
+RETURNS TEXT
+AS $$
+import hipy
+@hipy.compiled_function
+def q24_udf(l_shipmode, l_returnflag):
+    
+    shipmode_upper = l_shipmode.strip().upper()
+    
+    if l_returnflag == 'R':
+        return_status = 'Returned'
+    else:
+        return_status = 'Not Returned'
+    
+    result_summary = "Mode: " + shipmode_upper + ", Return Status: " + return_status
+    
+    return result_summary
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION q25_udf (l_shipmode TEXT)
+RETURNS TEXT
+AS $$
+import hipy
+@hipy.compiled_function
+def q25_udf(l_shipmode):
+    
+    formatted_mode = l_shipmode.strip().upper()
+    is_urgent = True;  
+   
+    if is_urgent:
+        urgency_status = 'URGENT' 
+    else:
+        urgency_status = 'Non-urgent'
+
+    in_air = 'AIR' in formatted_mode
+    on_rail = 'RAIL' in formatted_mode
+    
+    if in_air:
+        transport = 'Air transport ( ' + urgency_status + ')'
+    else:
+       if on_rail:
+          transport = 'Rail transport ( ' + urgency_status + ')'
+       else:
+          transport = 'Other transport ( ' + urgency_status + ')'
+    return transport
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION q26_udf (l_shipinstruct TEXT, l_comment TEXT)
+RETURNS TEXT
+AS $$
+import hipy
+@hipy.compiled_function
+def q26_udf(l_shipinstruct, l_comment):  
+    cleaned_instruction = l_shipinstruct.lower().strip()
+    cleaned_comment = l_comment.upper().strip()
+    
+    instruction_length = len(cleaned_instruction)
+    comment_length = len(cleaned_comment)
+    
+    if instruction_length > 20:
+        instruction_summary = f"Instruction: {cleaned_instruction[:20]}... (truncated)"
+    else:
+        instruction_summary = f"Instruction: {cleaned_instruction}"
+    
+    if comment_length > 30:
+        comment_summary = f"Comment: {cleaned_comment[:30]}... (truncated)"
+    else:
+        comment_summary = f"Comment: {cleaned_comment}"
+    
+    result = f"{instruction_summary}\n{comment_summary}"
+    
+    return result
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION q27_udf (l_shipmode TEXT)
+RETURNS TEXT
+AS $$
+import hipy
+@hipy.compiled_function
+def q27_udf(l_shipmode):
+    key_list = l_shipmode.split(" ")
+    if key_list[0] == "REG":
+        return "regular"
+    if key_list[0] in ["AIR", "MAIL"]:
+        return "fast"
+    return "slow"
+$$ LANGUAGE hipy;
+
+query tsv rowsort q1
+SELECT SUM(LENGTH(q1_udf(l_extendedprice, l_discount, l_quantity, l_returnflag, l_tax))) FROM lineitem;
+----
+1015
+
+query tsv rowsort q2
+SELECT SUM(q2_udf(o_totalprice, l_extendedprice))
+FROM
+    orders
+JOIN
+    lineitem ON orders.o_orderkey = lineitem.l_orderkey;
+----
+2.914e+10
+
+query tsv rowsort q3
+SELECT SUM(LENGTH(q3_udf(l_shipinstruct))) FROM lineitem;
+----
+232
+
+query tsv rowsort q4
+SELECT SUM(q4_udf(lineitem.l_shipmode)) FROM lineitem;
+----
+10
+
+query tsv rowsort q5
+SELECT SUM(LENGTH(q5_udf(lineitem.l_shipinstruct))) FROM lineitem;
+----
+392
+
+query tsv rowsort q7
+SELECT SUM(LENGTH(q7_udf(l_extendedprice, l_discount, l_quantity))) FROM lineitem;
+----
+349
+
+query tsv rowsort q8
+SELECT SUM(LENGTH(q8_udf(l_shipdate, l_receiptdate))) FROM lineitem;
+----
+190
+
+query tsv rowsort q9
+SELECT SUM(LENGTH(q9_udf(lineitem.l_comment))) FROM lineitem;
+----
+228
+
+query tsv rowsort q10
+SELECT SUM(LENGTH(q10_udf(lineitem.l_comment))) FROM lineitem;
+----
+115
+
+query tsv rowsort q11
+SELECT SUM(LENGTH(q11_udf(l_shipinstruct))) FROM lineitem;
+----
+768
+
+query tsv rowsort q12
+SELECT SUM(LENGTH(q12_udf(lineitem.l_shipmode))) FROM lineitem;
+----
+0
+
+query tsv rowsort q13
+SELECT SUM(LENGTH(q13_udf(lineitem.l_comment))) FROM lineitem;
+----
+569
+
+query tsv rowsort q14
+SELECT SUM(q14_udf(l_quantity, l_extendedprice))
+FROM lineitem;
+----
+148752.0354
+
+query tsv rowsort q15
+SELECT SUM(LENGTH(q15_udf(l_comment))) FROM lineitem;
+----
+782
+
+query tsv rowsort q16
+SELECT SUM(LENGTH(q16_udf(l_shipmode, l_returnflag))) FROM lineitem;
+----
+224
+
+query tsv rowsort q17
+SELECT SUM(LENGTH(q17_udf(l_shipmode, l_shipdate, l_receiptdate, l_commitdate, l_returnflag))) FROM lineitem;
+----
+573
+
+query tsv rowsort q18
+SELECT SUM(q18_udf(o_totalprice))
+FROM
+    orders;
+----
+0
+
+query tsv rowsort q19
+SELECT SUM(LENGTH(q19_udf(l_orderkey, l_partkey, l_shipmode))) FROM lineitem;
+----
+59
+
+query tsv rowsort q20
+SELECT SUM(LENGTH(q20_udf(l_extendedprice, l_discount, l_quantity))) FROM lineitem;
+----
+409
+
+query tsv rowsort q21
+SELECT SUM(q21_udf(o_totalprice, l_quantity))
+FROM
+    orders
+JOIN
+    lineitem ON orders.o_orderkey = lineitem.l_orderkey;
+----
+44295.8111
+
+query tsv rowsort q22
+SELECT SUM(LENGTH(q22_udf(l_shipmode, l_returnflag))) FROM lineitem;
+----
+224
+
+query tsv rowsort q23
+SELECT SUM(LENGTH(q23_udf(lineitem.l_comment))) FROM lineitem;
+----
+237
+
+query tsv rowsort q24
+SELECT SUM(LENGTH(q24_udf(l_shipmode, l_returnflag))) FROM lineitem;
+----
+151
+
+query tsv rowsort q25
+SELECT SUM(LENGTH(q25_udf(l_shipmode))) FROM lineitem;
+----
+96
+
+query tsv rowsort q26
+SELECT SUM(LENGTH(q26_udf(lineitem.l_shipinstruct, lineitem.l_comment))) FROM lineitem;
+----
+278
+
+query tsv rowsort q27
+SELECT SUM(LENGTH(q27_udf(l_shipmode))) FROM lineitem;
+----
+19

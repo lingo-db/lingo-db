@@ -400,7 +400,7 @@ jobs:
           apt-get install -y python3-venv
           python3 -m venv /hipy-venv
           /hipy-venv/bin/pip install --no-cache-dir lingodb-python-build/lingodb_bridge*.whl
-          /hipy-venv/bin/pip install --no-cache-dir jinja2 networkx numpy pandas scikit-learn scipy
+          /hipy-venv/bin/pip install --no-cache-dir jinja2 networkx numpy pandas scikit-learn scipy typeshed_client
       - name: CPU info
         # ubuntu-24.04 GitHub-Actions runners are not feature-uniform; print
         # the CPU info so any future cpu-feature-related issues are easy
@@ -438,6 +438,27 @@ jobs:
           LINGODB_HIPY_PYTHON_BINARY: /hipy-venv/bin/python3
         run: |
           build/lingodb-release/sqlite-tester test/sqlite-small-python/hipy-udfs.test
+      - name: Test UDF benchmarks (python)
+        # The udf-benchmark scalar/zillow/flights/qure benchmarks converted to
+        # sqlite tests (test/sqlite-small-python/benchmarks/*-python.test) so
+        # CI catches if a benchmark UDF stops compiling/running. CPYTHON only —
+        # the WASM date-marshalling path is not exercised by these.
+        if: matrix.python_mode == 'CPYTHON'
+        run: |
+          for t in test/sqlite-small-python/benchmarks/*-python.test; do
+            echo "=== $t ==="
+            build/lingodb-release/sqlite-tester "$t"
+          done
+      - name: Test UDF benchmarks (hipy)
+        # hipy variants of the same benchmarks.
+        if: matrix.python_mode == 'CPYTHON'
+        env:
+          LINGODB_HIPY_PYTHON_BINARY: /hipy-venv/bin/python3
+        run: |
+          for t in test/sqlite-small-python/benchmarks/*-hipy.test; do
+            echo "=== $t ==="
+            build/lingodb-release/sqlite-tester "$t"
+          done
       - name: Test python-udfs (numpy, WASM only)
         # Exercises the numpy wheel mounted at /site-packages in the WASIX
         # sandbox (fetched + unpacked by cmake). CPYTHON mode embeds the
