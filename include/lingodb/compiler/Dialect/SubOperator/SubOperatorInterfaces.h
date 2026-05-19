@@ -58,11 +58,19 @@ class ColumnMapping {
    }
    dialect::tuples::ColumnDefAttr clone(dialect::tuples::ColumnDefAttr defAttr) {
       auto& colManager = defAttr.getContext()->getLoadedDialect<dialect::tuples::TupleStreamDialect>()->getColumnManager();
-      auto [scope, name] = colManager.getName(&defAttr.getColumn());
       mlir::Attribute fromExisting = defAttr.getFromExisting();
       if (fromExisting) {
          fromExisting = remap(fromExisting);
       }
+      // A column can be *defined* in more than one place — e.g. the two
+      // branches of a `subop.union` each define the same column. When such a
+      // subtree is cloned, every definition must map to a single new column
+      // so the definitions and all downstream uses stay consistent. Reuse the
+      // existing clone instead of minting a second, divergent one.
+      if (mapping.contains(&defAttr.getColumn())) {
+         return colManager.createDef(mapping[&defAttr.getColumn()], fromExisting);
+      }
+      auto [scope, name] = colManager.getName(&defAttr.getColumn());
       auto newDef = colManager.createDef(colManager.getUniqueScope(scope), name, fromExisting);
       newDef.getColumn().type = defAttr.getColumn().type;
       mapping[&defAttr.getColumn()] = &newDef.getColumn();
