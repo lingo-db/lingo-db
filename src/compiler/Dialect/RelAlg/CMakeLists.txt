@@ -36,6 +36,10 @@ add_mlir_dialect_library(MLIRRelAlg
         MLIRDBOpsIncGen
         MLIRUtilOpsIncGen
         MLIRTupleStreamOpsIncGen
+        # ParseNestedSQL.cpp pulls in the SQL frontend headers (driver.h, sql_analyzer.h,
+        # sql_mlir_translator.h), which transitively need the bison-generated parser.hpp
+        # under ${BUILD}/include/lingodb/compiler/frontend/generated/.
+        build_includes
         LINK_LIBS mlir-support utility PUBLIC
         MLIRIR
         MLIRCompilerHelper
