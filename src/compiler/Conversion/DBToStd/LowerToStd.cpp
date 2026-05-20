@@ -1210,6 +1210,43 @@ class ListSetLowering : public OpConversionPattern<db::ListSetOp> {
    }
 };
 
+class ListSortLowering : public OpConversionPattern<db::ListSortOp> {
+   public:
+   using OpConversionPattern<db::ListSortOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(db::ListSortOp listSortOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      // Build a wrapper that takes two raw byte pointers, loads the element
+      // values, and calls the user-supplied comparator. List::sort takes a
+      // void(*)(const void*, const void*)-shaped predicate; the supplied
+      // function works on the lowered element type.
+      auto loc = listSortOp.getLoc();
+      auto suppliedSymbol = listSortOp.getCmpFn();
+      auto suppliedCmpFn = mlir::cast<mlir::func::FuncOp>(listSortOp->getParentOfType<ModuleOp>().lookupSymbol(suppliedSymbol));
+      auto refType = util::RefType::get(rewriter.getContext(), rewriter.getI8Type());
+      auto fnType = FunctionType::get(rewriter.getContext(), {refType, refType}, rewriter.getI1Type());
+      auto elementType = typeConverter->convertType(listSortOp.getList().getType().getElementType());
+      auto elementPtrType = util::RefType::get(rewriter.getContext(), elementType);
+      mlir::func::FuncOp cmpFn;
+      {
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(listSortOp->getParentOfType<ModuleOp>().getBody());
+         cmpFn = rewriter.create<mlir::func::FuncOp>(loc, suppliedCmpFn.getName().str() + "_wrapper", fnType);
+         rewriter.setInsertionPointToStart(cmpFn.addEntryBlock());
+         mlir::Value leftPtr = cmpFn.getArgument(0);
+         mlir::Value rightPtr = cmpFn.getArgument(1);
+         leftPtr = rewriter.create<util::GenericMemrefCastOp>(loc, elementPtrType, leftPtr);
+         rightPtr = rewriter.create<util::GenericMemrefCastOp>(loc, elementPtrType, rightPtr);
+         mlir::Value left = rewriter.create<util::LoadOp>(loc, leftPtr).getVal();
+         mlir::Value right = rewriter.create<util::LoadOp>(loc, rightPtr).getVal();
+         mlir::Value cmpResult = rewriter.create<func::CallOp>(loc, suppliedCmpFn, mlir::ValueRange{left, right}).getResult(0);
+         rewriter.create<mlir::func::ReturnOp>(loc, cmpResult);
+      }
+      auto cmpFnPtr = rewriter.create<func::ConstantOp>(loc, fnType, cmpFn.getSymName());
+      rt::List::sort(rewriter, loc)({adaptor.getList(), cmpFnPtr});
+      rewriter.eraseOp(listSortOp);
+      return success();
+   }
+};
+
 class CreateDictLowering : public OpConversionPattern<db::CreateDictOp> {
    public:
    using OpConversionPattern<db::CreateDictOp>::OpConversionPattern;
@@ -1755,6 +1792,7 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<ListAppendLowering>(typeConverter, ctxt);
    patterns.insert<ListGetLowering>(typeConverter, ctxt);
    patterns.insert<ListSetLowering>(typeConverter, ctxt);
+   patterns.insert<ListSortLowering>(typeConverter, ctxt);
    patterns.insert<CreateDictLowering>(typeConverter, ctxt);
    patterns.insert<DictLengthLowering>(typeConverter, ctxt);
    patterns.insert<DictSetLowering>(typeConverter, ctxt);

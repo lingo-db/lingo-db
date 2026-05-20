@@ -202,6 +202,13 @@ def DB_ListSetOp : DB_Op<"list_set", [DeclareOpInterfaceMethods<DB_RefCountedOp,
     }];
 }
 
+def DB_ListSortOp : DB_Op<"list_sort", []> {
+    let summary = "Sort list in place using a user-supplied comparator";
+
+    let arguments = (ins ListType:$list, SymbolRefAttr:$cmpFn);
+    let assemblyFormat = "$list `:` type($list) `,` $cmpFn attr-dict";
+}
+
 def DB_ListAppendOp : DB_Op<"list_append", [DeclareOpInterfaceMethods<DB_RefCountedOp, ["getOwnedOperands"]>]> {
     let summary = "Append element to list";
 

@@ -21,6 +21,7 @@ class List {
    static void cleanupUse(List* list);
    static void cleanupUseCb(List* list, void (*cleanupFn)(List*));
    static void addUse(List* list);
+   void sort(bool (*compareFn)(const void*, const void*));
 };
 
 }; // namespace lingodb::runtime
