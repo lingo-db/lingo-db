@@ -212,10 +212,186 @@ def q5_udf(l_shipinstruct):
     return result_summary
 $$ LANGUAGE hipy;
 
-# NOTE: q6_udf is omitted from the hipy variant — it uses sorted(),
-# which hipy lowers to a `db.list_sort` op that this branch's DB
-# dialect does not define (only `db.list_set` exists). Tracked as a
-# missing-feature; the LANGUAGE python variant covers q6.
+statement ok
+CREATE OR REPLACE FUNCTION q1_udf (l_extendedprice FLOAT, l_discount FLOAT, l_quantity FLOAT, l_returnflag TEXT, l_tax FLOAT)
+RETURNS TEXT
+AS $$
+import hipy
+@hipy.compiled_function
+def q1_udf(l_extendedprice, l_discount, l_quantity, l_returnflag, l_tax):
+    if l_extendedprice < 0.0 or l_discount < 0.0 or l_discount > 1.0 or l_tax < 0.0:
+        profit_report = "Invalid input data"
+        return profit_report
+    
+    price_after_discount = l_extendedprice * (1.0 - l_discount)
+    
+    if l_quantity > 50.0:
+        bulk_discount = 0.05
+        price_after_discount = price_after_discount * (1.0 - bulk_discount)
+    else:
+        bulk_discount = 0.0
+    
+    price_with_tax = price_after_discount * (1.0 + l_tax)
+    
+    profit_margin = 0.2
+    profit = price_with_tax * profit_margin
+
+    profit_report = (
+        "Original Price: $" + str(l_extendedprice) +
+        " Discount Applied: " + str(l_discount * 100.0) + "%" +
+        " Bulk Discount Applied: " + str(bulk_discount * 100.0) + "%" +
+        " Price After Discounts: $" + str(price_after_discount) +
+        " Tax Rate: " + str(l_tax * 100.0) + "%" +
+        " Price After Tax: $" + str(price_with_tax) +
+        " Profit: $" + str(profit) +
+        " (Profit Margin: " + str(profit_margin * 100.0) + "%)"
+    )
+    
+    # Handle return flag
+    if l_returnflag == 'R':
+        return_penalty = price_with_tax * 0.1
+        profit_report += (
+            " Return Penalty: $" + str(return_penalty) +
+            " Profit after Penalty: $" + str(profit - return_penalty)
+        )
+
+    # Indicate bulk order if quantity exceeds 50
+    if l_quantity > 50.0:
+        profit_report += " Bulk Order Detected: Extra Discounts Applied."
+    
+    return profit_report
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION q2_udf (o_totalprice FLOAT, l_extendedprice FLOAT)
+RETURNS FLOAT
+AS $$
+import hipy
+from math import sqrt, exp
+import hipy.lib.math
+@hipy.compiled_function
+def q2_udf(o_totalprice, l_extendedprice):
+  
+    decay_rate1 = 0.02
+    decay_rate2 = 0.5
+    factor1 = 0.5
+    factor2 = 0.5
+    external_factor = 1.5
+
+    term1 = o_totalprice *  exp(-decay_rate1) * factor1
+    term2 = l_extendedprice *  exp(-decay_rate2) * factor2
+
+    total_decay = term1 + term2
+    decay_adjustment = sqrt(term1**2.0 + term2**2.0)
+
+    adjusted_value = total_decay * decay_adjustment
+
+    if adjusted_value > 0.0:
+        result_value = round(adjusted_value, 4) 
+    else:
+       result_value = 0.0
+    return result_value
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION q3_udf (l_shipinstruct TEXT)
+RETURNS TEXT
+AS $$
+import hipy
+@hipy.compiled_function
+def q3_udf(l_shipinstruct):
+    
+    instruction_lower = l_shipinstruct.lower().strip()
+    
+    f_express = 'express' in instruction_lower
+    f_standard = 'standard' in instruction_lower
+
+    if f_express:
+        shipping_speed = 'Express Delivery'
+    else:
+       if f_standard:
+            shipping_speed = 'Standard Delivery'
+       else:
+            shipping_speed = 'Unknown Delivery'
+    
+    keyword_count = instruction_lower.count('deliver')
+    
+    result1 = "Shipping Speed: " + shipping_speed + ", Keyword deliver Count: " + str(keyword_count)
+    
+    return result1
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION q4_udf (key TEXT)
+RETURNS INT8
+AS $$
+import hipy
+@hipy.compiled_function
+def q4_udf(key):
+    shipmode_list = [
+        "AIR",
+        "MAIL",
+        "RAIL",
+        "SHIP",
+        "TRUCK",
+        "REG AIR",
+    ]
+    if key in shipmode_list:
+        return shipmode_list.index(key)
+    else:
+        return -1
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION q5_udf (l_shipinstruct TEXT)
+RETURNS TEXT
+AS $$
+import hipy
+@hipy.compiled_function
+def q5_udf(l_shipinstruct):
+    
+    cleaned_instruction = l_shipinstruct.strip().upper()
+
+    is_urgent = 'URGENT' in cleaned_instruction
+    is_standard = 'STANDARD' in cleaned_instruction
+    
+    if is_urgent:
+        urgency = 'High Urgency'
+    elif is_standard:
+        urgency = 'Standard'
+    else:
+        urgency = 'Unknown Urgency'
+    
+    word_count = len(cleaned_instruction.split(" "))
+    
+    if word_count > 5:
+        summary = "Complex instruction"
+    else:
+        summary = "Simple instruction"
+    
+    result_summary = "Cleaned Instruction: " + cleaned_instruction + ", Urgency: " + urgency + ", Words: " + str(word_count) +", Summary: " + summary
+    
+    return result_summary
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION q6_udf (l_comment TEXT)
+RETURNS TEXT
+AS $$
+import hipy
+@hipy.compiled_function
+def q6_udf(l_comment):
+    if not l_comment:
+        return 'No comment provided'
+    sensitive_words = ['confidential', 'proprietary', 'secret']
+    scrambled_comment = l_comment
+    for word in sensitive_words:
+        scrambled_comment = scrambled_comment.replace(word, '*' * len(word))
+    words = scrambled_comment.split()
+    scrambled_words = [''.join(sorted(word)) for word in words]
+    scrambled_final = ' '.join(scrambled_words)
+    return f"Masked and Scrambled: {scrambled_final}"
+$$ LANGUAGE hipy;
 
 statement ok
 CREATE OR REPLACE FUNCTION q7_udf (l_extendedprice FLOAT, l_discount FLOAT, l_quantity FLOAT)
@@ -854,6 +1030,11 @@ SELECT SUM(LENGTH(q5_udf(lineitem.l_shipinstruct))) FROM lineitem;
 ----
 392
 
+query tsv rowsort q6
+SELECT SUM(LENGTH(q6_udf(lineitem.l_comment))) FROM lineitem;
+----
+203
+
 query tsv rowsort q7
 SELECT SUM(LENGTH(q7_udf(l_extendedprice, l_discount, l_quantity))) FROM lineitem;
 ----
@@ -965,3 +1146,4 @@ query tsv rowsort q27
 SELECT SUM(LENGTH(q27_udf(l_shipmode))) FROM lineitem;
 ----
 19
+
