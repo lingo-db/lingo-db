@@ -882,9 +882,11 @@ select t.depCount, morning_to_eve_ratio(t.depCount) from (select distinct cd_dep
 1	nan
 2	nan
 
-# q6 skipped: q6 calls total_discount whose second nested SQL (a SUM with two PARAMs) hits a `subop.nested_map` column-mapping issue on the wide procbenchpy schema — same class as the LEFT-JOIN bug that landed in commit 8ecca21d, but on a different captured-column path; documented for follow-up.
-# Query: select distinct i_manufact_id, total_discount(i_manufact_id) as totalDisc from item
-
+query tsv rowsort q6
+select distinct i_manufact_id, total_discount(i_manufact_id) as totalDisc from item;
+----
+100	20
+200	0
 
 query tsv rowsort q7
 select s_manager from store where profitable_manager(s_manager, 2001)<=0;
