@@ -10,6 +10,7 @@
 #include "lingodb/compiler/frontend/ast/bound/bound_query_node.h"
 #include "lingodb/compiler/frontend/ast/bound/bound_tableref.h"
 #include "lingodb/compiler/frontend/ast/bound/bound_target_list.h"
+#include "lingodb/compiler/Dialect/DB/IR/DBOps.h"
 #include "lingodb/scheduler/Tasks.h"
 
 #include <boost/context/fiber_fcontext.hpp>
@@ -3053,6 +3054,56 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeFunctionExpressio
       auto arg = analyzeExpression(function->arguments[0], context, resolverScope);
       resultType = catalog::Type::int64();
       boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, std::vector{arg});
+   } else if (upperCaseFName == "PARAM") {
+      // PARAM(n) inside a nested SQL string references the n-th (1-based)
+      // runtime parameter of the surrounding relalg.sql_query op. The PARAM
+      // index is required to be a literal integer; the result type is derived
+      // from the parameter Value's MLIR type.
+      if (function->arguments.size() != 1) {
+         error("PARAM function needs exactly one argument", function->loc);
+      }
+      auto paramIdxExpr = function->arguments[0];
+      if (paramIdxExpr->type != ast::ExpressionType::VALUE_CONSTANT) {
+         error("PARAM function argument must be a constant", paramIdxExpr->loc);
+      }
+      auto paramIdxValue = std::static_pointer_cast<ast::ConstantExpression>(paramIdxExpr);
+      if (paramIdxValue->value->type != ast::ConstantType::INT) {
+         error("PARAM function argument must be an integer constant", paramIdxExpr->loc);
+      }
+      auto paramIdx = static_cast<size_t>(std::static_pointer_cast<ast::IntValue>(paramIdxValue->value)->iVal);
+      if (paramIdx > context->params.size() || paramIdx < 1) {
+         error("PARAM function argument index out of bounds", paramIdxExpr->loc);
+      }
+      paramIdx = paramIdx - 1;
+      auto value = context->params[paramIdx];
+      bool nullable = false;
+      mlir::Type baseType = value.getType();
+      using namespace lingodb::compiler::dialect;
+      if (auto nullableType = mlir::dyn_cast_or_null<db::NullableType>(value.getType())) {
+         nullable = true;
+         baseType = nullableType.getType();
+      }
+      catalog::Type rawResType = catalog::Type::int64();
+      if (mlir::isa<db::StringType>(baseType)) {
+         rawResType = catalog::Type::stringType();
+      } else if (mlir::isa<mlir::Float32Type>(baseType)) {
+         rawResType = catalog::Type::f32();
+      } else if (mlir::isa<mlir::Float64Type>(baseType)) {
+         rawResType = catalog::Type::f64();
+      } else if (auto intType = mlir::dyn_cast_or_null<mlir::IntegerType>(baseType)) {
+         switch (intType.getWidth()) {
+            case 1: rawResType = catalog::Type::boolean(); break;
+            case 8: rawResType = catalog::Type::int8(); break;
+            case 16: rawResType = catalog::Type::int16(); break;
+            case 32: rawResType = catalog::Type::int32(); break;
+            case 64: rawResType = catalog::Type::int64(); break;
+            default: error("Unsupported integer width for PARAM function", paramIdxExpr->loc);
+         }
+      } else {
+         error("Unsupported parameter type for PARAM function", paramIdxExpr->loc);
+      }
+      NullableType resType{rawResType, nullable};
+      return drv.nf.node<ast::BoundParameterExpression>(function->loc, resType, paramIdx);
    } else if (upperCaseFName == "REGEXP_REPLACE") {
       if (function->arguments.size() != 3) {
          error("Function REGEXP_REPLACE needs exactly 3 arguments", function->loc);

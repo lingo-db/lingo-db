@@ -15,6 +15,12 @@ void relalg::setStaticCatalog(std::shared_ptr<lingodb::catalog::Catalog> catalog
    staticCatalog = catalog;
 }
 void relalg::createQueryOptPipeline(mlir::OpPassManager& pm, lingodb::catalog::Catalog* catalog) {
+   // Parse any nested SQL (relalg.sql_query, emitted by hipy.lib.sql.execute)
+   // before the rest of the query optimizer sees the module — the inlined
+   // subqueries then flow through the normal pipeline.
+   if (catalog) {
+      pm.addPass(relalg::createParseNestedSQLPass(*catalog));
+   }
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createSimplifyAggregationsPass());
    pm.addNestedPass<mlir::func::FuncOp>(relalg::createExtractNestedOperatorsPass());
    pm.addPass(mlir::createCSEPass());

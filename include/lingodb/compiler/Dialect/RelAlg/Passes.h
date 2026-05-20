@@ -37,6 +37,11 @@ std::unique_ptr<mlir::Pass> createDetachMetaDataPass();
 
 std::unique_ptr<mlir::Pass> createTrackTuplesPass();
 
+// Parses every relalg.sql_query op's embedded SQL text and replaces it with
+// the corresponding relalg subtree + a relalg.getscalar — bridges hipy's
+// hipy.lib.sql.execute calls into the regular query pipeline.
+std::unique_ptr<mlir::Pass> createParseNestedSQLPass(catalog::Catalog& catalog);
+
 void registerQueryOptimizationPasses();
 void setStaticCatalog(std::shared_ptr<catalog::Catalog> catalog);
 void createQueryOptPipeline(mlir::OpPassManager& pm, catalog::Catalog* catalog);

@@ -92,6 +92,7 @@ void SQLContext::replace(ResolverScope& scope, std::shared_ptr<ast::ColumnRefere
 }
 
 std::string SQLContext::getUniqueScope(std::string base) {
+   base = scopePrefix + base;
    if (scopeUnifier.contains(std::string(base))) {
       scopeUnifier[std::string(base)] += 1;
       return std::string(base) + std::string("_u_") + std::to_string(scopeUnifier[std::string(base)]);

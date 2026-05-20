@@ -533,4 +533,11 @@ def TrackTuplesOP : RelAlg_Op<"track_tuples", [Operator]> {
     let assemblyFormat = [{ $rel $resultId attr-dict }];
 }
 
+def SQLQueryOp : RelAlg_Op<"sql_query"> {
+    let summary = "Nested SQL query emitted by a hipy UDF via hipy.lib.sql.execute. Carries the SQL text as an attribute plus the runtime parameter values referenced by PARAM(n); ParseNestedSQLPass parses the text and replaces the op with a relalg.getscalar over the parsed subquery.";
+    let arguments = (ins StrAttr:$sql, Variadic<AnyType>:$parameters);
+    let results = (outs AnyType:$result);
+    let assemblyFormat = [{ $sql (`,` $parameters^ `:` type($parameters))? `->` type($result) attr-dict }];
+}
+
 #endif // LINGODB_DIALECT_RELALG_IR_OPS

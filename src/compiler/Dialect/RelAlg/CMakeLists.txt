@@ -17,6 +17,7 @@ add_mlir_dialect_library(MLIRRelAlg
         Transforms/CommonSubtreeElimination.cpp
         Transforms/Unnesting.cpp
         Transforms/Pushdown.cpp
+        Transforms/ParseNestedSQL.cpp
         Transforms/ImplicitToExplicitJoins.cpp
         Transforms/OptimizeJoinOrder.cpp
         Transforms/TrackTuples.cpp

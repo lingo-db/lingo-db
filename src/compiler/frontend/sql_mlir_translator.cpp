@@ -1009,6 +1009,12 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
          }
          return translateWhenChecks(builder, boundCase, caseExprTranslated, boundCase->caseChecks, boundCase->elseExpr, context);
       }
+      case ast::ExpressionClass::BOUND_PARAMETER: {
+         // PARAM(n) — passes the n-th runtime parameter value of the
+         // surrounding relalg.sql_query through verbatim.
+         auto paramExpr = std::static_pointer_cast<ast::BoundParameterExpression>(expression);
+         return context->params[paramExpr->paramIdx];
+      }
 
       default: translatorError("Expression not implemented", expression->loc);
    }

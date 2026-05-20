@@ -79,9 +79,17 @@ class DefineScope {
  */
 class SQLContext {
    public:
-   SQLContext() : definedAttributes(), resolver() {
+   SQLContext(std::vector<mlir::Value> params = {}, std::string scopePrefix = "")
+      : params(std::move(params)), scopePrefix(std::move(scopePrefix)), definedAttributes(), resolver() {
       definedAttributes.push({});
    };
+
+   // Runtime parameter values referenced by PARAM(n) inside a nested SQL
+   // query — populated by ParseNestedSQLPass from the SQLQueryOp's operands.
+   std::vector<mlir::Value> params;
+   // Prefix attached to every uniqued scope so nested-SQL columns can't
+   // collide with the outer query's columns.
+   std::string scopePrefix;
 
    catalog::Catalog* catalog;
    std::vector<std::shared_ptr<SQLScope>> scopes;
