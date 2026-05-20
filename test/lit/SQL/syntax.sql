@@ -200,6 +200,13 @@ INSERT into test(str, float32, float64, decimal, int32, int64, bool, date32, dat
 --//CHECK: %{{.*}} = arith.constant false
 --//CHECK: call @{{.*}}RelationHelper{{.*}}copyFromIntoTable{{.*}}(%{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}) : (!util.varlen32, !util.varlen32, !util.varlen32, !util.varlen32, i1) -> ()
 copy test from 't.csv' csv escape '\' delimiter '|' null '';
+--//CHECK: module
+--//CHECK: %{{.*}} = util.varlen32_create_const "test"
+--//CHECK: %{{.*}} = util.varlen32_create_const "t.csv"
+--//CHECK: %{{.*}} = util.varlen32_create_const "|"
+--//CHECK: %{{.*}} = arith.constant false
+--//CHECK: call @{{.*}}RelationHelper{{.*}}copyFromIntoTable{{.*}}(%{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}) : (!util.varlen32, !util.varlen32, !util.varlen32, !util.varlen32, i1) -> ()
+copy test from 't.csv' with (delimiter '|', format csv, null '');
 --//CHECK: %{{.*}} = relalg.aggregation %{{.*}} [@{{.*}}{{.*}}::@const{{.*}}] computes : [@{{.*}}::@{{.*}}({type = i32})] (%arg0: !tuples.tuplestream,%arg1: !tuples.tuple){
 --//CHECK:       %{{.*}} = relalg.projection distinct [@{{.*}}::@const{{.*}}] %arg0
 --//CHECK:       %{{.*}} = relalg.aggrfn sum @{{.*}}::@const{{.*}} %{{.*}} : i32

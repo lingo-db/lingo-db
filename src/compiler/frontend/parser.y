@@ -9,6 +9,7 @@
 
 %code requires {
   # include <string>
+  #include <algorithm>
   #include <iostream>
   #include <memory>
   #include <vector>
@@ -338,9 +339,9 @@
 
 
 %type<std::shared_ptr<ast::CopyNode>> CopyStmt
-%type<std::string> copy_file_name copy_delimiter
-%type<std::vector<std::pair<std::string, std::string>>> copy_options copy_opt_list
-%type<std::pair<std::string, std::string>> copy_opt_item
+%type<std::string> copy_file_name copy_delimiter copy_with_opt_name copy_with_opt_value
+%type<std::vector<std::pair<std::string, std::string>>> copy_options copy_opt_list copy_with_opt_list
+%type<std::pair<std::string, std::string>> copy_opt_item copy_with_opt_item
 %type<std::vector<std::pair<std::string, std::string>>> createfunc_opt_list opt_createfunc_opt_list
 %type<std::pair<std::string, std::string>> createfunc_opt_item common_func_opt_item
 
@@ -571,7 +572,7 @@ PreparableStmt:
     }
     ;
 //TODO add missing rules    
-CopyStmt: 
+CopyStmt:
     COPY qualified_name copy_from copy_file_name copy_options copy_delimiter
     {
         auto node = mkNode<lingodb::ast::CopyNode>(@$);
@@ -580,6 +581,61 @@ CopyStmt:
         node->copyInfo->options = $copy_options;
         $$ = node;
     }
+    | COPY qualified_name copy_from copy_file_name WITH LP copy_with_opt_list RP
+    {
+        auto node = mkNode<lingodb::ast::CopyNode>(@$);
+        node->copyInfo->table = $qualified_name;
+        node->copyInfo->fromFileName = $copy_file_name;
+        node->copyInfo->options = $copy_with_opt_list;
+        $$ = node;
+    }
+    ;
+
+copy_with_opt_list:
+    copy_with_opt_list[list] COMMA copy_with_opt_item
+    {
+        $list.emplace_back($copy_with_opt_item);
+        $$ = $list;
+    }
+    | copy_with_opt_item
+    {
+        auto list = mkList<std::pair<std::string,std::string>>();
+        list.emplace_back($copy_with_opt_item);
+        $$ = list;
+    }
+    ;
+
+copy_with_opt_item:
+    copy_with_opt_name copy_with_opt_value
+    {
+        $$ = std::pair<std::string, std::string>($copy_with_opt_name, $copy_with_opt_value);
+    }
+    | copy_with_opt_name
+    {
+        $$ = std::pair<std::string, std::string>($copy_with_opt_name, "true");
+    }
+    ;
+
+copy_with_opt_name:
+    IDENTIFIER
+    {
+        std::string name = $IDENTIFIER;
+        std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c){ return std::toupper(c); });
+        $$ = name;
+    }
+    | DELIMITER  { $$ = "DELIMITER"; }
+    | NULL_P     { $$ = "NULL"; }
+    | ESCAPE     { $$ = "ESCAPE"; }
+    | FORMAT     { $$ = "FORMAT"; }
+    | HEADER_P   { $$ = "HEADER"; }
+    ;
+
+copy_with_opt_value:
+    STRING_VALUE { $$ = $1; }
+    | IDENTIFIER { $$ = $1; }
+    | CSV        { $$ = "csv"; }
+    | TRUE_P     { $$ = "true"; }
+    | FALSE_P    { $$ = "false"; }
     ;
 //TODO add missing rules    
 copy_from:
