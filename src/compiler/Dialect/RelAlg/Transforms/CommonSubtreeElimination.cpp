@@ -281,6 +281,11 @@ class CommonSubtreeElimination : public mlir::PassWrapper<CommonSubtreeEliminati
                      llvm::function_ref<void(mlir::Region&)> traverseRegion) {
       for (auto& op : llvm::make_early_inc_range(*block)) {
          if (op.getDialect()->getNamespace() != relalgDialectNamespaceString) continue;
+         // Skip ops emitted by ParseNestedSQLPass — they carry scope-prefixed
+         // columns and reference outer ColumnRefs via PARAM(n), so merging
+         // them with structurally-equivalent outer subtrees produces
+         // nested_map captures the lowering can't resolve.
+         if (op.hasAttr("nested_sql_emitted")) continue;
 
          bool merged = false;
          auto hash = computeHash(&op);

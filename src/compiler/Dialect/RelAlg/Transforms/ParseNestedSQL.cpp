@@ -51,6 +51,17 @@ class ParseNestedSQL : public mlir::PassWrapper<ParseNestedSQL, mlir::OperationP
          lingodb::analyzer::SQLQueryAnalyzer analyzer{&catalog};
          drv.result[0] = analyzer.canonicalizeAndAnalyze(drv.result[0], sqlContext);
 
+         // Snapshot the set of relalg ops present before translation, so we
+         // can identify which ops translateStart inserted and tag them.
+         llvm::DenseSet<mlir::Operation*> preexisting;
+         auto parentFunc = op->getParentOfType<mlir::func::FuncOp>();
+         if (parentFunc) {
+            parentFunc.walk([&](mlir::Operation* o) {
+               if (o->getDialect() && o->getDialect()->getNamespace() == "relalg")
+                  preexisting.insert(o);
+            });
+         }
+
          lingodb::translator::SQLMlirTranslator translator{moduleOp, &catalog};
          mlir::OpBuilder builder(op);
          auto translated = translator.translateStart(builder, drv.result[0], sqlContext);
@@ -71,6 +82,20 @@ class ParseNestedSQL : public mlir::PassWrapper<ParseNestedSQL, mlir::OperationP
          materializeOp->dropAllUses();
          materializeOp->erase();
          op->erase();
+
+         // Tag every relalg op the translator just inserted so CSE doesn't
+         // merge them with structurally-identical outer ops. The inlined
+         // subtree's BaseTables carry scope-prefixed columns AND capture
+         // outer ColumnRefs via PARAM(n) — merging with the outer subtree
+         // silently equates the two sets of column references and produces
+         // nested_map captures the SubOp→ControlFlow lowering can't resolve.
+         if (parentFunc) {
+            parentFunc.walk([&](mlir::Operation* o) {
+               if (o->getDialect() && o->getDialect()->getNamespace() == "relalg" && !preexisting.contains(o)) {
+                  o->setAttr("nested_sql_emitted", mlir::UnitAttr::get(o->getContext()));
+               }
+            });
+         }
       }
    }
 };
