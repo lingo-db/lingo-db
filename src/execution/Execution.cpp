@@ -33,6 +33,7 @@ utility::GlobalSetting<std::string> executionModeSetting("system.execution_mode"
 utility::GlobalSetting<std::string> subopOptPassesSetting("system.subop.opt", "ReuseLocal,Specialize,PullGatherUp,Compression");
 utility::GlobalSetting<bool> cleanupAfterSubOp("system.opt.cleanup_after_subop", false);
 utility::GlobalSetting<bool> cleanupAfterImperative("system.opt.cleanup_after_imperative", false);
+utility::GlobalSetting<bool> asyncContext("system.opt.async_context", true);
 utility::Tracer::Event queryOptimizationEvent("Compilation", "Query Opt.");
 utility::Tracer::Event lowerRelalgEvent("Compilation", "Lower RelAlg");
 utility::Tracer::Event lowerSubOpEvent("Compilation", "Lower SubOp");
@@ -289,7 +290,7 @@ class DefaultQueryExecuter : public QueryExecuter {
       auto& frontend = *queryExecutionConfig->frontend;
       bool useLLVM = queryExecutionConfig->executionBackend && queryExecutionConfig->executionBackend->isLLVMBased();
       auto& systemContext = scheduler::getSystemContext();
-      {
+      if (asyncContext.getValue()) {
          std::lock_guard<std::mutex> lock(systemContext.contextStackMutex);
          if (useLLVM) {
             if (!systemContext.llvmContextStack.empty()) {
@@ -302,6 +303,17 @@ class DefaultQueryExecuter : public QueryExecuter {
                systemContext.noLlvmContextStack.pop();
             }
          }
+         scheduler::enqueueTask(std::make_unique<scheduler::SimpleTask>([useLLVM]() {
+            auto& systemContext = scheduler::getSystemContext();
+            mlir::MLIRContext* context = new mlir::MLIRContext();
+            execution::initializeContext(*context, useLLVM);
+            std::lock_guard<std::mutex> lock(systemContext.contextStackMutex);
+            if (useLLVM) {
+               systemContext.llvmContextStack.push(context);
+            } else {
+               systemContext.noLlvmContextStack.push(context);
+            }
+         }));
       }
       if (!context) {
          context = new mlir::MLIRContext();
@@ -309,17 +321,6 @@ class DefaultQueryExecuter : public QueryExecuter {
       }
       frontend.setContext(context);
       frontend.setCatalog(catalog);
-      scheduler::enqueueTask(std::make_unique<scheduler::SimpleTask>([useLLVM]() {
-         auto& systemContext = scheduler::getSystemContext();
-         mlir::MLIRContext* context = new mlir::MLIRContext();
-         execution::initializeContext(*context, useLLVM);
-         std::lock_guard<std::mutex> lock(systemContext.contextStackMutex);
-         if (useLLVM) {
-            systemContext.llvmContextStack.push(context);
-         } else {
-            systemContext.noLlvmContextStack.push(context);
-         }
-      }));
       if (data) {
          frontend.loadFromString(data.value());
       } else if (file) {
