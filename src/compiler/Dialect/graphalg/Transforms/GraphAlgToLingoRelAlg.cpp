@@ -593,49 +593,38 @@ class ConstantMatrixConversion : public StatefulConversion<ConstantMatrixOp> {
       meta.val = createColumnRef(valDef);
 
       auto addDim = [&](StringRef prefix, DimAttr dimAttr, tuples::ColumnDefAttr& metaDef, tuples::ColumnRefAttr& metaRef) {
+         Value dimRel;
+         tuples::ColumnRefAttr dimRef;
+
          if (dimAttr.isConcrete()) {
             int64_t safeSize = dimAttr.getConcreteDim();
             auto def = createColumnDef(ctx, AttributeGenerator::nextName(prefix.str() + "_concrete"), rewriter.getI64Type());
             SmallVector<Attribute> rows;
             for (int64_t i = 0; i < safeSize; ++i) rows.push_back(ArrayAttr::get(ctx, {rewriter.getI64IntegerAttr(i)}));
-            Value dimRel = rewriter.create<relalg::ConstRelationOp>(loc, ArrayAttr::get(ctx, {def}), ArrayAttr::get(ctx, rows)).getResult();
-            tuples::ColumnRefAttr dimRef = createColumnRef(def);
-
-            metaDef = createColumnDef(ctx, AttributeGenerator::nextName(prefix.str()), rewriter.getI64Type());
-            metaRef = createColumnRef(metaDef);
-            auto renameDef = tuples::ColumnDefAttr::get(ctx, metaDef.getName(), metaDef.getColumnPtr(), ArrayAttr::get(ctx, {dimRef}));
-            dimRel = rewriter.create<relalg::RenamingOp>(loc, tuples::TupleStreamType::get(ctx), dimRel, ArrayAttr::get(ctx, {renameDef})).getResult();
-
-            auto joinOp = rewriter.create<relalg::InnerJoinOp>(loc, currentRel, dimRel);
-            OpBuilder::InsertionGuard guard(rewriter);
-            auto* joinBlock = rewriter.createBlock(&joinOp.getPredicate());
-            joinBlock->addArgument(tuples::TupleType::get(ctx), loc);
-            rewriter.setInsertionPointToEnd(joinBlock);
-            Value trueVal = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
-            rewriter.create<tuples::ReturnOp>(loc, ValueRange{trueVal});
-
-            currentRel = joinOp.getResult();
+            dimRel = rewriter.create<relalg::ConstRelationOp>(loc, ArrayAttr::get(ctx, {def}), ArrayAttr::get(ctx, rows)).getResult();
+            dimRef = createColumnRef(def);
          } else {
             auto it = state.globalDomains.find(dimAttr);
             if (it == state.globalDomains.end()) return;
-            Value dimRel = it->second.first;
-            tuples::ColumnRefAttr dimRef = it->second.second;
+            dimRel = it->second.first;
+            dimRef = it->second.second;
+         }
 
-            metaDef = createColumnDef(ctx, AttributeGenerator::nextName(prefix.str()), rewriter.getI64Type());
-            metaRef = createColumnRef(metaDef);
-            auto renameDef = tuples::ColumnDefAttr::get(ctx, metaDef.getName(), metaDef.getColumnPtr(), ArrayAttr::get(ctx, {dimRef}));
-            dimRel = rewriter.create<relalg::RenamingOp>(loc, tuples::TupleStreamType::get(ctx), dimRel, ArrayAttr::get(ctx, {renameDef})).getResult();
+         metaDef = createColumnDef(ctx, AttributeGenerator::nextName(prefix.str()), rewriter.getI64Type());
+         metaRef = createColumnRef(metaDef);
+         auto renameDef = tuples::ColumnDefAttr::get(ctx, metaDef.getName(), metaDef.getColumnPtr(), ArrayAttr::get(ctx, {dimRef}));
+         dimRel = rewriter.create<relalg::RenamingOp>(loc, tuples::TupleStreamType::get(ctx), dimRel, ArrayAttr::get(ctx, {renameDef})).getResult();
 
-            auto joinOp = rewriter.create<relalg::InnerJoinOp>(loc, currentRel, dimRel);
+         auto joinOp = rewriter.create<relalg::InnerJoinOp>(loc, currentRel, dimRel);
+         {
             OpBuilder::InsertionGuard guard(rewriter);
             auto* joinBlock = rewriter.createBlock(&joinOp.getPredicate());
             joinBlock->addArgument(tuples::TupleType::get(ctx), loc);
             rewriter.setInsertionPointToEnd(joinBlock);
             Value trueVal = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
             rewriter.create<tuples::ReturnOp>(loc, ValueRange{trueVal});
-
-            currentRel = joinOp.getResult();
          }
+         currentRel = joinOp.getResult();
       };
 
       if (!matType.getRows().isOne()) addDim("const_row", matType.getRows(), meta.rowDef, meta.row);
@@ -649,7 +638,6 @@ class ConstantMatrixConversion : public StatefulConversion<ConstantMatrixOp> {
          rewriter.setInsertionPointToEnd(selBlock);
          Value falseVal = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
          rewriter.create<tuples::ReturnOp>(loc, ValueRange{falseVal});
-
          currentRel = selOp.getResult();
       }
 
@@ -1024,6 +1012,33 @@ class MaskOpConversion : public StatefulConversion<MaskOp> {
    public:
    using StatefulConversion::StatefulConversion;
 
+   static bool isZeroConstant(Value v) {
+      auto* defOp = v.getDefiningOp();
+      if (!defOp) return false;
+      auto constMatOp = llvm::dyn_cast<ConstantMatrixOp>(defOp);
+      if (!constMatOp) return false;
+      auto matType = llvm::cast<MatrixType>(constMatOp.getType());
+      Type valType = GraphAlgTypeConverter::convertSemiringType(matType.getSemiring());
+      Attribute rawVal = constMatOp.getValue();
+      if (auto tropInt = llvm::dyn_cast<TropIntAttr>(rawVal)) rawVal = tropInt.getValue();
+      if (auto tropF = llvm::dyn_cast<TropFloatAttr>(rawVal)) rawVal = tropF.getValue();
+      auto* sctx = matType.getContext();
+      if (valType.isInteger(1)) return llvm::cast<IntegerAttr>(rawVal).getInt() == 0;
+      if (valType.isInteger(64)) {
+         if (matType.getSemiring() == SemiringTypes::forTropInt(sctx))
+            return llvm::cast<IntegerAttr>(rawVal).getInt() == std::numeric_limits<int64_t>::max();
+         if (matType.getSemiring() == SemiringTypes::forTropMaxInt(sctx))
+            return llvm::cast<IntegerAttr>(rawVal).getInt() == std::numeric_limits<int64_t>::min();
+         return llvm::cast<IntegerAttr>(rawVal).getInt() == 0;
+      }
+      if (valType.isF64()) {
+         if (matType.getSemiring() == SemiringTypes::forTropReal(sctx))
+            return std::isinf(llvm::cast<FloatAttr>(rawVal).getValueAsDouble()) && llvm::cast<FloatAttr>(rawVal).getValueAsDouble() > 0;
+         return llvm::cast<FloatAttr>(rawVal).getValueAsDouble() == 0.0;
+      }
+      return false;
+   }
+
    LogicalResult matchAndRewrite(MaskOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto loc = op.getLoc();
       auto* ctx = rewriter.getContext();
@@ -1115,11 +1130,10 @@ class MaskOpConversion : public StatefulConversion<MaskOp> {
                zero = rewriter.create<arith::ConstantOp>(loc, rewriter.getFloatAttr(rewriter.getF64Type(), std::numeric_limits<double>::infinity()));
 
             Value cmpZero;
-            if (maskValType.isIntOrIndex()) {
+            if (maskValType.isIntOrIndex())
                cmpZero = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ne, val, zero);
-            } else {
+            else
                cmpZero = rewriter.create<arith::CmpFOp>(loc, arith::CmpFPredicate::UNE, val, zero);
-            }
             rewriter.create<tuples::ReturnOp>(loc, ValueRange{cmpZero});
          }
          maskRel = selOp.getResult();
@@ -1148,6 +1162,30 @@ class MaskOpConversion : public StatefulConversion<MaskOp> {
          if (!cmpAcc) cmpAcc = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
          rewriter.create<tuples::ReturnOp>(loc, ValueRange{cmpAcc});
       };
+
+      bool baseIsZero = isZeroConstant(op->getOperand(0));
+
+      if (baseIsZero) {
+         Value valResult;
+         if (op.getComplement()) {
+            auto joinOp = rewriter.create<relalg::AntiSemiJoinOp>(loc, valRel, maskRel);
+            auto* joinBlock = new Block;
+            joinOp.getPredicate().push_back(joinBlock);
+            populateJoinBlock(valMeta, joinBlock);
+            valResult = joinOp.getResult();
+         } else {
+            auto joinOp = rewriter.create<relalg::SemiJoinOp>(loc, valRel, maskRel);
+            auto* joinBlock = new Block;
+            joinOp.getPredicate().push_back(joinBlock);
+            populateJoinBlock(valMeta, joinBlock);
+            valResult = joinOp.getResult();
+         }
+
+         MatrixMeta resMeta = valMeta;
+         state.set(op.getResult(), resMeta);
+         rewriter.replaceOp(op, valResult);
+         return success();
+      }
 
       Value valResult;
       if (op.getComplement()) {
@@ -1197,7 +1235,6 @@ class MaskOpConversion : public StatefulConversion<MaskOp> {
       auto setSemanticAttr = relalg::SetSemanticAttr::get(ctx, relalg::SetSemantic::all);
       auto unionOp = rewriter.create<relalg::UnionOp>(loc, tuples::TupleStreamType::get(ctx), setSemanticAttr, baseResult, valResult, ArrayAttr::get(ctx, mappingDefs));
 
-      // FIX: Append AggregationOp to resolve pipeline column mapping bugs downstream
       SmallVector<Attribute> groupByAttrs;
       if (nextMeta.hasRow()) groupByAttrs.push_back(nextMeta.row);
       if (nextMeta.hasCol()) groupByAttrs.push_back(nextMeta.col);
@@ -1256,17 +1293,18 @@ class BroadcastOpConversion : public StatefulConversion<BroadcastOp> {
 
       auto addBroadcast = [&](StringRef prefix, Attribute dimObj, tuples::ColumnRefAttr& outRef, tuples::ColumnDefAttr& outDef) {
          auto dimAttr = llvm::cast<graphalg::DimAttr>(dimObj);
+         Value broadcastRel;
 
          if (dimAttr.isConcrete()) {
             int64_t size = dimAttr.getConcreteDim();
             outDef = createColumnDef(ctx, AttributeGenerator::nextName(prefix.str()), rewriter.getI64Type());
+            outRef = createColumnRef(outDef);
             SmallVector<Attribute> rows;
-            bool isEmpty = (size <= 0);
-            int64_t safeSize = isEmpty ? 1 : size;
+            int64_t safeSize = (size <= 0) ? 1 : size;
             for (int64_t i = 0; i < safeSize; ++i) rows.push_back(ArrayAttr::get(ctx, {rewriter.getI64IntegerAttr(i)}));
-            Value broadcastRel = rewriter.create<relalg::ConstRelationOp>(loc, ArrayAttr::get(ctx, {outDef}), ArrayAttr::get(ctx, rows)).getResult();
+            broadcastRel = rewriter.create<relalg::ConstRelationOp>(loc, ArrayAttr::get(ctx, {outDef}), ArrayAttr::get(ctx, rows)).getResult();
 
-            if (isEmpty) {
+            if (size <= 0) {
                auto selOp = rewriter.create<relalg::SelectionOp>(loc, broadcastRel);
                OpBuilder::InsertionGuard guard(rewriter);
                auto* selBlock = rewriter.createBlock(&selOp.getPredicate());
@@ -1276,17 +1314,6 @@ class BroadcastOpConversion : public StatefulConversion<BroadcastOp> {
                rewriter.create<tuples::ReturnOp>(loc, ValueRange{falseVal});
                broadcastRel = selOp.getResult();
             }
-
-            auto joinOp = rewriter.create<relalg::InnerJoinOp>(loc, currentRel, broadcastRel);
-            OpBuilder::InsertionGuard guard(rewriter);
-            auto* joinBlock = rewriter.createBlock(&joinOp.getPredicate());
-            joinBlock->addArgument(tuples::TupleType::get(ctx), loc);
-            rewriter.setInsertionPointToEnd(joinBlock);
-            Value trueVal = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
-            rewriter.create<tuples::ReturnOp>(loc, ValueRange{trueVal});
-
-            currentRel = joinOp.getResult();
-            outRef = createColumnRef(outDef);
          } else {
             auto it = state.globalDomains.find(dimAttr);
             if (it == state.globalDomains.end()) return;
@@ -1297,18 +1324,19 @@ class BroadcastOpConversion : public StatefulConversion<BroadcastOp> {
             outRef = createColumnRef(outDef);
 
             auto renameDef = tuples::ColumnDefAttr::get(ctx, outDef.getName(), outDef.getColumnPtr(), ArrayAttr::get(ctx, {dimRef}));
-            dimRel = rewriter.create<relalg::RenamingOp>(loc, tuples::TupleStreamType::get(ctx), dimRel, ArrayAttr::get(ctx, {renameDef})).getResult();
+            broadcastRel = rewriter.create<relalg::RenamingOp>(loc, tuples::TupleStreamType::get(ctx), dimRel, ArrayAttr::get(ctx, {renameDef})).getResult();
+         }
 
-            auto joinOp = rewriter.create<relalg::InnerJoinOp>(loc, currentRel, dimRel);
+         auto joinOp = rewriter.create<relalg::InnerJoinOp>(loc, currentRel, broadcastRel);
+         {
             OpBuilder::InsertionGuard guard(rewriter);
             auto* joinBlock = rewriter.createBlock(&joinOp.getPredicate());
             joinBlock->addArgument(tuples::TupleType::get(ctx), loc);
             rewriter.setInsertionPointToEnd(joinBlock);
             Value trueVal = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
             rewriter.create<tuples::ReturnOp>(loc, ValueRange{trueVal});
-
-            currentRel = joinOp.getResult();
          }
+         currentRel = joinOp.getResult();
       };
 
       if (!info.hasRow() && !outType.getRows().isOne()) addBroadcast("broadcast_row", outType.getRows(), resMeta.row, resMeta.rowDef);
