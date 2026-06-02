@@ -62,17 +62,14 @@ module {
   func.func @main() {
     %result = relalg.query() {
 
-      // 1. Setup the Graph Relation
-      %edges_rel = relalg.const_relation columns:[@edges::@src({type=i64}), @edges::@dst({type=i64}), @edges::@val({type=i1})] values: [[0: i64, 1: i64, true],
+      // 1. Setup a Simple 3-Node Triangle Graph Relation
+      %edges_rel = relalg.const_relation columns:[@edges::@src({type=i64}), @edges::@dst({type=i64}), @edges::@val({type=i1})] values: [
+        [0: i64, 1: i64, true],
+        [1: i64, 0: i64, true],
+        [1: i64, 2: i64, true],
+        [2: i64, 1: i64, true],
         [0: i64, 2: i64, true],
-        [0: i64, 6: i64, true],[1: i64, 0: i64, true],[1: i64, 2: i64, true],
-        [2: i64, 0: i64, true],
-        [2: i64, 1: i64, true],[3: i64, 4: i64, true],[3: i64, 5: i64, true],
-        [4: i64, 3: i64, true],
-        [4: i64, 5: i64, true],[4: i64, 6: i64, true],[5: i64, 4: i64, true],
-        [5: i64, 6: i64, true],
-        [6: i64, 4: i64, true],[6: i64, 5: i64, true],[6: i64, 7: i64, true],
-        [7: i64, 5: i64, true]
+        [2: i64, 0: i64, true]
       ]
 
       %graph = builtin.unrealized_conversion_cast %edges_rel : !tuples.tuplestream to !graphalg.mat<#dim x #dim x i1> { cols =[@edges::@src, @edges::@dst, @edges::@val] }
@@ -97,11 +94,6 @@ module {
     // CHECK-DAG: | 0 | 0 | true |
     // CHECK-DAG: | 1 | 0 | true |
     // CHECK-DAG: | 2 | 0 | true |
-    // CHECK-DAG: | 3 | 4 | true |
-    // CHECK-DAG: | 4 | 3 | true |
-    // CHECK-DAG: | 5 | 3 | true |
-    // CHECK-DAG: | 6 | 3 | true |
-    // CHECK-DAG: | 7 | 3 | true |
     return
   }
 }

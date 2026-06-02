@@ -438,6 +438,14 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
             auto loc = createOp->getLoc();
             createOp->erase();
 
+            // Find the last shouldUse (parallel writer) step to determine merge placement.
+            mlir::Operation* lastShouldUse = nullptr;
+            for (auto step : toThreadLocal.second.shouldUse) {
+               if (!lastShouldUse || lastShouldUse->isBeforeInBlock(step.getOperation())) {
+                  lastShouldUse = step.getOperation();
+               }
+            }
+
             std::vector<mlir::Operation*> mergedUsers;
             for (auto& use : toThreadLocal.first.getUses()) {
                auto usingExecutionStep = mlir::dyn_cast_or_null<subop::ExecutionStepOp>(use.getOwner());
@@ -445,7 +453,13 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                   std::vector<mlir::Attribute> attrs(usingExecutionStep.getIsThreadLocal().begin(), usingExecutionStep.getIsThreadLocal().end());
                   attrs[use.getOperandNumber()] = mlir::BoolAttr::get(&getContext(), true);
                   usingExecutionStep.setIsThreadLocalAttr(mlir::ArrayAttr::get(&getContext(), attrs));
-                  //use.getOwner()->setOperand(use.getOperandNumber(), createThreadLocal.getResult());
+               } else if (lastShouldUse && usingExecutionStep &&
+                          usingExecutionStep.getOperation()->isBeforeInBlock(lastShouldUse)) {
+                  // This step uses the state before the last parallel writer completes.
+                  // It must also access the state via thread-local to avoid ordering issues.
+                  std::vector<mlir::Attribute> attrs(usingExecutionStep.getIsThreadLocal().begin(), usingExecutionStep.getIsThreadLocal().end());
+                  attrs[use.getOperandNumber()] = mlir::BoolAttr::get(&getContext(), true);
+                  usingExecutionStep.setIsThreadLocalAttr(mlir::ArrayAttr::get(&getContext(), attrs));
                } else {
                   mergedUsers.push_back(use.getOwner());
                }
