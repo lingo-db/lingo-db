@@ -900,7 +900,7 @@ class DeferredReduceConversion : public StatefulConversion<DeferredReduceOp> {
       Value inputRel = adaptor.getInputs()[0];
       auto inputMeta = state.get(op.getInputs()[0], rewriter.getContext());
 
-      auto resMatrixType = op.getType();
+      auto resMatrixType = llvm::cast<MatrixType>(op.getResult().getType());
       Type valType = GraphAlgTypeConverter::convertSemiringType(resMatrixType.getSemiring());
 
       SmallVector<Attribute> groupByAttrs;
@@ -1586,34 +1586,7 @@ class UnionOpConversion : public StatefulConversion<UnionOp> {
             loc, tuples::TupleStreamType::get(ctx), setSemanticAttr,
             currentRel, rightRel, ArrayAttr::get(ctx, mappingDefs));
 
-         // FIX: Append AggregationOp to resolve pipeline column mapping bugs downstream & fix Pagerank fractional drift
-         SmallVector<Attribute> groupByAttrs;
-         if (nextMeta.hasRow()) groupByAttrs.push_back(nextMeta.row);
-         if (nextMeta.hasCol()) groupByAttrs.push_back(nextMeta.col);
-
-         auto aggValDef = createColumnDef(ctx, AttributeGenerator::nextName("union_agg_val"), valType);
-         auto aggValRef = createColumnRef(aggValDef);
-
-         auto aggOp = rewriter.create<relalg::AggregationOp>(
-            loc, tuples::TupleStreamType::get(ctx), unionOp.getResult(),
-            ArrayAttr::get(ctx, groupByAttrs), ArrayAttr::get(ctx, {aggValDef}));
-         {
-            OpBuilder::InsertionGuard guard(rewriter);
-            Block* aggBlock = rewriter.createBlock(&aggOp.getAggrFunc());
-            Value groupStream = aggBlock->addArgument(tuples::TupleStreamType::get(ctx), loc);
-            rewriter.setInsertionPointToStart(aggBlock);
-
-            relalg::AggrFunc func = DeferredReduceConversion::getAggrFuncForSemiring(outMatrixType.getSemiring());
-            Value aggVal = rewriter.create<relalg::AggrFuncOp>(
-               loc, valType, relalg::AggrFuncAttr::get(ctx, func), groupStream, nextMeta.val);
-
-            rewriter.create<tuples::ReturnOp>(loc, ValueRange{aggVal});
-         }
-
-         nextMeta.valDef = aggValDef;
-         nextMeta.val = aggValRef;
-
-         currentRel = aggOp.getResult();
+         currentRel = unionOp.getResult();
          currentMeta = nextMeta;
       }
 
