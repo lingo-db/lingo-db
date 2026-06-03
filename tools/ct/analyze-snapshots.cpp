@@ -4,6 +4,7 @@
 #include "lingodb/compiler/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorDialect.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
+#include "lingodb/compiler/Dialect/graphalg/GraphAlgDialect.h"
 #include "lingodb/compiler/Dialect/util/UtilDialect.h"
 #include "lingodb/execution/ResultProcessing.h"
 
@@ -260,6 +261,8 @@ int main(int argc, char** argv) {
    registry.insert<mlir::gpu::GPUDialect>();
    registry.insert<mlir::scf::SCFDialect>();
    registry.insert<mlir::DLTIDialect>();
+
+   registry.insert<graphalg::GraphAlgDialect>();
    std::ifstream fileIn(jsonInputFilename);
 
    auto inputJson = nlohmann::json::parse(fileIn);
