@@ -4743,6 +4743,8 @@ void subop::createLowerSubOpPipeline(mlir::OpPassManager& pm) {
    pm.addNestedPass<mlir::func::FuncOp>(subop::createParallelizePass());
    pm.addPass(subop::createSpecializeParallelPass());
    pm.addPass(subop::createPrepareLoweringPass());
+   pm.addNestedPass<mlir::func::FuncOp>(subop::createParallelizePass());
+   pm.addPass(subop::createSpecializeParallelPass());
    pm.addPass(subop::createLowerSubOpPass());
    pm.addPass(mlir::createCanonicalizerPass());
    pm.addPass(mlir::createCSEPass());

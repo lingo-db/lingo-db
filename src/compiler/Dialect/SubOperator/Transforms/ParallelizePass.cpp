@@ -189,21 +189,11 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
       bool requiresCombine = false;
       bool isClosed = false;
    };
-   void runOnOperation() override {
-      auto columnUsageAnalysis = getAnalysis<subop::ColumnUsageAnalysis>();
-      auto& colManager = getContext().getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
-
-      std::vector<subop::ExecutionGroupOp> executionGroupOps;
-      getOperation()->walk([&](subop::ExecutionGroupOp executionGroupOp) {
-         executionGroupOps.push_back(executionGroupOp);
-         return mlir::WalkResult::skip();
-      });
-      for (auto executionGroup : executionGroupOps) {
-         //todo: maybe move outside?
-         llvm::DenseMap<mlir::Value, GlobalThreadLocalInfo> toThreadLocalsGlobal;
-         std::map<tuples::Column*, std::vector<std::pair<mlir::Value, mlir::Operation*>>> toLockGlobal;
-         llvm::DenseSet<mlir::Value> threadLocalNotPossibleAnymore;
-         for (auto& op : executionGroup.getSubOps().front()) {
+   void parallelizeBlock(mlir::Block& block, subop::ColumnUsageAnalysis& columnUsageAnalysis, tuples::ColumnManager& colManager) {
+      llvm::DenseMap<mlir::Value, GlobalThreadLocalInfo> toThreadLocalsGlobal;
+      std::map<tuples::Column*, std::vector<std::pair<mlir::Value, mlir::Operation*>>> toLockGlobal;
+      llvm::DenseSet<mlir::Value> threadLocalNotPossibleAnymore;
+      for (auto& op : block) {
             if (auto executionStepOp = mlir::dyn_cast_or_null<subop::ExecutionStepOp>(&op)) {
                llvm::DenseMap<mlir::Value, mlir::Value> extStates;
                for (auto [i, a] : llvm::zip(executionStepOp.getInputs(), executionStepOp.getSubOps().getArguments())) {
@@ -211,7 +201,7 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                }
 
                if (auto scanRefsOp = mlir::dyn_cast_or_null<subop::ScanRefsOp>(*executionStepOp.getSubOps().getOps().begin())) {
-                  if (!scanRefsOp->hasAttr("sequential")) {
+                  if (!scanRefsOp->hasAttr("sequential") && !scanRefsOp->hasAttr("parallel")) {
                      ExecutionStepAnalyzed analyzed = analyze(executionStepOp);
                      std::unordered_set<mlir::Operation*> markAsAtomic;
                      std::map<tuples::Column*, std::vector<std::pair<mlir::Value, mlir::Operation*>>> toLock;
@@ -416,6 +406,8 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                resultIdx++;
             }
             auto* createOp = mlir::cast<subop::ExecutionStepReturnOp>(producingExecutionStep.getSubOps().front().getTerminator()).getOperand(resultIdx).getDefiningOp();
+            if (!mlir::isa<subop::State>(createOp->getResultTypes()[0])) continue;
+            if (mlir::isa<subop::ThreadLocalType>(createOp->getResultTypes()[0])) continue;
 
             mlir::OpBuilder builder(&getContext());
             builder.setInsertionPoint(createOp);
@@ -495,6 +487,22 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
             }
             producingExecutionStep->getResult(resultIdx).setType(threadLocalType);
          }
+      }
+   void runOnOperation() override {
+      auto columnUsageAnalysis = getAnalysis<subop::ColumnUsageAnalysis>();
+      auto& colManager = getContext().getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+
+      std::vector<subop::ExecutionGroupOp> executionGroupOps;
+      getOperation()->walk([&](subop::ExecutionGroupOp executionGroupOp) {
+         executionGroupOps.push_back(executionGroupOp);
+         return mlir::WalkResult::skip();
+      });
+      for (auto executionGroup : executionGroupOps) {
+         parallelizeBlock(executionGroup.getSubOps().front(), columnUsageAnalysis, colManager);
+         // Also parallelize execution steps inside NestedExecutionGroupOps (e.g., loop bodies)
+         executionGroup->walk([&](subop::NestedExecutionGroupOp nestedGroup) {
+            parallelizeBlock(nestedGroup.getRegion().front(), columnUsageAnalysis, colManager);
+         });
       }
    }
 };

@@ -56,7 +56,7 @@ class FlexibleBufferIteratorTask : public lingodb::scheduler::TaskWithImplicitCo
    size_t typeSize;
    const std::function<void(lingodb::runtime::Buffer)> cb;
    std::atomic<size_t> startIndex{0};
-   size_t splitSize{20000};
+   size_t splitSize{200};
    std::vector<std::unique_ptr<FlexibleBufferWorkerResvState>> workerResvs;
 
    public:
