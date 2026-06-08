@@ -245,9 +245,6 @@ class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::Oper
    }
 
    void runOnOperation() override {
-      bool hasLoop = false;
-      getOperation()->walk([&](subop::LoopOp) { hasLoop = true; });
-      if (hasLoop) return;
       //walk over all operators:
       getOperation()->walk([&](Operator op) {
          //check if current operator is root for join order optimization
