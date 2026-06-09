@@ -189,6 +189,7 @@ class ConversionState {
    struct LoopYieldInfo {
       Value nextIdx;
       DimBound bound;
+      bool hasUntil = false;
    };
    llvm::DenseMap<Operation*, LoopYieldInfo> loopYieldData;
 
@@ -873,64 +874,78 @@ class MatMulJoinOpConversion : public ConversionPattern {
    }
 };
 
+static relalg::AggrFunc getAggrFuncForSemiring(Type semiringType) {
+   if (isTropicalNonMax(semiringType)) return relalg::AggrFunc::min;
+   if (isTropicalMax(semiringType)) return relalg::AggrFunc::max;
+   if (isBool(semiringType)) return relalg::AggrFunc::any;
+   return relalg::AggrFunc::sum;
+}
+
+// Shared lowering for ReduceOp and DeferredReduceOp: both collapse one or both
+// matrix dimensions into a relalg.aggregation using the semiring's add op.
+static LogicalResult lowerReduceToAggregation(Operation* op, Value origInput, Value inputRel, ConversionPatternRewriter& rewriter, ConversionState& state) {
+   auto inputMeta = state.get(origInput, rewriter.getContext());
+
+   auto resMatrixType = llvm::cast<MatrixType>(op->getResult(0).getType());
+   Type valType = GraphAlgTypeConverter::convertSemiringType(resMatrixType.getSemiring());
+
+   SmallVector<Attribute> groupByAttrs;
+   MatrixMeta resMeta;
+   resMeta.semiring = resMatrixType.getSemiring();
+
+   if (!resMatrixType.getRows().isOne() && inputMeta.hasRow()) {
+      groupByAttrs.push_back(inputMeta.row);
+      resMeta.row = inputMeta.row;
+   }
+   if (!resMatrixType.getCols().isOne() && inputMeta.hasCol()) {
+      groupByAttrs.push_back(inputMeta.col);
+      resMeta.col = inputMeta.col;
+   }
+
+   auto aggDefAttr = createColumnDef(rewriter.getContext(), AttributeGenerator::nextName("agg_val"), valType);
+   resMeta.valDef = aggDefAttr;
+   resMeta.val = createColumnRef(aggDefAttr);
+
+   auto aggOp = rewriter.create<relalg::AggregationOp>(
+      op->getLoc(),
+      tuples::TupleStreamType::get(rewriter.getContext()),
+      inputRel,
+      ArrayAttr::get(rewriter.getContext(), groupByAttrs),
+      ArrayAttr::get(rewriter.getContext(), {aggDefAttr}));
+
+   {
+      OpBuilder::InsertionGuard guard(rewriter);
+      Block* aggBlock = rewriter.createBlock(&aggOp.getAggrFunc());
+      Value groupStream = aggBlock->addArgument(tuples::TupleStreamType::get(rewriter.getContext()), op->getLoc());
+      rewriter.setInsertionPointToStart(aggBlock);
+
+      relalg::AggrFunc func = getAggrFuncForSemiring(resMatrixType.getSemiring());
+      Value res = rewriter.create<relalg::AggrFuncOp>(
+         op->getLoc(), valType, relalg::AggrFuncAttr::get(rewriter.getContext(), func), groupStream, inputMeta.val);
+
+      rewriter.create<tuples::ReturnOp>(op->getLoc(), ValueRange{res});
+   }
+
+   state.set(op->getResult(0), resMeta);
+   rewriter.replaceOp(op, aggOp.getResult());
+   return success();
+}
+
 class DeferredReduceConversion : public StatefulConversion<DeferredReduceOp> {
    public:
    using StatefulConversion::StatefulConversion;
 
-   static relalg::AggrFunc getAggrFuncForSemiring(Type semiringType) {
-      if (isTropicalNonMax(semiringType)) return relalg::AggrFunc::min;
-      if (isTropicalMax(semiringType)) return relalg::AggrFunc::max;
-      if (isBool(semiringType)) return relalg::AggrFunc::any;
-      return relalg::AggrFunc::sum;
-   }
-
    LogicalResult matchAndRewrite(DeferredReduceOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      Value inputRel = adaptor.getInputs()[0];
-      auto inputMeta = state.get(op.getInputs()[0], rewriter.getContext());
+      return lowerReduceToAggregation(op, op.getInputs()[0], adaptor.getInputs()[0], rewriter, state);
+   }
+};
 
-      auto resMatrixType = llvm::cast<MatrixType>(op.getResult().getType());
-      Type valType = GraphAlgTypeConverter::convertSemiringType(resMatrixType.getSemiring());
+class ReduceConversion : public StatefulConversion<ReduceOp> {
+   public:
+   using StatefulConversion::StatefulConversion;
 
-      SmallVector<Attribute> groupByAttrs;
-      MatrixMeta resMeta;
-      resMeta.semiring = resMatrixType.getSemiring();
-
-      if (!resMatrixType.getRows().isOne() && inputMeta.hasRow()) {
-         groupByAttrs.push_back(inputMeta.row);
-         resMeta.row = inputMeta.row;
-      }
-      if (!resMatrixType.getCols().isOne() && inputMeta.hasCol()) {
-         groupByAttrs.push_back(inputMeta.col);
-         resMeta.col = inputMeta.col;
-      }
-
-      auto aggDefAttr = createColumnDef(rewriter.getContext(), AttributeGenerator::nextName("agg_val"), valType);
-      resMeta.valDef = aggDefAttr;
-      resMeta.val = createColumnRef(aggDefAttr);
-
-      auto aggOp = rewriter.create<relalg::AggregationOp>(
-         op.getLoc(),
-         tuples::TupleStreamType::get(rewriter.getContext()),
-         inputRel,
-         ArrayAttr::get(rewriter.getContext(), groupByAttrs),
-         ArrayAttr::get(rewriter.getContext(), {aggDefAttr}));
-
-      {
-         OpBuilder::InsertionGuard guard(rewriter);
-         Block* aggBlock = rewriter.createBlock(&aggOp.getAggrFunc());
-         Value groupStream = aggBlock->addArgument(tuples::TupleStreamType::get(rewriter.getContext()), op.getLoc());
-         rewriter.setInsertionPointToStart(aggBlock);
-
-         relalg::AggrFunc func = getAggrFuncForSemiring(resMatrixType.getSemiring());
-         Value res = rewriter.create<relalg::AggrFuncOp>(
-            op.getLoc(), valType, relalg::AggrFuncAttr::get(rewriter.getContext(), func), groupStream, inputMeta.val);
-
-         rewriter.create<tuples::ReturnOp>(op.getLoc(), ValueRange{res});
-      }
-
-      state.set(op.getResult(), resMeta);
-      rewriter.replaceOp(op, aggOp.getResult());
-      return success();
+   LogicalResult matchAndRewrite(ReduceOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      return lowerReduceToAggregation(op, op.getInput(), adaptor.getInput(), rewriter, state);
    }
 };
 
@@ -2151,6 +2166,12 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
    replValues.append(origStateRepls.begin(), origStateRepls.end());
 
    Block& oldBody = op->getRegion(0).front();
+
+   // The `until` early-return condition has been folded into the body by an
+   // earlier graphalg pre-pass (foldUntilIntoBody): when present, it appears as
+   // a trailing operand of the body YieldOp, beyond the loop-carried results.
+   bool hasUntil = oldBody.getTerminator()->getNumOperands() > origInitArgs.size();
+
    rewriter.mergeBlocks(&oldBody, newBody, replValues);
 
    newBody->walk([&](Operation* nestedOp) {
@@ -2163,7 +2184,7 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
    rewriter.setInsertionPoint(yieldOp);
 
    Value nextIdx = rewriter.create<arith::AddIOp>(loc, newIdx, stepBoundVal);
-   state.loopYieldData[yieldOp] = {nextIdx, endBoundVal};
+   state.loopYieldData[yieldOp] = {nextIdx, endBoundVal, hasUntil};
 
    rewriter.setInsertionPointAfter(loopOp);
    SmallVector<Value> finalResults;
@@ -2223,7 +2244,22 @@ class GraphAlgYieldOpConversion : public StatefulConversion<YieldOp> {
 
       Value nextIdx = it->second.nextIdx;
       DimBound bound = it->second.bound;
+      bool hasUntil = it->second.hasUntil;
       Value condState;
+
+      // When an `until` region is present, its bool result is threaded through as
+      // the trailing operand of the yield (see convertLoop). Pull out the
+      // converted stream + its value column so we can fold it into the loop cond.
+      size_t numReal = op.getNumOperands() - (hasUntil ? 1 : 0);
+      Value untilStream;
+      tuples::ColumnRefAttr untilValRef;
+      if (hasUntil) {
+         untilStream = adaptor.getOperands()[numReal];
+         if (!llvm::isa<tuples::TupleStreamType>(untilStream.getType())) {
+            untilStream = rewriter.create<UnrealizedConversionCastOp>(loc, tuples::TupleStreamType::get(ctx), untilStream).getResult(0);
+         }
+         untilValRef = state.get(op.getOperand(numReal), ctx).val;
+      }
 
       subop::Member condMember = memberManager.createMember("loop_cond", rewriter.getI1Type());
       auto condMembersAttr = subop::StateMembersAttr::get(ctx, {condMember});
@@ -2232,7 +2268,97 @@ class GraphAlgYieldOpConversion : public StatefulConversion<YieldOp> {
       // We will need this MemberAttr for both the ReduceOp and the LoopContinueOp
       auto condMemberAttr = subop::MemberAttr::get(ctx, condMember);
 
-      if (bound.scalarBound) {
+      // Tail shared by the abstract path and the until path: materialize a
+      // single-row stream's bool column (`condRef`) into a fresh SimpleState
+      // (default false) via lookup + reduce, and return that state.
+      auto buildCondStateFromStream = [&](Value condStream, tuples::ColumnRefAttr condRef) -> Value {
+         auto createStateOp = rewriter.create<subop::CreateSimpleStateOp>(loc, simpleStateType);
+         {
+            OpBuilder::InsertionGuard guard(rewriter);
+            Block* initBlock = rewriter.createBlock(&createStateOp.getInitFn());
+            rewriter.setInsertionPointToStart(initBlock);
+            Value defaultCond = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
+            rewriter.create<tuples::ReturnOp>(loc, ValueRange{defaultCond});
+         }
+         Value st = createStateOp.getResult();
+
+         auto lookupRefType = subop::LookupEntryRefType::get(ctx, llvm::cast<subop::LookupAbleState>(simpleStateType));
+         auto lookupDef = createColumnDef(ctx, AttributeGenerator::nextName("lookup_ref"), lookupRefType);
+         auto lookupRef = createColumnRef(lookupDef);
+
+         auto lookupOp = rewriter.create<subop::LookupOp>(
+            loc, tuples::TupleStreamType::get(ctx), condStream, st,
+            rewriter.getArrayAttr({}), lookupDef);
+
+         auto reduceOp = rewriter.create<subop::ReduceOp>(
+            loc, lookupOp.getResult(), lookupRef,
+            rewriter.getArrayAttr({condRef}),
+            rewriter.getArrayAttr({condMemberAttr}));
+         {
+            OpBuilder::InsertionGuard guard(rewriter);
+            Block* updateBlock = rewriter.createBlock(&reduceOp.getRegion());
+            updateBlock->addArgument(rewriter.getI1Type(), loc);
+            updateBlock->addArgument(rewriter.getI1Type(), loc);
+            rewriter.setInsertionPointToStart(updateBlock);
+            rewriter.create<tuples::ReturnOp>(loc, ValueRange{updateBlock->getArgument(0)});
+         }
+         {
+            OpBuilder::InsertionGuard guard(rewriter);
+            Block* combineBlock = rewriter.createBlock(&reduceOp.getCombine());
+            combineBlock->addArgument(rewriter.getI1Type(), loc);
+            combineBlock->addArgument(rewriter.getI1Type(), loc);
+            rewriter.setInsertionPointToStart(combineBlock);
+            rewriter.create<tuples::ReturnOp>(loc, ValueRange{combineBlock->getArgument(0)});
+         }
+         return st;
+      };
+
+      if (hasUntil) {
+         // [UNTIL PATH] loop_cond = (nextIdx < bound) AND NOT(until_result).
+         // Computed as a single-row stream over the until result, then reduced.
+         auto condDef = createColumnDef(ctx, AttributeGenerator::nextName("cond_bool"), rewriter.getI1Type());
+         auto condRef = createColumnRef(condDef);
+
+         // For an abstract bound we need the dim count, obtained by cross-joining
+         // the (single-row) until stream with the bound relation.
+         Value condInput = untilStream;
+         if (!bound.scalarBound) {
+            auto joinOp = rewriter.create<relalg::InnerJoinOp>(loc, untilStream, bound.relBound);
+            OpBuilder::InsertionGuard guard(rewriter);
+            Block* joinBlock = rewriter.createBlock(&joinOp.getPredicate());
+            joinBlock->addArgument(tuples::TupleType::get(ctx), loc);
+            rewriter.setInsertionPointToEnd(joinBlock);
+            Value trueVal = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
+            rewriter.create<tuples::ReturnOp>(loc, ValueRange{trueVal});
+            condInput = joinOp.getResult();
+         }
+
+         auto mapOp = rewriter.create<relalg::MapOp>(loc, condInput);
+         mapOp.setComputedColsAttr(ArrayAttr::get(ctx, {condDef}));
+         {
+            OpBuilder::InsertionGuard guard(rewriter);
+            Block* mapBlock = rewriter.createBlock(&mapOp.getPredicate());
+            auto tupleArg = mapBlock->addArgument(tuples::TupleType::get(ctx), loc);
+            rewriter.setInsertionPointToEnd(mapBlock);
+
+            Value rangeCond;
+            if (bound.scalarBound) {
+               rangeCond = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt, nextIdx, bound.scalarBound);
+            } else {
+               Value idxI64 = rewriter.create<arith::IndexCastOp>(loc, rewriter.getI64Type(), nextIdx);
+               Value countVal = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), bound.relCountRef, tupleArg);
+               rangeCond = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt, idxI64, countVal);
+            }
+
+            Value untilVal = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI1Type(), untilValRef, tupleArg);
+            Value trueVal = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
+            Value notUntil = rewriter.create<arith::XOrIOp>(loc, untilVal, trueVal);
+            Value cond = rewriter.create<arith::AndIOp>(loc, rangeCond, notUntil);
+            rewriter.create<tuples::ReturnOp>(loc, ValueRange{cond});
+         }
+
+         condState = buildCondStateFromStream(mapOp.getResult(), condRef);
+      } else if (bound.scalarBound) {
          // [CONCRETE PATH]
          Value cond = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt, nextIdx, bound.scalarBound);
 
@@ -2293,64 +2419,13 @@ class GraphAlgYieldOpConversion : public StatefulConversion<YieldOp> {
             rewriter.create<tuples::ReturnOp>(loc, ValueRange{cond});
          }
 
-         // Initialize the SimpleState to false
-         auto createStateOp = rewriter.create<subop::CreateSimpleStateOp>(loc, simpleStateType);
-         {
-            OpBuilder::InsertionGuard guard(rewriter);
-            Block* initBlock = rewriter.createBlock(&createStateOp.getInitFn());
-            rewriter.setInsertionPointToStart(initBlock);
-            Value defaultCond = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
-            rewriter.create<tuples::ReturnOp>(loc, ValueRange{defaultCond});
-         }
-         condState = createStateOp.getResult();
-
-         // Lookup the state (Explicit llvm::cast to the LookupAbleState Interface required here!)
-         auto lookupRefType = subop::LookupEntryRefType::get(ctx, llvm::cast<subop::LookupAbleState>(simpleStateType));
-         auto lookupDef = createColumnDef(ctx, AttributeGenerator::nextName("lookup_ref"), lookupRefType);
-         auto lookupRef = createColumnRef(lookupDef);
-
-         auto lookupOp = rewriter.create<subop::LookupOp>(
-            loc,
-            tuples::TupleStreamType::get(ctx),
-            mapBoolOp.getResult(),
-            condState,
-            rewriter.getArrayAttr({}),
-            lookupDef);
-
-         // Reduce (Overwrite the state with our mapped boolean)
-         auto reduceOp = rewriter.create<subop::ReduceOp>(
-            loc,
-            lookupOp.getResult(),
-            lookupRef,
-            rewriter.getArrayAttr({boolRef}),
-            rewriter.getArrayAttr({condMemberAttr}) // FIXED: Now strictly a MemberAttr, no longer a StringAttr!
-         );
-
-         // Populate Update Block
-         {
-            OpBuilder::InsertionGuard guard(rewriter);
-            Block* updateBlock = rewriter.createBlock(&reduceOp.getRegion());
-            updateBlock->addArgument(rewriter.getI1Type(), loc);
-            updateBlock->addArgument(rewriter.getI1Type(), loc);
-            rewriter.setInsertionPointToStart(updateBlock);
-            rewriter.create<tuples::ReturnOp>(loc, ValueRange{updateBlock->getArgument(0)});
-         }
-
-         // Populate Combine Block
-         {
-            OpBuilder::InsertionGuard guard(rewriter);
-            Block* combineBlock = rewriter.createBlock(&reduceOp.getCombine());
-            combineBlock->addArgument(rewriter.getI1Type(), loc);
-            combineBlock->addArgument(rewriter.getI1Type(), loc);
-            rewriter.setInsertionPointToStart(combineBlock);
-            rewriter.create<tuples::ReturnOp>(loc, ValueRange{combineBlock->getArgument(0)});
-         }
+         condState = buildCondStateFromStream(mapBoolOp.getResult(), boolRef);
       }
 
       SmallVector<Value> yieldArgs;
       yieldArgs.push_back(nextIdx);
 
-      for (size_t i = 0; i < op.getNumOperands(); ++i) {
+      for (size_t i = 0; i < numReal; ++i) {
          Value origYieldOperand = op.getOperand(i);
          Value streamOperand = adaptor.getOperands()[i];
 
@@ -2453,8 +2528,43 @@ class GraphAlgToRelAlgPass : public PassWrapper<GraphAlgToRelAlgPass, OperationP
    virtual llvm::StringRef getArgument() const override { return "graphalg-core-to-relalg"; }
 };
 
+// Pre-pass (on valid graphalg IR, before the dialect conversion): fold each
+// loop's `until` early-return region into its body. The until block is moved in
+// just before the body YieldOp (its args bound to the body's iteration counter
+// and post-body yielded values), and the until's bool result is appended as a
+// trailing operand of the body YieldOp. Doing this here — rather than during the
+// conversion — keeps the until ops in the initial IR walk so they convert in
+// dataflow order alongside the body (the meta side-channel depends on that).
+static void foldUntilIntoBody(Operation* root) {
+   mlir::IRRewriter rewriter(root->getContext());
+   root->walk([&](Operation* op) {
+      if (!llvm::isa<ForDimOp, ForConstOp>(op)) return;
+      Region& untilRegion = op->getRegion(1);
+      if (untilRegion.empty()) return;
+
+      Block& body = op->getRegion(0).front();
+      Block& untilBlock = untilRegion.front();
+      Operation* bodyYield = body.getTerminator();
+
+      // Map until args: idx -> body idx arg, carried -> body yielded values.
+      SmallVector<Value> untilArgVals;
+      untilArgVals.push_back(body.getArgument(0));
+      for (Value yielded : bodyYield->getOperands()) untilArgVals.push_back(yielded);
+
+      Operation* untilYield = untilBlock.getTerminator();
+      rewriter.inlineBlockBefore(&untilBlock, bodyYield, untilArgVals);
+
+      Value untilResult = untilYield->getOperand(0);
+      rewriter.eraseOp(untilYield);
+      bodyYield->insertOperands(bodyYield->getNumOperands(), {untilResult});
+   });
+}
+
 void GraphAlgToRelAlgPass::runOnOperation() {
    MLIRContext* context = &getContext();
+
+   // PRE-PASS: fold loop `until` regions into their bodies.
+   foldUntilIntoBody(getOperation());
 
    ConversionState state;
    // PRE-PASS: Dynamically detect Matrix Sizes!
@@ -2501,6 +2611,7 @@ void GraphAlgToRelAlgPass::runOnOperation() {
       ConstantMatrixConversion,
       ApplyOpConversion,
       DeferredReduceConversion,
+      ReduceConversion,
       TransposeOpConversion>(typeConverter, context, state);
 
    patterns.add<MatMulJoinOpConversion>(typeConverter, context, state);
