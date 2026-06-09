@@ -3082,9 +3082,10 @@ class BufferScanLowering : public OpConversionPattern<relalg::BufferScanOp> {
    LogicalResult matchAndRewrite(relalg::BufferScanOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto ctx = rewriter.getContext();
 
-      // 1. Get the members from the BufferType
-      auto bufferType = llvm::cast<subop::BufferType>(adaptor.getBuffer().getType());
-      auto members = bufferType.getMembers().getMembers();
+      // 1. Get the members from the State (a buffer, or a map for accumulating
+      //    loop-carried states whose key+value members are scanned out).
+      auto stateType = llvm::cast<subop::State>(adaptor.getBuffer().getType());
+      auto members = stateType.getMembers().getMembers();
 
       // 2. Extract column definitions and their mapped string names
       auto columns = op.getColumns();

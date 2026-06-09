@@ -190,6 +190,11 @@ class ConversionState {
       Value nextIdx;
       DimBound bound;
       bool hasUntil = false;
+      // Per loop-carried state: true if the state accumulates into itself
+      // (yield = deferred_reduce(union(self, delta))). Such states are backed by
+      // a persistent subop.map and updated in place with only the delta, instead
+      // of rebuilding a fresh subop.buffer each iteration.
+      llvm::SmallVector<bool> accumulating;
    };
    llvm::DenseMap<Operation*, LoopYieldInfo> loopYieldData;
 
@@ -879,6 +884,164 @@ static relalg::AggrFunc getAggrFuncForSemiring(Type semiringType) {
    if (isTropicalMax(semiringType)) return relalg::AggrFunc::max;
    if (isBool(semiringType)) return relalg::AggrFunc::any;
    return relalg::AggrFunc::sum;
+}
+
+// Additive identity (the semiring "zero") for a value type. Used as the initial
+// value of a freshly inserted map entry, so that combine(delta, identity) == delta.
+static TypedAttr additiveIdentityAttr(OpBuilder& b, Type semiring, Type valType) {
+   auto* ctx = b.getContext();
+   if (valType.isInteger(1)) return b.getIntegerAttr(b.getI1Type(), 0);
+   if (valType.isInteger(64)) {
+      if (semiring == SemiringTypes::forTropInt(ctx)) return b.getI64IntegerAttr(std::numeric_limits<int64_t>::max());
+      if (semiring == SemiringTypes::forTropMaxInt(ctx)) return b.getI64IntegerAttr(std::numeric_limits<int64_t>::min());
+      return b.getI64IntegerAttr(0);
+   }
+   if (semiring == SemiringTypes::forTropReal(ctx)) return b.getF64FloatAttr(std::numeric_limits<double>::infinity());
+   return b.getF64FloatAttr(0.0);
+}
+
+// The semiring additive op (the monoid combine), matching getAggrFuncForSemiring.
+static Value buildSemiringAdd(OpBuilder& b, Location loc, Type semiring, Type valType, Value lhs, Value rhs) {
+   if (isBool(semiring) || valType.isInteger(1)) return b.create<arith::OrIOp>(loc, lhs, rhs);
+   if (isTropicalNonMax(semiring)) {
+      if (valType.isF64()) return b.create<arith::MinimumFOp>(loc, lhs, rhs);
+      return b.create<arith::MinSIOp>(loc, lhs, rhs);
+   }
+   if (isTropicalMax(semiring)) return b.create<arith::MaxSIOp>(loc, lhs, rhs);
+   if (valType.isF64()) return b.create<arith::AddFOp>(loc, lhs, rhs);
+   return b.create<arith::AddIOp>(loc, lhs, rhs);
+}
+
+// Build the persistent-map type for an accumulating loop var: key = row(,col),
+// value = the (converted) semiring value. Emitted as HashMapType (the executable
+// form) directly, so SpecializeSubOpPass's Map->HashMap rewrite — which cannot
+// thread a state-type change through subop.loop_continue — never fires on it.
+static subop::HashMapType makeAccMapType(MLIRContext* ctx, subop::MemberManager& mm, const MatrixMeta& meta) {
+   Type valType = GraphAlgTypeConverter::convertSemiringType(meta.semiring);
+   SmallVector<subop::Member> keyMembers;
+   if (meta.hasRow()) keyMembers.push_back(mm.createMember("acc_row", IntegerType::get(ctx, 64)));
+   if (meta.hasCol()) keyMembers.push_back(mm.createMember("acc_col", IntegerType::get(ctx, 64)));
+   subop::Member valMember = mm.createMember("acc_val", valType);
+   auto keyMembersAttr = subop::StateMembersAttr::get(ctx, keyMembers);
+   auto valMembersAttr = subop::StateMembersAttr::get(ctx, {valMember});
+   return subop::HashMapType::get(ctx, keyMembersAttr, valMembersAttr, false);
+}
+
+// Scan an accumulating map back into a stream via relalg.buffer_scan (which, unlike
+// subop.scan, implements the RelAlg Operator interface and therefore survives the
+// RelAlg optimizer that runs over the loop body). Produces the columns named by
+// `meta`, mapping them to the map's members (key members first, then the value).
+static Value emitStateScan(OpBuilder& rewriter, Location loc, subop::MemberManager& mm, subop::HashMapType mapType, Value state, const MatrixMeta& meta) {
+   auto* ctx = rewriter.getContext();
+   auto& cm = ctx->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+   SmallVector<subop::Member> members(mapType.getKeyMembers().getMembers().begin(), mapType.getKeyMembers().getMembers().end());
+   members.push_back(mapType.getValueMembers().getMembers()[0]);
+   SmallVector<Attribute> cols, mapping;
+   size_t mIdx = 0;
+   auto add = [&](tuples::ColumnRefAttr ref, tuples::ColumnDefAttr def) {
+      if (!def) def = cm.createDef(&ref.getColumn());
+      cols.push_back(def);
+      mapping.push_back(rewriter.getStringAttr(mm.getName(members[mIdx++])));
+   };
+   if (meta.hasRow()) add(meta.row, meta.rowDef);
+   if (meta.hasCol()) add(meta.col, meta.colDef);
+   add(meta.val, meta.valDef);
+   auto scan = rewriter.create<relalg::BufferScanOp>(loc, tuples::TupleStreamType::get(ctx), state, rewriter.getArrayAttr(cols), rewriter.getArrayAttr(mapping));
+   scan->setAttr("rows", rewriter.getF64FloatAttr(100.0));
+   return scan.getResult();
+}
+
+// Stage a (possibly complex / constant-bearing) stream through a temporary buffer
+// and scan it back, yielding a clean stream that exposes meta.row(/col)/val as
+// plainly materialized columns. Feeding constant/join-derived columns straight
+// into lookup_or_insert/reduce loses them across the execution-step split, so the
+// initial map population is routed through a buffer first.
+static Value stageThroughBuffer(OpBuilder& rewriter, Location loc, subop::MemberManager& mm, Value stream, const MatrixMeta& meta) {
+   auto* ctx = rewriter.getContext();
+   auto& cm = ctx->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+   Type valType = GraphAlgTypeConverter::convertSemiringType(meta.semiring);
+   SmallVector<subop::Member> members;
+   SmallVector<std::pair<subop::Member, tuples::ColumnRefAttr>> matMap;
+   SmallVector<Attribute> scanCols, scanNames;
+   auto add = [&](StringRef nm, Type t, tuples::ColumnRefAttr ref, tuples::ColumnDefAttr def) {
+      auto m = mm.createMember(nm.str(), t);
+      members.push_back(m);
+      matMap.push_back({m, ref});
+      scanCols.push_back(def ? def : cm.createDef(&ref.getColumn()));
+      scanNames.push_back(rewriter.getStringAttr(mm.getName(m)));
+   };
+   if (meta.hasRow()) add("init_row", rewriter.getI64Type(), meta.row, meta.rowDef);
+   if (meta.hasCol()) add("init_col", rewriter.getI64Type(), meta.col, meta.colDef);
+   add("init_val", valType, meta.val, meta.valDef);
+   auto bufType = subop::BufferType::get(ctx, subop::StateMembersAttr::get(ctx, members));
+   Value buf = rewriter.create<subop::GenericCreateOp>(loc, bufType);
+   rewriter.create<subop::MaterializeOp>(loc, stream, buf, subop::ColumnRefMemberMappingAttr::get(ctx, matMap));
+   auto scan = rewriter.create<relalg::BufferScanOp>(loc, tuples::TupleStreamType::get(ctx), buf, rewriter.getArrayAttr(scanCols), rewriter.getArrayAttr(scanNames));
+   scan->setAttr("rows", rewriter.getF64FloatAttr(100.0));
+   return scan.getResult();
+}
+
+// Merge `stream` (carrying columns described by `streamMeta`) into the persistent
+// map `mapVal` in place: lookup-or-insert by key, then reduce the value member
+// with the semiring add. Returns `mapVal`. Used both for initial population (into
+// an empty map) and for the per-iteration delta update.
+static Value mergeStreamIntoMap(OpBuilder& rewriter, Location loc, Value mapVal, Value stream, const MatrixMeta& streamMeta) {
+   auto* ctx = rewriter.getContext();
+   auto mapType = llvm::cast<subop::HashMapType>(mapVal.getType());
+   subop::Member valMember = mapType.getValueMembers().getMembers()[0];
+   Type valType = GraphAlgTypeConverter::convertSemiringType(streamMeta.semiring);
+
+   SmallVector<Attribute> keyRefs;
+   SmallVector<Type> keyTypes;
+   if (streamMeta.hasRow()) { keyRefs.push_back(streamMeta.row); keyTypes.push_back(rewriter.getI64Type()); }
+   if (streamMeta.hasCol()) { keyRefs.push_back(streamMeta.col); keyTypes.push_back(rewriter.getI64Type()); }
+
+   auto lookupRefType = subop::LookupEntryRefType::get(ctx, llvm::cast<subop::LookupAbleState>(mapType));
+   auto lookupDef = createColumnDef(ctx, AttributeGenerator::nextName("acc_ref"), lookupRefType);
+   auto lookupRef = createColumnRef(lookupDef);
+
+   auto lookupOp = rewriter.create<subop::LookupOrInsertOp>(
+      loc, tuples::TupleStreamType::get(ctx), stream, mapVal, ArrayAttr::get(ctx, keyRefs), lookupDef);
+   {
+      OpBuilder::InsertionGuard g(rewriter);
+      Block* initBlock = rewriter.createBlock(&lookupOp.getInitFn());
+      rewriter.setInsertionPointToStart(initBlock);
+      Value idv = rewriter.create<arith::ConstantOp>(loc, additiveIdentityAttr(rewriter, streamMeta.semiring, valType));
+      rewriter.create<tuples::ReturnOp>(loc, ValueRange{idv});
+   }
+   {
+      OpBuilder::InsertionGuard g(rewriter);
+      Block* eqBlock = rewriter.createBlock(&lookupOp.getEqFn());
+      SmallVector<Location> locs(keyTypes.size(), loc);
+      eqBlock->addArguments(keyTypes, locs);
+      eqBlock->addArguments(keyTypes, locs);
+      rewriter.setInsertionPointToStart(eqBlock);
+      size_t n = keyTypes.size();
+      Value eq;
+      for (size_t j = 0; j < n; ++j) {
+         Value c = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, eqBlock->getArgument(j), eqBlock->getArgument(n + j));
+         eq = eq ? rewriter.create<arith::AndIOp>(loc, eq, c).getResult() : c;
+      }
+      if (!eq) eq = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
+      rewriter.create<tuples::ReturnOp>(loc, ValueRange{eq});
+   }
+
+   auto valMemberAttr = subop::MemberAttr::get(ctx, valMember);
+   auto reduceOp = rewriter.create<subop::ReduceOp>(
+      loc, lookupOp.getResult(), lookupRef,
+      ArrayAttr::get(ctx, {streamMeta.val}), ArrayAttr::get(ctx, {valMemberAttr}));
+   auto buildCombine = [&](Region& region) {
+      OpBuilder::InsertionGuard g(rewriter);
+      Block* block = rewriter.createBlock(&region);
+      block->addArgument(valType, loc); // incoming value (delta column / other partial)
+      block->addArgument(valType, loc); // current member value
+      rewriter.setInsertionPointToStart(block);
+      Value combined = buildSemiringAdd(rewriter, loc, streamMeta.semiring, valType, block->getArgument(0), block->getArgument(1));
+      rewriter.create<tuples::ReturnOp>(loc, ValueRange{combined});
+   };
+   buildCombine(reduceOp.getRegion());
+   buildCombine(reduceOp.getCombine());
+   return mapVal;
 }
 
 // Shared lowering for ReduceOp and DeferredReduceOp: both collapse one or both
@@ -1927,6 +2090,30 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
    auto* ctx = rewriter.getContext();
    auto& colManager = ctx->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
 
+   size_t numInit = origInitArgs.size();
+   Block& bodyBlock = op->getRegion(0).front();
+   Operation* bodyYield = bodyBlock.getTerminator();
+
+   // Detect loop-carried states that accumulate into themselves, i.e. the yielded
+   // value has the form deferred_reduce(union(self, delta)). These are backed by a
+   // persistent subop.map updated in place with `delta` only; the union+reduce are
+   // erased and the yield is rerouted to the delta stream.
+   SmallVector<bool> accumulating(numInit, false);
+   SmallVector<Value> deltaVals(numInit, nullptr);
+   for (size_t i = 0; i < numInit; ++i) {
+      Value yielded = bodyYield->getOperand(i);
+      Value selfArg = bodyBlock.getArgument(i + 1);
+      auto dr = yielded.getDefiningOp<DeferredReduceOp>();
+      if (!dr || !dr->hasOneUse() || dr.getInputs().size() != 1) continue;
+      auto un = dr.getInputs()[0].getDefiningOp<UnionOp>();
+      if (!un || !un->hasOneUse() || un.getInputs().size() != 2) continue;
+      Value a = un.getInputs()[0], b = un.getInputs()[1];
+      Value delta = (a == selfArg) ? b : (b == selfArg ? a : Value());
+      if (!delta) continue;
+      accumulating[i] = true;
+      deltaVals[i] = delta;
+   }
+
    llvm::SmallSetVector<Value, 4> capturedMatrices;
    Region& oldRegion = op->getRegion(0);
    oldRegion.walk([&](Operation* nestedOp) {
@@ -1988,6 +2175,18 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
 
       MatrixMeta meta = state.get(origArg, ctx);
       Type valType = GraphAlgTypeConverter::convertSemiringType(meta.semiring);
+
+      if (accumulating[i]) {
+         // Persistent map: create empty, then populate in place from the init stream
+         // (staged through a buffer so constant/join columns are cleanly materialized).
+         Value cleanInit = stageThroughBuffer(rewriter, loc, memberManager, convArg, meta);
+         auto mapType = makeAccMapType(ctx, memberManager, meta);
+         Value mapState = rewriter.create<subop::GenericCreateOp>(loc, mapType);
+         mergeStreamIntoMap(rewriter, loc, mapState, cleanInit, meta);
+         stateTypes.push_back(mapType);
+         initStates.push_back(mapState);
+         continue;
+      }
 
       SmallVector<subop::Member> memberList;
       SmallVector<std::pair<subop::Member, tuples::ColumnRefAttr>> refMappingArgs;
@@ -2130,6 +2329,14 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
       Value origArg = op->getRegion(0).front().getArgument(i + 1);
       MatrixMeta loopMeta = state.get(origArg, ctx);
 
+      if (accumulating[i]) {
+         auto mapType = llvm::cast<subop::HashMapType>(loopState.getType());
+         Value scanStream = emitStateScan(rewriter, loc, memberManager, mapType, loopState, loopMeta);
+         state.set(scanStream, loopMeta);
+         origStateRepls.push_back(scanStream);
+         continue;
+      }
+
       SmallVector<Attribute> scanComputedCols;
       SmallVector<Attribute> scanColumnMapping;
 
@@ -2167,6 +2374,18 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
 
    Block& oldBody = op->getRegion(0).front();
 
+   // For accumulating states, drop the union(self, delta) + deferred_reduce that
+   // recomputed the full next state, and yield only the delta stream. The delta is
+   // merged into the persistent map in place during yield conversion.
+   for (size_t i = 0; i < numInit; ++i) {
+      if (!accumulating[i]) continue;
+      auto dr = bodyYield->getOperand(i).getDefiningOp<DeferredReduceOp>();
+      auto un = dr.getInputs()[0].getDefiningOp<UnionOp>();
+      bodyYield->setOperand(i, deltaVals[i]);
+      rewriter.eraseOp(dr);
+      rewriter.eraseOp(un);
+   }
+
    // The `until` early-return condition has been folded into the body by an
    // earlier graphalg pre-pass (foldUntilIntoBody): when present, it appears as
    // a trailing operand of the body YieldOp, beyond the loop-carried results.
@@ -2184,13 +2403,21 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
    rewriter.setInsertionPoint(yieldOp);
 
    Value nextIdx = rewriter.create<arith::AddIOp>(loc, newIdx, stepBoundVal);
-   state.loopYieldData[yieldOp] = {nextIdx, endBoundVal, hasUntil};
+   state.loopYieldData[yieldOp] = {nextIdx, endBoundVal, hasUntil, accumulating};
 
    rewriter.setInsertionPointAfter(loopOp);
    SmallVector<Value> finalResults;
    for (size_t i = 0; i < op->getNumResults(); ++i) {
       Value finalState = loopOp.getResult(i + 1);
       MatrixMeta finalMeta = state.get(op->getResult(i), ctx);
+
+      if (i < accumulating.size() && accumulating[i]) {
+         auto mapType = llvm::cast<subop::HashMapType>(finalState.getType());
+         Value finalStream = emitStateScan(rewriter, loc, memberManager, mapType, finalState, finalMeta);
+         state.set(finalStream, finalMeta);
+         finalResults.push_back(finalStream);
+         continue;
+      }
 
       SmallVector<Attribute> scanComputedCols;
       SmallVector<Attribute> scanColumnMapping;
@@ -2422,6 +2649,8 @@ class GraphAlgYieldOpConversion : public StatefulConversion<YieldOp> {
          condState = buildCondStateFromStream(mapBoolOp.getResult(), boolRef);
       }
 
+      const auto& accumulating = it->second.accumulating;
+
       SmallVector<Value> yieldArgs;
       yieldArgs.push_back(nextIdx);
 
@@ -2434,6 +2663,18 @@ class GraphAlgYieldOpConversion : public StatefulConversion<YieldOp> {
          }
 
          MatrixMeta actualYieldMeta = state.get(origYieldOperand, ctx);
+
+         if (i < accumulating.size() && accumulating[i]) {
+            // Merge only the delta into the persistent map (carried block arg) in
+            // place, then yield the same map handle. The delta is staged through a
+            // (small) buffer so its key/value columns are cleanly materialized
+            // before lookup_or_insert/reduce, regardless of execution-step splits.
+            Value mapHandle = loopOp.getBody()->getArgument(i + 1);
+            Value cleanDelta = stageThroughBuffer(rewriter, loc, memberManager, streamOperand, actualYieldMeta);
+            mergeStreamIntoMap(rewriter, loc, mapHandle, cleanDelta, actualYieldMeta);
+            yieldArgs.push_back(mapHandle);
+            continue;
+         }
 
          auto bufferType = llvm::cast<subop::BufferType>(loopOp.getOperand(i + 1).getType());
          auto members = bufferType.getMembers().getMembers();
