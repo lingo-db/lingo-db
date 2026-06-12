@@ -174,6 +174,9 @@ class SubOpLoweringStep : public LoweringStep {
       optSubOpPm.addPass(subop::createHoistInvariantStatePass());
       optSubOpPm.addPass(subop::createSplitIntoExecutionStepsPass());
       if (!moduleOp->hasAttr("subop.sequential")) {
+         // Split loop bodies before parallelization so their execution steps can
+         // be parallelized; nested_map bodies stay intact (split below).
+         optSubOpPm.addPass(subop::createPrepareLoweringPass(/*loopsOnly=*/true));
          optSubOpPm.addNestedPass<mlir::func::FuncOp>(subop::createParallelizePass());
          optSubOpPm.addPass(subop::createSpecializeParallelPass());
       }

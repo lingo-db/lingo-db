@@ -44,10 +44,15 @@ class FlexibleBufferWorkerResvState {
       return -1;
    }
 
-   int fetchAndNext() {
+   // Reserve a unit when stealing. The victim's bufferId is captured under the
+   // same lock so the stealer records a consistent (bufferId, unitId) pair;
+   // reading it later would race with the victim advancing to its next buffer.
+   int fetchAndNext(size_t& outBufferId) {
       std::unique_lock<std::shared_mutex> resvLock(mutex);
       size_t cur = resvCursor++;
-      return cur >= unitAmount ? -1 : cur;
+      if (cur >= unitAmount) return -1;
+      outBufferId = bufferId;
+      return cur;
    }
 };
 
@@ -96,9 +101,11 @@ class FlexibleBufferIteratorTask : public lingodb::scheduler::TaskWithImplicitCo
       if (state->stealWorkerId != std::numeric_limits<size_t>::max()) {
          auto* other = workerResvs[state->stealWorkerId].get();
          if (other->hasMoreWork()) {
-            auto id = other->fetchAndNext();
+            size_t stolenBufferId;
+            auto id = other->fetchAndNext(stolenBufferId);
             if (id != -1) {
                state->resvId = id;
+               state->bufferId = stolenBufferId;
                return true;
             }
          }
@@ -110,11 +117,13 @@ class FlexibleBufferIteratorTask : public lingodb::scheduler::TaskWithImplicitCo
          auto idx = (lingodb::scheduler::currentWorkerId() + i) % workerResvs.size();
          auto* other = workerResvs[idx].get();
          if (other->hasMoreWork()) {
-            auto id = other->fetchAndNext();
+            size_t stolenBufferId;
+            auto id = other->fetchAndNext(stolenBufferId);
             if (id != -1) {
                // only current worker can modify its onw stealWorkerId. no need to lock
                state->stealWorkerId = idx;
                state->resvId = id;
+               state->bufferId = stolenBufferId;
                return true;
             }
          }
@@ -125,11 +134,6 @@ class FlexibleBufferIteratorTask : public lingodb::scheduler::TaskWithImplicitCo
    }
    void performWork() override {
       auto* state = workerResvs[lingodb::scheduler::currentWorkerId()].get();
-      if (state->stealWorkerId != std::numeric_limits<size_t>::max()) {
-         auto* other = workerResvs[state->stealWorkerId].get();
-         unitRun(other->bufferId, state->resvId);
-         return;
-      }
       unitRun(state->bufferId, state->resvId);
    }
 };

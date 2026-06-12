@@ -32,6 +32,54 @@ struct ExecutionStepAnalyzed {
    bool notParallel = false;
 };
 
+// Resolve a state value through execution_step / nested_execution_group arg->input
+// edges back to one of the analyzed step's external states, so a state threaded in
+// via nested region args is recognized as shared rather than thread-private.
+static mlir::Value resolveThroughNesting(mlir::Value v, const llvm::DenseMap<mlir::Value, mlir::Value>& extStates) {
+   while (!extStates.contains(v)) {
+      auto barg = mlir::dyn_cast<mlir::BlockArgument>(v);
+      if (!barg) break;
+      mlir::Operation* parent = barg.getOwner()->getParentOp();
+      unsigned idx = barg.getArgNumber();
+      if (auto step = mlir::dyn_cast_or_null<subop::ExecutionStepOp>(parent)) {
+         if (barg.getOwner() == &step.getSubOps().front() && idx < step.getInputs().size()) {
+            v = step.getInputs()[idx];
+            continue;
+         }
+      } else if (auto nestedGroup = mlir::dyn_cast_or_null<subop::NestedExecutionGroupOp>(parent)) {
+         if (idx < nestedGroup.getInputs().size()) {
+            v = nestedGroup.getInputs()[idx];
+            continue;
+         }
+      }
+      break;
+   }
+   return v;
+}
+
+// A reduce combine merges two partial aggregates (the block args are the two
+// partials, each `numMembers` wide). It is only a sound parallel merge if its
+// result depends on the second partial; a combine like (a,b)->a discards a
+// partial and cannot be parallelized.
+static bool combineMergesBothPartials(mlir::Region& combine, unsigned numMembers) {
+   if (combine.empty() || numMembers == 0) return false;
+   mlir::Block& block = combine.front();
+   if (block.getNumArguments() != 2 * numMembers) return false;
+   llvm::DenseSet<mlir::Value> secondArgs;
+   for (unsigned i = numMembers; i < 2 * numMembers; i++)
+      secondArgs.insert(block.getArgument(i));
+   llvm::SmallVector<mlir::Value> work(block.getTerminator()->getOperands().begin(), block.getTerminator()->getOperands().end());
+   llvm::DenseSet<mlir::Value> seen;
+   while (!work.empty()) {
+      mlir::Value v = work.pop_back_val();
+      if (!seen.insert(v).second) continue;
+      if (secondArgs.contains(v)) return true;
+      if (auto* def = v.getDefiningOp())
+         work.append(def->getOperands().begin(), def->getOperands().end());
+   }
+   return false;
+}
+
 ExecutionStepAnalyzed analyze(subop::ExecutionStepOp executionStepOp) {
    subop::ColumnCreationAnalysis columnCreationAnalysis(executionStepOp);
    ExecutionStepAnalyzed result;
@@ -106,7 +154,7 @@ ExecutionStepAnalyzed analyze(subop::ExecutionStepOp executionStepOp) {
 
          return collisions;
       };
-      auto isNested = [&](mlir::Value v) { return !extStates.contains(v); };
+      auto isNested = [&](mlir::Value v) { return !extStates.contains(resolveThroughNesting(v, extStates)); };
       auto getCreationOp = [&](tuples::Column& column) {
          auto creationOp = mlir::cast<subop::SubOperator>(columnCreationAnalysis.getColumnCreator(&column));
          if (auto unwrapOp = mlir::dyn_cast_or_null<subop::UnwrapOptionalRefOp>(creationOp.getOperation())) {
@@ -212,14 +260,14 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                         for (auto& problematicOp : collisionGroup.ops) {
                            //llvm::dbgs() << "  Problematic Op: " << problematicOp.op << "\n";
                            if (auto materializeOp = mlir::dyn_cast_or_null<subop::MaterializeOp>(problematicOp.op.getOperation())) {
-                              auto ext = extStates[materializeOp.getState()];
+                              auto ext = extStates[resolveThroughNesting(materializeOp.getState(), extStates)];
                               if (ext.getDefiningOp()) {
                                  toThreadLocals.insert({ext, {}});
                               } else {
                                  canBeParallel = false;
                               }
                            } else if (auto lookupOrInsert = mlir::dyn_cast_or_null<subop::LookupOrInsertOp>(problematicOp.op.getOperation())) {
-                              auto ext = extStates[lookupOrInsert.getState()];
+                              auto ext = extStates[resolveThroughNesting(lookupOrInsert.getState(), extStates)];
                               if (ext.getDefiningOp()) {
                                  toThreadLocals[ext].requiresCombine = true;
                                  toThreadLocals[ext].compareRegion = &lookupOrInsert.getEqFn();
@@ -229,8 +277,8 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                            } else if (auto reduceOp = mlir::dyn_cast_or_null<subop::ReduceOp>(problematicOp.op.getOperation())) {
                               auto stateAccessing = problematicOp.stateAccessing;
                               if (auto lookupOp = mlir::dyn_cast_or_null<subop::LookupOp>(stateAccessing.getOperation())) {
-                                 auto ext = extStates[lookupOp.getState()];
-                                 if (ext.getDefiningOp() && mlir::isa<subop::SimpleStateType>(ext.getType()) && mlir::dyn_cast_or_null<subop::SimpleStateType>(ext.getType()).getMembers().getMembers().size() == reduceOp.getMembers().size() && !reduceOp.getCombine().empty()) {
+                                 auto ext = extStates[resolveThroughNesting(lookupOp.getState(), extStates)];
+                                 if (ext.getDefiningOp() && mlir::isa<subop::SimpleStateType>(ext.getType()) && mlir::dyn_cast_or_null<subop::SimpleStateType>(ext.getType()).getMembers().getMembers().size() == reduceOp.getMembers().size() && !reduceOp.getCombine().empty() && combineMergesBothPartials(reduceOp.getCombine(), reduceOp.getMembers().size())) {
                                     toThreadLocals[ext].requiresCombine = true;
                                     toThreadLocals[ext].combineRegion = &reduceOp.getCombine();
                                  } else if (ext.getDefiningOp() && mlir::isa<subop::HashMapType>(ext.getType())) {
@@ -240,7 +288,7 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                                  }
                               } else if (auto lookupOrInsertOp = mlir::dyn_cast_or_null<subop::LookupOrInsertOp>(stateAccessing.getOperation())) {
                                  // lookupOrInsertOp will be handled either way
-                                 auto ext = extStates[lookupOrInsertOp.getState()];
+                                 auto ext = extStates[resolveThroughNesting(lookupOrInsertOp.getState(), extStates)];
                                  if (ext.getDefiningOp()) {
                                     toThreadLocals[ext].requiresCombine = true;
                                     toThreadLocals[ext].combineRegion = &reduceOp.getCombine();
@@ -256,7 +304,7 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                                  // TODO: check if this is actually a sane optimization on x86 and especially other architectures
                                  markAsAtomic.insert(scatterOp);
                               } else if (auto lookupOp = mlir::dyn_cast_or_null<subop::LookupOp>(stateAccessing.getOperation())) {
-                                 auto ext = extStates[lookupOp.getState()];
+                                 auto ext = extStates[resolveThroughNesting(lookupOp.getState(), extStates)];
                                  if (ext.getDefiningOp() && mlir::isa<subop::HashMapType>(ext.getType())) {
                                     toLock[&scatterOp.getRef().getColumn()].push_back({ext, scatterOp.getOperation()});
                                  } else {
@@ -499,7 +547,7 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
       });
       for (auto executionGroup : executionGroupOps) {
          parallelizeBlock(executionGroup.getSubOps().front(), columnUsageAnalysis, colManager);
-         // Also parallelize execution steps inside NestedExecutionGroupOps (e.g., loop bodies)
+         // Also parallelize steps inside loop bodies (split into nested groups).
          executionGroup->walk([&](subop::NestedExecutionGroupOp nestedGroup) {
             parallelizeBlock(nestedGroup.getRegion().front(), columnUsageAnalysis, colManager);
          });

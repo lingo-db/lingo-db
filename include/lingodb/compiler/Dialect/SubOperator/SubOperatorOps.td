@@ -991,7 +991,7 @@ def ExecutionStepReturnOp : SubOperator_Op<"execution_step_return",[Terminator]>
    let arguments = (ins Variadic<AnyType>:$inputs);
    let assemblyFormat = [{ ($inputs^ `:` type($inputs))? attr-dict-with-keyword }];
 }
-def NestedExecutionGroupOp : SubOperator_Op<"nested_execution_group",[IsolatedFromAbove]> {
+def NestedExecutionGroupOp : SubOperator_Op<"nested_execution_group",[IsolatedFromAbove,DeclareOpInterfaceMethods<StateUsingSubOperator>]> {
     let summary = "nested execution group";
     let arguments = (ins Variadic<AnyType>:$inputs);
     let results = (outs Variadic<AnyType>:$results);

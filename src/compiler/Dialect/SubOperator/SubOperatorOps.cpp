@@ -1545,6 +1545,19 @@ void subop::ExecutionStepOp::updateStateType(subop::SubOpStateUsageTransformer& 
    }
 }
 
+void subop::NestedExecutionGroupOp::replaceColumns(subop::SubOpStateUsageTransformer& transformer, tuples::Column* oldColumn, tuples::Column* newColumn) {
+   assert(false && "should not happen");
+}
+
+void subop::NestedExecutionGroupOp::updateStateType(subop::SubOpStateUsageTransformer& transformer, mlir::Value state, mlir::Type newType) {
+   for (auto [i, a] : llvm::zip(getInputs(), getSubOps().getArguments())) {
+      if (i == state) {
+         transformer.updateValue(a, newType);
+         a.setType(newType);
+      }
+   }
+}
+
 void subop::SetTrackedCountOp::replaceColumns(subop::SubOpStateUsageTransformer& transformer, tuples::Column* oldColumn, tuples::Column* newColumn) {
    assert(false && "should not happen");
 }

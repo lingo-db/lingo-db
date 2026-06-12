@@ -1,8 +1,16 @@
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorInterfaces.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/StateUsageTransformer.h"
+#include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
 #include "mlir/IR/Builders.h"
 using namespace lingodb::compiler::dialect;
 using namespace lingodb::compiler::dialect::subop;
+namespace {
+// A tuples.return only forwards its operands; the SSA value type is already
+// updated in place, so the terminator needs no rewrite.
+static bool isForwardingTerminator(mlir::Operation* op) {
+   return mlir::isa<tuples::ReturnOp>(op);
+}
+} // namespace
 mlir::Type SubOpStateUsageTransformer::getNewRefType(mlir::Operation* op, mlir::Type oldRefType) {
    return getNewRefTypeFn(op, oldRefType);
 }
@@ -15,6 +23,8 @@ void SubOpStateUsageTransformer::updateValue(mlir::Value oldValue, mlir::Type ne
          if (callBeforeFn) { callBeforeFn(stateUsingSubOp.getOperation()); }
          stateUsingSubOp.updateStateType(*this, oldValue, newType);
          if (callAfterFn) { callAfterFn(stateUsingSubOp.getOperation()); }
+      } else if (isForwardingTerminator(user)) {
+         // nothing to do: the value type is already updated in place
       } else {
          user->dump();
          assert(false);
@@ -27,6 +37,8 @@ void SubOpStateUsageTransformer::updateUse(mlir::OpOperand& opOperand, mlir::Typ
       if (callBeforeFn) { callBeforeFn(stateUsingSubOp.getOperation()); }
       stateUsingSubOp.updateStateType(*this, opOperand.get(), newType);
       if (callAfterFn) { callAfterFn(stateUsingSubOp.getOperation()); }
+   } else if (isForwardingTerminator(user)) {
+      // nothing to do: the value type is already updated in place
    } else {
       user->dump();
       assert(false);

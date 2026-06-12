@@ -4212,6 +4212,9 @@ class LoopLowering : public SubOpConversionPattern<subop::LoopOp> {
          for (auto& op : nestedExecutionGroup.getRegion().front().getOperations()) {
             if (auto step = mlir::dyn_cast_or_null<subop::ExecutionStepOp>(&op)) {
                auto guard = rewriter.nest(outerMapping, step);
+               // Emit thread-local getLocal/casts into the loop body, not wherever
+               // the previous op's lowering left the insertion point.
+               rewriter.operator mlir::OpBuilder&().setInsertionPointToEnd(after);
                for (auto [param, arg, isThreadLocal] : llvm::zip(step.getInputs(), step.getSubOps().front().getArguments(), step.getIsThreadLocal())) {
                   mlir::Value input = outerMapping.lookup(param);
                   if (!mlir::cast<mlir::BoolAttr>(isThreadLocal).getValue()) {
@@ -4740,11 +4743,10 @@ void subop::createLowerSubOpPipeline(mlir::OpPassManager& pm) {
    pm.addPass(subop::createInlineNestedMapPass());
    pm.addPass(subop::createFinalizePass());
    pm.addPass(subop::createSplitIntoExecutionStepsPass());
+   pm.addPass(subop::createPrepareLoweringPass(/*loopsOnly=*/true));
    pm.addNestedPass<mlir::func::FuncOp>(subop::createParallelizePass());
    pm.addPass(subop::createSpecializeParallelPass());
    pm.addPass(subop::createPrepareLoweringPass());
-   pm.addNestedPass<mlir::func::FuncOp>(subop::createParallelizePass());
-   pm.addPass(subop::createSpecializeParallelPass());
    pm.addPass(subop::createLowerSubOpPass());
    pm.addPass(mlir::createCanonicalizerPass());
    pm.addPass(mlir::createCSEPass());
