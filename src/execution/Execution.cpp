@@ -171,6 +171,7 @@ class SubOpLoweringStep : public LoweringStep {
       optSubOpPm.addPass(subop::createEnforceOrderPass());
       optSubOpPm.addPass(subop::createInlineNestedMapPass());
       optSubOpPm.addPass(subop::createFinalizePass());
+      optSubOpPm.addPass(subop::createHoistInvariantStatePass());
       optSubOpPm.addPass(subop::createSplitIntoExecutionStepsPass());
       if (!moduleOp->hasAttr("subop.sequential")) {
          optSubOpPm.addNestedPass<mlir::func::FuncOp>(subop::createParallelizePass());
