@@ -55,9 +55,9 @@ def extract_subop_filename(json_file):
     with open(json_file, 'r') as file:
         data = json.load(file)
         for i in range(len(data)):
-            if data[i].get("argument") == "subop-prepare-lowering":
+            if data[i].get("argument") == "subop-specialize-parallel":
                 return data[i].get("file")
-    raise ValueError(f"No object found with argument {"subop-prepare-lowering"}")
+    raise ValueError(f"No object found with argument {"subop-specialize-parallel"}")
 
 
 def extract_llvm_filename(json_file):

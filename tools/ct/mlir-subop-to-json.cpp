@@ -639,11 +639,11 @@ class ToJson {
          .Case<subop::NestedMapOp>([&](subop::NestedMapOp nestedMapOp) {
             result["subop"] = "nested_map";
             result["inputs"] = nlohmann::json::array();
+            result["subops"] = nlohmann::json::array();
             llvm::DenseMap<mlir::Value, size_t> externalValueToIndex;
             if (nestedMapOp.getBody()->begin() != nestedMapOp.getBody()->end()) {
                mlir::Operation* firstOp = &*nestedMapOp.getBody()->begin();
                if (auto nestedExecutionGroup = mlir::dyn_cast_or_null<subop::NestedExecutionGroupOp>(firstOp)) {
-                  result["subops"] = nlohmann::json::array();
                   for (auto& op : nestedExecutionGroup.getSubOps().front()) {
                      if (!mlir::isa_and_nonnull<subop::NestedExecutionGroupReturnOp>(&op)) {
                         result["subops"].push_back(convertOperation(&op, [&](mlir::BlockArgument ba, bool isExpression) {
