@@ -29,6 +29,17 @@ void lingodb::runtime::Hashtable::resize() {
 void lingodb::runtime::Hashtable::destroy(lingodb::runtime::Hashtable* ht) {
    delete ht;
 }
+void lingodb::runtime::Hashtable::clear() {
+   // Reset the directory in place (retain its current size) and drop all entries.
+   // A subsequent insert/resize rebuilds the directory from the values buffer.
+   runtime::MemoryHelper::zero((uint8_t*) ht.ptr, (hashMask + 1) * sizeof(Entry*));
+   values.clear();
+}
+void lingodb::runtime::Hashtable::clearThreadLocal(lingodb::runtime::ThreadLocal* threadLocal) {
+   for (auto* current : threadLocal->getThreadLocalValues<lingodb::runtime::Hashtable>()) {
+      if (current) current->clear();
+   }
+}
 lingodb::runtime::Hashtable::Entry* lingodb::runtime::Hashtable::insert(size_t hash) {
    if (values.getLen() > hashMask / 2) {
       resize();

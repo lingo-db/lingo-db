@@ -26,9 +26,11 @@ class GrowingBuffer {
    runtime::Buffer sort(bool (*compareFn)(uint8_t*, uint8_t*));
    runtime::Buffer asContinuous();
    static void destroy(GrowingBuffer* vec);
+   void clear();
    BufferIterator* createIterator();
    runtime::FlexibleBuffer& getValues() { return values; }
    static GrowingBuffer* merge(ThreadLocal* threadLocal);
+   static void clearThreadLocal(ThreadLocal* threadLocal);
 };
 
 } // end namespace lingodb::runtime

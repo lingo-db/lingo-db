@@ -22,6 +22,7 @@ add_mlir_dialect_library(MLIRSubOperator
         Transforms/FinalizePass.cpp
         Transforms/CommonPipelineElimination.cpp
         Transforms/HoistInvariantStatePass.cpp
+        Transforms/ReuseLoopScratchPass.cpp
         ADDITIONAL_HEADER_DIRS
         ../../../../include/lingodb/compiler/Dialect/SubOperator
 

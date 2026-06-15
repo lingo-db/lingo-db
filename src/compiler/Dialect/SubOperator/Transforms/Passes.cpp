@@ -44,4 +44,7 @@ void subop::registerSubOpTransformations() {
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return subop::createHoistInvariantStatePass();
    });
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+      return subop::createReuseLoopScratchPass();
+   });
 }

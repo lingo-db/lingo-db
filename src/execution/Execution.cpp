@@ -172,6 +172,7 @@ class SubOpLoweringStep : public LoweringStep {
       optSubOpPm.addPass(subop::createInlineNestedMapPass());
       optSubOpPm.addPass(subop::createFinalizePass());
       optSubOpPm.addPass(subop::createHoistInvariantStatePass());
+      optSubOpPm.addPass(subop::createReuseLoopScratchPass());
       optSubOpPm.addPass(subop::createSplitIntoExecutionStepsPass());
       if (!moduleOp->hasAttr("subop.sequential")) {
          // Split loop bodies before parallelization so their execution steps can

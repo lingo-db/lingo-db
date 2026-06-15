@@ -57,6 +57,31 @@ static mlir::Value resolveThroughNesting(mlir::Value v, const llvm::DenseMap<mli
    return v;
 }
 
+// Like resolveThroughNesting but ignores the per-step extStates guard: walk
+// arg->input edges all the way out through execution_step / nested_execution_group
+// nesting until reaching a value that is not such a nested block argument. For a
+// state created outside an enclosing loop and threaded into the loop body, this
+// returns the original (external) create result, whose defining op is reachable.
+static mlir::Value resolveToRoot(mlir::Value v) {
+   while (auto barg = mlir::dyn_cast<mlir::BlockArgument>(v)) {
+      mlir::Operation* parent = barg.getOwner()->getParentOp();
+      unsigned idx = barg.getArgNumber();
+      if (auto step = mlir::dyn_cast_or_null<subop::ExecutionStepOp>(parent)) {
+         if (barg.getOwner() == &step.getSubOps().front() && idx < step.getInputs().size()) {
+            v = step.getInputs()[idx];
+            continue;
+         }
+      } else if (auto nestedGroup = mlir::dyn_cast_or_null<subop::NestedExecutionGroupOp>(parent)) {
+         if (idx < nestedGroup.getInputs().size()) {
+            v = nestedGroup.getInputs()[idx];
+            continue;
+         }
+      }
+      break;
+   }
+   return v;
+}
+
 // A reduce combine merges two partial aggregates (the block args are the two
 // partials, each `numMembers` wide). It is only a sound parallel merge if its
 // result depends on the second partial; a combine like (a,b)->a discards a
@@ -247,6 +272,21 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                for (auto [i, a] : llvm::zip(executionStepOp.getInputs(), executionStepOp.getSubOps().getArguments())) {
                   extStates.insert({a, i});
                }
+               // Map a (locally resolved) state operand to the value that identifies
+               // the state for thread-localization. Normally this is the execution
+               // step input; but for a state created outside an enclosing loop and
+               // threaded into the loop body, that input is itself a nested block
+               // argument with no defining op. Resolve it the rest of the way out to
+               // the external create so the in-loop writers can still be parallelized
+               // (see the cross-loop handling in the conversion below).
+               auto resolveExt = [&](mlir::Value localResolved) -> mlir::Value {
+                  mlir::Value e = extStates[localResolved];
+                  if (!e.getDefiningOp()) {
+                     auto root = resolveToRoot(e);
+                     if (root.getDefiningOp()) return root;
+                  }
+                  return e;
+               };
 
                if (auto scanRefsOp = mlir::dyn_cast_or_null<subop::ScanRefsOp>(*executionStepOp.getSubOps().getOps().begin())) {
                   if (!scanRefsOp->hasAttr("sequential") && !scanRefsOp->hasAttr("parallel")) {
@@ -260,14 +300,14 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                         for (auto& problematicOp : collisionGroup.ops) {
                            //llvm::dbgs() << "  Problematic Op: " << problematicOp.op << "\n";
                            if (auto materializeOp = mlir::dyn_cast_or_null<subop::MaterializeOp>(problematicOp.op.getOperation())) {
-                              auto ext = extStates[resolveThroughNesting(materializeOp.getState(), extStates)];
+                              auto ext = resolveExt(resolveThroughNesting(materializeOp.getState(), extStates));
                               if (ext.getDefiningOp()) {
                                  toThreadLocals.insert({ext, {}});
                               } else {
                                  canBeParallel = false;
                               }
                            } else if (auto lookupOrInsert = mlir::dyn_cast_or_null<subop::LookupOrInsertOp>(problematicOp.op.getOperation())) {
-                              auto ext = extStates[resolveThroughNesting(lookupOrInsert.getState(), extStates)];
+                              auto ext = resolveExt(resolveThroughNesting(lookupOrInsert.getState(), extStates));
                               if (ext.getDefiningOp()) {
                                  toThreadLocals[ext].requiresCombine = true;
                                  toThreadLocals[ext].compareRegion = &lookupOrInsert.getEqFn();
@@ -277,7 +317,7 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                            } else if (auto reduceOp = mlir::dyn_cast_or_null<subop::ReduceOp>(problematicOp.op.getOperation())) {
                               auto stateAccessing = problematicOp.stateAccessing;
                               if (auto lookupOp = mlir::dyn_cast_or_null<subop::LookupOp>(stateAccessing.getOperation())) {
-                                 auto ext = extStates[resolveThroughNesting(lookupOp.getState(), extStates)];
+                                 auto ext = resolveExt(resolveThroughNesting(lookupOp.getState(), extStates));
                                  if (ext.getDefiningOp() && mlir::isa<subop::SimpleStateType>(ext.getType()) && mlir::dyn_cast_or_null<subop::SimpleStateType>(ext.getType()).getMembers().getMembers().size() == reduceOp.getMembers().size() && !reduceOp.getCombine().empty() && combineMergesBothPartials(reduceOp.getCombine(), reduceOp.getMembers().size())) {
                                     toThreadLocals[ext].requiresCombine = true;
                                     toThreadLocals[ext].combineRegion = &reduceOp.getCombine();
@@ -288,7 +328,7 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                                  }
                               } else if (auto lookupOrInsertOp = mlir::dyn_cast_or_null<subop::LookupOrInsertOp>(stateAccessing.getOperation())) {
                                  // lookupOrInsertOp will be handled either way
-                                 auto ext = extStates[resolveThroughNesting(lookupOrInsertOp.getState(), extStates)];
+                                 auto ext = resolveExt(resolveThroughNesting(lookupOrInsertOp.getState(), extStates));
                                  if (ext.getDefiningOp()) {
                                     toThreadLocals[ext].requiresCombine = true;
                                     toThreadLocals[ext].combineRegion = &reduceOp.getCombine();
@@ -304,7 +344,7 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                                  // TODO: check if this is actually a sane optimization on x86 and especially other architectures
                                  markAsAtomic.insert(scatterOp);
                               } else if (auto lookupOp = mlir::dyn_cast_or_null<subop::LookupOp>(stateAccessing.getOperation())) {
-                                 auto ext = extStates[resolveThroughNesting(lookupOp.getState(), extStates)];
+                                 auto ext = resolveExt(resolveThroughNesting(lookupOp.getState(), extStates));
                                  if (ext.getDefiningOp() && mlir::isa<subop::HashMapType>(ext.getType())) {
                                     toLock[&scatterOp.getRef().getColumn()].push_back({ext, scatterOp.getOperation()});
                                  } else {
@@ -478,40 +518,23 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
             auto loc = createOp->getLoc();
             createOp->erase();
 
-            // Find the last shouldUse (parallel writer) step to determine merge placement.
-            mlir::Operation* lastShouldUse = nullptr;
-            for (auto step : toThreadLocal.second.shouldUse) {
-               if (!lastShouldUse || lastShouldUse->isBeforeInBlock(step.getOperation())) {
-                  lastShouldUse = step.getOperation();
-               }
-            }
-
-            std::vector<mlir::Operation*> mergedUsers;
-            for (auto& use : toThreadLocal.first.getUses()) {
-               auto usingExecutionStep = mlir::dyn_cast_or_null<subop::ExecutionStepOp>(use.getOwner());
-               if (usingExecutionStep && toThreadLocal.second.shouldUse.contains(usingExecutionStep)) {
-                  std::vector<mlir::Attribute> attrs(usingExecutionStep.getIsThreadLocal().begin(), usingExecutionStep.getIsThreadLocal().end());
-                  attrs[use.getOperandNumber()] = mlir::BoolAttr::get(&getContext(), true);
-                  usingExecutionStep.setIsThreadLocalAttr(mlir::ArrayAttr::get(&getContext(), attrs));
-               } else if (lastShouldUse && usingExecutionStep &&
-                          usingExecutionStep.getOperation()->isBeforeInBlock(lastShouldUse)) {
-                  // This step uses the state before the last parallel writer completes.
-                  // It must also access the state via thread-local to avoid ordering issues.
-                  std::vector<mlir::Attribute> attrs(usingExecutionStep.getIsThreadLocal().begin(), usingExecutionStep.getIsThreadLocal().end());
-                  attrs[use.getOperandNumber()] = mlir::BoolAttr::get(&getContext(), true);
-                  usingExecutionStep.setIsThreadLocalAttr(mlir::ArrayAttr::get(&getContext(), attrs));
-               } else {
-                  mergedUsers.push_back(use.getOwner());
-               }
-            }
-
-            std::sort(mergedUsers.begin(), mergedUsers.end(), [&](mlir::Operation* left, mlir::Operation* right) {
-               return left->isBeforeInBlock(right);
-            });
-
-            if (!mergedUsers.empty()) {
+            // A clear step (inserted by ReuseLoopScratchPass at the loop body top)
+            // must reset all worker-local instances, so it consumes the state
+            // thread-locally (isThreadLocal=false -> wrapped arg stays thread_local)
+            // and is neither a parallel writer nor a merged consumer.
+            auto isClearStep = [](subop::ExecutionStepOp step) {
+               bool found = false;
+               step.getSubOps().walk([&](subop::ClearOp) { found = true; });
+               return found;
+            };
+            // Build a merge execution step that reduces the thread_local `tlValue`
+            // into a single merged state, placed before `mergedUsers.front()`, and
+            // redirect each (state-operand) use in `mergedUsers` to the merged result.
+            auto buildMerge = [&](mlir::Value tlValue, std::vector<mlir::Operation*>& mergedUsers, llvm::function_ref<bool(mlir::OpOperand&)> isMergedOperand) {
+               if (mergedUsers.empty()) return;
+               std::sort(mergedUsers.begin(), mergedUsers.end(), [&](mlir::Operation* l, mlir::Operation* r) { return l->isBeforeInBlock(r); });
                builder.setInsertionPoint(mergedUsers.front());
-               auto mergeStep = builder.create<subop::ExecutionStepOp>(loc, mergedType, toThreadLocal.first, builder.getBoolArrayAttr({false}));
+               auto mergeStep = builder.create<subop::ExecutionStepOp>(loc, mergedType, tlValue, builder.getBoolArrayAttr({false}));
                {
                   mlir::OpBuilder::InsertionGuard guard(builder);
                   auto* block = new mlir::Block;
@@ -529,11 +552,88 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                   }
                   builder.create<subop::ExecutionStepReturnOp>(loc, mergeOp.getResult());
                }
-               toThreadLocal.first.replaceUsesWithIf(mergeStep.getResult(0), [&](mlir::OpOperand& op) {
-                  return std::find(mergedUsers.begin(), mergedUsers.end(), op.getOwner()) != mergedUsers.end();
-               });
+               // Redirect only the matching operands of mergedUsers to the merged
+               // result (the new merge step itself keeps consuming tlValue).
+               for (mlir::Operation* u : mergedUsers)
+                  for (auto& op : u->getOpOperands())
+                     if (isMergedOperand(op)) op.set(mergeStep.getResult(0));
+            };
+
+            bool crossBlock = false;
+            for (auto s : toThreadLocal.second.shouldUse) {
+               if (s->getBlock() != producingExecutionStep->getBlock()) { crossBlock = true; break; }
             }
-            producingExecutionStep->getResult(resultIdx).setType(threadLocalType);
+
+            if (!crossBlock) {
+               // ===== In-block create: writers/consumers directly use the state. =====
+               mlir::Operation* lastShouldUse = nullptr;
+               for (auto step : toThreadLocal.second.shouldUse) {
+                  if (!lastShouldUse || lastShouldUse->isBeforeInBlock(step.getOperation())) {
+                     lastShouldUse = step.getOperation();
+                  }
+               }
+               std::vector<mlir::Operation*> mergedUsers;
+               for (auto& use : toThreadLocal.first.getUses()) {
+                  auto usingExecutionStep = mlir::dyn_cast_or_null<subop::ExecutionStepOp>(use.getOwner());
+                  if (usingExecutionStep && toThreadLocal.second.shouldUse.contains(usingExecutionStep)) {
+                     std::vector<mlir::Attribute> attrs(usingExecutionStep.getIsThreadLocal().begin(), usingExecutionStep.getIsThreadLocal().end());
+                     attrs[use.getOperandNumber()] = mlir::BoolAttr::get(&getContext(), true);
+                     usingExecutionStep.setIsThreadLocalAttr(mlir::ArrayAttr::get(&getContext(), attrs));
+                  } else if (lastShouldUse && usingExecutionStep &&
+                             usingExecutionStep.getOperation()->isBeforeInBlock(lastShouldUse)) {
+                     std::vector<mlir::Attribute> attrs(usingExecutionStep.getIsThreadLocal().begin(), usingExecutionStep.getIsThreadLocal().end());
+                     attrs[use.getOperandNumber()] = mlir::BoolAttr::get(&getContext(), true);
+                     usingExecutionStep.setIsThreadLocalAttr(mlir::ArrayAttr::get(&getContext(), attrs));
+                  } else {
+                     mergedUsers.push_back(use.getOwner());
+                  }
+               }
+               buildMerge(toThreadLocal.first, mergedUsers, [&](mlir::OpOperand& op) {
+                  return op.get() == toThreadLocal.first && std::find(mergedUsers.begin(), mergedUsers.end(), op.getOwner()) != mergedUsers.end();
+               });
+               producingExecutionStep->getResult(resultIdx).setType(threadLocalType);
+            } else {
+               // ===== Cross-loop create (hoisted by ReuseLoopScratchPass): writers,
+               // clears and consumers live inside the loop body's nested execution
+               // group, with the state threaded in (possibly at several arg slots).
+               // We set the parallel-writer flags + insert one per-iteration merge,
+               // then thread the thread_local type through every carrier with the
+               // state-usage transformer (which respects the isThreadLocal flags and
+               // naturally handles the duplicated threading edges). =====
+               auto nestedGroup = (*toThreadLocal.second.shouldUse.begin()).getOperation()->getParentOfType<subop::NestedExecutionGroupOp>();
+               if (!nestedGroup) { producingExecutionStep->getResult(resultIdx).setType(threadLocalType); continue; }
+               llvm::SmallVector<mlir::Value> reprs;
+               auto ngArgs = nestedGroup.getSubOps().getArguments();
+               auto ngInputs = nestedGroup.getInputs();
+               for (size_t i = 0; i < ngArgs.size() && i < ngInputs.size(); i++) {
+                  if (resolveToRoot(ngInputs[i]) == toThreadLocal.first) reprs.push_back(ngArgs[i]);
+               }
+               if (reprs.empty()) { producingExecutionStep->getResult(resultIdx).setType(threadLocalType); continue; }
+
+               std::vector<mlir::Operation*> mergedUsers;
+               for (auto R : reprs) {
+                  for (auto& use : R.getUses()) {
+                     auto step = mlir::dyn_cast_or_null<subop::ExecutionStepOp>(use.getOwner());
+                     if (step && isClearStep(step)) {
+                        // keep isThreadLocal=false; transformer retypes arg to thread_local
+                     } else if (step && toThreadLocal.second.shouldUse.contains(step)) {
+                        std::vector<mlir::Attribute> attrs(step.getIsThreadLocal().begin(), step.getIsThreadLocal().end());
+                        attrs[use.getOperandNumber()] = mlir::BoolAttr::get(&getContext(), true);
+                        step.setIsThreadLocalAttr(mlir::ArrayAttr::get(&getContext(), attrs));
+                     } else {
+                        mergedUsers.push_back(use.getOwner());
+                     }
+                  }
+               }
+               llvm::DenseSet<mlir::Value> reprSet(reprs.begin(), reprs.end());
+               buildMerge(reprs[0], mergedUsers, [&](mlir::OpOperand& op) {
+                  return reprSet.contains(op.get()) && std::find(mergedUsers.begin(), mergedUsers.end(), op.getOwner()) != mergedUsers.end();
+               });
+
+               producingExecutionStep->getResult(resultIdx).setType(threadLocalType);
+               subop::SubOpStateUsageTransformer transformer(columnUsageAnalysis, &getContext(), [](mlir::Operation*, mlir::Type t) -> mlir::Type { return t; });
+               transformer.updateValue(toThreadLocal.first, threadLocalType);
+            }
          }
       }
    void runOnOperation() override {

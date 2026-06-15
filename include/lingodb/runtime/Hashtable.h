@@ -30,9 +30,11 @@ class Hashtable {
    uint8_t* lookUpOrInsert(size_t hash, uint8_t* keyVal);
    static Hashtable* create(size_t typeSize, size_t initialCapacity);
    static void destroy(Hashtable*);
+   void clear();
    size_t size();
    void mergeEntries(bool (*isEq)(uint8_t*, uint8_t*), void (*merge)(uint8_t*, uint8_t*), Hashtable* other);
    static runtime::Hashtable* merge(ThreadLocal*, bool (*eq)(uint8_t*, uint8_t*), void (*combine)(uint8_t*, uint8_t*));
+   static void clearThreadLocal(ThreadLocal* threadLocal);
 
    runtime::BufferIterator* createIterator();
 

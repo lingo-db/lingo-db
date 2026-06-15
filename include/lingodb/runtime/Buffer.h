@@ -85,6 +85,22 @@ class FlexibleBuffer {
    const std::vector<Buffer>& getBuffers() {
       return buffers;
    }
+   // Drop all contents but retain a single backing allocation sized to the grown
+   // capacity, so a buffer reused across loop iterations does not re-grow from
+   // scratch and, crucially, does not leak the previous iteration's storage.
+   void clear() {
+      for (auto buf : buffers) {
+         free(buf.ptr);
+      }
+      buffers.clear();
+      // A merge() empties this buffer and leaves currCapacity at 0 (it donated its
+      // chunks to the merge target). When the buffer is reused across loop
+      // iterations we must restore a non-zero capacity, otherwise insert() would
+      // write into a zero-sized allocation.
+      if (currCapacity == 0) currCapacity = 1024;
+      buffers.push_back(Buffer(0, (uint8_t*) malloc(currCapacity * typeSize)));
+      totalLen = 0;
+   }
    BufferIterator* createIterator();
    size_t getTypeSize() const {
       return typeSize;

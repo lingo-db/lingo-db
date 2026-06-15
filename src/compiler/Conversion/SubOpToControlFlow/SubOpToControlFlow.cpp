@@ -1499,6 +1499,35 @@ class CreateBufferLowering : public SubOpConversionPattern<subop::GenericCreateO
    }
 };
 
+class ClearLowering : public SubOpConversionPattern<subop::ClearOp> {
+   public:
+   using SubOpConversionPattern<subop::ClearOp>::SubOpConversionPattern;
+   LogicalResult matchAndRewrite(subop::ClearOp clearOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
+      auto loc = clearOp->getLoc();
+      auto stateType = clearOp.getState().getType();
+      mlir::Value state = adaptor.getState();
+      if (auto tl = mlir::dyn_cast_or_null<subop::ThreadLocalType>(stateType)) {
+         auto wrapped = tl.getWrapped();
+         if (mlir::isa<subop::BufferType>(wrapped)) {
+            rt::GrowingBuffer::clearThreadLocal(rewriter, loc)({state});
+         } else if (mlir::isa<subop::HashMapType>(wrapped)) {
+            rt::Hashtable::clearThreadLocal(rewriter, loc)({state});
+         } else {
+            return mlir::failure();
+         }
+      } else if (mlir::isa<subop::BufferType>(stateType)) {
+         rt::GrowingBuffer::clear(rewriter, loc)({state});
+      } else if (mlir::isa<subop::HashMapType>(stateType)) {
+         rt::Hashtable::clear(rewriter, loc)({state});
+      } else if (mlir::isa<subop::HashMultiMapType>(stateType)) {
+         rt::HashMultiMap::clear(rewriter, loc)({state});
+      } else {
+         return mlir::failure();
+      }
+      rewriter.eraseOp(clearOp);
+      return mlir::success();
+   }
+};
 void implementBufferIterationRuntime(bool parallel, mlir::Value bufferIterator, mlir::Type entryType, mlir::Location loc, SubOpRewriter& rewriter, mlir::TypeConverter& typeConverter, mlir::Operation* op, std::function<void(SubOpRewriter& rewriter, mlir::Value)> fn) {
    auto* ctxt = rewriter.getContext();
    ModuleOp parentModule = bufferIterator.getDefiningOp()->getParentOfType<ModuleOp>();
@@ -4414,6 +4443,7 @@ PatternList getCPUPatternList(TypeConverter& typeConverter, mlir::MLIRContext* c
    patterns.insertPattern<ScanRefsTableLowering>(typeConverter, ctxt);
    patterns.insertPattern<ScanRefsLocalTableLowering>(typeConverter, ctxt);
    patterns.insertPattern<TableRefGatherOpLowering>(typeConverter, ctxt);
+   patterns.insertPattern<ClearLowering>(typeConverter, ctxt);
    //Buffer
    patterns.insertPattern<CreateBufferLowering>(typeConverter, ctxt);
    patterns.insertPattern<ScanRefsVectorLowering>(typeConverter, ctxt);

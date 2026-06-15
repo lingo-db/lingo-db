@@ -496,7 +496,7 @@ def CreateThreadLocalOp : SubOperator_Op<"create_thread_local", [Pure]> {
     let regions = (region AnyRegion:$initFn);
     let assemblyFormat = [{ type($res) (`initial` `:` $initFn^)? attr-dict }];
 }
-def MergeOp : SubOperator_Op<"merge", [Pure,SubOperator]> {
+def MergeOp : SubOperator_Op<"merge", [Pure,SubOperator,DeclareOpInterfaceMethods<StateUsingSubOperator>]> {
   let summary = "merge thread_local ";
   let arguments = (ins ThreadLocal: $threadLocal);
   let results = (outs AnyType : $res);
@@ -507,6 +507,16 @@ def MergeOp : SubOperator_Op<"merge", [Pure,SubOperator]> {
   let regions = (region AnyRegion:$combineFn,AnyRegion:$eqFn);
   let assemblyFormat = [{ type($res)  attr-dict }];
   let assemblyFormat = [{ $threadLocal `:` type($threadLocal) `->` type($res) (`combine` `:` $combineFn^)? (`eq` `:` $eqFn^)? attr-dict }];
+}
+def ClearOp : SubOperator_Op<"clear", [SubOperator,DeclareOpInterfaceMethods<StateUsingSubOperator>]> {
+  let summary = "reset a state in-place, dropping its contents but retaining its allocation";
+  let arguments = (ins AnyType: $state);
+  let extraClassDeclaration = [{
+    llvm::SmallVector<Member> getWrittenMembers();
+    llvm::SmallVector<Member> getReadMembers();
+    mlir::Operation* cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, lingodb::compiler::dialect::subop::ColumnMapping& columnMapping);
+  }];
+  let assemblyFormat = [{ $state `:` type($state) attr-dict }];
 }
 def LockOp : SubOperator_Op<"lock", [SubOperator,DeclareOpInterfaceMethods<StateUsingSubOperator>]> {
   let summary = "merge thread_local ";

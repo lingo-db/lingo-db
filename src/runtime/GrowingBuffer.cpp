@@ -96,6 +96,14 @@ lingodb::runtime::Buffer lingodb::runtime::GrowingBuffer::asContinuous() {
 void lingodb::runtime::GrowingBuffer::destroy(GrowingBuffer* vec) {
    delete vec;
 }
+void lingodb::runtime::GrowingBuffer::clear() {
+   values.clear();
+}
+void lingodb::runtime::GrowingBuffer::clearThreadLocal(lingodb::runtime::ThreadLocal* threadLocal) {
+   for (auto* current : threadLocal->getThreadLocalValues<GrowingBuffer>()) {
+      if (current) current->clear();
+   }
+}
 
 lingodb::runtime::GrowingBuffer* lingodb::runtime::GrowingBuffer::merge(lingodb::runtime::ThreadLocal* threadLocal) {
    utility::Tracer::Trace trace(mergeEvent);

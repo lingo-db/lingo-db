@@ -9,6 +9,11 @@ lingodb::runtime::HashMultiMap* lingodb::runtime::HashMultiMap::create(size_t en
 void lingodb::runtime::HashMultiMap::destroy(HashMultiMap* hashMultiMap) {
    delete hashMultiMap;
 }
+void lingodb::runtime::HashMultiMap::clear() {
+   runtime::MemoryHelper::zero((uint8_t*) ht.ptr, (hashMask + 1) * sizeof(Entry*));
+   entries.clear();
+   values.clear();
+}
 lingodb::runtime::HashMultiMap::Entry* lingodb::runtime::HashMultiMap::insertEntry(size_t hash) {
    if (entries.getLen() > hashMask / 2) {
       resize();

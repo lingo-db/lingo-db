@@ -1232,6 +1232,39 @@ llvm::SmallVector<subop::Member> subop::CreateHashIndexedView::getWrittenMembers
 llvm::SmallVector<subop::Member> subop::CreateHashIndexedView::getReadMembers() {
    return llvm::SmallVector<Member>{getHashMember().getMember()};
 }
+static llvm::SmallVector<subop::Member> getStateOrThreadLocalMembers(mlir::Type t) {
+   if (auto tl = mlir::dyn_cast_or_null<subop::ThreadLocalType>(t)) {
+      return tl.getWrapped().getMembers().getMembers();
+   }
+   if (auto state = mlir::dyn_cast_or_null<subop::State>(t)) {
+      return state.getMembers().getMembers();
+   }
+   return {};
+}
+llvm::SmallVector<subop::Member> subop::ClearOp::getReadMembers() {
+   return getStateOrThreadLocalMembers(getState().getType());
+}
+llvm::SmallVector<subop::Member> subop::ClearOp::getWrittenMembers() {
+   return getStateOrThreadLocalMembers(getState().getType());
+}
+mlir::Operation* subop::ClearOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, subop::ColumnMapping& columnMapping) {
+   auto newOp = builder.create<ClearOp>(this->getLoc(), mapping.lookupOrDefault(getState()));
+   mapResults(mapping, this->getOperation(), newOp.getOperation());
+   return newOp;
+}
+void subop::ClearOp::replaceColumns(subop::SubOpStateUsageTransformer& transformer, tuples::Column* oldColumn, tuples::Column* newColumn) {
+   // clear references no columns
+}
+void subop::ClearOp::updateStateType(subop::SubOpStateUsageTransformer& transformer, mlir::Value state, mlir::Type newType) {
+   // operand type is updated by the transformer directly; nothing else to adjust
+}
+void subop::MergeOp::updateStateType(subop::SubOpStateUsageTransformer& transformer, mlir::Value state, mlir::Type newType) {
+   // The merged result type is fixed; merge just consumes the thread_local input
+   // whose type is updated in place. Nothing else to adjust.
+}
+void subop::MergeOp::replaceColumns(subop::SubOpStateUsageTransformer& transformer, tuples::Column* oldColumn, tuples::Column* newColumn) {
+   // merge references no columns
+}
 llvm::SmallVector<subop::Member> subop::MergeOp::getReadMembers() {
    return getThreadLocal().getType().getWrapped().getMembers().getMembers();
 }
