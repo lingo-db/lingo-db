@@ -462,6 +462,8 @@ double QueryGraph::estimateSelectivity(Operator op, NodeSet left, NodeSet right)
       if (predicate.left.isSubsetOf(predicatesLeft) && predicate.right.isSubsetOf(predicatesRight)) {
          if (predicate.isEq) {
             selectivity *= 0.1;
+         }else if (predicate.isNeq) {
+            selectivity *= 0.75;
          } else {
             selectivity *= 0.25;
          }
