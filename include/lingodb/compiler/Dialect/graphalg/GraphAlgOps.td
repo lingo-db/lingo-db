@@ -911,4 +911,31 @@ def DeferredReduceOp : Core_Op<"deferred_reduce", [
     let hasVerifier = 1;
 }
 
+def DeltaOp : Core_Op<"delta", [
+        Pure,
+        SameOperandsAndResultType,
+        SameOperandsAndResultSemiring]> {
+    let summary = "Cells of `candidate` that improve on `reference`";
+
+    let description = [{
+        Returns the subset of cells of `candidate` that strictly improve on the
+        corresponding cell of `reference` under the semiring's additive order. A
+        cell improves if it is absent in `reference`, or if its value `v` and the
+        reference value `r` satisfy `r (+) v != r` (i.e. adding the candidate
+        changes the reference). The retained values are taken from `candidate`.
+
+        This is the change set between two successive iterates and is the core
+        primitive of semi-naive (delta) iteration: combining `reference` with the
+        delta reproduces the next iterate, and an empty delta signals a fixpoint.
+    }];
+
+    let arguments = (ins Matrix:$candidate, Matrix:$reference);
+
+    let results = (outs Matrix:$result);
+
+    let assemblyFormat = [{
+        $candidate `,` $reference `:` type($candidate) `,` type($reference) `->` type($result) attr-dict
+    }];
+}
+
 #endif // GRAPHALG_GRAPH_ALG_OPS

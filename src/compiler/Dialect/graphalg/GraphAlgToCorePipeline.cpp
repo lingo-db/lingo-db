@@ -13,6 +13,10 @@ void buildGraphAlgToCorePipeline(mlir::OpPassManager& pm) {
    pm.addNestedPass<mlir::func::FuncOp>(createGraphAlgSplitAggregate());
    pm.addNestedPass<mlir::func::FuncOp>(createGraphAlgToCore());
    pm.addPass(mlir::createCanonicalizerPass());
+   // Rewrite eligible fixpoint loops (WCC/SSSP-style) into semi-naive form so
+   // each iteration propagates only the changed delta instead of the full state.
+   pm.addNestedPass<mlir::func::FuncOp>(createGraphAlgSemiNaive());
+   pm.addPass(mlir::createCanonicalizerPass());
 }
 void createGraphAlgToGraphAlgCorePipeline() {
    mlir::PassPipelineRegistration<mlir::EmptyPipelineOptions>(

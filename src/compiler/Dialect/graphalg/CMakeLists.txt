@@ -14,6 +14,7 @@ add_mlir_dialect_library(MLIRGraphAlg
         GraphAlgLoopAggregate.cpp
         GraphAlgPrepareInlinePass.cpp
         GraphAlgScalarizeApply.cpp
+        GraphAlgSemiNaive.cpp
         GraphAlgSetDimensions.cpp
         GraphAlgSplitAggregate.cpp
         GraphAlgToCore.cpp

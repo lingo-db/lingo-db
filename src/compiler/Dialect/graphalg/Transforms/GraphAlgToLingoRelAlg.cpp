@@ -388,35 +388,35 @@ static void resolveDimensionsGlobally(ModuleOp module, ConversionState& state) {
 
       if (!unionRel) continue;
 
-      auto maxDef = createColumnDef(ctx, AttributeGenerator::nextName("dim_max"), rewriter.getI64Type());
-      auto maxRef = createColumnRef(maxDef);
-      auto aggMax = rewriter.create<relalg::AggregationOp>(loc, tuples::TupleStreamType::get(ctx), unionRel, ArrayAttr::get(ctx, {}), ArrayAttr::get(ctx, {maxDef}));
-      {
-         OpBuilder::InsertionGuard guard(rewriter);
-         Block* cntBlock = rewriter.createBlock(&aggMax.getAggrFunc());
-         Value groupStream = cntBlock->addArgument(tuples::TupleStreamType::get(ctx), loc);
-         rewriter.setInsertionPointToEnd(cntBlock);
-         Value mVal = rewriter.create<relalg::AggrFuncOp>(loc, rewriter.getI64Type(), relalg::AggrFuncAttr::get(ctx, relalg::AggrFunc::max), groupStream, domainRef);
-         rewriter.create<tuples::ReturnOp>(loc, ValueRange{mVal});
-      }
+      // Deduplicate the node domain. The union above only runs (and only dedups)
+      // for multi-source dimensions; a single edge-endpoint column arrives with
+      // one row per edge, so project distinct unconditionally to obtain the set
+      // of distinct nodes.
+      Value domainRel = rewriter.create<relalg::ProjectionOp>(
+                                    loc, tuples::TupleStreamType::get(ctx), relalg::SetSemantic::distinct,
+                                    unionRel, ArrayAttr::get(ctx, {domainRef}))
+                           .getResult();
 
+      // Dimension size = number of distinct nodes (|V|), computed as COUNT over the
+      // distinct domain rather than max(id)+1. For a dense 0-based id space the two
+      // agree, but for 1-based or otherwise sparse ids max+1 over-counts by including
+      // unused index slots ("phantom" nodes with no edges). Those phantom nodes skew
+      // every per-node normalization that divides by |V| (e.g. PageRank's 1/|V| and
+      // dangling-mass redistribution), scaling all results by |V|/(max+1).
       auto countDef = createColumnDef(ctx, AttributeGenerator::nextName("dim_size"), rewriter.getI64Type());
       auto countRef = createColumnRef(countDef);
-      auto mapOp = rewriter.create<relalg::MapOp>(loc, aggMax.getResult());
-      mapOp.setComputedColsAttr(ArrayAttr::get(ctx, {countDef}));
+      auto aggCount = rewriter.create<relalg::AggregationOp>(loc, tuples::TupleStreamType::get(ctx), domainRel, ArrayAttr::get(ctx, {}), ArrayAttr::get(ctx, {countDef}));
       {
          OpBuilder::InsertionGuard guard(rewriter);
-         Block* mapBlock = rewriter.createBlock(&mapOp.getPredicate());
-         auto tupleArg = mapBlock->addArgument(tuples::TupleType::get(ctx), loc);
-         rewriter.setInsertionPointToEnd(mapBlock);
-         Value maxVal = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), maxRef, tupleArg);
-         Value one = rewriter.create<arith::ConstantOp>(loc, rewriter.getI64IntegerAttr(1));
-         Value dimSize = rewriter.create<arith::AddIOp>(loc, maxVal, one);
-         rewriter.create<tuples::ReturnOp>(loc, ValueRange{dimSize});
+         Block* cntBlock = rewriter.createBlock(&aggCount.getAggrFunc());
+         Value groupStream = cntBlock->addArgument(tuples::TupleStreamType::get(ctx), loc);
+         rewriter.setInsertionPointToEnd(cntBlock);
+         Value cVal = rewriter.create<relalg::AggrFuncOp>(loc, rewriter.getI64Type(), relalg::AggrFuncAttr::get(ctx, relalg::AggrFunc::count), groupStream, domainRef);
+         rewriter.create<tuples::ReturnOp>(loc, ValueRange{cVal});
       }
-      state.globalDimSizes[dimAttr] = {mapOp.getResult(), countRef};
+      state.globalDimSizes[dimAttr] = {aggCount.getResult(), countRef};
 
-      state.globalDomains[dimAttr] = {unionRel, domainRef};
+      state.globalDomains[dimAttr] = {domainRel, domainRef};
    }
 }
 static DimBound getDimBound(Location loc, DimAttr dim, ConversionPatternRewriter& rewriter, ConversionState& state, Operation* contextOp) {
@@ -1480,6 +1480,95 @@ class MaskOpConversion : public StatefulConversion<MaskOp> {
    }
 };
 
+// delta(candidate, reference) -> the candidate cells that improve on reference.
+// Lowered to an anti-semi-join: keep a candidate row iff no reference row
+// "dominates" it (same index and at-least-as-good value). A candidate whose
+// index is absent in the reference, or whose value strictly improves on the
+// reference value, therefore survives.
+class DeltaOpConversion : public StatefulConversion<DeltaOp> {
+   public:
+   using StatefulConversion::StatefulConversion;
+
+   LogicalResult matchAndRewrite(DeltaOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op.getLoc();
+      auto* ctx = rewriter.getContext();
+
+      Value candRel = adaptor.getCandidate();
+      Value refRel = adaptor.getReference();
+      MatrixMeta candMeta = state.get(op.getCandidate(), ctx);
+      MatrixMeta refMeta = state.get(op.getReference(), ctx);
+
+      Type sring = candMeta.semiring;
+      Type valType = GraphAlgTypeConverter::convertSemiringType(sring);
+
+      // Rename the reference columns so the predicate can name both sides
+      // unambiguously even if the two operands share column identities.
+      SmallVector<Attribute> renameDefs;
+      MatrixMeta ref = refMeta;
+      auto renameCol = [&](tuples::ColumnRefAttr src, Type t, StringRef nm,
+                           tuples::ColumnDefAttr& outDef, tuples::ColumnRefAttr& outRef) {
+         if (!src) return;
+         auto def = createColumnDef(ctx, AttributeGenerator::nextName(nm.str()), t);
+         renameDefs.push_back(tuples::ColumnDefAttr::get(ctx, def.getName(), def.getColumnPtr(), ArrayAttr::get(ctx, {src})));
+         outDef = def;
+         outRef = createColumnRef(def);
+      };
+      renameCol(refMeta.row, rewriter.getI64Type(), "delta_ref_row", ref.rowDef, ref.row);
+      renameCol(refMeta.col, rewriter.getI64Type(), "delta_ref_col", ref.colDef, ref.col);
+      renameCol(refMeta.val, valType, "delta_ref_val", ref.valDef, ref.val);
+      if (!renameDefs.empty())
+         refRel = rewriter.create<relalg::RenamingOp>(loc, tuples::TupleStreamType::get(ctx), refRel, ArrayAttr::get(ctx, renameDefs)).getResult();
+
+      auto joinOp = rewriter.create<relalg::AntiSemiJoinOp>(loc, candRel, refRel);
+      {
+         OpBuilder::InsertionGuard guard(rewriter);
+         Block* blk = new Block;
+         joinOp.getPredicate().push_back(blk);
+         auto tuple = blk->addArgument(tuples::TupleType::get(ctx), loc);
+         rewriter.setInsertionPointToEnd(blk);
+
+         Value pred;
+         auto conjoin = [&](Value c) {
+            pred = pred ? rewriter.create<arith::AndIOp>(loc, pred, c).getResult() : c;
+         };
+         auto eqIndex = [&](tuples::ColumnRefAttr a, tuples::ColumnRefAttr b) {
+            if (!a || !b) return;
+            Value va = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), a, tuple);
+            Value vb = rewriter.create<tuples::GetColumnOp>(loc, rewriter.getI64Type(), b, tuple);
+            conjoin(rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, va, vb));
+         };
+         eqIndex(candMeta.row, ref.row);
+         eqIndex(candMeta.col, ref.col);
+
+         // dominates: the reference value is at least as good as the candidate's,
+         // so the candidate contributes nothing new at this cell.
+         Value cv = rewriter.create<tuples::GetColumnOp>(loc, valType, candMeta.val, tuple);
+         Value rv = rewriter.create<tuples::GetColumnOp>(loc, valType, ref.val, tuple);
+         Value dominates;
+         if (isBool(sring) || valType.isInteger(1)) {
+            dominates = rv; // a present (true) reference cell dominates
+         } else if (isTropicalNonMax(sring)) {
+            dominates = valType.isF64()
+               ? rewriter.create<arith::CmpFOp>(loc, arith::CmpFPredicate::OLE, rv, cv).getResult()
+               : rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::sle, rv, cv).getResult();
+         } else if (isTropicalMax(sring)) {
+            dominates = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::sge, rv, cv).getResult();
+         } else {
+            return op.emitOpError("delta requires an idempotent semiring");
+         }
+         conjoin(dominates);
+
+         if (!pred)
+            pred = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
+         rewriter.create<tuples::ReturnOp>(loc, ValueRange{pred});
+      }
+
+      state.set(op.getResult(), candMeta);
+      rewriter.replaceOp(op, joinOp.getResult());
+      return success();
+   }
+};
+
 class BroadcastOpConversion : public StatefulConversion<BroadcastOp> {
    public:
    using StatefulConversion::StatefulConversion;
@@ -1902,8 +1991,25 @@ class ConstantOpConversion : public OpConversionPattern<ConstantOp> {
    public:
    using OpConversionPattern::OpConversionPattern;
    LogicalResult matchAndRewrite(ConstantOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto* ctx = op.getContext();
       auto type = GraphAlgTypeConverter::convertSemiringType(op.getType());
       Attribute rawVal = op.getValue();
+
+      // The additive identity of a tropical semiring is infinity; materialize it
+      // as the concrete sentinel the rest of the pipeline uses.
+      if (llvm::isa<TropInfAttr>(rawVal)) {
+         Type sring = op.getType();
+         TypedAttr infAttr;
+         if (sring == SemiringTypes::forTropMaxInt(ctx))
+            infAttr = rewriter.getI64IntegerAttr(std::numeric_limits<int64_t>::min());
+         else if (sring == SemiringTypes::forTropInt(ctx))
+            infAttr = rewriter.getI64IntegerAttr(std::numeric_limits<int64_t>::max());
+         else
+            infAttr = rewriter.getFloatAttr(rewriter.getF64Type(), std::numeric_limits<double>::infinity());
+         rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, infAttr);
+         return success();
+      }
+
       if (auto tropInt = llvm::dyn_cast<TropIntAttr>(rawVal)) rawVal = tropInt.getValue();
       if (auto tropF = llvm::dyn_cast<TropFloatAttr>(rawVal)) rawVal = tropF.getValue();
 
@@ -2898,6 +3004,7 @@ void GraphAlgToRelAlgPass::runOnOperation() {
       BroadcastOpConversion,
       TrilOpConversion,
       MaskOpConversion,
+      DeltaOpConversion,
       UnionOpConversion,
       PickAnyOpConversion,
       CastDimOpConversion>(typeConverter, context, state);

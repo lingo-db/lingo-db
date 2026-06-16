@@ -38,6 +38,21 @@ def GraphAlgLoopAggregate : Pass<"graphalg-loop-aggregate", "mlir::func::FuncOp"
     let summary = "Optimizes passing aggregates across loop iterations";
 }
 
+def GraphAlgSemiNaive : Pass<"graphalg-semi-naive", "mlir::func::FuncOp"> {
+    let summary = "Tags fixpoint loops eligible for semi-naive (delta) iteration";
+    let description = [{
+        Identifies `for_dim` loops whose body is a monotone, linear fixpoint
+        `M_next = M (+) g(M)` over an idempotent semiring, where `g` is linear
+        (distributes over the semiring addition). Such loops can be evaluated
+        incrementally: only the changed entries (delta) of `M` need to be
+        propagated each iteration instead of the whole state.
+
+        This stage only performs the eligibility analysis and annotates the loop
+        with a `graphalg.semi_naive` unit attribute; the delta rewrite that
+        consumes the annotation is a separate stage.
+    }];
+}
+
 def GraphAlgVerifyDimensions : Pass<"graphalg-verify-dimensions", "mlir::func::FuncOp"> {
     let summary = "Verifies that ops only use abstract dimensions defined in the function parameters";
 }

@@ -1,3 +1,4 @@
+// The to-core pipeline rewrites this loop into semi-naive (delta) form.
 // RUN: mlir-db-opt %s --lower-graphalg-to-graphalg-core --lower-graphalg-core-to-relalg > %t.mlir
 // RUN: run-mlir %t.mlir | FileCheck %s
 
