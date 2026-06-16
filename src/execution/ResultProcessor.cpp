@@ -1,9 +1,12 @@
+#include <cctype>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
 
+#include <arrow/array.h>
 #include <arrow/csv/options.h>
 #include <arrow/csv/writer.h>
 #include <arrow/ipc/writer.h>
@@ -199,9 +202,46 @@ void writeTableToCSV(const std::shared_ptr<arrow::Table>& table, std::ostream& o
    }
 
    for (auto c : table->columns()) {
-      convertHex.push_back(table->schema()->field(positions.size())->type()->id() == arrow::Type::FIXED_SIZE_BINARY);
+      auto typeId = table->schema()->field(positions.size())->type()->id();
+      convertHex.push_back(typeId == arrow::Type::FIXED_SIZE_BINARY);
       std::string str;
-      (void) arrow::PrettyPrint(*c.get(), options, &str);
+      if (typeId == arrow::Type::DOUBLE || typeId == arrow::Type::FLOAT) {
+         // Emit floating-point values in scientific notation (e.g. 7.278133305959326e-06)
+         // instead of arrow::PrettyPrint's fixed-point form, to match the reference CSV.
+         // We reuse PrettyPrint's exact line framing (brackets, commas, indentation and
+         // any windowing/truncation) and only reformat the numeric token on each value
+         // line, so the per-column line parser below stays perfectly aligned with the
+         // other columns of the same table.
+         std::string raw;
+         (void) arrow::PrettyPrint(*c.get(), options, &raw);
+         std::ostringstream ss;
+         std::istringstream in(raw);
+         std::string line;
+         bool firstLine = true;
+         while (std::getline(in, line)) {
+            if (!firstLine) ss << "\n";
+            firstLine = false;
+            size_t start = line.find_first_of("-0123456789");
+            if (start == std::string::npos) {
+               ss << line; // bracket / ellipsis / "null" line: keep verbatim
+               continue;
+            }
+            size_t end = start;
+            while (end < line.size() &&
+                   (std::isdigit(static_cast<unsigned char>(line[end])) ||
+                    line[end] == '.' || line[end] == 'e' || line[end] == 'E' ||
+                    line[end] == '+' || line[end] == '-')) {
+               end++;
+            }
+            double v = std::strtod(line.substr(start, end - start).c_str(), nullptr);
+            std::ostringstream num;
+            num << std::scientific << std::setprecision(15) << v;
+            ss << line.substr(0, start) << num.str() << line.substr(end);
+         }
+         str = ss.str();
+      } else {
+         (void) arrow::PrettyPrint(*c.get(), options, &str);
+      }
       columnReps.push_back(str);
       positions.push_back(0);
    }
