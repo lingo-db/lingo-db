@@ -12,6 +12,9 @@ namespace lingodb::runtime {
 /*
  * Buffer: continuous memory area, which is directly accessed by generated code
  */
+// Element count below which a parallel scan runs inline instead of spawning a
+// morsel task (avoids worker wakeup/sync overhead on tiny working sets).
+size_t getParallelScanThreshold();
 struct BufferIterator;
 struct Buffer {
    union {

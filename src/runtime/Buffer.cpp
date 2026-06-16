@@ -1,6 +1,7 @@
 #include "lingodb/runtime/Buffer.h"
 #include "lingodb/scheduler/Tasks.h"
 #include "lingodb/utility/Tracer.h"
+#include <cstdlib>
 #include <iostream>
 #include <mutex>
 #include <shared_mutex>
@@ -189,7 +190,29 @@ lingodb::runtime::Buffer lingodb::runtime::BufferIterator::iteratorGetCurrentBuf
 void lingodb::runtime::BufferIterator::destroy(lingodb::runtime::BufferIterator* iterator) {
    delete iterator;
 }
+// Below this many elements a parallel scan is run inline on the calling worker
+// instead of spawning a task. Dispatching a morsel task wakes every worker, has
+// them contend for a handful of 200-element morsels, then sleep again; for the
+// tiny per-iteration working sets of graph algorithms that wakeup/sync overhead
+// dwarfs the actual work. Running inline also means only one thread-local state
+// is populated, so the subsequent merge step is free. Tunable via env var.
+size_t lingodb::runtime::getParallelScanThreshold() {
+   static size_t threshold = [] {
+      if (const char* e = std::getenv("LINGODB_PARALLEL_THRESHOLD")) {
+         return static_cast<size_t>(std::strtoull(e, nullptr, 10));
+      }
+      return static_cast<size_t>(400);
+   }();
+   return threshold;
+}
+
 void lingodb::runtime::FlexibleBuffer::iterateBuffersParallel(const std::function<void(Buffer)>& fn) {
+   if (totalLen < getParallelScanThreshold()) {
+      for (auto& buffer : buffers) {
+         fn(buffer);
+      }
+      return;
+   }
    lingodb::scheduler::awaitChildTask(std::make_unique<FlexibleBufferIteratorTask>(buffers, typeSize, fn));
 }
 class FlexibleBufferIterator : public lingodb::runtime::BufferIterator {
@@ -241,7 +264,7 @@ void lingodb::runtime::BufferIterator::iterate(lingodb::runtime::BufferIterator*
 
 void lingodb::runtime::Buffer::iterate(bool parallel, lingodb::runtime::Buffer buffer, size_t typeSize, void (*forEachChunk)(lingodb::runtime::Buffer, size_t, size_t, void*), void* contextPtr) {
    utility::Tracer::Trace trace(bufferScan);
-   if (parallel) {
+   if (parallel && buffer.numElements / typeSize >= getParallelScanThreshold()) {
       lingodb::scheduler::awaitChildTask(std::make_unique<BufferIteratorTask>(buffer, typeSize, contextPtr, forEachChunk));
    } else {
       lingodb::utility::Tracer::Trace trace2(bufferChunk);
