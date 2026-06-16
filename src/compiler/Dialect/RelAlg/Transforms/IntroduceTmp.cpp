@@ -103,8 +103,26 @@ class IntroduceTmp : public mlir::PassWrapper<IntroduceTmp, mlir::OperationPass<
             }
          }
 
-         // STEP 2: Handle remaining static multiple uses via standard relalg.tmp
+         // STEP 2: Handle remaining static multiple uses.
          if (!op->hasOneUse() && !op->use_empty()) {
+            // Fast path: a buffer_scan is just a re-scan of an already
+            // materialized buffer. Duplicating the scan per consumer is free
+            // (no allocation), whereas relalg.tmp would copy the scanned data
+            // into a fresh spool buffer and add a pipeline barrier. Lowering
+            // already emits scans with identical column defs (see TmpLowering),
+            // so cloning here is safe; IntroduceTmp is the last relalg pass
+            // before to-subop, so the clones go straight to BufferScanLowering.
+            if (mlir::isa<relalg::BufferScanOp>(op.getOperation())) {
+               mlir::OpBuilder builder(&getContext());
+               for (auto& use : llvm::make_early_inc_range(op->getUses())) {
+                  builder.setInsertionPoint(use.getOwner());
+                  mlir::Operation* clone = builder.clone(*op.getOperation());
+                  use.set(clone->getResult(0));
+               }
+               op->erase();
+               return;
+            }
+
             mlir::OpBuilder builder(&getContext());
             builder.setInsertionPointAfter(op.getOperation());
 
