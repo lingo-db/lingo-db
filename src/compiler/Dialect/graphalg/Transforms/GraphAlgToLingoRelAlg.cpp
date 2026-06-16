@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <limits>
@@ -129,6 +130,41 @@ struct MatrixMeta {
    bool hasRow() const { return row != nullptr; }
    bool hasCol() const { return col != nullptr; }
 };
+
+// Cardinality estimate (in tuples) for a relalg.buffer_scan over a materialized
+// matrix/vector state. Graph dimensions are usually abstract (symbolic node
+// counts), so a concrete size is unavailable at compile time. Every loop-carried
+// state scan used to be hardcoded to 100 rows, which made the join optimizer
+// treat the changing state as trivially small next to a real, catalog-sized edge
+// table and build the entire edge set. Instead derive the estimate from the
+// matrix shape: abstract dims assume a large graph, and a 2-D (matrix) operand is
+// scaled by an assumed average degree to approximate nnz (capped by the dense
+// rows*cols), keeping it comparable to the adjacency it joins against.
+static constexpr double kAssumedNodes = 1e6;      // assumed |V| for abstract dims
+static constexpr double kAssumedAvgDegree = 16.0; // assumed nnz per row for matrices
+
+static double estimateDimSize(DimAttr d) {
+   if (d && d.isConcrete()) return static_cast<double>(d.getConcreteDim());
+   return kAssumedNodes;
+}
+
+// `loopInvariant` distinguishes a captured operand (the static adjacency / edge
+// matrix, re-scanned each iteration) from a loop-carried state (the evolving
+// frontier / result). Only the former gets the nnz bump, guaranteeing the edge
+// table is always estimated larger than the frontier it joins against.
+static double estimateScanRows(const MatrixMeta& meta, bool loopInvariant) {
+   bool hasRowDim = meta.rowDim && !meta.rowDim.isOne();
+   bool hasColDim = meta.colDim && !meta.colDim.isOne();
+   double rows = hasRowDim ? estimateDimSize(meta.rowDim) : 1.0;
+   double cols = hasColDim ? estimateDimSize(meta.colDim) : 1.0;
+   double base = std::max({rows, cols, 1.0});
+   if (loopInvariant && hasRowDim && hasColDim) {
+      // Adjacency/edge matrix: approximate nnz (capped by dense rows*cols).
+      return std::min(base * kAssumedAvgDegree, rows * cols);
+   }
+   // Loop-carried state / frontier / vectors: bounded by |V|.
+   return base;
+}
 
 struct DimBound {
    Value scalarBound;
@@ -947,7 +983,7 @@ static Value emitStateScan(OpBuilder& rewriter, Location loc, subop::MemberManag
    if (meta.hasCol()) add(meta.col, meta.colDef);
    add(meta.val, meta.valDef);
    auto scan = rewriter.create<relalg::BufferScanOp>(loc, tuples::TupleStreamType::get(ctx), state, rewriter.getArrayAttr(cols), rewriter.getArrayAttr(mapping));
-   scan->setAttr("rows", rewriter.getF64FloatAttr(100.0));
+   scan->setAttr("rows", rewriter.getF64FloatAttr(estimateScanRows(meta, false)));
    return scan.getResult();
 }
 
@@ -977,7 +1013,7 @@ static Value stageThroughBuffer(OpBuilder& rewriter, Location loc, subop::Member
    Value buf = rewriter.create<subop::GenericCreateOp>(loc, bufType);
    rewriter.create<subop::MaterializeOp>(loc, stream, buf, subop::ColumnRefMemberMappingAttr::get(ctx, matMap));
    auto scan = rewriter.create<relalg::BufferScanOp>(loc, tuples::TupleStreamType::get(ctx), buf, rewriter.getArrayAttr(scanCols), rewriter.getArrayAttr(scanNames));
-   scan->setAttr("rows", rewriter.getF64FloatAttr(100.0));
+   scan->setAttr("rows", rewriter.getF64FloatAttr(estimateScanRows(meta, false)));
    return scan.getResult();
 }
 
@@ -2258,7 +2294,7 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
          bufferState,
          rewriter.getArrayAttr(scanComputedCols),
          rewriter.getArrayAttr(scanColumnMapping));
-      scanOp->setAttr("rows", rewriter.getF64FloatAttr(100.0));
+      scanOp->setAttr("rows", rewriter.getF64FloatAttr(estimateScanRows(loopMeta, /*loopInvariant=*/true)));
 
       Value scanStream = scanOp.getResult();
       state.set(scanStream, loopMeta);
@@ -2361,7 +2397,7 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
          loopState,
          rewriter.getArrayAttr(scanComputedCols),
          rewriter.getArrayAttr(scanColumnMapping));
-      scanOp->setAttr("rows", rewriter.getF64FloatAttr(100.0));
+      scanOp->setAttr("rows", rewriter.getF64FloatAttr(estimateScanRows(loopMeta, false)));
 
       Value scanStream = scanOp.getResult();
       state.set(scanStream, loopMeta);
@@ -2443,7 +2479,7 @@ static LogicalResult convertLoop(Operation* op, ValueRange origInitArgs, ValueRa
          finalState,
          rewriter.getArrayAttr(scanComputedCols),
          rewriter.getArrayAttr(scanColumnMapping));
-      scanOp->setAttr("rows", rewriter.getF64FloatAttr(100.0));
+      scanOp->setAttr("rows", rewriter.getF64FloatAttr(estimateScanRows(finalMeta, false)));
 
       Value finalStream = scanOp.getResult();
       state.set(finalStream, finalMeta);
