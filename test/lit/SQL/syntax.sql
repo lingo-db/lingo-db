@@ -25,7 +25,7 @@ select 3*2;
 --//CHECK: %{{.*}} = db.div %{{.*}} : i32, %{{.*}} : i32
 select 3/2;
 --//CHECK: module
---//CHECK: %{{.*}} = db.div %{{.*}} : !db.decimal<1, 0>, %{{.*}} : !db.decimal<19, 0>
+--//CHECK: %{{.*}} = db.div %{{.*}} : !db.decimal<1, 0>, %{{.*}} : !db.decimal<10, 0>
 select 3::decimal(1,0)/2;
 --//CHECK: module
 --//CHECK: %{{.*}} = db.mod %{{.*}} : i32, %{{.*}} : i32

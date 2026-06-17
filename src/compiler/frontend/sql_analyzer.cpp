@@ -3126,10 +3126,25 @@ std::vector<NullableType> SQLTypeUtils::toCommonNumber(std::vector<NullableType>
    auto anyDecimal = llvm::any_of(types, [](NullableType type) { return type.type.getTypeId() == catalog::LogicalTypeId::DECIMAL; });
    auto anyFloat = llvm::any_of(types, [](NullableType type) { return type.type.getTypeId() == catalog::LogicalTypeId::FLOAT || type.type.getTypeId() == catalog::LogicalTypeId::DOUBLE; });
    if (anyDecimal && !anyFloat) {
+      // Promote a non-decimal (integer) operand to the *smallest* decimal that
+      // can still represent its full range, derived from the integer bit width.
+      // Using a blanket decimal(19,0) needlessly inflated the result precision
+      // (e.g. `1 - decimal(12,2)` became decimal(21,2) -> i128 instead of i64).
+      auto intToDecimalPrecision = [](NullableType type) -> unsigned long {
+         if (type.type.getTypeId() == catalog::LogicalTypeId::INT) {
+            switch (type.type.getInfo<catalog::IntTypeInfo>()->getBitWidth()) {
+               case 8: return 3; // up to 127
+               case 16: return 5; // up to 32767
+               case 32: return 10; // up to 2147483647
+               default: break;
+            }
+         }
+         return 19; // int64 / fallback: up to 9223372036854775807
+      };
       std::vector<NullableType> res;
       for (auto type : types) {
          if (type.type.getTypeId() != catalog::LogicalTypeId::DECIMAL) {
-            type.castType = std::make_shared<NullableType>(catalog::Type::decimal(19, 0), type.isNullable);
+            type.castType = std::make_shared<NullableType>(catalog::Type::decimal(intToDecimalPrecision(type), 0), type.isNullable);
             res.push_back(type);
 
          } else {
