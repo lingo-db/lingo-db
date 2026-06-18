@@ -11,6 +11,7 @@ add_mlir_dialect_library(MLIRGraphAlg
         SemiringTypes.cpp
         # Passes
         GraphAlgExplicateSparsity.cpp
+        GraphAlgFuseMatMul.cpp
         GraphAlgLoopAggregate.cpp
         GraphAlgPrepareInlinePass.cpp
         GraphAlgScalarizeApply.cpp

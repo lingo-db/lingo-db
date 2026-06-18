@@ -10,6 +10,9 @@ void buildGraphAlgToCorePipeline(mlir::OpPassManager& pm) {
    pm.addPass(createGraphAlgPrepareInline());
    pm.addPass(mlir::createInlinerPass());
    pm.addNestedPass<mlir::func::FuncOp>(createGraphAlgScalarizeApply());
+   // Fuse co-operand matmuls (A*X + Bᵀ*X -> (A+B)*X) before they are decomposed
+   // into mxm_join/deferred_reduce, so undirected propagation runs one matmul.
+   pm.addNestedPass<mlir::func::FuncOp>(createGraphAlgFuseMatMul());
    pm.addNestedPass<mlir::func::FuncOp>(createGraphAlgSplitAggregate());
    pm.addNestedPass<mlir::func::FuncOp>(createGraphAlgToCore());
    pm.addPass(mlir::createCanonicalizerPass());

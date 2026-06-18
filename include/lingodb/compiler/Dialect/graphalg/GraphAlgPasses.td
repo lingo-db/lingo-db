@@ -38,6 +38,19 @@ def GraphAlgLoopAggregate : Pass<"graphalg-loop-aggregate", "mlir::func::FuncOp"
     let summary = "Optimizes passing aggregates across loop iterations";
 }
 
+def GraphAlgFuseMatMul : Pass<"graphalg-fuse-matmul", "mlir::func::FuncOp"> {
+    let summary = "Fuse co-operand matmuls in an ewise-add tree: A*X + B*X -> (A+B)*X";
+    let description = [{
+        Applies semiring distributivity to fuse MatMul operations that share the
+        same right-hand operand within an `ewise ADD` tree. The undirected
+        propagation step of WCC (A*X + transpose(A)*X) collapses into a single
+        matmul over the symmetrized operand A + transpose(A), halving the
+        per-iteration matmul, reduce and pick_any work. The fused operand is
+        loop-invariant, so its edge index is built once by
+        HoistInvariantStatePass.
+    }];
+}
+
 def GraphAlgSemiNaive : Pass<"graphalg-semi-naive", "mlir::func::FuncOp"> {
     let summary = "Tags fixpoint loops eligible for semi-naive (delta) iteration";
     let description = [{
