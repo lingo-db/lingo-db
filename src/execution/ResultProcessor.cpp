@@ -1,4 +1,6 @@
 #include <cctype>
+#include <charconv>
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -206,10 +208,12 @@ void writeTableToCSV(const std::shared_ptr<arrow::Table>& table, std::ostream& o
       convertHex.push_back(typeId == arrow::Type::FIXED_SIZE_BINARY);
       std::string str;
       if (typeId == arrow::Type::DOUBLE || typeId == arrow::Type::FLOAT) {
-         // Emit floating-point values in scientific notation (e.g. 7.278133305959326e-06)
-         // instead of arrow::PrettyPrint's fixed-point form, to match the reference CSV.
+         // Reformat the numeric token on each value line: clean decimals stay clean
+         // (0.0, 0.5, 32.5) while genuinely tiny/huge values use scientific notation
+         // (std::to_chars shortest round-trippable form, %g-like). Non-finite values are
+         // emitted as "infinity"/"-infinity"/"nan" so they match the Graphalytics reference.
          // We reuse PrettyPrint's exact line framing (brackets, commas, indentation and
-         // any windowing/truncation) and only reformat the numeric token on each value
+         // any windowing/truncation) and only rewrite the numeric token on each value
          // line, so the per-column line parser below stays perfectly aligned with the
          // other columns of the same table.
          std::string raw;
@@ -221,22 +225,56 @@ void writeTableToCSV(const std::shared_ptr<arrow::Table>& table, std::ostream& o
          while (std::getline(in, line)) {
             if (!firstLine) ss << "\n";
             firstLine = false;
-            size_t start = line.find_first_of("-0123456789");
+            // Candidate token start: a digit, sign, dot, or the lead char of inf/nan.
+            size_t start = line.find_first_of("-+.0123456789iInN");
             if (start == std::string::npos) {
                ss << line; // bracket / ellipsis / "null" line: keep verbatim
                continue;
             }
-            size_t end = start;
-            while (end < line.size() &&
-                   (std::isdigit(static_cast<unsigned char>(line[end])) ||
-                    line[end] == '.' || line[end] == 'e' || line[end] == 'E' ||
-                    line[end] == '+' || line[end] == '-')) {
-               end++;
+            const char* cstart = line.c_str() + start;
+            char* endptr = nullptr;
+            double v = std::strtod(cstart, &endptr);
+            if (endptr == cstart) {
+               ss << line; // not a parseable number (e.g. "null"): keep verbatim
+               continue;
             }
-            double v = std::strtod(line.substr(start, end - start).c_str(), nullptr);
-            std::ostringstream num;
-            num << std::scientific << std::setprecision(15) << v;
-            ss << line.substr(0, start) << num.str() << line.substr(end);
+            size_t end = start + static_cast<size_t>(endptr - cstart);
+            std::string tok;
+            if (std::isinf(v)) {
+               tok = std::signbit(v) ? "-infinity" : "infinity";
+            } else if (std::isnan(v)) {
+               tok = "nan";
+            } else {
+               // Shortest round-trippable form decides clean-vs-scientific by *cleanliness*,
+               // not magnitude: short exact decimals (SSSP weights like 0.5, 32.5) print
+               // fixed, while messy/computed values (PageRank like 0.6142957099999999) and
+               // tiny/huge values print in scientific notation with 15 digits to match the
+               // Graphalytics reference.
+               char buf[64];
+               auto [ptr, ec] = std::to_chars(buf, buf + sizeof(buf), v);
+               std::string shortest(buf, ptr);
+               bool sciAlready = shortest.find_first_of("eE") != std::string::npos;
+               size_t sigDigits = 0;
+               if (!sciAlready) {
+                  std::string digits;
+                  for (char ch : shortest)
+                     if (ch >= '0' && ch <= '9') digits += ch;
+                  size_t b = digits.find_first_not_of('0');
+                  size_t e = digits.find_last_not_of('0');
+                  if (b != std::string::npos) sigDigits = e - b + 1;
+               }
+               if (sciAlready || sigDigits > 3) {
+                  std::ostringstream num;
+                  num << std::scientific << std::setprecision(15) << v;
+                  tok = num.str();
+               } else {
+                  tok = shortest;
+                  if (tok.find('.') == std::string::npos) {
+                     tok += ".0"; // integer-looking -> keep a decimal point (0 -> 0.0, 2 -> 2.0)
+                  }
+               }
+            }
+            ss << line.substr(0, start) << tok << line.substr(end);
          }
          str = ss.str();
       } else {
