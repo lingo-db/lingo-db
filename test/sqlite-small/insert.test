@@ -1,0 +1,26 @@
+statement ok
+CREATE TABLE next(id INTEGER);
+
+statement ok
+CREATE TABLE seen(id INTEGER, level INTEGER);
+
+statement ok
+INSERT INTO next VALUES (1);
+
+statement ok
+INSERT INTO next VALUES (2);
+
+query tsv
+select * from next order by id desc
+----
+2
+1
+
+statement ok
+INSERT INTO seen (id, level) SELECT id, 0 FROM next;
+
+query tsv
+select * from seen order by id desc
+----
+2	0
+1	0

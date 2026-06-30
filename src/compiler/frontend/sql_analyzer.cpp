@@ -979,11 +979,10 @@ std::shared_ptr<ast::BoundInsertNode> SQLQueryAnalyzer::analyzeInsertNode(std::s
       error("Table " << insertNode->tableName << " does not exist", insertNode->loc);
    }
    auto boundTableProducer = analyzeTableProducer(insertNode->producer, context, resolverScope);
-   if (boundTableProducer->nodeType != ast::NodeType::QUERY_NODE || std::static_pointer_cast<ast::QueryNode>(boundTableProducer)->type != ast::QueryNodeType::BOUND_VALUES) {
-      error("Table producer type for insert node not yet supported", boundTableProducer->loc);
-   }
-   if (!std::static_pointer_cast<ast::BoundValuesQueryNode>(boundTableProducer)->modifiers.empty()) {
-      error("Modifiers for insert node not yet supported", boundTableProducer->loc);
+   if (boundTableProducer->nodeType == ast::NodeType::QUERY_NODE && std::static_pointer_cast<ast::QueryNode>(boundTableProducer)->type == ast::QueryNodeType::BOUND_VALUES) {
+      if (!std::static_pointer_cast<ast::BoundValuesQueryNode>(boundTableProducer)->modifiers.empty()) {
+         error("Modifiers for insert node not yet supported", boundTableProducer->loc);
+      }
    }
    for (auto c : context->currentScope->targetInfo.getTargetColumns()) {
       if (c->resultType.type.getTypeId() == catalog::LogicalTypeId::CHAR) {
@@ -994,7 +993,6 @@ std::shared_ptr<ast::BoundInsertNode> SQLQueryAnalyzer::analyzeInsertNode(std::s
       }
    }
 
-   auto exprListTableRef = std::static_pointer_cast<ast::BoundValuesQueryNode>(boundTableProducer)->expressionListRef;
    auto rel = maybeRel.value();
    std::unordered_map<std::string, NullableType> allCollumnTypes;
    //Check for correct Type
@@ -1007,7 +1005,11 @@ std::shared_ptr<ast::BoundInsertNode> SQLQueryAnalyzer::analyzeInsertNode(std::s
       }
    }
 
-   return drv.nf.node<ast::BoundInsertNode>(insertNode->loc, insertNode->schema, insertNode->tableName, exprListTableRef, insertNode->columns, allCollumnTypes);
+   if (context->currentScope->targetInfo.getTargetColumns().size() != insertNode->columns.size()) {
+      error("Number of inserted columns does not match number of target columns", insertNode->loc);
+   }
+
+   return drv.nf.node<ast::BoundInsertNode>(insertNode->loc, insertNode->schema, insertNode->tableName, boundTableProducer, insertNode->columns, allCollumnTypes);
 }
 std::shared_ptr<ast::SetNode> SQLQueryAnalyzer::analyzeSetNode(std::shared_ptr<ast::SetNode> setNode) {
    switch (setNode->setType) {
