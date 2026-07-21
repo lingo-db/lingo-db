@@ -2,6 +2,8 @@
 // RUN: env LINGODB_EXECUTION_MODE=DEFAULT mlir-db-opt %s -split-input-file -mlir-print-local-scope --lower-graphalg-to-graphalg-core --lower-graphalg-core-to-relalg | FileCheck %s
 // RUN: %if baseline-backend %{LINGODB_EXECUTION_MODE=BASELINE mlir-db-opt %s -split-input-file -mlir-print-local-scope --lower-graphalg-to-graphalg-core --lower-graphalg-core-to-relalg | FileCheck %s %}
 
+// this test fails as it does not provide cardinality information for the #dim placeholders
+
 // CHECK: module @"<input>"
 module @"<input>" {
   func.func @SSSP(%arg0: !graphalg.mat<distinct[0]<> x distinct[0]<> x !graphalg.trop_f64>, %arg1: !graphalg.mat<distinct[0]<> x 1 x i1>) -> !graphalg.mat<distinct[0]<> x 1 x !graphalg.trop_f64> {

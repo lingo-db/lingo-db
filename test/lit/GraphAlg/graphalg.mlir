@@ -2,6 +2,8 @@
 // RUN: env LINGODB_EXECUTION_MODE=DEFAULT mlir-db-opt %s -split-input-file -mlir-print-local-scope --lower-graphalg-to-graphalg-core --lower-graphalg-core-to-relalg | FileCheck %s
 // RUN: %if baseline-backend %{LINGODB_EXECUTION_MODE=BASELINE mlir-db-opt %s -split-input-file -mlir-print-local-scope --lower-graphalg-to-graphalg-core --lower-graphalg-core-to-relalg | FileCheck %s %}
 
+// this test fails as it does not provide cardinality information for the #dim placeholders
+
 #dim = #graphalg.dim<distinct[0]<>>
 // CHECK: module @"<input>"
 module @"<input>" {
