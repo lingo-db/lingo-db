@@ -2,13 +2,16 @@
 #include "lingodb/compiler/Dialect/PyInterp/PyInterpOps.h"
 #include "lingodb/compiler/Dialect/SubOperator/SubOperatorOps.h"
 #include "lingodb/compiler/Dialect/SubOperator/Transforms/Passes.h"
+#include "lingodb/compiler/Dialect/TupleStream/ColumnManager.h"
+#include "lingodb/compiler/Dialect/TupleStream/TupleStreamDialect.h"
 #include "lingodb/compiler/Dialect/util/UtilOps.h"
 #include "lingodb/compiler/helper.h"
-
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/BuiltinOps.h"
+
+#include "llvm/Support/Debug.h"
 
 namespace {
 using namespace lingodb::compiler::dialect;
@@ -26,6 +29,54 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
    bool typeNeedsManagement(mlir::Type t) {
       if (auto managed = mlir::dyn_cast<db::ManagedType>(t)) {
          return managed.needsManagement();
+      }
+      return false;
+   }
+
+   bool definesColumn(mlir::Attribute attr, tuples::Column* col) {
+      if (!attr) return false;
+      if (auto arrayAttr = mlir::dyn_cast<mlir::ArrayAttr>(attr)) {
+         for (auto x : arrayAttr) {
+            if (definesColumn(x, col)) return true;
+         }
+      } else if (auto mappingDefAttr = mlir::dyn_cast<subop::ColumnDefMemberMappingAttr>(attr)) {
+         for (auto x : mappingDefAttr.getMapping()) {
+            if (definesColumn(x.second, col)) return true;
+         }
+      } else if (auto columnDefAttr = mlir::dyn_cast<tuples::ColumnDefAttr>(attr)) {
+         if (&columnDefAttr.getColumn() == col) return true;
+      }
+      return false;
+   }
+
+   mlir::Operation* findCreatorInStream(mlir::Value stream, tuples::Column* col) {
+      while (stream) {
+         mlir::Operation* defOp = stream.getDefiningOp();
+         if (!defOp) return nullptr;
+         for (auto attr : defOp->getAttrs()) {
+            if (definesColumn(attr.getValue(), col)) {
+               return defOp;
+            }
+         }
+         if (defOp->getNumOperands() > 0 && mlir::isa<tuples::TupleStreamType>(defOp->getOperand(0).getType())) {
+            stream = defOp->getOperand(0);
+         } else {
+            break;
+         }
+      }
+      return nullptr;
+   }
+
+   bool needsPromotion(tuples::Column* col, mlir::Value stream) {
+      if (!typeNeedsManagement(col->type)) return false;
+      auto* creator = findCreatorInStream(stream, col);
+      if (creator) {
+         if (auto gatherOp = mlir::dyn_cast<subop::GatherOp>(creator)) {
+            if (!mlir::isa<subop::TableEntryRefType>(gatherOp.getRef().getColumn().type)) {
+               return false;
+            }
+            return true;
+         }
       }
       return false;
    }
@@ -232,6 +283,137 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
          funcOp->walk([&](mlir::Block* block) {
             handleBlock(block, nullptr, notCounted);
          });
+      });
+
+      // Data before materialize should be promoted to a global lifetime.
+      // When storing data persistently in a materialized table,
+      // we must clone/promote them into a longer-living global representation.
+      module.walk([&](subop::MaterializeOp materializeOp) {
+         // Step 1: Identify which columns being materialized need to be promoted and create new column definitions.
+         std::vector<std::pair<tuples::ColumnRefAttr, tuples::ColumnDefAttr>> promoteCols;
+         llvm::SmallVector<std::pair<subop::Member, tuples::ColumnRefAttr>> newMapping;
+
+         for (auto pair : materializeOp.getMapping().getMapping()) {
+            if (needsPromotion(&pair.second.getColumn(), materializeOp.getStream())) {
+               auto& columnManager = pair.second.getColumn().type.getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+               std::string scopeName = columnManager.getUniqueScope("promote");
+               std::string attributeName = pair.second.getName().getLeafReference().getValue().str();
+               tuples::ColumnDefAttr newDef = columnManager.createDef(scopeName, attributeName);
+               newDef.getColumn().type = pair.second.getColumn().type;
+               tuples::ColumnRefAttr newRef = columnManager.createRef(scopeName, attributeName);
+               promoteCols.push_back({pair.second, newDef});
+               newMapping.push_back({pair.first, newRef});
+            } else {
+               newMapping.push_back(pair);
+            }
+         }
+
+         // Step 2: If any columns need promotion, insert a MapOp before the MaterializeOp to perform the promotion.
+         if (!promoteCols.empty()) {
+            mlir::OpBuilder builder(materializeOp);
+
+            std::vector<mlir::Attribute> computedCols;
+            std::vector<mlir::Attribute> inputCols;
+            for (auto& pair : promoteCols) {
+               computedCols.push_back(pair.second);
+               inputCols.push_back(pair.first);
+            }
+
+            auto mapOp = builder.create<subop::MapOp>(
+               materializeOp.getLoc(),
+               materializeOp.getStream(),
+               builder.getArrayAttr(computedCols),
+               builder.getArrayAttr(inputCols));
+
+            mlir::Block* block = new mlir::Block();
+            mapOp.getFn().push_back(block);
+
+            mlir::OpBuilder::InsertionGuard guard(builder);
+            builder.setInsertionPointToStart(block);
+
+            std::vector<mlir::Value> promotedValues;
+            // Step 3: Populate the MapOp's body with the actual promotion logic
+            for (auto& pair : promoteCols) {
+               auto oldRef = pair.first;
+               auto type = oldRef.getColumn().type;
+
+               mlir::Value arg = block->addArgument(type, materializeOp.getLoc());
+
+               auto managed = mlir::cast<db::ManagedType>(type);
+               mlir::Value promoted = managed.emitPromoteToGlobal(builder, materializeOp.getLoc(), arg);
+               promotedValues.push_back(promoted);
+            }
+            builder.create<tuples::ReturnOp>(materializeOp.getLoc(), promotedValues);
+
+            // Step 4: Update the MaterializeOp to consume the stream from the MapOp and use the newly promoted columns.
+            materializeOp->setOperand(0, mapOp.getResult());
+            materializeOp.setMappingAttr(subop::ColumnRefMemberMappingAttr::get(builder.getContext(), newMapping));
+         }
+      });
+
+      // When inserting data into a hash table (LookupOrInsert), the keys might need to be promoted.
+      module.walk([&](subop::LookupOrInsertOp lookupOp) {
+         // Step 1: Identify which keys need to be promoted and create new column definitions for them.
+         std::vector<std::pair<tuples::ColumnRefAttr, tuples::ColumnDefAttr>> promoteCols;
+         llvm::SmallVector<mlir::Attribute> newKeys;
+
+         for (auto keyAttr : lookupOp.getKeys()) {
+            auto keyRef = mlir::cast<tuples::ColumnRefAttr>(keyAttr);
+            if (needsPromotion(&keyRef.getColumn(), lookupOp.getStream())) {
+               auto& columnManager = keyRef.getColumn().type.getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+               std::string scopeName = columnManager.getUniqueScope("promote");
+               std::string attributeName = keyRef.getName().getLeafReference().getValue().str();
+               tuples::ColumnDefAttr newDef = columnManager.createDef(scopeName, attributeName);
+               newDef.getColumn().type = keyRef.getColumn().type;
+               tuples::ColumnRefAttr newRef = columnManager.createRef(scopeName, attributeName);
+               promoteCols.push_back({keyRef, newDef});
+               newKeys.push_back(newRef);
+            } else {
+               newKeys.push_back(keyAttr);
+            }
+         }
+
+         // Step 2: If any keys need promotion, insert a MapOp before the LookupOrInsertOp to perform the promotion.
+         if (!promoteCols.empty()) {
+            mlir::OpBuilder builder(lookupOp);
+
+            std::vector<mlir::Attribute> computedCols;
+            std::vector<mlir::Attribute> inputCols;
+            for (auto& pair : promoteCols) {
+               computedCols.push_back(pair.second);
+               inputCols.push_back(pair.first);
+            }
+
+            auto mapOp = builder.create<subop::MapOp>(
+               lookupOp.getLoc(),
+               lookupOp.getStream(),
+               builder.getArrayAttr(computedCols),
+               builder.getArrayAttr(inputCols));
+
+            mlir::Block* block = new mlir::Block();
+            mapOp.getFn().push_back(block);
+
+            mlir::OpBuilder::InsertionGuard guard(builder);
+            builder.setInsertionPointToStart(block);
+
+            // Step 3: Populate the MapOp's body with the actual promotion logic.
+            std::vector<mlir::Value> promotedValues;
+            for (auto& pair : promoteCols) {
+               auto oldRef = pair.first;
+               auto type = oldRef.getColumn().type;
+
+               mlir::Value arg = block->addArgument(type, lookupOp.getLoc());
+
+               auto managed = mlir::cast<db::ManagedType>(type);
+               mlir::Value promoted = managed.emitPromoteToGlobal(builder, lookupOp.getLoc(), arg);
+               promotedValues.push_back(promoted);
+            }
+            builder.create<tuples::ReturnOp>(lookupOp.getLoc(), promotedValues);
+
+            // Step 4: Update the LookupOrInsertOp to consume the stream from the MapOp and use the newly promoted keys.
+            lookupOp->setOperand(0, mapOp.getResult());
+            lookupOp.setKeysAttr(builder.getArrayAttr(newKeys));
+         }
       });
    }
 };
