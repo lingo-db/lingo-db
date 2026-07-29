@@ -74,6 +74,10 @@ class SizeOfOpLowering : public ConversionPattern {
                    ConversionPatternRewriter& rewriter) const override {
       auto sizeOfOp = mlir::dyn_cast_or_null<util::SizeOfOp>(op);
       Type t = typeConverter->convertType(sizeOfOp.getType());
+      if (!t || mlir::isa<mlir::NoneType>(t)) {
+         rewriter.replaceOpWithNewOp<mlir::LLVM::ConstantOp>(op, rewriter.getI64Type(), rewriter.getI64IntegerAttr(0));
+         return success();
+      }
       const DataLayout* layout = &defaultLayout;
       if (const DataLayoutAnalysis* analysis = llvmTypeConverter.getDataLayoutAnalysis()) {
          layout = &analysis->getAbove(op);

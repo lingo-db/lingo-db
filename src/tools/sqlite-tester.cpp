@@ -5,7 +5,9 @@
 
 #include <arrow/array.h>
 #include <arrow/pretty_print.h>
+#include <arrow/scalar.h>
 #include <arrow/table.h>
+#include <arrow/type.h>
 
 #include <fstream>
 #include <iostream>
@@ -30,6 +32,89 @@ unsigned char hexval(unsigned char c) {
       return c - 'A' + 10;
    else
       abort();
+}
+// Helper to safely escape strings for JSON
+std::string escapeString(const std::string& str) {
+   std::string escaped;
+   for (char c : str) {
+      if (c == '\n')
+         escaped += "\\n";
+      else if (c == '"')
+         escaped += "\\\"";
+      else
+         escaped += c;
+   }
+   return escaped;
+}
+
+// Recursively convert Arrow Scalars to JSON strings
+std::string scalarToJson(const std::shared_ptr<arrow::Scalar>& scalar) {
+   if (!scalar || !scalar->is_valid) return "null";
+
+   switch (scalar->type->id()) {
+      case arrow::Type::STRUCT: {
+         auto structScalar = std::static_pointer_cast<arrow::StructScalar>(scalar);
+         auto sctructType = std::static_pointer_cast<arrow::StructType>(structScalar->type);
+         std::stringstream ss;
+         ss << "{";
+         for (size_t i = 0; i < structScalar->value.size(); ++i) {
+            if (i > 0) ss << ", ";
+            ss << "\"" << escapeString(sctructType->field(i)->name()) << "\": "
+               << scalarToJson(structScalar->value[i]);
+         }
+         ss << "}";
+         return ss.str();
+      }
+      case arrow::Type::LIST:
+      case arrow::Type::LARGE_LIST:
+      case arrow::Type::FIXED_SIZE_LIST: {
+         auto listScalar = std::static_pointer_cast<arrow::BaseListScalar>(scalar);
+         std::stringstream ss;
+         ss << "[ ";
+         auto listArr = listScalar->value;
+         for (int64_t i = 0; i < listArr->length(); ++i) {
+            if (i > 0) ss << ", ";
+            auto itemScalar = listArr->GetScalar(i);
+            if (itemScalar.ok()) {
+               ss << scalarToJson(itemScalar.ValueOrDie());
+            } else {
+               ss << "null";
+            }
+         }
+         ss << " ]";
+         return ss.str();
+      }
+      case arrow::Type::STRING:
+      case arrow::Type::LARGE_STRING: {
+         auto strScalar = std::static_pointer_cast<arrow::StringScalar>(scalar);
+         return "\"" + escapeString(strScalar->ToString()) + "\"";
+      }
+      default:
+         return scalar->ToString();
+   }
+}
+
+// Generate parser-friendly string mimicking Arrow's exact ChunkedArray formatting
+std::string formatComplexColumn(const std::shared_ptr<arrow::ChunkedArray>& column) {
+   std::stringstream ss;
+   ss << "[\n";
+   for (int i = 0; i < column->num_chunks(); ++i) {
+      if (i > 0) ss << ",\n";
+      ss << "[\n"; // Arrow chunks have inner brackets
+      auto chunk = column->chunk(i);
+      for (int64_t row = 0; row < chunk->length(); ++row) {
+         if (row > 0) ss << ",\n";
+         auto scalarRes = chunk->GetScalar(row);
+         if (scalarRes.ok()) {
+            ss << scalarToJson(scalarRes.ValueOrDie());
+         } else {
+            ss << "null";
+         }
+      }
+      ss << "\n]";
+   }
+   ss << "\n]";
+   return ss.str();
 }
 struct ResultHasher : public execution::ResultProcessor {
    //input
@@ -57,14 +142,24 @@ struct ResultHasher : public execution::ResultProcessor {
       std::vector<bool> convertHex;
       std::vector<bool> isFloat;
       for (auto c : table->columns()) {
+         auto field = table->schema()->field(positions.size());
          convertHex.push_back(table->schema()->field(positions.size())->type()->id() == arrow::Type::FIXED_SIZE_BINARY);
          isFloat.push_back(table->schema()->field(positions.size())->type()->id() == arrow::Type::DOUBLE);
          std::stringstream sstr;
-         arrow::PrettyPrint(*c.get(), options, &sstr); //NOLINT (clang-diagnostic-unused-result)
+         auto typeId = field->type()->id();
+
+         // Intercept struct and list types to format them into single-line JSON strings
+         if (typeId == arrow::Type::STRUCT || typeId == arrow::Type::LIST ||
+             typeId == arrow::Type::LARGE_LIST || typeId == arrow::Type::FIXED_SIZE_LIST) {
+            sstr << formatComplexColumn(c);
+         } else {
+            arrow::PrettyPrint(*c.get(), options, &sstr); //NOLINT (clang-diagnostic-unused-result)
+         }
          columnReps.push_back(sstr.str());
          positions.push_back(0);
       }
 
+      std::vector<int> bracketDepth(columnReps.size(), 0);
       bool cont = true;
       while (cont) {
          cont = false;
@@ -72,64 +167,91 @@ struct ResultHasher : public execution::ResultProcessor {
             char32_t currChar = U'\0';
             uint8_t currCharSize = 0;
 
-            bool first = true;
+            bool cellHasData = false;
             bool afterComma = false;
             size_t digits = 0;
             std::stringstream out;
-            while (positions[column] < columnReps[column].size()) {
+
+            if (positions[column] < columnReps[column].size()) {
                cont = true;
+            }
+
+            while (positions[column] < columnReps[column].size()) {
                char curr = columnReps[column][positions[column]];
-               char next = columnReps[column][positions[column] + 1];
+
+               // 1. Bracket tracking
+               if (curr == '[') bracketDepth[column]++;
+               int depth = bracketDepth[column];
+               if (curr == ']') bracketDepth[column]--;
                positions[column]++;
-               if (first && (curr == '[' || curr == ']' || curr == ',')) {
+
+               // 2. Skip leading structural junk (brackets, separators, spaces at depth 1 or 2)
+               if (!cellHasData && (depth <= 2) && (curr == '[' || curr == ']' || curr == ',' || curr == ' ' || curr == '\n')) {
                   continue;
                }
-               if (curr == ',' && next == '\n') {
-                  continue;
-               }
-               if (curr == '\n') {
-                  break;
-               } else {
-                  if (isFloat[column]) {
-                     if (std::isdigit(curr)) {
-                        if (afterComma && digits < 3) {
-                           digits++;
-                           out << curr;
-                        } else if (!afterComma) {
-                           out << curr;
-                           first = false;
-                        }
-                     } else if (curr == '.') {
-                        afterComma = true;
-                        out << curr;
-                        digits = 0;
-                     } else {
-                        afterComma = false;
-                        digits = 0;
-                        first = false;
-                        out << curr;
-                     }
-                  } else if (convertHex[column]) {
-                     first = false;
-                     if (std::isxdigit(curr)) {
-                        if (currCharSize % 2 == 0)
-                           currChar |= hexval(curr) << (currCharSize++ * 4 + 4);
-                        else
-                           currChar |= hexval(curr) << (currCharSize++ * 4 - 4);
-                     } else {
-                        out << curr;
-                     }
-                  } else {
-                     first = false;
-                     out << curr;
+
+               // 3. Handle structural commas (comma followed by newline at depth 1 or 2)
+               if (cellHasData && (depth <= 2) && curr == ',') {
+                  char next = (positions[column] < columnReps[column].size()) ? columnReps[column][positions[column]] : '\0';
+                  if (next == '\n') {
+                     continue;
                   }
                }
+
+               // 4. Handle end of cell
+               if (cellHasData && (depth <= 2) && curr == '\n') {
+                  break;
+               }
+
+               // 5. Value Processing (Strict ASCII/Float/Hex for SQLite validation)
+               cellHasData = true;
+               if (curr == '\n') {
+                  // Inner newline (depth > 2), skip leading spaces of next line and replace with space
+                  while (positions[column] < columnReps[column].size() && columnReps[column][positions[column]] == ' ') {
+                     positions[column]++;
+                  }
+                  out << ' ';
+                  continue;
+               }
+
+               if (isFloat[column]) {
+                  if (std::isdigit(curr)) {
+                     if (afterComma && digits < 3) {
+                        digits++;
+                        out << curr;
+                     } else if (!afterComma) {
+                        out << curr;
+                     }
+                  } else if (curr == '.') {
+                     afterComma = true;
+                     out << curr;
+                     digits = 0;
+                  } else {
+                     afterComma = false;
+                     digits = 0;
+                     out << curr;
+                  }
+               } else if (convertHex[column]) {
+                  if (std::isxdigit(curr)) {
+                     if (currCharSize % 2 == 0)
+                        currChar |= hexval(curr) << (currCharSize++ * 4 + 4);
+                     else
+                        currChar |= hexval(curr) << (currCharSize++ * 4 - 4);
+                  } else {
+                     out << curr;
+                  }
+               } else {
+                  out << curr; // Standard string/int fallthrough
+               }
             }
+
+            // Final flush for hex conversions
             if (currChar != U'\0') {
                assert(currChar <= 0xFF && "Only ASCII characters supported for sqlite testing");
                out << static_cast<char>(currChar);
             }
-            if (!first) {
+
+            if (cellHasData) {
                toHash.push_back(out.str());
             }
          }

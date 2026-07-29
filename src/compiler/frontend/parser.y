@@ -68,6 +68,8 @@
 %token 			RP		")"
 %token 			LB		"["
 %token 			RB		"]"
+%token 			CBL		"{"
+%token 			CBR		"}"
 %token 			DOT		"."
 %token          PERCENT "%"
 %token 			COMMA		","
@@ -85,6 +87,7 @@
 %token          HAT         "^"
 %token 			QUOTE		"'"
 %token          PIPE        "|>"
+%token          COLON       ":"
 
 
 
@@ -232,7 +235,7 @@
 
 %type<std::shared_ptr<lingodb::ast::ParsedExpression>>  having_clause target_el a_expr c_expr b_expr  where_clause group_by_item group_by_item_with_alias
                                                         func_arg_expr select_limit_value case_expr case_default cast_expr offset_clause 
-                                                        select_offset_value
+                                                        select_offset_value list_expr
 
 %type<std::shared_ptr<lingodb::ast::ConjunctionExpression>> and_a_expr or_a_expr
 
@@ -307,7 +310,8 @@
 
 %type<std::shared_ptr<lingodb::ast::CreateNode>> CreateStmt CreateFunctionStmt
 %type<bool> OptTemp opt_varying
-%type<lingodb::ast::LogicalTypeWithMods> Numeric SimpleType Type CharacterWithoutLength character Bit ConstCharacter Character CharacterWithLength ConstDatetime Typename ConstTypename Numeric_with_opt_lenghth ConstInterval
+%type<lingodb::ast::LogicalTypeWithMods> Numeric SimpleType Type ListType CharacterWithoutLength character Bit ConstCharacter Character CharacterWithLength ConstDatetime Typename ConstTypename Numeric_with_opt_lenghth ConstInterval
+
 %type<std::shared_ptr<lingodb::ast::TableElement>> TableElement columnElement TableConstraint
 %type<std::vector<std::shared_ptr<lingodb::ast::TableElement>>> TableElementList OptTableElementList
 %type<std::shared_ptr<lingodb::ast::Constraint>> ColConstraint ColConstraintElem ConstraintElem
@@ -350,6 +354,12 @@
 %type<lingodb::ast::LogicalTypeWithMods> func_type func_return
 %type<std::vector<lingodb::ast::FunctionArgument>> func_args_with_defaults func_args_with_defaults_list
 %type<lingodb::ast::FunctionArgument> func_arg_with_default func_arg
+
+%type<std::optional<lingodb::ast::ListExpression::ListSelection>> opt_list_extraction
+%type<lingodb::ast::ListExpression::ListSelection> list_extraction
+
+%type<std::shared_ptr<lingodb::ast::StructExpression>> struct_expr
+%type<std::unordered_map<std::string, std::shared_ptr<lingodb::ast::ParsedExpression>>> key_value_list
 
 
 /* Precedence: lowest to highest */
@@ -1620,7 +1630,15 @@ c_expr:
         $$ = subquery;
     }
     //TODO | ARRAY select_with_parens
-    //TODO | ARRAY array_expr
+    | list_expr
+    {
+        $$ = $list_expr;
+    }
+    | struct_expr
+    {
+        $$ = $struct_expr;
+       
+    }
     //TODO | explicit_row
     //TODO | implicit_row
     //TODO | GROUPING LP expr_list RP
@@ -1895,6 +1913,92 @@ func_arg_expr:
     | param_name GREATER_EQUAL a_expr
     ;
 
+list_expr: 
+    LB expr_list RB opt_list_extraction
+    {
+        $$ = mkNode<lingodb::ast::ListExpression>(@$, $expr_list, $opt_list_extraction);
+    }
+    | LB RB
+    {
+        $$ = mkNode<lingodb::ast::ListExpression>(@$, std::vector<std::shared_ptr<lingodb::ast::ParsedExpression>>(), std::nullopt);
+    }
+    ;
+struct_expr:
+    CBL key_value_list CBR
+    {
+        $$ = mkNode<lingodb::ast::StructExpression>(@$, $key_value_list);
+    }
+
+    ;
+key_value_list:
+    ColId COLON a_expr
+    {
+        auto map = std::unordered_map<std::string, std::shared_ptr<lingodb::ast::ParsedExpression>>();
+        map.emplace($ColId, $a_expr);
+        $$ = map;
+    }
+    | STRING_VALUE COLON a_expr
+    {
+        auto map = std::unordered_map<std::string, std::shared_ptr<lingodb::ast::ParsedExpression>>();
+        map.emplace($STRING_VALUE, $a_expr);
+        $$ = map;
+    }
+    | key_value_list[map] COMMA ColId COLON a_expr
+    {
+        $map.emplace($ColId, $a_expr);
+        $$ = $map;
+    }
+    | key_value_list[map] COMMA STRING_VALUE COLON a_expr 
+    {
+        $map.emplace($STRING_VALUE, $a_expr);
+        $$ = $map;
+    }
+
+    ;
+
+
+opt_list_extraction:
+    %empty 
+    {
+        $$ = std::nullopt;
+    }
+    | list_extraction 
+    {
+        $$ = $list_extraction;
+    }
+    ;
+//TODO decide between a_expr, b_expr and c_expr for the rules in 
+list_extraction:
+    LB b_expr RB
+    {
+        lingodb::ast::ListExpression::ListSelection le{};
+        le.lowerBound = $b_expr;
+        $$ = le;
+    }
+    | LB b_expr[lowerBound] COLON b_expr[upperBound] RB
+    {
+        lingodb::ast::ListExpression::ListSelection le{};
+        le.lowerBound = $lowerBound;
+        le.upperBound = $upperBound;
+        le.range = true;
+        $$ = le;
+    }
+    | LB COLON b_expr[upperBound] RB
+    {
+        lingodb::ast::ListExpression::ListSelection le{};
+        le.upperBound = $upperBound;
+        le.range = true;
+        $$ = le;
+    }
+    | LB b_expr[lowerBound] COLON RB
+    {
+        lingodb::ast::ListExpression::ListSelection le{};
+        le.lowerBound = $lowerBound;
+        le.range = true;
+        $$ = le;
+    }
+     ;
+
 //TODO missing rules
 /*
  * Special expressions that are considered to be functions.
@@ -2014,7 +2118,17 @@ window_specification:
 //! TODO For what exactly is this here
 indirection:
     indirection_el { $$=$1;}
-    | indirection indirection_el {$$=$1;}
+    | indirection indirection_el 
+    {
+        if ($1->exprClass == lingodb::ast::ExpressionClass::COLUMN_REF && $2->exprClass == lingodb::ast::ExpressionClass::COLUMN_REF) {
+            auto colRef1 = std::static_pointer_cast<lingodb::ast::ColumnRefExpression>($1);
+            auto colRef2 = std::static_pointer_cast<lingodb::ast::ColumnRefExpression>($2);
+            colRef1->columnNames.insert(colRef1->columnNames.end(), colRef2->columnNames.begin(), colRef2->columnNames.end());
+            $$ = colRef1;
+        } else {
+            $$ = $1;
+        }
+    }
     ;
 indirection_el:
     DOT attr_name {$$=mkNode<lingodb::ast::ColumnRefExpression>(@$, $attr_name);}
@@ -3007,11 +3121,33 @@ opt_column_storage:
 
 //TODO add missing rules
 Type:
-    SimpleType //opt_array_bounds
+    SimpleType 
     {
-        $$ = $SimpleType;
+        auto type = $SimpleType;
+        $$ = type;
+    }
+    | ListType 
+    {
+        $$ = $ListType;
     }
     ;
+ListType:
+    SimpleType LB RB
+    {
+        auto listType = lingodb::ast::LogicalTypeWithMods(catalog::LogicalTypeId::LIST);
+        listType.elementType = std::make_shared<lingodb::ast::LogicalTypeWithMods>($SimpleType);;
+        $$ = listType;
+
+
+    }
+    | ListType[list] LB RB
+    {
+        auto listType = lingodb::ast::LogicalTypeWithMods(catalog::LogicalTypeId::LIST);
+        listType.elementType = std::make_shared<lingodb::ast::LogicalTypeWithMods>($list);;
+        $$ = listType;
+    }
+    ;
+  
 SimpleType: 
      //GenericType
     Numeric_with_opt_lenghth {$$ = $Numeric_with_opt_lenghth;}
@@ -3348,7 +3484,7 @@ AexprConst:
         auto t = mkNode<lingodb::ast::ConstantExpression>(@$); t->value=std::make_shared<lingodb::ast::NullValue>(); $$=t; 
 
     }
-;
+    ;
 //TODO Set Iconst to unsigned long
 //TODO create rule SignedIconst to handle signed integers!
 Iconst:	

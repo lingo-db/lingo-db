@@ -1103,6 +1103,24 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
       return false;
    }
 
+   bool compile_util_buffer_create_op(dialect::util::BufferCreateOp op) {
+      //TODO check if this correct
+      auto elem_size = get_size(op.getRes().getType().getT());
+      if (!elem_size) {
+         assert(0 && "Unsupported type for buffer create operation");
+         error.emit() << "Unsupported type for buffer create operation.";
+         return false;
+      }
+      auto ptr_vr = this->val_ref(op.getPtr());
+      auto len_vr = this->val_ref(op.getLen());
+      auto res_vr = this->result_ref(op.getRes());
+
+      ValuePartRef elem_size_vp{this, *elem_size, 8, Config::GP_BANK};
+      derived()->encode_arith_mul_i64(len_vr.part(0), GenericValuePart{std::move(elem_size_vp)}, res_vr.part(0));
+      res_vr.part(1).set_value(ptr_vr.part(0));
+      return true;
+   }
+
    bool compile_util_buffer_get_len_op(dialect::util::BufferGetLen op) {
       auto elem_size = get_size(op.getBuffer().getType().getT());
       if (!elem_size) {
@@ -1755,6 +1773,8 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
          })
          .template Case<dialect::util::BufferCastOp>(
             [&](auto op) { return compile_util_buffer_cast_op(op); })
+         .template Case<dialect::util::BufferCreateOp>(
+            [&](auto op) { return compile_util_buffer_create_op(op); })
          .template Case<dialect::util::BufferGetLen>([&](auto op) {
             return compile_util_buffer_get_len_op(op);
          })

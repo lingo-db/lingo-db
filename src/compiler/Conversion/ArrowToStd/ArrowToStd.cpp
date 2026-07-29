@@ -2,6 +2,8 @@
 #include "lingodb/compiler/Conversion/UtilToLLVM/Passes.h"
 #include "lingodb/compiler/Dialect/Arrow/IR/ArrowDialect.h"
 #include "lingodb/compiler/Dialect/Arrow/IR/ArrowOps.h"
+#include "lingodb/compiler/Dialect/DB/IR/DBDialect.h"
+#include "lingodb/compiler/Dialect/DB/IR/DBOps.h"
 #include "lingodb/compiler/Dialect/PyInterp/PyInterpDialect.h"
 #include "lingodb/compiler/Dialect/util/UtilDialect.h"
 #include "lingodb/compiler/Dialect/util/UtilOps.h"
@@ -25,10 +27,11 @@
 #include <mlir/IR/BuiltinTypes.h>
 
 #include "lingodb/compiler/runtime/ExecutionContext.h"
-
 #include <lingodb/compiler/runtime/ArrowColumn.h>
+#include <lingodb/compiler/runtime/ListRuntime.h>
 using namespace mlir;
 namespace arrow = lingodb::compiler::dialect::arrow;
+namespace db = lingodb::compiler::dialect::db;
 namespace util = lingodb::compiler::dialect::util;
 namespace rt = lingodb::compiler::runtime;
 
@@ -152,7 +155,45 @@ class ArrayLoadVariableSizeBinaryLowering : public OpConversionPattern<arrow::Lo
       return success();
    }
 };
+class ArrayLoadListLowering : public OpConversionPattern<arrow::LoadListOp> {
+   using OpConversionPattern<arrow::LoadListOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(arrow::LoadListOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto refType = mlir::dyn_cast_or_null<util::RefType>(op.getType());
+      if (!refType) {
+         return failure();
+      }
+      mlir::Value valueBuffer;
+      mlir::Value binaryBuffer;
+      mlir::Value c1;
+      createAtArrayCreation(rewriter, adaptor.getArray(), [&](mlir::ConversionPatternRewriter& rewriter) {
+         auto offset = rewriter.create<util::LoadElementOp>(op.getLoc(), rewriter.getIndexType(), adaptor.getArray(), 2);
+         auto bufferArray = rewriter.create<util::LoadElementOp>(op.getLoc(), util::RefType::get(util::RefType::get(rewriter.getI8Type())), adaptor.getArray(), 5);
+         //load buffer with main values (offset 1)
+         c1 = rewriter.create<arith::ConstantIndexOp>(op.getLoc(), 1);
+         auto c2 = rewriter.create<arith::ConstantIndexOp>(op.getLoc(), 2);
+         valueBuffer = rewriter.create<util::LoadOp>(op.getLoc(), bufferArray, c1);
+         valueBuffer = rewriter.create<util::GenericMemrefCastOp>(op.getLoc(), util::RefType::get(rewriter.getI32Type()), valueBuffer);
+         valueBuffer = rewriter.create<util::ArrayElementPtrOp>(op.getLoc(), util::RefType::get(rewriter.getI32Type()), valueBuffer, offset);
+         binaryBuffer = rewriter.create<util::LoadOp>(op.getLoc(), bufferArray, c2);
+      });
+      auto pos1 = rewriter.create<util::LoadOp>(op.getLoc(), valueBuffer, adaptor.getOffset());
+      Value ip1 = rewriter.create<arith::AddIOp>(op.getLoc(), rewriter.getIndexType(), adaptor.getOffset(), c1);
+      Value pos2 = rewriter.create<util::LoadOp>(op.getLoc(), rewriter.getI32Type(), valueBuffer, ip1);
+      Value len = rewriter.create<arith::SubIOp>(op.getLoc(), rewriter.getI32Type(), pos2, pos1);
+      auto pos1AsIndex = rewriter.create<arith::IndexCastOp>(op.getLoc(), rewriter.getIndexType(), pos1);
+      Value ptr = rewriter.create<util::ArrayElementPtrOp>(op.getLoc(), util::RefType::get(rewriter.getI8Type()), binaryBuffer, pos1AsIndex);
 
+      Value elemSizeIdx = rewriter.create<util::SizeOfOp>(op.getLoc(), rewriter.getIndexType(), op.getElementType());
+      Value lenAsIndex = rewriter.create<arith::IndexCastOp>(op.getLoc(), rewriter.getIndexType(), len);
+      Value byteLen = rewriter.create<arith::MulIOp>(op.getLoc(), rewriter.getIndexType(), lenAsIndex, elemSizeIdx);
+      Value buffer = rewriter.create<util::BufferCreateOp>(op.getLoc(), util::BufferType::get(getContext(), rewriter.getI8Type()), ptr, byteLen);
+      Value elemSizeI64 = rewriter.create<arith::IndexCastOp>(op.getLoc(), rewriter.getI64Type(), elemSizeIdx);
+      Value list = rt::List::fromBuffer(rewriter, op.getLoc())({elemSizeI64, buffer})[0];
+      rewriter.replaceOp(op, list);
+
+      return success();
+   }
+};
 class ArrayIsValidLowering : public OpConversionPattern<arrow::IsValidOp> {
    public:
    using OpConversionPattern<arrow::IsValidOp>::OpConversionPattern;
@@ -244,6 +285,147 @@ class BuilderAppendVariableSizeBinaryLowering : public OpConversionPattern<arrow
    }
 };
 
+class BuilderAppendListLowering : public OpConversionPattern<arrow::AppendListOp> {
+   private:
+   std::string arrowDescrFromType(mlir::Type type) const {
+      if (type.isIndex()) {
+         return "int[64]";
+      } else if (isIntegerType(type, 1)) {
+         return "bool";
+      } else if (auto intWidth = getIntegerWidth(type, false)) {
+         return "int[" + std::to_string(intWidth) + "]";
+      } else if (auto uIntWidth = getIntegerWidth(type, true)) {
+         return "uint[" + std::to_string(uIntWidth) + "]";
+      } else if (auto floatType = mlir::dyn_cast_or_null<mlir::FloatType>(type)) {
+         return "float[" + std::to_string(floatType.getWidth()) + "]";
+      } else if (auto decimalType = mlir::dyn_cast_or_null<db::DecimalType>(type)) {
+         auto prec = std::min(decimalType.getP(), 38);
+         return "decimal[" + std::to_string(prec) + "," + std::to_string(decimalType.getS()) + "]";
+      } else if (auto dateType = mlir::dyn_cast_or_null<db::DateType>(type)) {
+         return dateType.getUnit() == db::DateUnitAttr::day ? "date[32]" : "date[64]";
+      } else if (auto timestampType = mlir::dyn_cast_or_null<db::TimestampType>(type)) {
+         return "timestamp[" + std::to_string(static_cast<uint32_t>(timestampType.getUnit())) + "]";
+      } else if (auto intervalType = mlir::dyn_cast_or_null<db::IntervalType>(type)) {
+         if (intervalType.getUnit() == db::IntervalUnitAttr::months) {
+            return "interval_months";
+         } else {
+            return "interval_daytime";
+         }
+      } else if (mlir::isa<db::StringType>(type)) {
+         return "string";
+      } else if (auto charType = mlir::dyn_cast_or_null<db::CharType>(type)) {
+         if (charType.getLen() <= 1) {
+            return "fixed_sized[4]";
+         } else {
+            return "string";
+         }
+      } else if (auto listType = mlir::dyn_cast_or_null<db::ListType>(type)) {
+         return "list[" + arrowDescrFromType(listType.getElementType()) + "]";
+      } else if (auto structType = mlir::dyn_cast_or_null<db::StructType>(type)) {
+         std::string res = "struct[";
+         for (size_t i = 0; i < structType.getTypes().size(); ++i) {
+            res += structType.getNames()[i].getValue().str() + ":" + arrowDescrFromType(structType.getTypes()[i]);
+            if (i + 1 < structType.getTypes().size()) {
+               res += ",";
+            }
+         }
+         res += "]";
+         return res;
+      }
+      assert(false);
+      return "";
+   }
+
+   public:
+   using OpConversionPattern<arrow::AppendListOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(arrow::AppendListOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op.getLoc();
+      auto builderVal = adaptor.getBuilder();
+      auto isValid = adaptor.getValid();
+      if (!isValid) {
+         isValid = rewriter.create<mlir::arith::ConstantIntOp>(loc, 1, 1);
+      }
+      auto val = adaptor.getValue();
+      auto elementType = op.getElementType();
+      mlir::Value elementTypeDescr = rewriter.create<util::CreateConstVarLen>(loc, util::VarLen32Type::get(getContext()), arrowDescrFromType(elementType));
+
+      rt::ArrowColumnBuilder::addList(rewriter, loc)({builderVal, isValid, val, elementTypeDescr});
+      rewriter.eraseOp(op);
+
+      return success();
+   }
+};
+
+class BuilderAppendStructLowering : public OpConversionPattern<arrow::AppendStructOp> {
+   private:
+   std::string arrowDescrFromType(mlir::Type type) const {
+      if (type.isIndex()) {
+         return "int[64]";
+      } else if (isIntegerType(type, 1)) {
+         return "bool";
+      } else if (auto intWidth = getIntegerWidth(type, false)) {
+         return "int[" + std::to_string(intWidth) + "]";
+      } else if (auto uIntWidth = getIntegerWidth(type, true)) {
+         return "uint[" + std::to_string(uIntWidth) + "]";
+      } else if (auto floatType = mlir::dyn_cast_or_null<mlir::FloatType>(type)) {
+         return "float[" + std::to_string(floatType.getWidth()) + "]";
+      } else if (auto decimalType = mlir::dyn_cast_or_null<db::DecimalType>(type)) {
+         auto prec = std::min(decimalType.getP(), 38);
+         return "decimal[" + std::to_string(prec) + "," + std::to_string(decimalType.getS()) + "]";
+      } else if (auto dateType = mlir::dyn_cast_or_null<db::DateType>(type)) {
+         return dateType.getUnit() == db::DateUnitAttr::day ? "date[32]" : "date[64]";
+      } else if (auto timestampType = mlir::dyn_cast_or_null<db::TimestampType>(type)) {
+         return "timestamp[" + std::to_string(static_cast<uint32_t>(timestampType.getUnit())) + "]";
+      } else if (auto intervalType = mlir::dyn_cast_or_null<db::IntervalType>(type)) {
+         if (intervalType.getUnit() == db::IntervalUnitAttr::months) {
+            return "interval_months";
+         } else {
+            return "interval_daytime";
+         }
+      } else if (mlir::isa<db::StringType>(type)) {
+         return "string";
+      } else if (auto charType = mlir::dyn_cast_or_null<db::CharType>(type)) {
+         if (charType.getLen() <= 1) {
+            return "fixed_sized[4]";
+         } else {
+            return "string";
+         }
+      } else if (auto listType = mlir::dyn_cast_or_null<db::ListType>(type)) {
+         return "list[" + arrowDescrFromType(listType.getElementType()) + "]";
+      } else if (auto structType = mlir::dyn_cast_or_null<db::StructType>(type)) {
+         std::string res = "struct[";
+         for (size_t i = 0; i < structType.getTypes().size(); ++i) {
+            res += structType.getNames()[i].getValue().str() + ":" + arrowDescrFromType(structType.getTypes()[i]);
+            if (i + 1 < structType.getTypes().size()) {
+               res += ",";
+            }
+         }
+         res += "]";
+         return res;
+      }
+      assert(false);
+      return "";
+   }
+
+   public:
+   using OpConversionPattern<arrow::AppendStructOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(arrow::AppendStructOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op.getLoc();
+      auto builderVal = adaptor.getBuilder();
+      auto isValid = adaptor.getValid();
+      if (!isValid) {
+         isValid = rewriter.create<mlir::arith::ConstantIntOp>(loc, 1, 1);
+      }
+      auto val = adaptor.getValue();
+      auto type = op.getStructType();
+      mlir::Value elementTypeDescr = rewriter.create<util::CreateConstVarLen>(loc, util::VarLen32Type::get(getContext()), arrowDescrFromType(type));
+
+      rt::ArrowColumnBuilder::addStruct(rewriter, loc)({builderVal, isValid, val, elementTypeDescr});
+      rewriter.eraseOp(op);
+
+      return success();
+   }
+};
 } // end anonymous namespace
 template <class Op>
 class SimpleTypeConversionPattern : public ConversionPattern {
@@ -336,11 +518,14 @@ void ArrowToStdLoweringPass::runOnOperation() {
    patterns.insert<ArrayIsValidLowering>(typeConverter, &getContext());
    patterns.insert<ArrayLoadFixedSizedLowering>(typeConverter, &getContext());
    patterns.insert<ArrayLoadVariableSizeBinaryLowering>(typeConverter, &getContext());
+   patterns.insert<ArrayLoadListLowering>(typeConverter, &getContext());
    patterns.insert<ArrayLoadBoolLowering>(typeConverter, &getContext());
    patterns.insert<BuilderFromPtrLowering>(typeConverter, &getContext());
    patterns.insert<BuilderAppendFixedSizedLowering>(typeConverter, &getContext());
    patterns.insert<BuilderAppendBoolLowering>(typeConverter, &getContext());
    patterns.insert<BuilderAppendVariableSizeBinaryLowering>(typeConverter, &getContext());
+   patterns.insert<BuilderAppendListLowering>(typeConverter, &getContext());
+   patterns.insert<BuilderAppendStructLowering>(typeConverter, &getContext());
    if (failed(applyFullConversion(module, target, std::move(patterns))))
       signalPassFailure();
 }

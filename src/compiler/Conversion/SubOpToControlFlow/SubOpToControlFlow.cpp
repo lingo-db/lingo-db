@@ -1299,6 +1299,18 @@ class CreateTableLowering : public SubOpConversionPattern<subop::GenericCreateOp
          } else {
             return "string";
          }
+      } else if (auto listType = mlir::dyn_cast_or_null<db::ListType>(type)) {
+         return "list[" + arrowDescrFromType(listType.getElementType()) + "]";
+      } else if (auto structType = mlir::dyn_cast_or_null<db::StructType>(type)) {
+         std::string res = "struct[";
+         for (size_t i = 0; i < structType.getTypes().size(); ++i) {
+            res += structType.getNames()[i].getValue().str() + ":" + arrowDescrFromType(structType.getTypes()[i]);
+            if (i + 1 < structType.getTypes().size()) {
+               res += ",";
+            }
+         }
+         res += "]";
+         return res;
       }
       assert(false);
       return "";

@@ -7,6 +7,8 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
+#include <vector>
 namespace lingodb::utility {
 class Serializer;
 class Deserializer;
@@ -29,6 +31,8 @@ enum class LogicalTypeId : uint8_t {
    STRING = 11,
    NONE = 12,
    INDEX = 13,
+   LIST = 14,
+   STRUCT = 15,
 };
 class TypeInfo {
    protected:
@@ -40,6 +44,8 @@ class TypeInfo {
       CharInfo = 4,
       DateInfo = 5,
       IntervalInfo = 6,
+      ListInfo = 7,
+      StructInfo = 8,
    };
    TypeInfoType infoType;
    TypeInfo(TypeInfoType infoType) : infoType(infoType) {}
@@ -80,6 +86,8 @@ class Type {
    static Type timestamp();
    static Type intervalDaytime();
    static Type intervalMonths();
+   static Type listType(Type elementType);
+   static Type structType(std::vector<std::pair<std::string, Type>> members);
    static Type noneType();
    static Type index();
 };
@@ -184,6 +192,28 @@ class IntervalTypeInfo : public TypeInfo {
    static std::shared_ptr<IntervalTypeInfo> deserialize(utility::Deserializer& deserializer);
    std::string toString();
    auto getUnit() { return unit; }
+};
+class ListTypeInfo : public TypeInfo {
+   public:
+   ListTypeInfo(Type elementType) : TypeInfo(TypeInfoType::ListInfo), elementType(elementType) {}
+   void serializeConcrete(utility::Serializer& serializer) const override;
+   static std::shared_ptr<ListTypeInfo> deserialize(utility::Deserializer& deserializer);
+   std::string toString();
+   auto getElementType() { return elementType; }
+
+   private:
+   Type elementType;
+};
+class StructTypeInfo : public TypeInfo {
+   public:
+   StructTypeInfo(std::vector<std::pair<std::string, Type>> members) : TypeInfo(TypeInfoType::StructInfo), members(std::move(members)) {}
+   void serializeConcrete(utility::Serializer& serializer) const override;
+   static std::shared_ptr<StructTypeInfo> deserialize(utility::Deserializer& deserializer);
+   std::string toString();
+   auto& getMembers() { return members; }
+
+   private:
+   std::vector<std::pair<std::string, Type>> members;
 };
 } //end namespace lingodb::catalog
 #endif //LINGODB_CATALOG_TYPES_H

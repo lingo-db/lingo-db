@@ -8,6 +8,7 @@
 
 #include <string>
 #include <vector>
+#include <arrow/vendored/datetime/date.h>
 namespace lingodb::ast {
 class OrderByModifier;
 enum class ExpressionType : uint8_t;
@@ -16,11 +17,17 @@ class LogicalTypeWithMods {
    public:
    LogicalTypeWithMods() : LogicalTypeWithMods(catalog::LogicalTypeId::INVALID) {}
    LogicalTypeWithMods(catalog::LogicalTypeId logicalTypeId)
-      : logicalTypeId(logicalTypeId), typeModifiers({}) {}
+      : logicalTypeId(logicalTypeId), typeModifiers({}), elementType(nullptr) {}
    LogicalTypeWithMods(catalog::LogicalTypeId logicalTypeId, std::vector<std::shared_ptr<Value>> typeModifiers)
-      : logicalTypeId(logicalTypeId), typeModifiers(std::move(typeModifiers)) {}
+      : logicalTypeId(logicalTypeId), typeModifiers(std::move(typeModifiers)), elementType(nullptr) {}
+   LogicalTypeWithMods(catalog::LogicalTypeId logicalTypeId, std::shared_ptr<LogicalTypeWithMods> elementType)
+      : logicalTypeId(logicalTypeId), typeModifiers({}), elementType(std::move(elementType)) {}
+   LogicalTypeWithMods(catalog::LogicalTypeId logicalTypeId, std::vector<std::shared_ptr<Value>> typeModifiers, std::shared_ptr<LogicalTypeWithMods> elementType)
+      : logicalTypeId(logicalTypeId), typeModifiers(std::move(typeModifiers)), elementType(std::move(elementType)) {}
    catalog::LogicalTypeId logicalTypeId;
    std::vector<std::shared_ptr<Value>> typeModifiers;
+   //Required for List Types
+   std::shared_ptr<LogicalTypeWithMods> elementType;
 };
 
 class BaseExpression : public AstNode {
@@ -104,9 +111,10 @@ enum class ExpressionType : uint8_t {
    VALUE_TUPLE = 77,
    VALUE_TUPLE_ADDRESS = 78,
    VALUE_NULL = 79,
-   VALUE_VECTOR = 80,
+   VALUE_LIST = 80,
    VALUE_SCALAR = 81,
    VALUE_DEFAULT = 82,
+   VALUE_STRUCT = 83,
 
    // -----------------------------
    // Aggregates
@@ -209,6 +217,8 @@ enum class ExpressionClass : uint8_t {
    POSITIONAL_REFERENCE = 18,
    BETWEEN = 19,
    LAMBDA_REF = 20,
+   LIST = 21,
+   STRUCT = 22,
    //===--------------------------------------------------------------------===//
    // Bound Expressions
    //===--------------------------------------------------------------------===//
@@ -231,6 +241,9 @@ enum class ExpressionClass : uint8_t {
    BOUND_LAMBDA = 41,
    BOUND_LAMBDA_REF = 42,
    BOUND_STAR = 43,
+   BOUND_LIST = 44,
+   BOUND_STRUCT = 45,
+   BOUND_STRUCT_EXTRACT = 46,
    //===--------------------------------------------------------------------===//
    // Miscellaneous
    //===--------------------------------------------------------------------===//
@@ -554,5 +567,26 @@ class SetColumnExpression : public ParsedExpression {
    // Custom hash and equality operators are not needed since SetColumnExpression cannot appear in GROUP BY clauses
 };
 
+class ListExpression : public ParsedExpression {
+   public:
+   struct ListSelection {
+      public:
+      std::optional<std::shared_ptr<ParsedExpression>> lowerBound;
+      std::optional<std::shared_ptr<ParsedExpression>> upperBound;
+      bool range = false;
+   };
+   static constexpr const ExpressionClass cType = ExpressionClass::LIST;
+   ListExpression(std::vector<std::shared_ptr<ParsedExpression>> values, std::optional<ListSelection> selection) : ParsedExpression(ExpressionType::VALUE_LIST, cType), values(std::move(values)), selection(std::move(selection)) {}
+   std::vector<std::shared_ptr<ParsedExpression>> values;
+   std::optional<ListSelection> selection;
+};
+
+class StructExpression : public ParsedExpression {
+   public:
+   static constexpr const ExpressionClass cType = ExpressionClass::STRUCT;
+   StructExpression(std::unordered_map<std::string, std::shared_ptr<ParsedExpression>> fields) : ParsedExpression(ExpressionType::VALUE_STRUCT, cType), fields(std::move(fields)) {}
+
+   std::unordered_map<std::string, std::shared_ptr<ParsedExpression>> fields;
+};
 } // namespace lingodb::ast
 #endif

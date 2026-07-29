@@ -30,6 +30,32 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
       return false;
    }
 
+   mlir::Value promoteToGlobal(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value value, llvm::DenseSet<mlir::Value>& notCounted) {
+      if (notCounted.contains(value)) return value;
+      auto type = value.getType();
+      auto managed = mlir::dyn_cast<db::ManagedType>(type);
+
+      if (!managed || !managed.needsManagement()) return value;
+
+      if (auto listType = mlir::dyn_cast<db::ListType>(type)) {
+         mlir::Value promotedList = managed.emitPromoteToGlobal(builder, loc, value);
+         if (typeNeedsManagement(listType.getElementType())) {
+            auto zero = builder.create<mlir::arith::ConstantIndexOp>(loc, 0);
+            auto len = builder.create<db::ListLengthOp>(loc, promotedList);
+            auto step = builder.create<mlir::arith::ConstantIndexOp>(loc, 1);
+            builder.create<mlir::scf::ForOp>(loc, zero, len, step, std::nullopt, [&](mlir::OpBuilder& b, mlir::Location loc, mlir::Value idx, mlir::ValueRange) {
+               mlir::Value element = b.create<db::ListGetOp>(loc, listType.getElementType(), promotedList, idx);
+               mlir::Value promotedElement = promoteToGlobal(b, loc, element, notCounted);
+               b.create<db::ListSetOp>(loc, promotedList, idx, promotedElement);
+               b.create<mlir::scf::YieldOp>(loc);
+            });
+         }
+         return promotedList;
+      }
+
+      return managed.emitPromoteToGlobal(builder, loc, value);
+   }
+
    void addUse(mlir::Value val, mlir::Operation* insertBeforeOp, llvm::DenseSet<mlir::Value>& notCounted) {
       if (notCounted.contains(val)) return;
       if (!typeNeedsManagement(val.getType())) return;
@@ -104,8 +130,66 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
                builder.create<mlir::func::ReturnOp>(loc);
             }
             elementFn = mlir::SymbolRefAttr::get(builder.getContext(), name);
+         } else if (mlir::isa<db::ListType>(listType.getElementType())) {
+            // Nested lists clean up their direct elements, but the element is
+            // itself a managed list value, so the inner cleanup uses the plain
+            // list cleanup path rather than recursing into leaf elements.
+            auto loc = insertBeforeOp->getLoc();
+            std::string name = "_cleanup_list_list";
+            auto moduleOp = insertBeforeOp->getParentOfType<mlir::ModuleOp>();
+            mlir::func::FuncOp cleanupFn = moduleOp.lookupSymbol<mlir::func::FuncOp>(name);
+            if (!cleanupFn) {
+               auto fnType = builder.getFunctionType({listType}, {});
+               mlir::OpBuilder::InsertionGuard guard(builder);
+               builder.setInsertionPointToStart(moduleOp.getBody());
+               cleanupFn = builder.create<mlir::func::FuncOp>(loc, name, fnType);
+               builder.setInsertionPointToStart(cleanupFn.addEntryBlock());
+               mlir::Value list = cleanupFn.getArgument(0);
+               auto zero = builder.create<mlir::arith::ConstantIndexOp>(loc, 0);
+               auto len = builder.create<db::ListLengthOp>(loc, list);
+               auto step = builder.create<mlir::arith::ConstantIndexOp>(loc, 1);
+               builder.create<mlir::scf::ForOp>(loc, zero, len, step, std::nullopt, [&](mlir::OpBuilder& b, mlir::Location loc, mlir::Value idx, mlir::ValueRange) {
+                  mlir::Value element = b.create<db::ListGetOp>(loc, listType.getElementType(), list, idx);
+                  b.create<db::MemoryCleanupUse>(loc, element, mlir::SymbolRefAttr());
+                  b.create<mlir::scf::YieldOp>(loc);
+               });
+               builder.create<mlir::func::ReturnOp>(loc);
+            }
+            elementFn = mlir::SymbolRefAttr::get(builder.getContext(), name);
          } else {
             assert(!typeNeedsManagement(listType.getElementType()));
+         }
+      } else if (auto structType = mlir::dyn_cast<db::StructType>(val.getType())) {
+         bool needsFieldMgmt = false;
+         for (auto fieldType : structType.getTypes()) {
+            if (typeNeedsManagement(fieldType)) {
+               needsFieldMgmt = true;
+               break;
+            }
+         }
+         if (needsFieldMgmt) {
+            auto loc = insertBeforeOp->getLoc();
+            std::string name = "_cleanup_struct_" + std::to_string(reinterpret_cast<uintptr_t>(structType.getAsOpaquePointer()));
+            auto moduleOp = insertBeforeOp->getParentOfType<mlir::ModuleOp>();
+            mlir::func::FuncOp cleanupFn = moduleOp.lookupSymbol<mlir::func::FuncOp>(name);
+            if (!cleanupFn) {
+               auto fnType = builder.getFunctionType({structType}, {});
+               mlir::OpBuilder::InsertionGuard guard(builder);
+               builder.setInsertionPointToStart(moduleOp.getBody());
+               cleanupFn = builder.create<mlir::func::FuncOp>(loc, name, fnType);
+               builder.setInsertionPointToStart(cleanupFn.addEntryBlock());
+               mlir::Value strct = cleanupFn.getArgument(0);
+               for (size_t i = 0; i < structType.getTypes().size(); ++i) {
+                  auto fieldType = structType.getTypes()[i];
+                  if (typeNeedsManagement(fieldType)) {
+                     auto fieldNameAttr = mlir::cast<mlir::StringAttr>(structType.getNames()[i]);
+                     mlir::Value element = builder.create<db::StructGetOp>(loc, fieldType, strct, fieldNameAttr);
+                     builder.create<db::MemoryCleanupUse>(loc, element, mlir::SymbolRefAttr());
+                  }
+               }
+               builder.create<mlir::func::ReturnOp>(loc);
+            }
+            elementFn = mlir::SymbolRefAttr::get(builder.getContext(), name);
          }
       }
       mlir::cast<db::ManagedType>(val.getType()).emitCleanupUse(builder, insertBeforeOp->getLoc(), val, elementFn);
@@ -160,11 +244,8 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
          // values returned from the subop.map fn outlive the per-row scope;
          // promote them to a global lifetime instead of bumping the refcount.
          for (auto& operand : terminator->getOpOperands()) {
-            auto managed = mlir::dyn_cast<db::ManagedType>(operand.get().getType());
-            if (!managed || !managed.needsManagement()) continue;
-            if (notCounted.contains(operand.get())) continue;
             mlir::OpBuilder builder(block->getTerminator());
-            mlir::Value newVal = managed.emitPromoteToGlobal(builder, block->getTerminator()->getLoc(), operand.get());
+            mlir::Value newVal = promoteToGlobal(builder, block->getTerminator()->getLoc(), operand.get(), notCounted);
             operand.set(newVal);
          }
       } else {
@@ -217,6 +298,9 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
       module.walk([&](subop::MapOp mapOp) {
          llvm::DenseSet<mlir::Value> notCounted;
          for (auto arg : mapOp.getFn().front().getArguments()) {
+            if (mlir::isa<db::ListType>(arg.getType())) {
+               continue;
+            }
             notCounted.insert(arg);
          }
          seedNotCounted(mapOp.getFn(), notCounted);

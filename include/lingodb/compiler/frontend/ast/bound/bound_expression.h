@@ -182,5 +182,37 @@ class BoundSetColumnExpression : public BoundExpression {
    std::string mapName;
    std::vector<std::shared_ptr<BoundExpression>> sets;
 };
+
+class BoundListExpression : public BoundExpression {
+   public:
+   struct BoundListSelection {
+      public:
+      std::optional<std::shared_ptr<BoundExpression>> lowerBound;
+      std::optional<std::shared_ptr<BoundExpression>> upperBound;
+      bool range = false;
+   };
+   static constexpr const ExpressionClass cType = ExpressionClass::BOUND_LIST;
+   BoundListExpression(std::vector<std::shared_ptr<BoundExpression>> values, std::optional<BoundListSelection> selection, NullableType elementType, NullableType listType, NullableType resultType, std::string alias) : BoundExpression(cType, ExpressionType::VALUE_LIST, resultType, alias), values(std::move(values)), selection(std::move(selection)), elementType(elementType), listType(listType) {}
+   std::vector<std::shared_ptr<BoundExpression>> values;
+   std::optional<BoundListSelection> selection;
+   NullableType elementType;
+   NullableType listType;
+};
+
+class BoundStructExpression : public BoundExpression {
+   public:
+   static constexpr const ExpressionClass cType = ExpressionClass::BOUND_STRUCT;
+   BoundStructExpression(std::unordered_map<std::string, std::shared_ptr<BoundExpression>> fields, NullableType resultType, std::string alias) : BoundExpression(cType, ExpressionType::VALUE_STRUCT, resultType, alias), fields(std::move(fields)) {}
+
+   std::unordered_map<std::string, std::shared_ptr<BoundExpression>> fields;
+};
+
+class BoundStructExtractExpression : public BoundExpression {
+   public:
+   static constexpr const ExpressionClass cType = ExpressionClass::BOUND_STRUCT_EXTRACT;
+   BoundStructExtractExpression(std::shared_ptr<BoundExpression> structColumn, std::string fieldName, NullableType resultType, std::string alias) : BoundExpression(cType, ExpressionType::STRUCT_EXTRACT, resultType, alias), structColumn(structColumn), fieldName(fieldName) {}
+   std::shared_ptr<BoundExpression> structColumn;
+   std::string fieldName;
+};
 } // namespace lingodb::ast
 #endif

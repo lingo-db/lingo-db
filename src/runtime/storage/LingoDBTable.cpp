@@ -119,6 +119,42 @@ std::shared_ptr<arrow::RecordBatch> createSample(const std::vector<lingodb::runt
    return arrow::Table::FromRecordBatches(sampleData).ValueOrDie()->CombineChunksToBatch().ValueOrDie();
 }
 
+void addBuffers(const std::shared_ptr<arrow::ArrayData>& data, std::vector<const void*>& buffers, size_t numRows, bool isRoot) {
+   if (!data->buffers.empty()) {
+      if (isRoot) {
+         // Root array: include validity buffer, provide default if missing
+         if (data->buffers[0]) {
+            buffers.push_back(data->buffers[0]->data());
+         } else {
+            if (numRows > lingodb::runtime::ArrayView::maxNullCount) {
+               throw std::runtime_error("LingoDBTable: too many nulls in column");
+            }
+            buffers.push_back(lingodb::runtime::ArrayView::validData.data());
+         }
+      }
+      // Child arrays: intentionally skip the validity buffer at index 0
+   }
+
+   // Add remaining data/offset buffers
+   for (size_t i = 1; i < data->buffers.size(); i++) {
+      buffers.push_back(data->buffers[i] ? data->buffers[i]->data() : nullptr);
+   }
+
+   // Recursively add child buffers
+   for (const auto& child : data->child_data) {
+      addBuffers(child, buffers, numRows, false);
+   }
+}
+
+size_t countBuffers(const std::shared_ptr<arrow::ArrayData>& data, bool isRoot) {
+   size_t count = data->buffers.size();
+   if (!isRoot && count > 0) count--;
+   for (const auto& child : data->child_data) {
+      count += countBuffers(child, false);
+   }
+   return count;
+}
+
 std::shared_ptr<arrow::DataType> toPhysicalType(lingodb::catalog::Type t) {
    using TypeId = lingodb::catalog::LogicalTypeId;
    switch (t.getTypeId()) {
@@ -189,6 +225,10 @@ std::shared_ptr<arrow::DataType> toPhysicalType(lingodb::catalog::Type t) {
       }
       case TypeId::STRING:
          return arrow::utf8();
+      case TypeId::LIST: {
+         auto listInfo = t.getInfo<lingodb::catalog::ListTypeInfo>();
+         return arrow::list(toPhysicalType(listInfo->getElementType()));
+      }
       default:
          throw std::runtime_error("unsupported type");
    }
@@ -201,26 +241,12 @@ LingoDBTable::TableChunk::TableChunk(std::shared_ptr<arrow::RecordBatch> data, s
    std::vector<size_t> bufferStart;
    for (auto colId = 0; colId < data->num_columns(); colId++) {
       auto arrayData = data->column(colId)->data();
-      size_t currBufId = buffers.size();
-      for (size_t i = 0; i < arrayData->buffers.size(); i++) {
-         auto buffer = arrayData->buffers[i];
-         if (buffer) {
-            buffers.push_back(buffer->data());
-         } else {
-            buffers.push_back(nullptr);
-         }
-      }
-      if (!buffers[currBufId]) {
-         if (numRows > ArrayView::maxNullCount) {
-            throw std::runtime_error("LingoDBTable: too many nulls in column");
-         }
-         buffers[currBufId] = ArrayView::validData.data();
-      }
-      bufferStart.push_back(currBufId);
+      bufferStart.push_back(buffers.size());
+      addBuffers(arrayData, buffers, numRows, true);
    }
    for (auto colId = 0; colId < data->num_columns(); colId++) {
       auto arrayData = data->column(colId)->data();
-      columnInfo.push_back(ArrayView{.length = arrayData->length, .nullCount = arrayData->null_count, .offset = arrayData->offset, .nBuffers = static_cast<int64_t>(arrayData->buffers.size()), .nChildren = static_cast<int64_t>(arrayData->child_data.size()), .buffers = &buffers[bufferStart.at(colId)], .children = nullptr});
+      columnInfo.push_back(ArrayView{.length = arrayData->length, .nullCount = arrayData->null_count, .offset = arrayData->offset, .nBuffers = static_cast<int64_t>(countBuffers(arrayData, true)), .nChildren = static_cast<int64_t>(arrayData->child_data.size()), .buffers = &buffers[bufferStart.at(colId)], .children = nullptr});
    }
 }
 

@@ -39,6 +39,16 @@ mlir::Value NullableType::castValueToThisType(mlir::OpBuilder& builder, mlir::Va
          nullOp.getResult().setType(t2);
          return nullOp;
       }
+      if (auto createListOp = mlir::dyn_cast_or_null<compiler::dialect::db::CreateListOp>(defOp)) {
+         if (mlir::isa<compiler::dialect::db::ListType>(getBaseType(type))) {
+            auto listType = mlir::cast<compiler::dialect::db::ListType>(getBaseType(type));
+            createListOp.getResult().setType(listType);
+            if (isNullable) {
+               return builder.create<compiler::dialect::db::AsNullableOp>(builder.getUnknownLoc(), type, createListOp.getResult());
+            }
+            return createListOp.getResult();
+         }
+      }
    }
 
    if (valueToCast.getType() == getBaseType(type)) {
@@ -76,6 +86,16 @@ mlir::Value NullableType::castValue(mlir::OpBuilder& builder, mlir::Value valueT
          auto t2 = mlir::cast<compiler::dialect::db::NullableType>(type);
          nullOp.getResult().setType(t2);
          return nullOp;
+      }
+      if (auto createListOp = mlir::dyn_cast_or_null<compiler::dialect::db::CreateListOp>(defOp)) {
+         if (mlir::isa<compiler::dialect::db::ListType>(getBaseType(type))) {
+            auto listType = mlir::cast<compiler::dialect::db::ListType>(getBaseType(type));
+            createListOp.getResult().setType(listType);
+            if (castType->isNullable) {
+               return builder.create<compiler::dialect::db::AsNullableOp>(builder.getUnknownLoc(), type, createListOp.getResult());
+            }
+            return createListOp.getResult();
+         }
       }
    }
 

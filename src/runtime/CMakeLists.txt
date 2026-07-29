@@ -38,6 +38,7 @@ add_library(runtime OBJECT
         storage/LingoDBTable.cpp
         storage/Restrictions.cpp
         PythonRuntime.cpp
+        StructRuntime.cpp
 )
 set(COMPILE_DEFS "")
 if (ENABLE_GPU_BACKEND)

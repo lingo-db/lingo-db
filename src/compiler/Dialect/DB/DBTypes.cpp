@@ -25,5 +25,8 @@ bool NullableType::needsManagement() const {
    }
    return false;
 }
+bool StructType::needsManagement() const {
+   return true;
+}
 
 } // namespace lingodb::compiler::dialect::db

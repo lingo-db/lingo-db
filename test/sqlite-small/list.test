@@ -1,0 +1,27 @@
+# Test List Types
+statement ok
+CREATE TABLE integers (i INTEGER);
+
+statement ok
+CREATE TABLE list_table (int_list INTEGER[], varchar_list VARCHAR[]);
+
+statement ok
+INSERT INTO list_table VALUES ([1, 2, 3], ['Hello', 'World']);
+
+statement ok
+INSERT INTO integers VALUES (1), (2), (3), (NULL);
+
+query tsv
+select [23, 24], [42.42], ['Hello', 'Hello ' || 'World'], [ [['Super']], [['Nested']],  [['List']] ]
+----
+[ 23, 24 ] 	[ 42.42 ] 	[ "Hello", "Hello World" ] 	[ [ [ "Super" ] ], [ [ "Nested" ] ], [ [ "List" ] ] ]
+
+query tsv
+select [23, 24][2], [42.42][1], ['Hello', 'Hello ' || 'World'][2], [1,2,3,4,5][2:4], [1,2,3,4,5][:2], [1,2,3,4,5][2:]
+----
+24	42.42	Hello World	[ 2, 3, 4 ] 	[ 1, 2 ] 	[ 2, 3, 4, 5 ]
+
+query tsv
+select int_list from list_table
+----
+[ 1, 2, 3 ]

@@ -145,6 +145,16 @@ def ListType: DB_Type<"List", "list", [DB_ManagedType]>{
       bool needsManagement() const { return true; }
   }];
 }
+
+def StructType: DB_Type<"Struct", "struct", [DB_ManagedType]>{
+  let parameters = (ins ArrayRefParameter<"mlir::Type">:$types, ArrayRefParameter<"mlir::StringAttr">:$names);
+  let assemblyFormat = "`<` $names `,` $types `>`";
+  let extraClassDeclaration = [{
+      bool needsManagement() const;
+  }];
+}
+
+
 def DictType : DB_Type<"Dict", "dict">{
   let parameters = (ins "mlir::Type":$keyType, "mlir::Type":$valueType);
   let assemblyFormat = "`<` $keyType `,` $valueType `>`";
@@ -220,6 +230,56 @@ def ListLengthOp : DB_Op<"list_length", []> {
     let arguments = (ins ListType:$list);
     let results = (outs Index:$length);
     let assemblyFormat = "$list `:` type($list) attr-dict";
+}
+
+def StructCreateOp : DB_Op<"struct_create", [Pure, DeclareOpInterfaceMethods<DB_RefCountedOp, ["getOwnedOperands"]>]> {
+    let summary = "Create a struct from values";
+    let arguments = (ins Variadic<AnyType>:$vals);
+    let results = (outs StructType:$res);
+    let assemblyFormat = "$vals `:` functional-type($vals, $res) attr-dict";
+    let extraClassDefinition = [{
+        void $cppClass::getOwnedOperands(llvm::SmallVectorImpl<mlir::Value>& result) {
+            for (auto v : getVals()) result.push_back(v);
+        }
+    }];
+}
+
+def StructGetOp : DB_Op<"struct_get", [Pure, DeclareOpInterfaceMethods<DB_RefCountedOp, ["getBorrowedResults"]>]> {
+    let summary = "Get a field from a struct by name";
+    let arguments = (ins StructType:$strct, StrAttr:$name);
+    let results = (outs AnyType:$res);
+    let assemblyFormat = "$strct `[` $name `]` `:` functional-type($strct, $res) attr-dict";
+    let extraClassDefinition = [{
+        void $cppClass::getBorrowedResults(llvm::SmallVectorImpl<mlir::Value>& result) {
+            result.push_back(getRes());
+        }
+    }];
+}
+
+def StructAppendOp : DB_Op<"struct_append", [Pure, DeclareOpInterfaceMethods<DB_RefCountedOp, ["getOwnedOperands"]>]> {
+    let summary = "Append a field to a struct, creating a new struct";
+    let arguments = (ins StructType:$strct, StrAttr:$name, AnyType:$val);
+    let results = (outs StructType:$res);
+    let assemblyFormat = "$strct `,` $name `=` $val `:` type($strct) `,` type($val) `->` type($res) attr-dict";
+    let extraClassDefinition = [{
+        void $cppClass::getOwnedOperands(llvm::SmallVectorImpl<mlir::Value>& result) {
+            result.push_back(getStrct());
+            result.push_back(getVal());
+        }
+    }];
+}
+
+def StructUpdateOp : DB_Op<"struct_update", [Pure, DeclareOpInterfaceMethods<DB_RefCountedOp, ["getOwnedOperands"]>]> {
+    let summary = "Update a field in a struct, creating a new struct";
+    let arguments = (ins StructType:$strct, StrAttr:$name, AnyType:$val);
+    let results = (outs StructType:$res);
+    let assemblyFormat = "$strct `[` $name `]` `=` $val `:` type($strct) `,` type($val) `->` type($res) attr-dict";
+    let extraClassDefinition = [{
+        void $cppClass::getOwnedOperands(llvm::SmallVectorImpl<mlir::Value>& result) {
+            result.push_back(getStrct());
+            result.push_back(getVal());
+        }
+    }];
 }
 
 def CreateDictOp : DB_Op<"create_dict", []> {

@@ -136,6 +136,7 @@ class SQLQueryAnalyzer {
 
    private:
    std::shared_ptr<ast::TableProducer> analyzeTableProducer(std::shared_ptr<ast::TableProducer> rootNode, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope);
+   void unnestStruct(const std::string& relationName, std::shared_ptr<ast::ColumnReference> structColumn, std::shared_ptr<ast::ExtendNode> extendNode, std::vector<std::shared_ptr<ast::ParsedExpression>>& newTargets, location loc);
    std::shared_ptr<ast::CreateNode> analyzeCreateNode(std::shared_ptr<ast::CreateNode> createNode);
    std::shared_ptr<ast::CreateNode> analyzeFunctionCreate(std::shared_ptr<ast::CreateNode> createNode, std::shared_ptr<ast::CreateFunctionInfo> createFunctionInfo, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope);
    std::shared_ptr<ast::BoundInsertNode> analyzeInsertNode(std::shared_ptr<ast::InsertNode> insertNode, std::shared_ptr<SQLContext> context, SQLContext::ResolverScope& resolverScope);
@@ -195,7 +196,7 @@ class SQLQueryAnalyzer {
    std::shared_ptr<ast::BoundExpression> analyzeWindowExpression(std::shared_ptr<ast::WindowExpression> windowExpr, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope);
    std::shared_ptr<ast::BoundExpression> analyzeCastExpression(std::shared_ptr<ast::CastExpression> castExpr, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope);
    std::shared_ptr<ast::BoundExpression> analyzeFunctionExpression(std::shared_ptr<ast::FunctionExpression> function, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope);
-   std::shared_ptr<ast::BoundColumnRefExpression> analyzeColumnRefExpression(std::shared_ptr<ast::ColumnRefExpression> columnRef, std::shared_ptr<SQLContext> context);
+   std::shared_ptr<ast::BoundExpression> analyzeColumnRefExpression(std::shared_ptr<ast::ColumnRefExpression> columnRef, std::shared_ptr<SQLContext> context);
 
    ast::ExpressionType stringToExpressionType(const std::string& parserStr) {
       std::string str = parserStr;
@@ -238,7 +239,7 @@ struct SQLTypeUtils {
    static std::vector<NullableType> toCommonTypes(std::vector<NullableType> types);
    static std::vector<NullableType> toCommonNumber(std::vector<NullableType> types);
 
-   static NullableType typemodsToCatalogType(catalog::LogicalTypeId logicalTypeId, std::vector<std::shared_ptr<ast::Value>>& typeModifiers);
+   static NullableType typemodsToCatalogType(const ast::LogicalTypeWithMods& type);
 
    [[nodiscard]]
    static std::pair<unsigned long, unsigned long> getAdaptedDecimalPAndSAfterMulDiv(unsigned long p, unsigned long s);

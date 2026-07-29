@@ -1,0 +1,24 @@
+query
+SELECT a.x FROM (SELECT {x: 1, y: 2, z: 3} AS a) as tables;
+----
+1
+
+query
+SELECT a.y FROM (SELECT {x: 1, y: 2, z: 3} AS a) as tables;
+----
+2
+
+query tsv
+SELECT a.* FROM (SELECT {x: 1, y: 2, z: 3} AS a) as tables;
+----
+3	2	1
+
+query
+SELECT tables.a.x FROM (SELECT {x: 100, y: 200} AS a) as tables;
+----
+100
+
+query
+SELECT tables.a.y FROM (SELECT {x: 100, y: 200} AS a) as tables;
+----
+200
