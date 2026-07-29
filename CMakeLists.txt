@@ -34,12 +34,16 @@ include(FindZLIB)
 message("Using ZLIB: ${ZLIB_INCLUDE_DIRS}")
 message("Using Python3: ${Python3_EXECUTABLE}")
 
-find_package(Arrow 24 REQUIRED)
-find_package(ArrowCompute 24 REQUIRED)
+find_package(Arrow 25 REQUIRED)
+find_package(ArrowCompute 25 REQUIRED)
+find_package(Parquet REQUIRED)
+
+
 option(ENABLE_GPU_BACKEND "enable GPU backend" OFF)
 option(ENABLE_BASELINE_BACKEND "enable tpde baseline backend" OFF)
 option(ENABLE_TESTS "enable tests" ON)
 option(ENABLE_MIMALLOC "enable mimalloc allocator" ON)
+option(ENABLE_PARQUET_SCANNER "enable experimental external table  scanner for parquet files" OFF)
 option(ENABLE_REFCOUNT "enable reference counting for managed runtime values" ON)
 if (ENABLE_REFCOUNT)
     add_compile_definitions(ENABLE_REFCOUNT=1)

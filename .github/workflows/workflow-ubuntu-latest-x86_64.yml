@@ -16,7 +16,7 @@ jobs:
       matrix:
         build_type: [ debug, asan, release ]
     runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:ba723e305302f60aefe75084c3b0c60e12dbad70
+    container: ghcr.io/lingo-db/lingodb-dev:90c4764307d86c4c66ef4c5504313f65f4d0a0a4
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -38,6 +38,7 @@ jobs:
           CC: ccache clang-20
           CXX: ccache clang++-20
           ENABLE_BASELINE_BACKEND: "ON"
+          ENABLE_PARQUET_SCANNER: "ON"
       - uses: actions/upload-artifact@master
         with:
           name: ${{ matrix.build_type }}-build
@@ -50,7 +51,7 @@ jobs:
       matrix:
         build_type: [ debug, asan ]
     runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:ba723e305302f60aefe75084c3b0c60e12dbad70
+    container: ghcr.io/lingo-db/lingodb-dev:90c4764307d86c4c66ef4c5504313f65f4d0a0a4
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
@@ -100,7 +101,7 @@ jobs:
         build_type: [ release, asan ]
     needs: build
     runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:ba723e305302f60aefe75084c3b0c60e12dbad70
+    container: ghcr.io/lingo-db/lingodb-dev:90c4764307d86c4c66ef4c5504313f65f4d0a0a4
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
@@ -132,7 +133,7 @@ jobs:
         build_type: [ release, asan ]
     needs: build
     runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:ba723e305302f60aefe75084c3b0c60e12dbad70
+    container: ghcr.io/lingo-db/lingodb-dev:90c4764307d86c4c66ef4c5504313f65f4d0a0a4
     steps:
       - name: Freeing up space
         run: |
@@ -175,8 +176,11 @@ jobs:
         run: |
           export BASE_PATH=$(pwd)
           mkdir -p /db/tpch-1
+          mkdir -p /db/tpch-1-parquet
           cd /datasets/tpch-1
           $BASE_PATH/build/lingodb-${{ matrix.build_type }}/sql /db/tpch-1 < $BASE_PATH/resources/sql/tpch/initialize.sql
+          $BASE_PATH/build/lingodb-${{ matrix.build_type }}/sql /db/tpch-1 < $BASE_PATH/resources/sql/tpch/export-to-parquet.sql
+          mv *.parquet /db/tpch-1-parquet
       - name: Load dataset tpcds
         run: |
           export BASE_PATH=$(pwd)
@@ -187,8 +191,16 @@ jobs:
         run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpchSf1.test /db/tpch-1
         env:
           LINGODB_EXECUTION_MODE: DEFAULT
+      - name: Test tpch parquet (llvm)
+        run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpchSf1.test /db/tpch-1-parquet
+        env:
+          LINGODB_EXECUTION_MODE: DEFAULT
       - name: Test tpch (baseline)
         run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpchSf1.test /db/tpch-1
+        env:
+          LINGODB_EXECUTION_MODE: BASELINE
+      - name: Test tpch parquet (baseline)
+        run: build/lingodb-${{ matrix.build_type }}/sqlite-tester test/sqlite-datasets/tpchSf1.test /db/tpch-1-parquet
         env:
           LINGODB_EXECUTION_MODE: BASELINE
 
@@ -224,7 +236,7 @@ jobs:
   # UDFs.
   build_lingodb_python:
     runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-py-dev:a49b5b26648d55dda2817c23b70376d94e8f9084
+    container: ghcr.io/lingo-db/lingodb-py-dev:90c4764307d86c4c66ef4c5504313f65f4d0a0a4
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -269,7 +281,7 @@ jobs:
     # cycle.
     if: github.event_name == 'pull_request' || contains(github.ref, 'python')
     runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-py-dev:a49b5b26648d55dda2817c23b70376d94e8f9084
+    container: ghcr.io/lingo-db/lingodb-py-dev:90c4764307d86c4c66ef4c5504313f65f4d0a0a4
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -324,7 +336,7 @@ jobs:
           - python_mode: WASM
       fail-fast: false
     runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:ba723e305302f60aefe75084c3b0c60e12dbad70
+    container: ghcr.io/lingo-db/lingodb-dev:90c4764307d86c4c66ef4c5504313f65f4d0a0a4
     steps:
       - uses: actions/checkout@v4
         with:
@@ -395,7 +407,7 @@ jobs:
       matrix:
         build_type: [ debug]
     runs-on: ubuntu-24.04
-    container: ghcr.io/lingo-db/lingodb-dev:ba723e305302f60aefe75084c3b0c60e12dbad70
+    container: ghcr.io/lingo-db/lingodb-dev:90c4764307d86c4c66ef4c5504313f65f4d0a0a4
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master

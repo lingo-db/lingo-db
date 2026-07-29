@@ -1,4 +1,4 @@
-add_library(runtime OBJECT
+set(RUNTIME_SOURCES
         helpers.cpp
         Tracing.cpp
         ArrowColumn.cpp
@@ -39,6 +39,19 @@ add_library(runtime OBJECT
         storage/Restrictions.cpp
         PythonRuntime.cpp
 )
+
+
+if(ENABLE_PARQUET_SCANNER)
+    list(APPEND RUNTIME_SOURCES
+            storage/ExternalTableScan.cpp
+    )
+endif ()
+add_library(runtime OBJECT
+        ${RUNTIME_SOURCES}
+)
+if (ENABLE_PARQUET_SCANNER)
+    target_compile_definitions(runtime PRIVATE ENABLE_PARQUET_SCANNER=1)
+endif ()
 set(COMPILE_DEFS "")
 if (ENABLE_GPU_BACKEND)
     list(APPEND COMPILE_DEFS "GPU_ENABLED=1")
@@ -50,11 +63,10 @@ target_compile_definitions(runtime PUBLIC ${COMPILE_DEFS})
 
 #todo: should not be necessary, but it is for Arrow 23
 if("abslAlt" IN_LIST ARROW_SYSTEM_DEPENDENCIES)
-    target_link_libraries(runtime PRIVATE Arrow::arrow_static absl::strings absl::time absl::bad_optional_access)
+    target_link_libraries(runtime PRIVATE Arrow::arrow_static parquet_static absl::strings absl::time absl::bad_optional_access)
 else()
-    target_link_libraries(runtime PRIVATE Arrow::arrow_static)
+    target_link_libraries(runtime PRIVATE Arrow::arrow_static parquet_static)
 endif()
-
 
 add_subdirectory(GPU)
 target_link_libraries(runtime PUBLIC GPU-rt scheduler)

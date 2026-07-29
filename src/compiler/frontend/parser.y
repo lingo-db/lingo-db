@@ -271,7 +271,8 @@
 
 %type<std::vector<std::string>> name_list opt_name_list qualified_name_list
 
-%type<std::shared_ptr<lingodb::ast::ParsedExpression>> Iconst SignedIconst AexprConst Sconst Bconst Fconst NumericOnly NonReservedWord_or_Sconst opt_boolean_or_string var_value
+%type<std::shared_ptr<lingodb::ast::ParsedExpression>> Iconst SignedIconst AexprConst Bconst Fconst NumericOnly var_value opt_boolean_or_string_expression NonReservedWord_or_Sconst Sconst
+
 %type<std::vector<std::shared_ptr<lingodb::ast::ParsedExpression>>> var_list
 
 %type<std::shared_ptr<lingodb::ast::GroupByNode>> group_clause group_clause_with_alias
@@ -338,12 +339,12 @@
 
 
 %type<std::shared_ptr<ast::CopyNode>> CopyStmt
-%type<std::string> copy_file_name copy_delimiter
-%type<std::vector<std::pair<std::string, std::string>>> copy_options copy_opt_list
-%type<std::pair<std::string, std::string>> copy_opt_item
+%type<std::string> copy_file_name copy_delimiter opt_boolean_or_string_as_string copy_generic_opt_arg
+%type<std::vector<std::pair<std::string, std::string>>> copy_options copy_opt_list copy_generic_opt_list
+%type<std::pair<std::string, std::string>> copy_opt_item copy_generic_opt_elem
 %type<std::vector<std::pair<std::string, std::string>>> createfunc_opt_list opt_createfunc_opt_list
 %type<std::pair<std::string, std::string>> createfunc_opt_item common_func_opt_item
-
+%type<bool> copy_from
 
 %type<std::string> param_name func_as
 %type<bool> opt_or_replace
@@ -572,18 +573,30 @@ PreparableStmt:
     ;
 //TODO add missing rules    
 CopyStmt: 
-    COPY qualified_name copy_from copy_file_name copy_options copy_delimiter
+    COPY qualified_name copy_from copy_file_name opt_with copy_options copy_delimiter
     {
         auto node = mkNode<lingodb::ast::CopyNode>(@$);
         node->copyInfo->table = $qualified_name;
         node->copyInfo->fromFileName = $copy_file_name;
         node->copyInfo->options = $copy_options;
+        node->copyInfo->isFrom = $copy_from;
         $$ = node;
+    }
+    | COPY LP PreparableStmt RP TO copy_file_name opt_with copy_options
+    {
+        error(@$, "TODO");
     }
     ;
 //TODO add missing rules    
 copy_from:
     FROM
+    {
+        $$ = true;
+    }
+    | TO
+    {
+        $$ = false;
+    }
     ;
 //TODO Add missing rules
 copy_file_name:
@@ -598,7 +611,15 @@ copy_options:
     {
         $$ = $1;
     }
+    | LP copy_generic_opt_list RP
+    {
+        $$ = $2;
+    }
     ;
+opt_with: 
+    WITH
+	| %empty
+;
 copy_opt_list:
     copy_opt_list[list] copy_opt_item
     {
@@ -639,6 +660,31 @@ copy_delimiter:
     DELIMITERS Sconst
     ;
     | %empty
+    ;
+copy_generic_opt_list: 
+    copy_generic_opt_elem
+    {
+        auto list = mkList<std::pair<std::string,std::string>>();
+        list.emplace_back($copy_generic_opt_elem);
+        $$ = list;
+    }
+    | copy_generic_opt_list[list] COMMA copy_generic_opt_elem
+    {
+        $list.emplace_back($copy_generic_opt_elem);
+        $$ = $list;
+    }
+    ;
+copy_generic_opt_elem: 
+    ColLabel copy_generic_opt_arg
+    {
+        $$ = std::make_pair($ColLabel, $copy_generic_opt_arg);
+    }
+    ;
+copy_generic_opt_arg: 
+    opt_boolean_or_string_as_string
+    {
+        $$ = $1;
+    }
     ;
 
 VariableSetStmt: 
@@ -697,7 +743,7 @@ var_list:
     }
     ;
 var_value:
-    opt_boolean_or_string
+    opt_boolean_or_string_expression
     {
         $$ = $1;
     }
@@ -706,7 +752,7 @@ var_value:
         $$ = $1;
     }
     ;
-opt_boolean_or_string:
+opt_boolean_or_string_expression:
     TRUE_P
     {
         auto t = mkNode<lingodb::ast::ConstantExpression>(@$);
@@ -728,6 +774,32 @@ opt_boolean_or_string:
     | NonReservedWord_or_Sconst
     {
         $$ = $1;
+    }
+    ;
+opt_boolean_or_string_as_string: 
+    TRUE_P
+    {
+        $$="true";
+    }
+    | FALSE_P
+    {
+        $$="false";
+    }
+    | ON 
+    {
+        $$="on";
+    }
+    | NonReservedWord_or_Sconst
+    {
+        auto constant = std::dynamic_pointer_cast<lingodb::ast::ConstantExpression>($NonReservedWord_or_Sconst);
+        if(!constant) {
+            error(@$, "Only string constant expressions allowed here");
+        } 
+        auto stringValue = std::dynamic_pointer_cast<lingodb::ast::StringValue>(constant->value);
+        if(!stringValue) {
+            error(@$, "Only string constant expressions allowed here");
+        }
+        $$ = stringValue->sVal;
     }
     ;
 NonReservedWord_or_Sconst:

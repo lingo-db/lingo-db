@@ -11,6 +11,7 @@ class CopyInfo {
    public:
    std::string fromFileName;
    std::string table;
+   bool isFrom;
    std::vector<std::pair<std::string, std::string>> options;
 };
 /**

@@ -59,7 +59,7 @@ class LingoDBTableCatalogEntry : public TableCatalogEntry {
    virtual void ensureFullyLoaded() override;
    virtual void setShouldPersist(bool shouldPersist) override;
    virtual void setDBDir(std::string dbDir) override;
-   static std::shared_ptr<LingoDBTableCatalogEntry> createFromCreateTable(const CreateTableDef& def);
+   static std::shared_ptr<LingoDBTableCatalogEntry> createFromCreateTable(const CreateTableDef& def, bool useParquetScan = false);
 };
 } //namespace lingodb::catalog
 
