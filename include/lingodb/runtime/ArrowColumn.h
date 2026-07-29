@@ -29,7 +29,7 @@ class ArrowColumnBuilder {
    void addBool(bool isValid, bool value);
    void addFixedSized(bool isValid, uint8_t* value);
 
-   void addList(bool isValid);
+   void addList(bool isValid, class List* list, VarLen32 type);
    void addBinary(bool isValid, runtime::VarLen32);
    void merge(ArrowColumnBuilder* other);
    ArrowColumn* finish();

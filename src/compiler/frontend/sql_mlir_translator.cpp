@@ -30,6 +30,27 @@
 namespace lingodb::translator {
 
 using namespace lingodb::compiler::dialect;
+
+namespace {
+mlir::Value normalizeListLowerBound(mlir::OpBuilder& builder, mlir::Location location, mlir::Value index, mlir::Value listLength) {
+   mlir::Type indexType = index.getType();
+   mlir::Value zero = builder.create<mlir::arith::ConstantOp>(location, indexType, builder.getIntegerAttr(indexType, 0));
+   mlir::Value one = builder.create<mlir::arith::ConstantOp>(location, indexType, builder.getIntegerAttr(indexType, 1));
+   auto isNegative = builder.create<mlir::arith::CmpIOp>(location, mlir::arith::CmpIPredicate::slt, index, zero);
+   auto positiveIndex = builder.create<mlir::arith::SubIOp>(location, index, one);
+   auto negativeIndex = builder.create<mlir::arith::AddIOp>(location, index, listLength);
+   return builder.create<mlir::arith::SelectOp>(location, isNegative, negativeIndex, positiveIndex);
+}
+
+mlir::Value normalizeListUpperBound(mlir::OpBuilder& builder, mlir::Location location, mlir::Value index, mlir::Value listLength) {
+   mlir::Type indexType = index.getType();
+   mlir::Value zero = builder.create<mlir::arith::ConstantOp>(location, indexType, builder.getIntegerAttr(indexType, 0));
+   auto isNegative = builder.create<mlir::arith::CmpIOp>(location, mlir::arith::CmpIPredicate::slt, index, zero);
+   auto negativeIndex = builder.create<mlir::arith::AddIOp>(location, index, listLength);
+   return builder.create<mlir::arith::SelectOp>(location, isNegative, negativeIndex, index);
+}
+} // namespace
+
 SQLMlirTranslator::SQLMlirTranslator(mlir::ModuleOp moduleOp, catalog::Catalog* catalog) : moduleOp(moduleOp), catalog(catalog),
                                                                                            attrManager(moduleOp->getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager()), translationContext(std::make_shared<TranslationContext>()) {
    moduleOp.getContext()->getLoadedDialect<util::UtilDialect>()->getFunctionHelper().setParentModule(moduleOp);
@@ -979,6 +1000,57 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
          }
          return translateWhenChecks(builder, boundCase, caseExprTranslated, boundCase->caseChecks, boundCase->elseExpr, context);
       }
+      case ast::ExpressionClass::BOUND_LIST: {
+         auto boundList = std::static_pointer_cast<ast::BoundListExpression>(expression);
+         std::vector<mlir::Value> values;
+         for (auto& child : boundList->values) {
+            auto expr = translateExpression(builder, child, context);
+            expr = boundList->elementType.castValueToThisType(builder, expr, boundList->elementType.isNullable);
+            values.push_back(expr);
+         }
+         mlir::Type listType = boundList->listType.toMlirType(builder.getContext());
+         auto elementType = boundList->elementType.toMlirType(builder.getContext());
+         auto list = builder.create<db::CreateListOp>(builder.getUnknownLoc(), listType);
+         for (auto value : values) {
+            builder.create<db::ListAppendOp>(builder.getUnknownLoc(), list, value);
+         }
+
+         if (boundList->selection) {
+            mlir::Value listLength = builder.create<db::ListLengthOp>(exprLocation, list);
+            mlir::Value translatedLowerBound;
+            if (boundList->selection->lowerBound.has_value()) {
+               translatedLowerBound = translateExpression(builder, boundList->selection->lowerBound.value(), context);
+            } else {
+               translatedLowerBound = builder.create<mlir::arith::ConstantOp>(exprLocation, builder.getIndexType(), builder.getIndexAttr(1));
+            }
+            translatedLowerBound = normalizeListLowerBound(builder, exprLocation, translatedLowerBound, listLength);
+
+            if (boundList->selection->range) {
+               mlir::Value translatedUpperBound;
+               if (boundList->selection->upperBound.has_value()) {
+                  translatedUpperBound = translateExpression(builder, boundList->selection->upperBound.value(), context);
+                  translatedUpperBound = normalizeListUpperBound(builder, exprLocation, translatedUpperBound, listLength);
+               } else {
+                  translatedUpperBound = listLength;
+               }
+
+               auto subSetList = builder.create<db::CreateListOp>(builder.getUnknownLoc(), listType);
+
+               //Use for-loop to iterate from lower bound to upper bound, then use ListGetOp to extract element and add to new subSetList
+               auto step = builder.create<mlir::arith::ConstantOp>(exprLocation, builder.getIndexType(), builder.getIndexAttr(1));
+               builder.create<mlir::scf::ForOp>(exprLocation, translatedLowerBound, translatedUpperBound, step, mlir::ValueRange{}, [&](mlir::OpBuilder& loopBuilder, mlir::Location loc, mlir::Value idx, mlir::ValueRange) {
+                  auto element = loopBuilder.create<db::ListGetOp>(loc, elementType, list, idx);
+                  loopBuilder.create<db::ListAppendOp>(loc, subSetList, element);
+                  loopBuilder.create<mlir::scf::YieldOp>(loc);
+               });
+               return subSetList;
+            }
+
+            return builder.create<db::ListGetOp>(builder.getUnknownLoc(), elementType, list, translatedLowerBound);
+         }
+
+         return list;
+      }
 
       default: translatorError("Expression not implemented", expression->loc);
    }
@@ -1335,6 +1407,57 @@ mlir::Value SQLMlirTranslator::translateTableRef(mlir::OpBuilder& builder, std::
                   case ast::ConstantType::NULL_P: {
                      value = builder.getUnitAttr();
                      assert(constExpr->resultType.has_value());
+                     break;
+                  }
+                  case ast::ConstantType::LIST: {
+                     auto listValue = std::static_pointer_cast<ast::ListValue>(constExpr->value);
+                     auto serializeValue = [&](auto&& self, std::shared_ptr<ast::Value> nestedValue) -> mlir::Attribute {
+                        switch (nestedValue->type) {
+                           case ast::ConstantType::INT: {
+                              auto nestedInt = std::static_pointer_cast<ast::IntValue>(nestedValue);
+                              return builder.getI32IntegerAttr(nestedInt->iVal);
+                           }
+                           case ast::ConstantType::UINT: {
+                              auto nestedUInt = std::static_pointer_cast<ast::UnsignedIntValue>(nestedValue);
+                              return builder.getI64IntegerAttr(nestedUInt->iVal);
+                           }
+                           case ast::ConstantType::STRING: {
+                              auto nestedString = std::static_pointer_cast<ast::StringValue>(nestedValue);
+                              return builder.getStringAttr(nestedString->sVal);
+                           }
+                           case ast::ConstantType::FLOAT: {
+                              auto nestedFloat = std::static_pointer_cast<ast::FloatValue>(nestedValue);
+                              return builder.getStringAttr(nestedFloat->fVal);
+                           }
+                           case ast::ConstantType::NULL_P: {
+                              return builder.getUnitAttr();
+                           }
+                           case ast::ConstantType::BOOLEAN: {
+                              auto nestedBool = std::static_pointer_cast<ast::BoolValue>(nestedValue);
+                              return builder.getBoolAttr(nestedBool->bVal);
+                           }
+                           case ast::ConstantType::DATE: {
+                              auto nestedDate = std::static_pointer_cast<ast::DateValue>(nestedValue);
+                              return builder.getStringAttr(nestedDate->date);
+                           }
+                           case ast::ConstantType::INTERVAL: {
+                              auto nestedInterval = std::static_pointer_cast<ast::IntervalValue>(nestedValue);
+                              return builder.getStringAttr(nestedInterval->iVal.stringRepresentation);
+                           }
+                           case ast::ConstantType::LIST: {
+                              auto nestedList = std::static_pointer_cast<ast::ListValue>(nestedValue);
+                              std::vector<mlir::Attribute> nestedValues;
+                              nestedValues.reserve(nestedList->elements.size());
+                              for (auto& element : nestedList->elements) {
+                                 nestedValues.emplace_back(self(self, element));
+                              }
+                              return builder.getArrayAttr(nestedValues);
+                           }
+                           default:
+                              translatorError("Unsupported constant type in list literal", constExpr->loc);
+                        }
+                     };
+                     value = serializeValue(serializeValue, listValue);
                      break;
                   }
 

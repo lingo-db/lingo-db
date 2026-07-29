@@ -9,9 +9,10 @@ class List {
    size_t sizeOfType;
    size_t len;
    std::vector<uint8_t> values;
+   StorageClass storageClass;
 
    public:
-   List(size_t sizeOfType) : sizeOfType(sizeOfType), len(), values(2 * sizeOfType) {}
+   List(size_t sizeOfType, StorageClass storageClass = StorageClass::REFCOUNTED) : sizeOfType(sizeOfType), len(), values(2 * sizeOfType), storageClass(storageClass) {}
    static List* create(size_t sizeOfType);
    uint8_t* at(size_t pos);
    static List* fromBuffer(size_t sizeOfType, Buffer buffer);
@@ -21,6 +22,7 @@ class List {
    static void cleanupUse(List* list);
    static void cleanupUseCb(List* list, void (*cleanupFn)(List*));
    static void addUse(List* list);
+   static List* promoteToGlobal(List* list);
 };
 
 }; // namespace lingodb::runtime

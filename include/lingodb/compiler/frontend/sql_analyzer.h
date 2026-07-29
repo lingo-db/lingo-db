@@ -238,7 +238,7 @@ struct SQLTypeUtils {
    static std::vector<NullableType> toCommonTypes(std::vector<NullableType> types);
    static std::vector<NullableType> toCommonNumber(std::vector<NullableType> types);
 
-   static NullableType typemodsToCatalogType(catalog::LogicalTypeId logicalTypeId, std::vector<std::shared_ptr<ast::Value>>& typeModifiers);
+   static NullableType typemodsToCatalogType(const ast::LogicalTypeWithMods& type);
 
    [[nodiscard]]
    static std::pair<unsigned long, unsigned long> getAdaptedDecimalPAndSAfterMulDiv(unsigned long p, unsigned long s);

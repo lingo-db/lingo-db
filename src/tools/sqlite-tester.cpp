@@ -65,6 +65,7 @@ struct ResultHasher : public execution::ResultProcessor {
          positions.push_back(0);
       }
 
+      std::vector<int> bracketDepth(columnReps.size(), 0);
       bool cont = true;
       while (cont) {
          cont = false;
@@ -72,64 +73,91 @@ struct ResultHasher : public execution::ResultProcessor {
             char32_t currChar = U'\0';
             uint8_t currCharSize = 0;
 
-            bool first = true;
+            bool cellHasData = false;
             bool afterComma = false;
             size_t digits = 0;
             std::stringstream out;
-            while (positions[column] < columnReps[column].size()) {
+
+            if (positions[column] < columnReps[column].size()) {
                cont = true;
+            }
+
+            while (positions[column] < columnReps[column].size()) {
                char curr = columnReps[column][positions[column]];
-               char next = columnReps[column][positions[column] + 1];
+
+               // 1. Bracket tracking
+               if (curr == '[') bracketDepth[column]++;
+               int depth = bracketDepth[column];
+               if (curr == ']') bracketDepth[column]--;
                positions[column]++;
-               if (first && (curr == '[' || curr == ']' || curr == ',')) {
+
+               // 2. Skip leading structural junk (brackets, separators, spaces at depth 1 or 2)
+               if (!cellHasData && (depth <= 2) && (curr == '[' || curr == ']' || curr == ',' || curr == ' ' || curr == '\n')) {
                   continue;
                }
-               if (curr == ',' && next == '\n') {
-                  continue;
-               }
-               if (curr == '\n') {
-                  break;
-               } else {
-                  if (isFloat[column]) {
-                     if (std::isdigit(curr)) {
-                        if (afterComma && digits < 3) {
-                           digits++;
-                           out << curr;
-                        } else if (!afterComma) {
-                           out << curr;
-                           first = false;
-                        }
-                     } else if (curr == '.') {
-                        afterComma = true;
-                        out << curr;
-                        digits = 0;
-                     } else {
-                        afterComma = false;
-                        digits = 0;
-                        first = false;
-                        out << curr;
-                     }
-                  } else if (convertHex[column]) {
-                     first = false;
-                     if (std::isxdigit(curr)) {
-                        if (currCharSize % 2 == 0)
-                           currChar |= hexval(curr) << (currCharSize++ * 4 + 4);
-                        else
-                           currChar |= hexval(curr) << (currCharSize++ * 4 - 4);
-                     } else {
-                        out << curr;
-                     }
-                  } else {
-                     first = false;
-                     out << curr;
+
+               // 3. Handle structural commas (comma followed by newline at depth 1 or 2)
+               if (cellHasData && (depth <= 2) && curr == ',') {
+                  char next = (positions[column] < columnReps[column].size()) ? columnReps[column][positions[column]] : '\0';
+                  if (next == '\n') {
+                     continue;
                   }
                }
+
+               // 4. Handle end of cell
+               if (cellHasData && (depth <= 2) && curr == '\n') {
+                  break;
+               }
+
+               // 5. Value Processing (Strict ASCII/Float/Hex for SQLite validation)
+               cellHasData = true;
+               if (curr == '\n') {
+                  // Inner newline (depth > 2), skip leading spaces of next line and replace with space
+                  while (positions[column] < columnReps[column].size() && columnReps[column][positions[column]] == ' ') {
+                     positions[column]++;
+                  }
+                  out << ' ';
+                  continue;
+               }
+
+               if (isFloat[column]) {
+                  if (std::isdigit(curr)) {
+                     if (afterComma && digits < 3) {
+                        digits++;
+                        out << curr;
+                     } else if (!afterComma) {
+                        out << curr;
+                     }
+                  } else if (curr == '.') {
+                     afterComma = true;
+                     out << curr;
+                     digits = 0;
+                  } else {
+                     afterComma = false;
+                     digits = 0;
+                     out << curr;
+                  }
+               } else if (convertHex[column]) {
+                  if (std::isxdigit(curr)) {
+                     if (currCharSize % 2 == 0)
+                        currChar |= hexval(curr) << (currCharSize++ * 4 + 4);
+                     else
+                        currChar |= hexval(curr) << (currCharSize++ * 4 - 4);
+                  } else {
+                     out << curr;
+                  }
+               } else {
+                  out << curr; // Standard string/int fallthrough
+               }
             }
+
+            // Final flush for hex conversions
             if (currChar != U'\0') {
                assert(currChar <= 0xFF && "Only ASCII characters supported for sqlite testing");
                out << static_cast<char>(currChar);
             }
-            if (!first) {
+
+            if (cellHasData) {
                toHash.push_back(out.str());
             }
          }

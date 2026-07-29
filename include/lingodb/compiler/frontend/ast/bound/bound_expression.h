@@ -182,5 +182,21 @@ class BoundSetColumnExpression : public BoundExpression {
    std::string mapName;
    std::vector<std::shared_ptr<BoundExpression>> sets;
 };
+
+class BoundListExpression : public BoundExpression {
+   public:
+   struct BoundListSelection {
+      public:
+      std::optional<std::shared_ptr<BoundExpression>> lowerBound;
+      std::optional<std::shared_ptr<BoundExpression>> upperBound;
+      bool range = false;
+   };
+   static constexpr const ExpressionClass cType = ExpressionClass::BOUND_LIST;
+   BoundListExpression(std::vector<std::shared_ptr<BoundExpression>> values, std::optional<BoundListSelection> selection, NullableType elementType, NullableType listType, NullableType resultType, std::string alias) : BoundExpression(cType, ExpressionType::VALUE_LIST, resultType, alias), values(std::move(values)), selection(std::move(selection)), elementType(elementType), listType(listType) {}
+   std::vector<std::shared_ptr<BoundExpression>> values;
+   std::optional<BoundListSelection> selection;
+   NullableType elementType;
+   NullableType listType;
+};
 } // namespace lingodb::ast
 #endif

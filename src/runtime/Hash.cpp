@@ -4,6 +4,7 @@
 
 #include <arrow/array/array_binary.h>
 #include <arrow/array/array_decimal.h>
+#include <arrow/array/array_nested.h>
 #include <arrow/table.h>
 #include <arrow/type.h>
 #include <arrow/util/decimal.h>
@@ -18,6 +19,8 @@ EXPORT uint64_t hashVarLenData(lingodb::runtime::VarLen32 str) {
 namespace lingodb::runtime {
 namespace {
 
+void hashColumnPieceBatchRuntime(const arrow::Array& array, int64_t numRows, std::vector<uint64_t>& running);
+
 uint64_t byteSwap64(uint64_t x) {
    return __builtin_bswap64(x);
 }
@@ -29,6 +32,25 @@ uint64_t dbHash64(int64_t v) {
 
 void dbHashFoldPiece(uint64_t& acc, uint64_t piece) {
    acc = byteSwap64(acc) ^ piece;
+}
+//TODO AI generated! Check again
+void hashListArrayBatchRuntime(const arrow::ListArray& array, int64_t numRows, std::vector<uint64_t>& running) {
+   for (int64_t i = 0; i < numRows; ++i) {
+      if (array.IsNull(i)) {
+         continue;
+      }
+
+      const int32_t start = array.value_offset(i);
+      const int32_t length = array.value_length(i);
+      dbHashFoldPiece(running[i], dbHash64(static_cast<int64_t>(length)));
+
+      std::vector<uint64_t> childRunning(static_cast<size_t>(length), 0);
+      auto childSlice = array.values()->Slice(start, length);
+      hashColumnPieceBatchRuntime(*childSlice, length, childRunning);
+      for (uint64_t childHash : childRunning) {
+         dbHashFoldPiece(running[i], childHash);
+      }
+   }
 }
 
 template <typename TArrowArray>
@@ -231,6 +253,11 @@ void hashColumnPieceBatchRuntime(const arrow::Array& array, int64_t numRows, std
                dbHashFoldPiece(running[i], dbHashVarLen32(vl));
             }
          }
+         return;
+      }
+      case arrow::Type::type::LIST: {
+         const auto& a = static_cast<const arrow::ListArray&>(array);
+         hashListArrayBatchRuntime(a, numRows, running);
          return;
       }
       default:

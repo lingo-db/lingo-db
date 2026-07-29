@@ -19,6 +19,10 @@
 namespace lingodb::analyzer {
 using ResolverScope = llvm::ScopedHashTable<std::string, std::shared_ptr<ast::ColumnReference>, StringInfo>::ScopeTy;
 
+namespace {
+NullableType normalizeListCharTypes(NullableType type);
+} //namespace
+
 StackGuardNormal::StackGuardNormal() {
 #ifdef ASAN_ACTIVE
    rlimit rlp{};
@@ -632,6 +636,26 @@ std::shared_ptr<ast::ParsedExpression> SQLCanonicalizer::canonicalizeParsedExpre
 
          return constantExpr;
       }
+      case ast::ExpressionClass::LIST: {
+         auto listExpression = std::static_pointer_cast<ast::ListExpression>(rootNode);
+         if (listExpression->selection.has_value()) {
+            if (listExpression->selection->lowerBound.has_value()) {
+               auto castExpression = std::make_shared<ast::CastExpression>(ast::LogicalTypeWithMods(catalog::LogicalTypeId::INDEX), listExpression->selection->lowerBound.value());
+               castExpression->child = canonicalizeParsedExpression(castExpression->child, context, false, extendNode);
+               listExpression->selection->lowerBound = castExpression;
+            }
+            if (listExpression->selection->upperBound.has_value()) {
+               auto castExpression = std::make_shared<ast::CastExpression>(ast::LogicalTypeWithMods(catalog::LogicalTypeId::INDEX), listExpression->selection->upperBound.value());
+               castExpression->child = canonicalizeParsedExpression(castExpression->child, context, false, extendNode);
+               listExpression->selection->upperBound = castExpression;
+            }
+         }
+         if (extend) {
+            return extendExpr(listExpression);
+         }
+
+         return listExpression;
+      }
       case ast::ExpressionClass::BETWEEN: {
          auto betweenExpr = std::static_pointer_cast<ast::BetweenExpression>(rootNode);
          betweenExpr->input = canonicalizeParsedExpression(betweenExpr->input, context, false, extendNode);
@@ -850,7 +874,7 @@ std::shared_ptr<ast::CreateNode> SQLQueryAnalyzer::analyzeCreateNode(std::shared
                      error("Column name cannot be empty", columnElement->loc);
                   }
                   std::vector<std::variant<size_t, std::string>> typeModifiers;
-                  NullableType nullableType = SQLTypeUtils::typemodsToCatalogType(columnElement->logicalTypeWithMods.logicalTypeId, columnElement->logicalTypeWithMods.typeModifiers);
+                  NullableType nullableType = SQLTypeUtils::typemodsToCatalogType(columnElement->logicalTypeWithMods);
                   nullableType.isNullable = true;
                   bool primary = false;
                   for (auto& constraint : columnElement->constraints) {
@@ -957,13 +981,13 @@ std::shared_ptr<ast::CreateNode> SQLQueryAnalyzer::analyzeFunctionCreate(std::sh
    }
 
    if (language == "c" || language == "python") {
-      NullableType returnType = SQLTypeUtils::typemodsToCatalogType(createFunctionInfo->returnType.logicalTypeId, createFunctionInfo->returnType.typeModifiers);
+      NullableType returnType = SQLTypeUtils::typemodsToCatalogType(createFunctionInfo->returnType);
 
       auto boundCreateFunctionInfo = std::make_shared<ast::BoundCreateFunctionInfo>(createFunctionInfo->functionName, createFunctionInfo->replace, returnType);
       boundCreateFunctionInfo->language = language;
       boundCreateFunctionInfo->code = code;
       for (auto& fArgument : createFunctionInfo->argumentTypes) {
-         boundCreateFunctionInfo->argumentTypes.emplace_back(fArgument.name, SQLTypeUtils::typemodsToCatalogType(fArgument.type.logicalTypeId, fArgument.type.typeModifiers).type);
+         boundCreateFunctionInfo->argumentTypes.emplace_back(fArgument.name, SQLTypeUtils::typemodsToCatalogType(fArgument.type).type);
       }
 
       createNode->createInfo = boundCreateFunctionInfo;
@@ -1145,6 +1169,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                case ast::ExpressionClass::BOUND_BETWEEN:
                case ast::ExpressionClass::BOUND_COMPARISON:
                case ast::ExpressionClass::BOUND_CONSTANT:
+               case ast::ExpressionClass::BOUND_LIST:
                case ast::ExpressionClass::BOUND_OPERATOR:
                case ast::ExpressionClass::BOUND_CAST:
                case ast::ExpressionClass::BOUND_SUBQUERY:
@@ -2028,12 +2053,29 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzeExpressionListRef(s
       std::vector<std::shared_ptr<ast::BoundConstantExpression>> boundExprList{};
       for (size_t i = 0; i < sizePerExprList; i++) {
          std::shared_ptr<ast::BoundExpression> boundExpr = analyzeExpression(exprList.at(i), context, resolverScope);
-         if (boundExpr->exprClass != ast::ExpressionClass::BOUND_CONSTANT) {
+         if (boundExpr->exprClass == ast::ExpressionClass::BOUND_LIST) {
+            //Handle List case
+            auto boundList = std::static_pointer_cast<ast::BoundListExpression>(boundExpr);
+            std::vector<std::shared_ptr<ast::Value>> listElements{};
+            for (auto element : boundList->values) {
+               if (element->exprClass != ast::ExpressionClass::BOUND_CONSTANT) {
+                  error("Expression list must only contain constant expressions", element->loc);
+               }
+               assert(element->resultType.has_value());
+
+               listElements.emplace_back(std::static_pointer_cast<ast::BoundConstantExpression>(element)->value);
+            }
+            assert(boundExpr->resultType.has_value());
+            types.at(i).push_back(boundExpr->resultType.value());
+            auto boundListConstant = std::make_shared<ast::BoundConstantExpression>(boundExpr->resultType.value(), std::make_shared<ast::ListValue>(listElements), boundExpr->alias);
+            boundExprList.emplace_back(std::static_pointer_cast<ast::BoundConstantExpression>(boundListConstant));
+         } else if (boundExpr->exprClass == ast::ExpressionClass::BOUND_CONSTANT) {
+            assert(boundExpr->resultType.has_value());
+            types.at(i).push_back(boundExpr->resultType.value());
+            boundExprList.emplace_back(std::static_pointer_cast<ast::BoundConstantExpression>(boundExpr));
+         } else {
             error("Expression list must only contain constant expressions", exprList.at(i)->loc);
          }
-         assert(boundExpr->resultType.has_value());
-         types.at(i).push_back(boundExpr->resultType.value());
-         boundExprList.emplace_back(std::static_pointer_cast<ast::BoundConstantExpression>(boundExpr));
       }
       boundValues.emplace_back(boundExprList);
    }
@@ -2326,6 +2368,48 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
          auto windowExpr = std::static_pointer_cast<ast::WindowExpression>(rootNode);
          return analyzeWindowExpression(windowExpr, context, resolverScope);
       }
+      case ast::ExpressionClass::LIST: {
+         auto listExpr = std::static_pointer_cast<ast::ListExpression>(rootNode);
+         std::vector<std::shared_ptr<ast::BoundExpression>> boundValues;
+         std::ranges::transform(listExpr->values, std::back_inserter(boundValues), [&](auto& child) {
+            return analyzeExpression(child, context, resolverScope);
+         });
+         //Check if all boundValues have common type
+         std::vector<NullableType> types{};
+         std::ranges::transform(boundValues, std::back_inserter(types), [](auto& child) {
+            if (!child->resultType.has_value()) {
+               error("List expression has child with invalid type", child->loc);
+            }
+            return child->resultType.value();
+         });
+         if (types.size() == 0) {
+            types.push_back(NullableType(catalog::Type::noneType(), true));
+         }
+         auto commonType = SQLTypeUtils::getCommonBaseType(types);
+         commonType = normalizeListCharTypes(commonType);
+
+         NullableType listType = catalog::Type::listType(commonType.type);
+         NullableType resultType = catalog::Type::listType(commonType.type);
+
+         //Handle selection
+         std::optional<ast::BoundListExpression::BoundListSelection> boundListSelection = std::nullopt;
+         if (listExpr->selection.has_value()) {
+            auto& parsedSelection = listExpr->selection.value();
+            boundListSelection = ast::BoundListExpression::BoundListSelection{};
+            if (parsedSelection.lowerBound) {
+               boundListSelection->lowerBound = analyzeExpression(parsedSelection.lowerBound.value(), context, resolverScope);
+            }
+            if (parsedSelection.upperBound) {
+               boundListSelection->upperBound = analyzeExpression(parsedSelection.upperBound.value(), context, resolverScope);
+            }
+            boundListSelection->range = parsedSelection.range;
+            if (!parsedSelection.range) {
+               resultType = commonType;
+            }
+         }
+
+         return drv.nf.node<ast::BoundListExpression>(listExpr->loc, boundValues, boundListSelection, commonType, listType, resultType, listExpr->alias);
+      }
       default: error("Expression type not implemented", rootNode->loc);
    }
 }
@@ -2578,7 +2662,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeCastExpression(st
       }
 
       default: {
-         auto castType = SQLTypeUtils::typemodsToCatalogType(castExpr->logicalTypeWithMods.value().logicalTypeId, castExpr->logicalTypeWithMods.value().typeModifiers);
+         auto castType = SQLTypeUtils::typemodsToCatalogType(castExpr->logicalTypeWithMods.value());
          if (castType != boundChild->resultType.value()) {
             castType.isNullable = boundChild->resultType.value().isNullable;
             if (boundChild->type == ast::ExpressionType::VALUE_CONSTANT) {
@@ -2973,6 +3057,22 @@ std::shared_ptr<ast::BoundColumnRefExpression> SQLQueryAnalyzer::analyzeColumnRe
 /*
     * SQLTypeUtils
     */
+namespace {
+NullableType normalizeListCharTypes(NullableType type) {
+   if (type.type.getTypeId() == catalog::LogicalTypeId::CHAR) {
+      return NullableType(catalog::Type::stringType(), type.isNullable);
+   }
+
+   if (type.type.getTypeId() == catalog::LogicalTypeId::LIST) {
+      auto listInfo = type.type.getInfo<catalog::ListTypeInfo>();
+      auto normalizedElement = normalizeListCharTypes(NullableType(listInfo->getElementType(), false));
+      return NullableType(catalog::Type::listType(normalizedElement.type), type.isNullable);
+   }
+
+   return type;
+}
+} // namespace
+
 NullableType SQLTypeUtils::getCommonType(NullableType nullableType1, NullableType nullableType2) {
    const bool isNullable = nullableType1.isNullable || nullableType2.isNullable;
 
@@ -2980,6 +3080,10 @@ NullableType SQLTypeUtils::getCommonType(NullableType nullableType1, NullableTyp
    if (nullableType1.type.getTypeId() == nullableType2.type.getTypeId()) {
       if (nullableType1.type.getTypeId() == catalog::LogicalTypeId::DECIMAL) {
          return getHigherDecimalType(nullableType1, nullableType2);
+      }
+
+      if (nullableType1.type.getTypeId() == catalog::LogicalTypeId::LIST) {
+         return normalizeListCharTypes(NullableType(nullableType1.type, isNullable));
       }
 
       if (nullableType1.type.getTypeId() == catalog::LogicalTypeId::CHAR) {
@@ -3000,6 +3104,13 @@ NullableType SQLTypeUtils::getCommonType(NullableType nullableType1, NullableTyp
          }
       }
       return NullableType(nullableType1.type, isNullable);
+   }
+
+   if (nullableType1.type.getTypeId() == catalog::LogicalTypeId::LIST && nullableType2.type.getTypeId() == catalog::LogicalTypeId::LIST) {
+      auto listInfo1 = nullableType1.type.getInfo<catalog::ListTypeInfo>();
+      auto listInfo2 = nullableType2.type.getInfo<catalog::ListTypeInfo>();
+      auto commonElementType = getCommonType(NullableType(listInfo1->getElementType(), false), NullableType(listInfo2->getElementType(), false));
+      return normalizeListCharTypes(NullableType(catalog::Type::listType(commonElementType.type), isNullable));
    }
 
    for (size_t i = 0; i < 2; i++) {
@@ -3157,7 +3268,9 @@ std::pair<unsigned long, unsigned long> SQLTypeUtils::getAdaptedDecimalPAndSAfte
    return {p, s};
 }
 
-NullableType SQLTypeUtils::typemodsToCatalogType(catalog::LogicalTypeId logicalTypeId, std::vector<std::shared_ptr<ast::Value>>& typeModifiers) {
+NullableType SQLTypeUtils::typemodsToCatalogType(const ast::LogicalTypeWithMods& logicalTypeWithMods) {
+   auto logicalTypeId = logicalTypeWithMods.logicalTypeId;
+   auto& typeModifiers = logicalTypeWithMods.typeModifiers;
    switch (logicalTypeId) {
       case catalog::LogicalTypeId::INT: {
          if (typeModifiers.size() == 1) {
@@ -3223,6 +3336,13 @@ NullableType SQLTypeUtils::typemodsToCatalogType(catalog::LogicalTypeId logicalT
       }
       case catalog::LogicalTypeId::INTERVAL: {
          return catalog::Type::intervalDaytime();
+      }
+      case catalog::LogicalTypeId::LIST: {
+         assert(logicalTypeWithMods.elementType);
+         return catalog::Type::listType(typemodsToCatalogType(*logicalTypeWithMods.elementType).type);
+      }
+      case catalog::LogicalTypeId::INDEX: {
+         return catalog::Type::index();
       }
       default: throw std::runtime_error("Typemod not implemented");
    }

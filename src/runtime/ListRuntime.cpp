@@ -1,8 +1,10 @@
 #include "lingodb/runtime/ListRuntime.h"
+
+#include <iostream>
 using namespace lingodb::runtime;
 
 List* List::create(size_t sizeOfType) {
-   return createRefCounted<List>(sizeOfType);
+   return createRefCounted<List>(sizeOfType, StorageClass::REFCOUNTED);
 }
 uint8_t* List::append() {
    if ((len + 1) * sizeOfType > values.size()) {
@@ -17,10 +19,13 @@ Buffer List::getBuffer() {
    return Buffer(len * sizeOfType, values.data());
 }
 List* List::fromBuffer(size_t sizeOfType, Buffer buffer) {
-   auto* res = createRefCounted<List>(sizeOfType);
+   auto* res = new List(sizeOfType);
    res->len = buffer.numElements / sizeOfType;
    res->values.resize(buffer.numElements);
    memcpy(res->values.data(), buffer.ptr, buffer.numElements);
+   getCurrentExecutionContext()->registerState({res, [](void* p) {
+                                                   delete static_cast<List*>(p);
+                                                }});
    return res;
 }
 uint8_t* List::at(size_t pos) {
@@ -35,13 +40,35 @@ size_t List::size() {
 }
 
 void List::cleanupUseCb(List* list, void (*cleanupFn)(List*)) {
-   decRefCount<List>(list, cleanupFn);
+   if (list && list->storageClass == StorageClass::REFCOUNTED) {
+      decRefCount<List>(list, cleanupFn);
+   }
 }
 
 void List::cleanupUse(List* list) {
-   decRefCount<List>(list, [](List*) {});
+   if (list && list->storageClass == StorageClass::REFCOUNTED) {
+      decRefCount<List>(list, [](List*) {});
+   }
 }
 
 void List::addUse(List* list) {
-   incRefCount<List>(list);
+   if (list && list->storageClass == StorageClass::REFCOUNTED) {
+      incRefCount<List>(list);
+   }
+}
+List* List::promoteToGlobal(List* list) {
+   if (!list) return nullptr;
+   if (list->storageClass == StorageClass::GLOBAL) return list;
+   auto* newList = new List(list->sizeOfType, StorageClass::GLOBAL);
+   newList->len = list->len;
+   newList->values.resize(list->values.size());
+   std::ranges::copy(list->values.begin(), list->values.end(), newList->values.begin());
+
+   getCurrentExecutionContext()->registerState({newList, [](void* p) {
+                                                   delete static_cast<List*>(p);
+                                                }});
+   if (list->storageClass == StorageClass::REFCOUNTED) {
+      cleanupUse(list);
+   }
+   return newList;
 }

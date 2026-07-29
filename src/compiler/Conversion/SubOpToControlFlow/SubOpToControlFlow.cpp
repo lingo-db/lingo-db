@@ -1299,6 +1299,8 @@ class CreateTableLowering : public SubOpConversionPattern<subop::GenericCreateOp
          } else {
             return "string";
          }
+      } else if (auto listType = mlir::dyn_cast_or_null<db::ListType>(type)) {
+         return "list[" + arrowDescrFromType(listType.getElementType()) + "]";
       }
       assert(false);
       return "";

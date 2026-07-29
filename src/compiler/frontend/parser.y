@@ -85,6 +85,7 @@
 %token          HAT         "^"
 %token 			QUOTE		"'"
 %token          PIPE        "|>"
+%token          COLON       ":"
 
 
 
@@ -232,7 +233,7 @@
 
 %type<std::shared_ptr<lingodb::ast::ParsedExpression>>  having_clause target_el a_expr c_expr b_expr  where_clause group_by_item group_by_item_with_alias
                                                         func_arg_expr select_limit_value case_expr case_default cast_expr offset_clause 
-                                                        select_offset_value
+                                                        select_offset_value list_expr
 
 %type<std::shared_ptr<lingodb::ast::ConjunctionExpression>> and_a_expr or_a_expr
 
@@ -307,7 +308,8 @@
 
 %type<std::shared_ptr<lingodb::ast::CreateNode>> CreateStmt CreateFunctionStmt
 %type<bool> OptTemp opt_varying
-%type<lingodb::ast::LogicalTypeWithMods> Numeric SimpleType Type CharacterWithoutLength character Bit ConstCharacter Character CharacterWithLength ConstDatetime Typename ConstTypename Numeric_with_opt_lenghth ConstInterval
+%type<lingodb::ast::LogicalTypeWithMods> Numeric SimpleType Type ListType CharacterWithoutLength character Bit ConstCharacter Character CharacterWithLength ConstDatetime Typename ConstTypename Numeric_with_opt_lenghth ConstInterval
+
 %type<std::shared_ptr<lingodb::ast::TableElement>> TableElement columnElement TableConstraint
 %type<std::vector<std::shared_ptr<lingodb::ast::TableElement>>> TableElementList OptTableElementList
 %type<std::shared_ptr<lingodb::ast::Constraint>> ColConstraint ColConstraintElem ConstraintElem
@@ -350,6 +352,9 @@
 %type<lingodb::ast::LogicalTypeWithMods> func_type func_return
 %type<std::vector<lingodb::ast::FunctionArgument>> func_args_with_defaults func_args_with_defaults_list
 %type<lingodb::ast::FunctionArgument> func_arg_with_default func_arg
+
+%type<std::optional<lingodb::ast::ListExpression::ListSelection>> opt_list_extraction
+%type<lingodb::ast::ListExpression::ListSelection> list_extraction
 
 
 /* Precedence: lowest to highest */
@@ -1620,7 +1625,10 @@ c_expr:
         $$ = subquery;
     }
     //TODO | ARRAY select_with_parens
-    //TODO | ARRAY array_expr
+    | list_expr
+    {
+        $$ = $list_expr;
+    }
     //TODO | explicit_row
     //TODO | implicit_row
     //TODO | GROUPING LP expr_list RP
@@ -1894,6 +1902,58 @@ func_arg_expr:
     | param_name COLON_EQUALS a_expr
     | param_name GREATER_EQUAL a_expr
     ;
+
+list_expr: 
+    LB expr_list RB opt_list_extraction
+    {
+        $$ = mkNode<lingodb::ast::ListExpression>(@$, $expr_list, $opt_list_extraction);
+    }
+    | LB RB
+    {
+        $$ = mkNode<lingodb::ast::ListExpression>(@$, std::vector<std::shared_ptr<lingodb::ast::ParsedExpression>>(), std::nullopt);
+    }
+
+opt_list_extraction:
+    %empty 
+    {
+        $$ = std::nullopt;
+    }
+    | list_extraction 
+    {
+        $$ = $list_extraction;
+    }
+    ;
+//TODO decide between a_expr, b_expr and c_expr for the rules in 
+list_extraction:
+    LB b_expr RB
+    {
+        lingodb::ast::ListExpression::ListSelection le{};
+        le.lowerBound = $b_expr;
+        $$ = le;
+    }
+    | LB b_expr[lowerBound] COLON b_expr[upperBound] RB
+    {
+        lingodb::ast::ListExpression::ListSelection le{};
+        le.lowerBound = $lowerBound;
+        le.upperBound = $upperBound;
+        le.range = true;
+        $$ = le;
+    }
+    | LB COLON b_expr[upperBound] RB
+    {
+        lingodb::ast::ListExpression::ListSelection le{};
+        le.upperBound = $upperBound;
+        le.range = true;
+        $$ = le;
+    }
+    | LB b_expr[lowerBound] COLON RB
+    {
+        lingodb::ast::ListExpression::ListSelection le{};
+        le.lowerBound = $lowerBound;
+        le.range = true;
+        $$ = le;
+    }
+     ;
 
 //TODO missing rules
 /*
@@ -3007,11 +3067,33 @@ opt_column_storage:
 
 //TODO add missing rules
 Type:
-    SimpleType //opt_array_bounds
+    SimpleType 
     {
-        $$ = $SimpleType;
+        auto type = $SimpleType;
+        $$ = type;
+    }
+    | ListType 
+    {
+        $$ = $ListType;
     }
     ;
+ListType:
+    SimpleType LB RB
+    {
+        auto listType = lingodb::ast::LogicalTypeWithMods(catalog::LogicalTypeId::LIST);
+        listType.elementType = std::make_shared<lingodb::ast::LogicalTypeWithMods>($SimpleType);;
+        $$ = listType;
+
+
+    }
+    | ListType[list] LB RB
+    {
+        auto listType = lingodb::ast::LogicalTypeWithMods(catalog::LogicalTypeId::LIST);
+        listType.elementType = std::make_shared<lingodb::ast::LogicalTypeWithMods>($list);;
+        $$ = listType;
+    }
+    ;
+  
 SimpleType: 
      //GenericType
     Numeric_with_opt_lenghth {$$ = $Numeric_with_opt_lenghth;}

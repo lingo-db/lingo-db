@@ -512,3 +512,10 @@ select h.matrnr, count(*) from studenten s, hoeren h;
 
 statement frontend-error: not available after aggregation at
 select s.matrnr, x.vorlnr from studenten s, (select h.vorlnr from hoeren h group by h.matrnr) as x;
+
+# List Type
+query tsv
+select [s.name, 'hört',  v.titel] from studenten s, hoeren h, vorlesungen v where h.matrnr=s.matrnr and v.vorlnr=h.vorlnr order by h.matrnr, v.vorlnr limit 2;
+----
+[ "Jonas", "hört", "Glaube und Wissen" ]
+[ "Fichte", "hört", "Grundzuege" ]

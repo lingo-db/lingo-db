@@ -2,12 +2,13 @@
 #define LINGODB_COMPILER_FRONTEND_AST_CONSTANT_VALUE_H
 
 #include <cstdint>
+#include <memory>
 #include <stdexcept>
 #include <string>
+#include <vector>
 namespace lingodb::ast {
 enum class ConstantType : uint8_t {
    INT = 1,
-
    UINT = 2,
    FLOAT = 3,
    STRING = 4,
@@ -15,6 +16,7 @@ enum class ConstantType : uint8_t {
    NULL_P = 6,
    BOOLEAN = 7,
    DATE = 8,
+   LIST = 9,
 
    INVALID = 99,
 
@@ -84,6 +86,22 @@ class NullValue : public Value {
    explicit NullValue() : Value(ConstantType::NULL_P) {}
    std::string toString() override {
       return "NULL";
+   }
+};
+
+class ListValue : public Value {
+   public:
+   explicit ListValue(std::vector<std::shared_ptr<Value>> elements) : Value(ConstantType::LIST), elements(std::move(elements)) {}
+   std::vector<std::shared_ptr<Value>> elements;
+   std::string toString() override {
+      std::string str = "[";
+      for (auto& e : elements) {
+         str += e->toString() + ", ";
+      }
+      str.pop_back();
+      str.pop_back();
+      str += "]";
+      return str;
    }
 };
 

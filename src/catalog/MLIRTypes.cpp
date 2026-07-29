@@ -77,6 +77,16 @@ class CharTypeCreator : public lingodb::catalog::MLIRTypeCreator {
    private:
    std::shared_ptr<lingodb::catalog::CharTypeInfo> info;
 };
+class ListTypeCreator : public lingodb::catalog::MLIRTypeCreator {
+   public:
+   explicit ListTypeCreator(std::shared_ptr<lingodb::catalog::ListTypeInfo> info) : info(info) {}
+   mlir::Type createType(mlir::MLIRContext* context) override {
+      return lingodb::compiler::dialect::db::ListType::get(context, info->getElementType().getMLIRTypeCreator()->createType(context));
+   }
+
+   private:
+   std::shared_ptr<lingodb::catalog::ListTypeInfo> info;
+};
 class NoneTypeCreator : public lingodb::catalog::MLIRTypeCreator {
    public:
    mlir::Type createType(mlir::MLIRContext* context) override {
@@ -114,6 +124,9 @@ std::shared_ptr<MLIRTypeCreator> createCharTypeCreator(std::shared_ptr<catalog::
 }
 std::shared_ptr<MLIRTypeCreator> createStringTypeCreator(std::shared_ptr<catalog::StringTypeInfo> info) {
    return std::make_shared<GenericTypeCreator<lingodb::compiler::dialect::db::StringType>>();
+}
+std::shared_ptr<MLIRTypeCreator> createListTypeCreator(std::shared_ptr<catalog::ListTypeInfo> info) {
+   return std::make_shared<ListTypeCreator>(info);
 }
 std::shared_ptr<MLIRTypeCreator> createNoneTypeCreator() {
    return std::make_shared<NoneTypeCreator>();
@@ -153,6 +166,9 @@ std::shared_ptr<MLIRTypeCreator> createCharTypeCreator(std::shared_ptr<catalog::
    return {};
 }
 std::shared_ptr<MLIRTypeCreator> createStringTypeCreator(std::shared_ptr<catalog::StringTypeInfo> info) {
+   return {};
+}
+std::shared_ptr<MLIRTypeCreator> createListTypeCreator(std::shared_ptr<catalog::ListTypeInfo> info) {
    return {};
 }
 std::shared_ptr<MLIRTypeCreator> createNoneTypeCreator() {

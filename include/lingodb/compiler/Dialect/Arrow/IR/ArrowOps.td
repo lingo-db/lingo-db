@@ -50,6 +50,15 @@ def Arrow_LoadVariableSizeBinaryOp : Arrow_Op<"array.load_variable_size_binary",
     let results = (outs I32:$length, RefType : $ptr);
     let assemblyFormat = " $array `,` $offset `->` type($ptr) attr-dict";
 }
+def Arrow_LoadListOp : Arrow_Op<"array.load_list", [Pure] > {
+    let summary = "Loads a list from an array at a given offset";
+    let description = [{
+        Used for loading list values from an arrow array.
+    }];
+    let arguments = (ins Arrow_Array:$array,Index:$offset, TypeAttr:$elementType);
+    let results = (outs RefType:$value);
+    let assemblyFormat = " $array `,` $offset `,` $elementType `->` type($value) attr-dict";
+}
 def Arrow_AppendBoolOp : Arrow_Op<"array_builder.append_bool"> {
     let summary = "Appends a boolean value to an Arrow array builder.";
     let description = [{
@@ -77,6 +86,16 @@ def Arrow_AppendVariableSizeBinaryOp : Arrow_Op<"array_builder.append_variable_s
     }];
     let arguments = (ins Arrow_ArrayBuilder:$builder, VarLen32Type: $value,  Optional<I1>: $valid);
     let assemblyFormat = " $builder `,` $value   ( `,` $valid^ )? attr-dict";
+}
+
+def Arrow_AppendListOp : Arrow_Op<"array_builder.append_list"> {
+    let summary = "Appends a list to an Arrow array builder.";
+    let description = [{
+        This operation appends a list to an Arrow array builder, optionally with a validity flag.
+    }];
+
+    let arguments = (ins Arrow_ArrayBuilder:$builder, AnyType: $value, TypeAttr:$elementType,  Optional<I1>: $valid);
+    let assemblyFormat = " $builder `,` $value `:` type($value) `,` $elementType ( `,` $valid^ )? attr-dict";
 }
 
 def Arrow_BuilderFromPtr : Arrow_Op<"array_builder.from_ptr", [Pure] > {
