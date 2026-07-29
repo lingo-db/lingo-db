@@ -20,6 +20,8 @@ add_mlir_dialect_library(MLIRSubOperator
         Transforms/StepGraphUtils.cpp
         Transforms/InlineNestedMapPass.cpp
         Transforms/PrepareForLowering.cpp
+
+        Transforms/SIPPass.cpp
         Transforms/MemoryMgmtPass.cpp
         Transforms/CommonPipelineElimination.cpp
         ADDITIONAL_HEADER_DIRS

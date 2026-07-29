@@ -1,18 +1,12 @@
 #include "lingodb/runtime/DataSourceIteration.h"
-//TODO remove
-#include "../../include/lingodb/runtime/DatasourceRestrictionProperty.h"
 #include "json.h"
 #include "lingodb/catalog/TableCatalogEntry.h"
+#include "lingodb/runtime/DatasourceRestrictionProperty.h"
 #include "lingodb/runtime/ExternalDataSourceProperty.h"
 #include "lingodb/runtime/storage/TableStorage.h"
 #include "lingodb/scheduler/Scheduler.h"
-#include "lingodb/scheduler/Tasks.h"
-#include <iterator>
 
 #include "lingodb/utility/Tracer.h"
-
-#include <arrow/array.h>
-#include <arrow/table.h>
 namespace utility = lingodb::utility;
 namespace {
 

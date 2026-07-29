@@ -19,7 +19,10 @@ enum class FilterOp : uint8_t {
    GT,
    GTE,
    NOTNULL,
-   IN
+   IN,
+   SIP,
+   NS,
+   ISNULL,
 
 };
 struct FilterDescription {

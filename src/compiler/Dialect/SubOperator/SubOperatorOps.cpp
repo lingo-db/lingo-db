@@ -1392,6 +1392,11 @@ mlir::LogicalResult subop::InsertOp::foldColumns(subop::ColumnMapping& columnInf
    return mlir::success();
 }
 
+mlir::LogicalResult subop::CreateBloomFilterOp::foldColumns(subop::ColumnMapping& columnInfo) {
+   setColumnsAttr(columnInfo.remap(getColumns()));
+   return mlir::success();
+}
+
 void subop::NestedMapOp::updateStateType(subop::SubOpStateUsageTransformer& transformer, mlir::Value state, mlir::Type newType) {
    assert(false && "should not happen");
 }
