@@ -11,11 +11,13 @@
 #include "lingodb/runtime/RelationHelper.h"
 #include "lingodb/runtime/Session.h"
 #include "lingodb/runtime/storage/Index.h"
+#include "lingodb/runtime/storage/LingoDBTable.h"
 #include "lingodb/runtime/storage/TableStorage.h"
 #include "lingodb/scheduler/Tasks.h"
 #include "lingodb/utility/Serialization.h"
 
 #include <filesystem>
+#include <numeric>
 
 #include <arrow/builder.h>
 #include <arrow/ipc/reader.h>
@@ -231,6 +233,35 @@ class MockTaskWithContext : public lingodb::scheduler::TaskWithContext {
 };
 
 } // namespace
+
+TEST_CASE("Storage:SingleThreadedScanSplitsLargeBatches") {
+   auto scheduler = lingodb::scheduler::startScheduler();
+
+   auto schema = arrow::schema({arrow::field("value", arrow::int32())});
+   std::vector<int32_t> values(lingodb::runtime::BatchView::maxBatchSize + 1);
+   std::iota(values.begin(), values.end(), 0);
+
+   arrow::Int32Builder builder;
+   REQUIRE(builder.AppendValues(values).ok());
+   auto column = builder.Finish().ValueOrDie();
+
+   lingodb::runtime::LingoDBTable table("", schema);
+   table.append({arrow::RecordBatch::Make(schema, values.size(), {column})});
+
+   std::vector<size_t> batchLengths;
+   lingodb::runtime::ScanConfig scanConfig{
+      .parallel = false,
+      .columns = {"value"},
+      .filters = {{.columnName = "value", .columnId = 0, .op = lingodb::runtime::FilterOp::GTE,
+                   .value = int64_t{0}, .values = std::vector<int64_t>{}}},
+      .cb = [&](lingodb::runtime::BatchView* batchView) {
+         batchLengths.push_back(batchView->length);
+      },
+   };
+   lingodb::scheduler::awaitEntryTask(table.createScanTask(scanConfig));
+
+   REQUIRE(batchLengths == std::vector<size_t>{lingodb::runtime::BatchView::maxBatchSize, 1});
+}
 
 TEST_CASE("Storage") {
    auto scheduler = lingodb::scheduler::startScheduler();

@@ -508,7 +508,7 @@ class ScanBatchesSingleThreadedTask : public lingodb::scheduler::TaskWithImplici
       for (auto& batch : batches) {
          utility::Tracer::Trace trace(processMorselSingle);
          for (size_t start = 0; start < batch.getNumRows(); start += BatchView::maxBatchSize) {
-            size_t len = batch.getNumRows() - start;
+            size_t len = std::min(BatchView::maxBatchSize, batch.getNumRows() - start);
             batchView.offset = start;
             batchView.length = len;
             for (size_t i = 0; i < colIds.size(); i++) {
