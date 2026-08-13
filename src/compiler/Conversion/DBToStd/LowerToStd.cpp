@@ -226,7 +226,9 @@ class AppendArrowLowering : public OpConversionPattern<db::AppendArrowOp> {
          valid = rewriter.create<arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::eq, unpacked.first, falseValue);
       }
       //todo: also support more base types here
-      if (baseType.isIndex()) {
+      if (mlir::isa<mlir::NoneType>(baseType)) {
+         rewriter.create<lingodb::compiler::dialect::arrow::AppendNullOp>(loc, builder);
+      } else if (baseType.isIndex()) {
          rewriter.create<lingodb::compiler::dialect::arrow::AppendFixedSizedOp>(loc, builder, value, valid); //todo: necessary?
       } else if (baseType.isInteger(1)) {
          rewriter.create<lingodb::compiler::dialect::arrow::AppendBoolOp>(loc, builder, value, valid);
