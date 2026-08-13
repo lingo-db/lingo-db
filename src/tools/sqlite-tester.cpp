@@ -57,10 +57,17 @@ struct ResultHasher : public execution::ResultProcessor {
       std::vector<bool> convertHex;
       std::vector<bool> isFloat;
       for (auto c : table->columns()) {
-         convertHex.push_back(table->schema()->field(positions.size())->type()->id() == arrow::Type::FIXED_SIZE_BINARY);
-         isFloat.push_back(table->schema()->field(positions.size())->type()->id() == arrow::Type::DOUBLE);
+         auto type = table->schema()->field(positions.size())->type()->id();
+         convertHex.push_back(type == arrow::Type::FIXED_SIZE_BINARY);
+         isFloat.push_back(type == arrow::Type::DOUBLE);
          std::stringstream sstr;
-         arrow::PrettyPrint(*c.get(), options, &sstr); //NOLINT (clang-diagnostic-unused-result)
+         if (type == arrow::Type::NA) {
+            for (int64_t i = 0; i < table->num_rows(); i++) {
+               sstr << "null\n";
+            }
+         } else {
+            arrow::PrettyPrint(*c.get(), options, &sstr); //NOLINT (clang-diagnostic-unused-result)
+         }
          columnReps.push_back(sstr.str());
          positions.push_back(0);
       }
