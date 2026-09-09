@@ -242,6 +242,16 @@ class LoadOpLowering : public OpConversionPattern<util::LoadOp> {
       return success();
    }
 };
+class UnalignedLoadOpLowering : public OpConversionPattern<util::UnalignedLoadOp> {
+   public:
+   using OpConversionPattern<util::UnalignedLoadOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(util::UnalignedLoadOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      Value elementPtr = adaptor.getRef();
+      auto elemType = typeConverter->convertType(op.getRef().getType().getElementType());
+      rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, elemType, elementPtr,/*alignment=*/1);
+      return success();
+   }
+};
 class CastOpLowering : public OpConversionPattern<util::GenericMemrefCastOp> {
    public:
    using OpConversionPattern<util::GenericMemrefCastOp>::OpConversionPattern;
@@ -443,6 +453,300 @@ class VarLenGetLenLowering : public OpConversionPattern<util::VarLenGetLen> {
 
       rewriter.replaceOp(op, castedLen);
       return success();
+   }
+};
+class VarLenGetRefLowering : public OpConversionPattern<util::VarLenGetRef> {
+   public:
+   using OpConversionPattern<util::VarLenGetRef>::OpConversionPattern;
+   LogicalResult matchAndRewrite(util::VarLenGetRef op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op.getLoc();
+      Value shift64 = rewriter.create<LLVM::ConstantOp>(loc, rewriter.getIntegerType(128), rewriter.getIntegerAttr(rewriter.getIntegerType(128), 64));
+      Value last64 = rewriter.create<LLVM::TruncOp>(loc, rewriter.getIntegerType(64), rewriter.create<LLVM::LShrOp>(loc, adaptor.getVarlen(), shift64));
+      Value shift2 = rewriter.create<LLVM::ConstantOp>(loc, rewriter.getIntegerType(64), rewriter.getI64IntegerAttr(2));
+      Value base = rewriter.create<LLVM::IntToPtrOp>(loc,  mlir::LLVM::LLVMPointerType::get(rewriter.getContext()), rewriter.create<LLVM::LShrOp>(loc, last64, shift2));
+
+      rewriter.replaceOp(op, base);
+      return success();
+   }
+};
+class VarLenGetInlinedStringLowering : public OpConversionPattern<util::VarLenGetInlinedString> {
+   public:
+   using OpConversionPattern<util::VarLenGetInlinedString>::OpConversionPattern;
+   LogicalResult matchAndRewrite(util::VarLenGetInlinedString op, OpAdaptor adaptor,
+                                 ConversionPatternRewriter& rewriter) const override {
+      auto loc = op->getLoc();
+      auto i128Type = rewriter.getIntegerType(128);
+
+      Value const32 = rewriter.create<LLVM::ConstantOp>(loc, i128Type, rewriter.getIntegerAttr(i128Type, 32));
+      rewriter.replaceOpWithNewOp<LLVM::LShrOp>(op, adaptor.getVarlen(), const32);
+      return mlir::success();
+   }
+};
+
+class StringStartsWithLowering : public OpConversionPattern<util::StringStartsWith> {
+   public:
+   using OpConversionPattern<util::StringStartsWith>::OpConversionPattern;
+   LogicalResult matchAndRewrite(util::StringStartsWith op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op->getLoc();
+      llvm::StringRef prefix = op.getPrefix();
+
+      static size_t globalPrefixConstId = 0;
+      mlir::LLVM::GlobalOp globalOp;
+      {
+         std::string name = "global_const_prefix" + std::to_string(globalPrefixConstId++);
+         auto moduleOp = rewriter.getBlock()->getParentOp()->getParentOfType<ModuleOp>();
+         OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(moduleOp.getBody());
+         globalOp = rewriter.create<mlir::LLVM::GlobalOp>(loc, mlir::LLVM::LLVMArrayType::get(rewriter.getI8Type(), prefix.size()), true, mlir::LLVM::Linkage::Private, name, rewriter.getStringAttr(prefix));
+      }
+
+      auto memcmpFn = LLVM::lookupOrCreateFn(op->getParentOfType<ModuleOp>(), "memcmp",{mlir::LLVM::LLVMPointerType::get(rewriter.getContext()), mlir::LLVM::LLVMPointerType::get(rewriter.getContext()), rewriter.getIntegerType(64)}, rewriter.getI32Type()).value();
+      Value prefixPtr = rewriter.create<mlir::LLVM::AddressOfOp>(loc, globalOp);
+      Value prefixLen = rewriter.create<LLVM::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(prefix.size()));
+      Value start = rewriter.create<LLVM::GEPOp>(loc,  mlir::LLVM::LLVMPointerType::get(rewriter.getContext()), rewriter.getI8Type(), adaptor.getStr(), mlir::ValueRange{adaptor.getStartIndex()});
+
+      auto callOp = rewriter.create<LLVM::CallOp>(loc, memcmpFn, mlir::ValueRange{start, prefixPtr, prefixLen});
+      Value cmp = callOp.getResult();
+      Value zero = rewriter.create<LLVM::ConstantOp>(loc, rewriter.getI32Type(), rewriter.getI32IntegerAttr(0));
+      Value isMatch = rewriter.create<LLVM::ICmpOp>(loc, LLVM::ICmpPredicate::eq, cmp, zero);
+      rewriter.replaceOp(op, isMatch);
+      return mlir::success();
+   }
+};
+
+class BytesStartsWithLowering : public OpConversionPattern<util::BytesStartsWith> {
+   public:
+   using OpConversionPattern<util::BytesStartsWith>::OpConversionPattern;
+   LogicalResult matchAndRewrite(util::BytesStartsWith op,  OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op->getLoc();
+      llvm::StringRef prefix = op.getPrefix();
+
+      uint64_t mask[2] = {0};
+      uint8_t* maskBytes = reinterpret_cast<uint8_t*>(mask);
+      for (size_t i = 0; i < prefix.size(); ++i)
+         maskBytes[i] = 0xFF;
+      llvm::APInt maskAP(128, llvm::ArrayRef<uint64_t>(mask, 2));
+      auto maskAttr =  rewriter.getIntegerAttr(rewriter.getIntegerType(128), maskAP);
+      Value maskVal = rewriter.create<LLVM::ConstantOp>(loc, rewriter.getIntegerType(128), maskAttr);
+
+      uint64_t needle[2] = {0};
+      uint8_t* needleBytes = reinterpret_cast<uint8_t*>(needle);
+      memcpy(needleBytes, prefix.data(), prefix.size());
+      llvm::APInt needleAP(128, llvm::ArrayRef<uint64_t>(needle, 2));
+      auto needleAttr = rewriter.getIntegerAttr(rewriter.getIntegerType(128), needleAP);
+      Value needleVal = rewriter.create<LLVM::ConstantOp>(loc, rewriter.getIntegerType(128), needleAttr);
+
+      Value haystackVal = adaptor.getStr();
+      Value constEight = rewriter.create<LLVM::ConstantOp>(loc, rewriter.getIntegerType(128), rewriter.getIntegerAttr(rewriter.getIntegerType(128), 8));
+      Value startIdx128 = rewriter.create<LLVM::ZExtOp>(loc, rewriter.getIntegerType(128), adaptor.getStartIndex());
+      Value bitOff = rewriter.create<LLVM::MulOp>(loc, startIdx128, constEight);
+      Value shiftedHaystackVal = rewriter.create<LLVM::LShrOp>(loc, haystackVal, bitOff);
+      Value maskedVal = rewriter.create<mlir::LLVM::AndOp>(loc, shiftedHaystackVal, maskVal);
+      Value isMatch = rewriter.create<LLVM::ICmpOp>(loc, LLVM::ICmpPredicate::eq, needleVal, maskedVal);
+      rewriter.replaceOp(op, isMatch);
+      return mlir::success();
+   }
+};
+
+class StringEndsWithLowering : public OpConversionPattern<util::StringEndsWith> {
+   public:
+   using OpConversionPattern<util::StringEndsWith>::OpConversionPattern;
+   LogicalResult matchAndRewrite(util::StringEndsWith op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op->getLoc();
+      llvm::StringRef suffix = op.getSuffix();
+
+      static size_t globalSuffixConstId = 0;
+      mlir::LLVM::GlobalOp globalOp;
+      {
+         std::string name = "global_const_suffix" + std::to_string(globalSuffixConstId++);
+         auto moduleOp = rewriter.getBlock()->getParentOp()->getParentOfType<ModuleOp>();
+         OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(moduleOp.getBody());
+         globalOp = rewriter.create<mlir::LLVM::GlobalOp>(loc, mlir::LLVM::LLVMArrayType::get(rewriter.getI8Type(), suffix.size()), true, mlir::LLVM::Linkage::Private, name, rewriter.getStringAttr(suffix));
+      }
+
+      auto memcmpFn = LLVM::lookupOrCreateFn(op->getParentOfType<ModuleOp>(), "memcmp",{mlir::LLVM::LLVMPointerType::get(rewriter.getContext()), mlir::LLVM::LLVMPointerType::get(rewriter.getContext()), rewriter.getIntegerType(64)}, rewriter.getI32Type()).value();
+      Value suffixPtr = rewriter.create<mlir::LLVM::AddressOfOp>(loc, globalOp);
+      Value suffixLen = rewriter.create<LLVM::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(suffix.size()));
+
+      Value startIndex = rewriter.create<LLVM::SubOp>(loc, adaptor.getEndIndex(), suffixLen);
+      Value start = rewriter.create<LLVM::GEPOp>(loc,  mlir::LLVM::LLVMPointerType::get(rewriter.getContext()), rewriter.getI8Type(), adaptor.getStr(), mlir::ValueRange{startIndex});
+
+      auto callOp = rewriter.create<LLVM::CallOp>(loc, memcmpFn, mlir::ValueRange{start, suffixPtr, suffixLen});
+      Value cmp = callOp.getResult();
+      Value zero = rewriter.create<LLVM::ConstantOp>(loc, rewriter.getI32Type(), rewriter.getI32IntegerAttr(0));
+      Value isMatch = rewriter.create<LLVM::ICmpOp>(loc, LLVM::ICmpPredicate::eq, cmp, zero);
+      rewriter.replaceOp(op, isMatch);
+      return mlir::success();
+
+   }
+};
+
+class BytesEndsWithLowering : public OpConversionPattern<util::BytesEndsWith> {
+   public:
+   using OpConversionPattern<util::BytesEndsWith>::OpConversionPattern;
+   LogicalResult matchAndRewrite(util::BytesEndsWith op,  OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op->getLoc();
+      llvm::StringRef suffix = op.getSuffix();
+
+      uint64_t mask[2] = {0};
+      uint8_t* maskBytes = reinterpret_cast<uint8_t*>(mask);
+      for (size_t i = 0; i < suffix.size(); ++i)
+         maskBytes[i] = 0xFF;
+      llvm::APInt maskAP(128, llvm::ArrayRef<uint64_t>(mask, 2));
+      auto maskAttr =  rewriter.getIntegerAttr(rewriter.getIntegerType(128), maskAP);
+      Value maskVal = rewriter.create<LLVM::ConstantOp>(loc, rewriter.getIntegerType(128), maskAttr);
+
+      uint64_t needle[2] = {0};
+      uint8_t* needleBytes = reinterpret_cast<uint8_t*>(needle);
+      memcpy(needleBytes, suffix.data(), suffix.size());
+      llvm::APInt needleAP(128, llvm::ArrayRef<uint64_t>(needle, 2));
+      auto needleAttr = rewriter.getIntegerAttr(rewriter.getIntegerType(128), needleAP);
+      Value needleVal = rewriter.create<LLVM::ConstantOp>(loc, rewriter.getIntegerType(128), needleAttr);
+      auto needleLen = rewriter.create<mlir::LLVM::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(suffix.size()));
+
+      Value haystackVal = adaptor.getStr();
+      auto shiftValueBits = rewriter.create<mlir::LLVM::SubOp>(loc, adaptor.getEndIndex(), needleLen);
+      auto bitsCount = rewriter.create<mlir::LLVM::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(8));
+      auto shiftValue = rewriter.create<mlir::LLVM::MulOp>(loc, shiftValueBits, bitsCount);
+      Value shift128 = rewriter.create<LLVM::ZExtOp>(loc, rewriter.getIntegerType(128), shiftValue);
+      Value shiftedHaystack = rewriter.create<mlir::LLVM::LShrOp>(loc, haystackVal, shift128);
+
+      Value maskedVal = rewriter.create<mlir::LLVM::AndOp>(loc, shiftedHaystack, maskVal);
+      Value isMatch = rewriter.create<LLVM::ICmpOp>(loc, LLVM::ICmpPredicate::eq, needleVal, maskedVal);
+      rewriter.replaceOp(op, isMatch);
+      return mlir::success();
+   }
+};
+class RefMemchrLowering : public OpConversionPattern<util::RefMemchr> {
+   public:
+   using OpConversionPattern<util::RefMemchr>::OpConversionPattern;
+   LogicalResult matchAndRewrite(util::RefMemchr op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op->getLoc();
+      auto i64Type = rewriter.getI64Type();
+      auto i32Type = rewriter.getI32Type();
+
+      auto memchrFn = LLVM::lookupOrCreateFn(op->getParentOfType<ModuleOp>(), "memchr",{mlir::LLVM::LLVMPointerType::get(rewriter.getContext()), i32Type, i64Type}, mlir::LLVM::LLVMPointerType::get(rewriter.getContext())).value();
+      Value character = rewriter.create<LLVM::ZExtOp>(loc, i32Type, adaptor.getByte());
+      Value res = rewriter.create<LLVM::CallOp>(loc, memchrFn, mlir::ValueRange{adaptor.getRef(), character, adaptor.getLen()}).getResult();
+
+      Value nullPtr = rewriter.create<LLVM::ZeroOp>(loc, mlir::LLVM::LLVMPointerType::get(rewriter.getContext()));
+      Value found = rewriter.create<LLVM::ICmpOp>(loc, LLVM::ICmpPredicate::ne, res, nullPtr);
+
+      Value resInt = rewriter.create<LLVM::PtrToIntOp>(loc, i64Type, res);
+      Value baseInt = rewriter.create<LLVM::PtrToIntOp>(loc, i64Type, adaptor.getRef());
+      Value offset = rewriter.create<LLVM::SubOp>(loc, resInt, baseInt);
+
+      Value pos = rewriter.create<LLVM::SelectOp>(loc, found, offset, adaptor.getLen());
+
+      rewriter.replaceOp(op, mlir::ValueRange{found, pos});
+      return mlir::success();
+   }
+};
+class InlineMemchrLowering : public OpConversionPattern<util::InlineMemchr> {
+   public:
+   using OpConversionPattern<util::InlineMemchr>::OpConversionPattern;
+   LogicalResult matchAndRewrite(util::InlineMemchr op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op->getLoc();
+      auto i128 = rewriter.getIntegerType(128);
+      auto indexType = typeConverter->convertType(rewriter.getIndexType());
+
+      auto uint8ArrayToUint128Value = [&](uint64_t* arr) {
+         llvm::APInt arrAP(128, llvm::ArrayRef<uint64_t>(arr, 2));
+         auto arrAttr =  rewriter.getIntegerAttr(i128, arrAP);
+         return rewriter.create<LLVM::ConstantOp>(loc, i128, arrAttr);
+      };
+
+      uint64_t high[2], low[2], mask[2], allOnes[2];
+      memset(reinterpret_cast<uint8_t*>(high), 0x80, 16);
+      memset(reinterpret_cast<uint8_t*>(low), 0x7F, 16);
+      memset(reinterpret_cast<uint8_t*>(allOnes), 0xFF, 16);
+      memset(reinterpret_cast<uint8_t*>(mask), 0x01, 16);
+
+      Value highValue = uint8ArrayToUint128Value(high);
+      Value lowValue = uint8ArrayToUint128Value(low);
+      Value maskMulValue = uint8ArrayToUint128Value(mask);
+      Value allOnesValue = uint8ArrayToUint128Value(allOnes);
+      Value byteI128Value = rewriter.create<LLVM::ZExtOp>(loc, i128, adaptor.getByte());
+      Value patternValue = rewriter.create<LLVM::MulOp>(loc, byteI128Value, maskMulValue);
+
+      // uint64 t lowChars=( ̃block)&high;
+      Value block = adaptor.getData();
+
+      // block ^ pattern => bytes which fully match the pattern are set to 0
+      // bytes which do not have a 1-bit somewhere
+      Value all0IffMatchedByte = rewriter.create<LLVM::XOrOp>(loc, block, patternValue);
+      // all0iffNl = block ^ pattern & low => to perform bitwise addition, if the block byte and pattern disagree on the highest bit, we currently set it to 0
+      // otherwise, we keep it as is
+      Value all0IffMatchedByteOrDisagreeOnHighestBit = rewriter.create<LLVM::AndOp>(loc, all0IffMatchedByte, lowValue);
+
+      // highestBitSetIffByteNot0 = all0iffNl + low => if the previously computed value is not zero, set the highest bit
+      // otherwise, keep the highest bit is 0 (which means that either the block byte and pattern agree or they disagree on the highest bit)
+      Value highestBitSetIffByteNot0 = rewriter.create<LLVM::AddOp>(loc, all0IffMatchedByteOrDisagreeOnHighestBit, lowValue);
+      // ~highestBitSetIffByteNot0 => the highest bit is 1 if either the block byte and pattern agree or they disagree on the highest bit
+      // otherwise, the highest bit is 0
+      // the other bits are garbage
+      Value negatedHighestBitSetIffByteNot0 = rewriter.create<LLVM::XOrOp>(loc, highestBitSetIffByteNot0, allOnesValue);
+      // highestSetIf0 = ~ highestBitSetIffByteNot0 & high => remove the garbage bits from previous result to keep only the highest bits
+      Value highestSetIf0 = rewriter.create<LLVM::AndOp>(loc, negatedHighestBitSetIffByteNot0, highValue);
+
+      // when do the block byte and pattern disagree on the highest bit?
+
+      Value const127 = rewriter.create<LLVM::ConstantOp>(loc, rewriter.getI8Type(), rewriter.getI8IntegerAttr(127));
+      Value isLessThan127 = rewriter.create<LLVM::ICmpOp>(loc, LLVM::ICmpPredicate::ule, adaptor.getByte(), const127);
+      // if the pattern does not have the highest bit set, they disagree when the block byte has the highest bit set
+      // ~block => if the highest bit of entries is set, it is no longer set
+      // if the highest bit was not set, it is set now
+      Value negatedBlock = rewriter.create<LLVM::XOrOp>(loc, block, allOnesValue);
+      // (~block)&high => bytes within the block without the highest bit set are now 0x80
+      // bytes within the block with the highest bit set are 0x00 (mask)
+      // result = highestSetIf0 & lowChar => for block bytes with the highest bit set, set the mask to 0
+      // if the pattern has the highest bit set, they disagree when the block byte does not have the highest bit set
+      // bytes without their highest bit set are set to 0*
+      Value blockUsedForMasking = rewriter.create<LLVM::SelectOp>(loc, isLessThan127, negatedBlock, block);
+      Value finalMask = rewriter.create<LLVM::AndOp>(loc, blockUsedForMasking, highValue);
+
+      Value initialResult = rewriter.create<LLVM::AndOp>(loc, highestSetIf0, finalMask);
+
+      Value const16 = rewriter.create<LLVM::ConstantOp>(loc, adaptor.getLen().getType(), rewriter.getIntegerAttr(adaptor.getLen().getType(), 16));
+      Value const8 = rewriter.create<LLVM::ConstantOp>(loc, adaptor.getLen().getType(), rewriter.getIntegerAttr(adaptor.getLen().getType(), 8));
+      Value uselessByteIdx = rewriter.create<LLVM::SubOp>(loc, const16, adaptor.getLen());
+      Value numShiftBits = rewriter.create<LLVM::MulOp>(loc, uselessByteIdx, const8);
+      Value numShiftBits128 = rewriter.create<LLVM::ZExtOp>(loc, i128, numShiftBits);
+      Value lenMask = rewriter.create<LLVM::LShrOp>(loc, allOnesValue, numShiftBits128);
+      Value result = rewriter.create<LLVM::AndOp>(loc, initialResult, lenMask);
+
+      Value zero128 = rewriter.create<LLVM::ConstantOp>(loc, i128, rewriter.getIntegerAttr(i128, 0));
+      Value found = rewriter.create<LLVM::ICmpOp>(loc, LLVM::ICmpPredicate::ne, result, zero128);
+
+      Value trailingZeroes = rewriter.create<LLVM::CountTrailingZerosOp>(loc, i128, result, false);
+      Value const3 = rewriter.create<LLVM::ConstantOp>(loc, i128, rewriter.getIntegerAttr(i128, 3));
+      Value byteIndex = rewriter.create<LLVM::LShrOp>(loc, trailingZeroes, const3);
+      Value pos = rewriter.create<LLVM::TruncOp>(loc, indexType, byteIndex);
+      rewriter.replaceOp(op, ValueRange{found, pos});
+      return mlir::success();
+   }
+};
+class GetUTF8CodeLenOpLowering : public OpConversionPattern<util::GetUTF8CodeLenOp> {
+   public:
+   using OpConversionPattern<util::GetUTF8CodeLenOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(util::GetUTF8CodeLenOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op->getLoc();
+      auto i8Type = rewriter.getI8Type();
+      auto resType = typeConverter->convertType(op.getLen().getType());
+      mlir::Value byte = adaptor.getByte();
+
+      auto isByteAtLeast = [&](int64_t bound) -> mlir::Value {
+         mlir::Value boundConst = rewriter.create<mlir::LLVM::ConstantOp>(loc, i8Type, rewriter.getIntegerAttr(i8Type, bound));
+         mlir::Value cmp = rewriter.create<mlir::LLVM::ICmpOp>(loc, mlir::LLVM::ICmpPredicate::uge, byte, boundConst);
+         return rewriter.create<mlir::LLVM::ZExtOp>(loc, resType, cmp);
+      };
+      mlir::Value len = rewriter.create<mlir::LLVM::ConstantOp>(loc, resType, rewriter.getIntegerAttr(resType, 1));
+      len = rewriter.create<mlir::LLVM::AddOp>(loc, len, isByteAtLeast(0xC0));
+      len = rewriter.create<mlir::LLVM::AddOp>(loc, len, isByteAtLeast(0xE0));
+      len = rewriter.create<mlir::LLVM::AddOp>(loc, len, isByteAtLeast(0xF0));
+      rewriter.replaceOp(op, len);
+      return mlir::success();
    }
 };
 class BufferGetLenLowering : public OpConversionPattern<util::BufferGetLen> {
@@ -647,6 +951,72 @@ class IsBitSetConstLowering : public OpConversionPattern<util::IsBitSetConstOp> 
       return success();
    }
 };
+class CreateConstArrayLowering: public OpConversionPattern<util::CreateConstArrayOp> {
+   public:
+   using OpConversionPattern<util::CreateConstArrayOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(util::CreateConstArrayOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op->getLoc();
+      auto elemTy = typeConverter->convertType(op.getType().getElementType());
+      auto dataAttr = mlir::cast<mlir::ElementsAttr>(op.getData());
+      int64_t numElements = dataAttr.getNumElements();
+
+      static size_t globalStrConstId = 0;
+      mlir::LLVM::GlobalOp globalOp;
+      {
+         std::string name = "global_const_array" + std::to_string(globalStrConstId++);
+         auto moduleOp = rewriter.getBlock()->getParentOp()->getParentOfType<ModuleOp>();
+         OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(moduleOp.getBody());
+         globalOp = rewriter.create<mlir::LLVM::GlobalOp>(op->getLoc(), mlir::LLVM::LLVMArrayType::get(elemTy, numElements), true, mlir::LLVM::Linkage::Private, name, dataAttr);
+         uint64_t alignment = op.getAlignment();
+         globalOp.setAlignment(alignment);
+      }
+      rewriter.replaceOpWithNewOp<mlir::LLVM::AddressOfOp>(op, globalOp);
+      return mlir::success();
+   }
+};
+class GetConstArrayAtLowering: public OpConversionPattern<util::GetConstArrayAtOp> {
+   public:
+   using OpConversionPattern<util::GetConstArrayAtOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(util::GetConstArrayAtOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op->getLoc();
+      auto elemTy = typeConverter->convertType(op.getRes().getType());
+      auto ptrType = mlir::LLVM::LLVMPointerType::get(rewriter.getContext());
+
+      Value elemPtr = rewriter.create<mlir::LLVM::GEPOp>(loc, ptrType, elemTy, adaptor.getArray(), mlir::ValueRange{adaptor.getIdx()});
+      rewriter.replaceOpWithNewOp<mlir::LLVM::LoadOp>(op, elemTy, elemPtr);
+      return mlir::success();
+   }
+};
+class LoadVectorLowering : public OpConversionPattern<util::LoadVectorOp> {
+   public:
+   using OpConversionPattern<util::LoadVectorOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(util::LoadVectorOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto resTy = typeConverter->convertType(op.getRes().getType());
+      if (!resTy)
+         return mlir::failure();
+      rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, resTy, adaptor.getRef(), op.getAlignment());
+      return success();
+   }
+};
+
+class CmpistriLowering : public OpConversionPattern<util::CmpistriOp> {
+   public:
+   using OpConversionPattern<util::CmpistriOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(util::CmpistriOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      Value flags = rewriter.create<LLVM::ConstantOp>(op.getLoc(), rewriter.getI8Type(), op.getFlagsAttr());
+      auto module = op->getParentOfType<ModuleOp>();
+      auto pcmpistriFn = LLVM::lookupOrCreateFn(
+         module, "llvm.x86.sse42.pcmpistri128",
+         {adaptor.getA().getType(), adaptor.getB().getType(), rewriter.getI8Type()}, rewriter.getI32Type());
+      if (failed(pcmpistriFn))
+         return mlir::failure();
+
+      rewriter.replaceOpWithNewOp<LLVM::CallOp>(
+         op, pcmpistriFn.value(), ValueRange{adaptor.getA(), adaptor.getB(), flags});
+      return mlir::success();
+   }
+};
 
 } // end anonymous namespace
 
@@ -684,14 +1054,24 @@ void util::populateUtilToLLVMConversionPatterns(LLVMTypeConverter& typeConverter
    patterns.add<InvalidRefOpLowering>(typeConverter, patterns.getContext());
    patterns.add<StoreOpLowering>(typeConverter, patterns.getContext());
    patterns.add<LoadOpLowering>(typeConverter, patterns.getContext());
+   patterns.add<UnalignedLoadOpLowering>(typeConverter, patterns.getContext());
    patterns.add<CreateVarLenLowering>(typeConverter, patterns.getContext());
    patterns.add<CreateConstVarLenLowering>(typeConverter, patterns.getContext());
    patterns.add<VarLenGetLenLowering>(typeConverter, patterns.getContext());
+   patterns.add<VarLenGetRefLowering>(typeConverter, patterns.getContext());
+   patterns.add<VarLenGetInlinedStringLowering>(typeConverter, patterns.getContext());
    patterns.add<VarLenCmpLowering>(typeConverter, patterns.getContext());
    patterns.add<VarLenCmpSimpleLowering>(typeConverter, patterns.getContext());
    patterns.add<VarLenInvalidLowering>(typeConverter, patterns.getContext());
    patterns.add<VarLenIsInvalidLowering>(typeConverter, patterns.getContext());
    patterns.add<VarLenTryCheapHashLowering>(typeConverter, patterns.getContext());
+   patterns.add<StringStartsWithLowering>(typeConverter, patterns.getContext());
+   patterns.add<BytesStartsWithLowering>(typeConverter, patterns.getContext());
+   patterns.add<RefMemchrLowering>(typeConverter, patterns.getContext());
+   patterns.add<InlineMemchrLowering>(typeConverter, patterns.getContext());
+   patterns.add<StringEndsWithLowering>(typeConverter, patterns.getContext());
+   patterns.add<BytesEndsWithLowering>(typeConverter, patterns.getContext());
+   patterns.add<GetUTF8CodeLenOpLowering>(typeConverter, patterns.getContext());
    patterns.add<HashCombineLowering>(typeConverter, patterns.getContext());
    patterns.add<Hash64Lowering>(typeConverter, patterns.getContext());
    patterns.add<HashVarLenLowering>(typeConverter, patterns.getContext());
@@ -704,6 +1084,10 @@ void util::populateUtilToLLVMConversionPatterns(LLVMTypeConverter& typeConverter
    patterns.add<LoadElementOpLowering>(typeConverter, patterns.getContext());
    patterns.add<IsBitSetConstLowering>(typeConverter, patterns.getContext());
    patterns.add<SetBitConstLowering>(typeConverter, patterns.getContext());
+   patterns.add<CreateConstArrayLowering>(typeConverter, patterns.getContext());
+   patterns.add<GetConstArrayAtLowering>(typeConverter, patterns.getContext());
+   patterns.add<LoadVectorLowering>(typeConverter, patterns.getContext());
+   patterns.add<CmpistriLowering>(typeConverter, patterns.getContext());
 }
 namespace {
 

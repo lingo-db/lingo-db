@@ -579,9 +579,7 @@ mlir::Value SQLMlirTranslator::translateSubquery(mlir::OpBuilder& builder, std::
          mlir::Value pred;
          if (subquery->comparisonType.has_value()) {
             if (subquery->comparisonType.value() == ast::ExpressionType::COMPARE_LIKE || subquery->comparisonType.value() == ast::ExpressionType::COMPARE_NOT_LIKE) {
-               auto isNullable = mlir::isa<db::NullableType>(ctExpr.getType()) || mlir::isa<db::NullableType>(ctCol.getType());
-               mlir::Type resType = isNullable ? (mlir::Type) db::NullableType::get(predBuilder.getContext(), predBuilder.getI1Type()) : (mlir::Type) predBuilder.getI1Type();
-               auto like = predBuilder.create<db::RuntimeCall>(exprLocation, resType, "Like", mlir::ValueRange({ctExpr, ctCol})).getRes();
+               mlir::Value like = predBuilder.create<db::LikeOp>(exprLocation, ctExpr, ctCol, mlir::StringAttr{});
                pred = subquery->comparisonType.value() == ast::ExpressionType::COMPARE_NOT_LIKE ? predBuilder.create<db::NotOp>(exprLocation, like) : like;
             } else {
                switch (subquery->comparisonType.value()) {
@@ -645,9 +643,7 @@ mlir::Value SQLMlirTranslator::translateSubquery(mlir::OpBuilder& builder, std::
          mlir::Value pred;
          if (subquery->comparisonType.has_value()) {
             if (subquery->comparisonType.value() == ast::ExpressionType::COMPARE_LIKE || subquery->comparisonType.value() == ast::ExpressionType::COMPARE_NOT_LIKE) {
-               auto isNullable = mlir::isa<db::NullableType>(ctExpr.getType()) || mlir::isa<db::NullableType>(ctCol.getType());
-               mlir::Type resType = isNullable ? (mlir::Type) db::NullableType::get(predBuilder.getContext(), predBuilder.getI1Type()) : (mlir::Type) predBuilder.getI1Type();
-               auto like = predBuilder.create<db::RuntimeCall>(exprLocation, resType, "Like", mlir::ValueRange({ctExpr, ctCol})).getRes();
+               mlir::Value like = predBuilder.create<db::LikeOp>(exprLocation, ctExpr, ctCol, mlir::StringAttr{});
                pred = subquery->comparisonType.value() == ast::ExpressionType::COMPARE_NOT_LIKE ? predBuilder.create<db::NotOp>(exprLocation, like) : like;
             } else {
                switch (subquery->comparisonType.value()) {
@@ -786,9 +782,7 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
          auto ctLeft = comparisonExpr->left->resultType->castValue(builder, left);
          auto ctRight = comparisonExpr->rightChildren[0]->resultType->castValue(builder, right);
          if (comparisonExpr->type == ast::ExpressionType::COMPARE_LIKE || comparisonExpr->type == ast::ExpressionType::COMPARE_NOT_LIKE) {
-            auto isNullable = mlir::isa<db::NullableType>(left.getType()) || mlir::isa<db::NullableType>(right.getType());
-            mlir::Type resType = isNullable ? (mlir::Type) db::NullableType::get(mlirContext, builder.getI1Type()) : (mlir::Type) builder.getI1Type();
-            auto like = builder.create<db::RuntimeCall>(exprLocation, resType, "Like", mlir::ValueRange({ctLeft, ctRight})).getRes();
+            mlir::Value like = builder.create<db::LikeOp>(exprLocation, ctLeft, ctRight, mlir::StringAttr{});
             return comparisonExpr->type == ast::ExpressionType::COMPARE_NOT_LIKE ? builder.create<db::NotOp>(exprLocation, like) : like;
          }
          db::DBCmpPredicate pred;
