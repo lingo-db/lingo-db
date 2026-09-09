@@ -2837,6 +2837,23 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeFunctionExpressio
 
       boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, std::vector{arg1});
 
+   } else if (upperCaseFName == "POW" || upperCaseFName == "POWER") {
+      if (function->arguments.size() != 2) {
+         error("Function pow needs exactly two arguments", function->loc);
+      }
+      auto arg0 = analyzeExpression(function->arguments[0], context, resolverScope);
+      auto arg1 = analyzeExpression(function->arguments[1], context, resolverScope);
+      if (!arg0->resultType.has_value() || !arg0->resultType->isNumeric()) {
+         error("Argument of pow must be numeric", arg0->loc);
+      }
+      if (!arg1->resultType.has_value() || !arg1->resultType->isNumeric()) {
+         error("Argument of pow must be numeric", arg1->loc);
+      }
+      resultType = NullableType{
+         catalog::Type::f64(),
+         arg0->resultType->isNullable || arg1->resultType->isNullable};
+      boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, std::vector{arg0, arg1});
+
    } else if (upperCaseFName == "COALESCE") {
       if (function->arguments.size() < 2) {
          error("Function with less than two argument not supported", function->loc);
