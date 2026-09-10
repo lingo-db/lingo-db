@@ -341,6 +341,11 @@ std::shared_ptr<db::RuntimeFunctionRegistry> db::RuntimeFunctionRegistry::getBui
    builtinRegistry->add("Hash").matchesTypes({RuntimeFunction::anyType}, resTypeIsIndex).needsWrapping().implementedAs([](mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, const mlir::TypeConverter* typeConverter, mlir::Location loc) -> mlir::Value {
       return rewriter.create<lingodb::compiler::dialect::db::Hash>(loc, loweredArguments[0]);
    });
+   builtinRegistry->add("Power")
+      .matchesTypes(
+         {RuntimeFunction::float64, RuntimeFunction::float64},
+         resTypeIsF64)
+      .implementedAs(FloatRuntime::pow);
    builtinRegistry->add("CombineHashes").matchesTypes({RuntimeFunction::onlyIndex, RuntimeFunction::onlyIndex}, resTypeIsIndex).needsWrapping().implementedAs([](mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, const mlir::TypeConverter* typeConverter, mlir::Location loc) -> mlir::Value {
       return rewriter.create<util::HashCombine>(loc, rewriter.getIndexType(), loweredArguments[0], loweredArguments[1]);
    });

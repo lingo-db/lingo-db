@@ -934,6 +934,14 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
             auto str = translateExpression(builder, function->arguments[0], context);
             return builder.create<db::RuntimeCall>(exprLocation, builder.getI64Type(), "StringLength", str).getRes();
          }
+         if (upperCaseFName == "POW" || upperCaseFName == "POWER") {
+            auto base = translateExpression(builder, function->arguments[0], context);
+            auto exponent = translateExpression(builder, function->arguments[1], context);
+            auto doubleType = NullableType{catalog::Type::f64(), function->resultType->isNullable};
+            base = doubleType.castValueToThisType(builder, base, function->arguments[0]->resultType->isNullable);
+            exponent = doubleType.castValueToThisType(builder, exponent, function->arguments[1]->resultType->isNullable);
+            return builder.create<db::RuntimeCall>(exprLocation, doubleType.toMlirType(mlirContext), "Power", mlir::ValueRange{base, exponent}).getRes();
+         }
          if (upperCaseFName == "REGEXP_REPLACE") {
             auto text = translateExpression(builder, function->arguments[0], context);
             auto pattern = translateExpression(builder, function->arguments[1], context);
