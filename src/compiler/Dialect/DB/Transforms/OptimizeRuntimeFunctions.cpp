@@ -21,32 +21,6 @@ struct AnyMatcher : public Matcher {
    virtual ~AnyMatcher() {}
 };
 
-bool isDeterministicLikePattern(std::string_view str, char escape = '\\') {
-   // deterministic: patterns enclosed by '%' can contain only placeholders or only deterministic characters
-   bool sawPercent = false;
-   bool sawPlaceholder = false;
-   bool sawCharacter = false;
-   bool prevWasEscape = false;
-   for (char c : str) {
-      if (prevWasEscape) {
-         sawCharacter = true;
-         continue;
-      }
-      if (c == escape) {
-         prevWasEscape = true;
-      } else if (c == '%') {
-         if (sawPercent && sawPlaceholder && sawCharacter) return false;
-         sawPercent = true;
-         sawPlaceholder = false;
-         sawCharacter = false;
-      } else if (c == '_') {
-         sawPlaceholder = true;
-      } else {
-         sawCharacter = true;
-      }
-   }
-   return true;
-}
 std::optional<std::string> getConstantString(mlir::Value v) {
    if (auto* defOp = v.getDefiningOp()) {
       if (auto constOp = mlir::dyn_cast_or_null<lingodb::compiler::dialect::db::ConstantOp>(defOp)) {
@@ -57,14 +31,6 @@ std::optional<std::string> getConstantString(mlir::Value v) {
    }
    return std::optional<std::string>();
 }
-struct ConstantDeterministicPatternMatcher : public Matcher {
-   ConstantDeterministicPatternMatcher() {}
-   bool matches(mlir::Value v) override {
-      auto constStringOpt = getConstantString(v);
-      return constStringOpt.has_value() && isDeterministicLikePattern(constStringOpt.value());
-   }
-   virtual ~ConstantDeterministicPatternMatcher() {}
-};
 struct StringConstMatcher : public Matcher {
    std::string toMatch;
    StringConstMatcher(std::string toMatch) : toMatch(toMatch) {}
@@ -124,7 +90,5 @@ void addOptimizeRuntimeFunctionPatterns(mlir::RewritePatternSet& patterns) {
    patterns.insert<ReplaceFnWithFn>(ctxt, "DateDiff", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("minute"), std::make_shared<AnyMatcher>(), std::make_shared<AnyMatcher>()}, "DateDiffMinute");
    patterns.insert<ReplaceFnWithFn>(ctxt, "DateDiff", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("hour"), std::make_shared<AnyMatcher>(), std::make_shared<AnyMatcher>()}, "DateDiffHour");
    patterns.insert<ReplaceFnWithFn>(ctxt, "DateDiff", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("day"), std::make_shared<AnyMatcher>(), std::make_shared<AnyMatcher>()}, "DateDiffDay");
-
-   patterns.insert<ReplaceFnWithFn>(ctxt, "Like", std::vector<std::shared_ptr<Matcher>>{std::make_shared<AnyMatcher>(), std::make_shared<ConstantDeterministicPatternMatcher>()}, "ConstLike");
 }
 } // end namespace lingodb::compiler::dialect::db
