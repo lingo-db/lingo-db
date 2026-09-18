@@ -10,7 +10,11 @@ build-backend = "scikit_build_core.build"
 name = "lingodb-bridge"
 version = "0.0.5"
 dependencies = [
-    "numpy===1.26.4",
+    # numpy 1.26.4 only ships wheels up to CPython 3.12. Python 3.13+ (including
+    # the free-threaded cp313t/cp314t builds) needs numpy >= 2.1, which is where
+    # free-threaded wheels first appear.
+    "numpy===1.26.4; python_version < '3.13'",
+    "numpy>=2.1; python_version >= '3.13'",
     "pyarrow===24.0.0"
 ]
 

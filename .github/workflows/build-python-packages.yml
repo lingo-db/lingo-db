@@ -74,8 +74,33 @@ jobs:
         with:
           name: python-dist-314
           path: /built-packages
+  build_python_14t:
+    # Free-threaded (cp314t) wheel, built WITH embedded Python-UDF support.
+    # The shared-interpreter UDF runtime (src/runtime/ExecutionContext.cpp) runs
+    # Python across all workers with no GIL only on a free-threaded build, so the
+    # free-threaded wheel is the one that ships UDF support.
+    runs-on: ubuntu-latest
+    container: ghcr.io/lingo-db/lingodb-py-dev:a49b5b26648d55dda2817c23b70376d94e8f9084
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          submodules: recursive
+      - name: Build
+        run: |
+          rm -rf /built-packages
+          mkdir -p /built-packages
+          bash tools/python/bridge/create_package.linux.sh cp314-cp314t with-python-udf
+          cd tools/python
+          /opt/python/cp314-cp314t/bin/python3 -m build .
+          cp dist/*.whl /built-packages/.
+      - uses: actions/upload-artifact@master
+        with:
+          name: python-dist-314t
+          path: /built-packages
   collect_packages:
-    needs: [build_python_12, build_python_13, build_python_14]
+    needs: [build_python_12, build_python_13, build_python_14, build_python_14t]
     runs-on: ubuntu-latest
     steps:
       - name: Download 312 dist
@@ -93,6 +118,11 @@ jobs:
         with:
           name: python-dist-314
           path : dist/
+      - name: Download 314t dist
+        uses: actions/download-artifact@v4
+        with:
+          name: python-dist-314t
+          path : dist/
       - uses: actions/upload-artifact@master
         with:
           name: built-python-wheels
@@ -101,7 +131,7 @@ jobs:
   # Smoke test the released wheels on a clean Ubuntu runner (no dev container)
   # to verify they install and import on a baseline system.
   test_python:
-    needs: [build_python_12, build_python_13, build_python_14]
+    needs: [build_python_12, build_python_13, build_python_14, build_python_14t]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -113,6 +143,9 @@ jobs:
             tag: '313'
           - python_version: '3.14'
             tag: '314'
+          # Free-threaded build; this wheel additionally carries Python-UDF support.
+          - python_version: '3.14t'
+            tag: '314t'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -128,3 +161,14 @@ jobs:
           python -m pip install pandas
           python tools/python/test/test.py
           python tools/python/test/mlir-construction.py
+      - name: Python-UDF smoke test + verify GIL stays disabled (free-threaded only)
+        if: matrix.tag == '314t'
+        run: |
+          python - <<'PY'
+          import sys
+          assert not sys._is_gil_enabled(), "expected a free-threaded interpreter"
+          import lingodb  # importing the wheel must NOT re-enable the GIL
+          assert not sys._is_gil_enabled(), "importing lingodb re-enabled the GIL (nanobind FREE_THREADED missing?)"
+          print("GIL still disabled after import lingodb")
+          PY
+          python tools/python/test/python-udf.py
