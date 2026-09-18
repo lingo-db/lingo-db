@@ -11,14 +11,21 @@
 
 #ifdef USE_CPYTHON_RUNTIME
 namespace {
-// "isolated"   — each worker gets its own GIL + strict multi-interpreter
-//                extension check. Best for parallel scalar UDFs that only
-//                touch stdlib. Refuses to load legacy C extensions like
-//                pyarrow inside sub-interpreters.
-// "compatible" — workers share the host interpreter's GIL (serialised Python
-//                execution) but legacy extensions can be imported. Required
-//                for tabular Python UDFs (which load pyarrow / numpy).
-lingodb::utility::GlobalSetting<std::string> pythonSubinterpMode("system.python.subinterpreter_mode", "isolated");
+// Free-threaded model (CPython 3.14t, Py_GIL_DISABLED): every worker shares the
+// single main interpreter and runs Python concurrently with no GIL. This
+// replaces the former two-mode scheme selected by
+// system.python.subinterpreter_mode:
+//   - "isolated"   — one sub-interpreter per worker (each with its own GIL).
+//                    Ran scalar UDFs in parallel but could not import legacy
+//                    single-phase-init C extensions (pyarrow/numpy).
+//   - "compatible" — all workers shared the host GIL, so legacy extensions
+//                    loaded but Python execution serialised.
+// On a free-threaded build that trade-off disappears: the shared interpreter
+// is both parallel AND able to import legacy extensions. Sub-interpreters (and
+// their fragile cross-thread Py_EndInterpreter teardown, see Session.cpp) are
+// gone. The setting is kept — accepted but ignored — so existing configs and
+// the LINGODB_PYTHON_SUBINTERPRETER_MODE env var don't error.
+[[maybe_unused]] lingodb::utility::GlobalSetting<std::string> pythonSubinterpMode("system.python.subinterpreter_mode", "shared");
 } // namespace
 #endif
 
@@ -82,67 +89,30 @@ void lingodb::runtime::ExecutionContext::resetPythonSessionCache() {
 }
 void lingodb::runtime::ExecutionContext::setupPython() {
    auto workerId = scheduler::currentWorkerId();
-   const auto mode = pythonSubinterpMode.getValue();
-   const bool compatible = (mode == "compatible");
-   if (compatible) {
-      // Run all tabular UDFs against the host's main interpreter. Sub-
-      // interpreters can't share legacy single-phase-init extensions like
-      // numpy/pandas: each one would be the "first interpreter" from
-      // numpy's POV, and the second sub-interpreter to import it dies with
-      // "Interpreter change detected". With a single shared interpreter
-      // numpy is imported once and reused across queries / workers.
-      //
-      // PyGILState_Ensure attaches the calling OS thread to the main
-      // interpreter (creating a tstate for it on first call) and acquires
-      // the GIL. Multiple workers therefore serialise on the main GIL —
-      // acceptable because that's the trade-off of compatible mode.
-      PyGILState_STATE gstate = PyGILState_Ensure();
-      // Pack the gilstate into the per-worker slot so teardownPython can
-      // release it. Add 2 to avoid colliding with kMainInterpreterMarker
-      // (LOCKED is 0, UNLOCKED is 1 in CPython 3.12).
-      session.pythonThreadStates[workerId] = reinterpret_cast<void*>(static_cast<uintptr_t>(gstate) + 2);
-      if (session.pythonExtStates[workerId] == nullptr) {
-         session.pythonExtStates[workerId] = PythonRuntime::createPythonExtState();
-      }
-      return;
-   }
-   if (session.pythonThreadStates[workerId] == nullptr) {
-      // First time this worker enters a Python region — give it its own
-      // sub-interpreter (with its own GIL) so workers don't fight over the GIL.
-      PyThreadState* tstate = nullptr;
-      PyInterpreterConfig config = {
-         .use_main_obmalloc = 0,
-         .allow_fork = 0,
-         .allow_threads = 0,
-         .allow_daemon_threads = 0,
-         .check_multi_interp_extensions = 1,
-         .gil = PyInterpreterConfig_OWN_GIL,
-      };
-      PyStatus status = Py_NewInterpreterFromConfig(&tstate, &config);
-      if (PyStatus_Exception(status)) {
-         Py_ExitStatusException(status);
-      }
+   // Attach this worker's OS thread to the shared main interpreter.
+   // PyGILState_Ensure creates a PyThreadState for the thread on first use and
+   // reuses it afterwards. On a free-threaded build it does NOT serialise
+   // workers: there is no GIL to contend for, so many workers run Python in
+   // parallel against the one interpreter. Legacy single-phase-init extensions
+   // (pyarrow/numpy) import once into that interpreter and are shared — which
+   // is why tabular UDFs no longer need a separate "compatible" mode.
+   PyGILState_STATE gstate = PyGILState_Ensure();
+   // Pack the gilstate into the per-worker slot so teardownPython can release
+   // it. Offset by 1 so a set slot is always non-null (LOCKED is 0, UNLOCKED
+   // is 1); nullptr means "this worker is not currently in a Python region".
+   session.pythonThreadStates[workerId] = reinterpret_cast<void*>(static_cast<uintptr_t>(gstate) + 1);
+   if (session.pythonExtStates[workerId] == nullptr) {
       session.pythonExtStates[workerId] = PythonRuntime::createPythonExtState();
-   } else {
-      PyThreadState_Swap((PyThreadState*) session.pythonThreadStates[workerId]);
    }
 }
 void lingodb::runtime::ExecutionContext::teardownPython() {
    auto workerId = scheduler::currentWorkerId();
-   const auto mode = pythonSubinterpMode.getValue();
-   if (mode == "compatible") {
-      // Match the PyGILState_Ensure from setupPython.
-      auto packed = reinterpret_cast<uintptr_t>(session.pythonThreadStates[workerId]);
-      if (packed >= 2) {
-         PyGILState_STATE gstate = static_cast<PyGILState_STATE>(packed - 2);
-         PyGILState_Release(gstate);
-         session.pythonThreadStates[workerId] = nullptr;
-      }
-      return;
-   }
-   auto* state = PyThreadState_Swap(nullptr);
-   if (state) {
-      session.pythonThreadStates[workerId] = state;
+   // Match the PyGILState_Ensure from setupPython (same OS thread).
+   auto packed = reinterpret_cast<uintptr_t>(session.pythonThreadStates[workerId]);
+   if (packed >= 1) {
+      PyGILState_STATE gstate = static_cast<PyGILState_STATE>(packed - 1);
+      PyGILState_Release(gstate);
+      session.pythonThreadStates[workerId] = nullptr;
    }
 }
 #endif

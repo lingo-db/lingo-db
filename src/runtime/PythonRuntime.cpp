@@ -72,6 +72,23 @@ PyObject* PythonRuntime::createModule(size_t x, runtime::VarLen32 modname, runti
    if (cached) {
       return cached;
    }
+   // Shared-interpreter (free-threaded) model: several workers can race to
+   // first-create the same UDF module into the single, shared sys.modules.
+   // We must NOT guard this with a native (C++) mutex: a thread that holds a
+   // Python thread state (every worker does, via PyGILState_Ensure) may not
+   // block in native code on a lock that another Python-attached thread holds
+   // — free-threaded CPython periodically needs a stop-the-world safe point
+   // (import, GC, ...), and a thread parked in __lll_lock_wait never reaches
+   // one, deadlocking the whole interpreter.
+   //
+   // No lock is needed for correctness either: each worker builds its own
+   // module object (PyModule_New) and runs the source into that module's own
+   // globals; the only shared structure touched is sys.modules, whose
+   // get/set are individually atomic under free-threading. Racing workers
+   // therefore end up with per-worker module objects (each cached in its own
+   // PythonExtState) that expose the same functions — exactly as the former
+   // per-worker sub-interpreters did. Whichever module wins the sys.modules
+   // slot is immaterial; nothing reads it back except this dedup fast-path.
    auto modStr = modname.str();
 
    PyObject* sys_modules = PyImport_GetModuleDict(); // borrowed
