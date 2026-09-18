@@ -59,7 +59,14 @@ link_directories(${PYARROW_LIBRARY_DIRS})
 include_directories(${LLVM_DIR}/include)
 link_directories(${LLVM_DIR}/lib)
 
-nanobind_add_module(ext src/extensions/pylingodb.cpp)
+# FREE_THREADED marks these modules as safe to import without the GIL. Without
+# it, importing the wheel into a free-threaded CPython (cp313t/cp314t) re-enables
+# the GIL process-wide (CPython prints a RuntimeWarning), defeating the point of
+# the free-threaded Python-UDF runtime. It is a no-op on non-free-threaded
+# builds, so it is safe for the cp312/cp313/cp314 wheels too. `ext` is the only
+# module loaded on the UDF runtime path (lingodbbridge/__init__ imports just it);
+# the MLIR binding modules are used single-threaded by hipy's compile subprocess.
+nanobind_add_module(ext FREE_THREADED src/extensions/pylingodb.cpp)
 target_compile_definitions(ext PRIVATE MLIR_PYTHON_PACKAGE_PREFIX=lingodbbridge.mlir.)
 if (APPLE)
     target_link_libraries(ext PRIVATE libarrow_python.dylib libarrow.dylib)
@@ -68,7 +75,7 @@ else ()
 endif ()
 install(TARGETS ext LIBRARY DESTINATION lingodbbridge)
 
-nanobind_add_module(_mlir
+nanobind_add_module(_mlir FREE_THREADED
         src/extensions/mlir_vendored/MainModule.cpp
         src/extensions/mlir_vendored/IRAffine.cpp
         src/extensions/mlir_vendored/IRAttributes.cpp
@@ -84,12 +91,12 @@ target_compile_definitions(_mlir PRIVATE MLIR_PYTHON_PACKAGE_PREFIX=lingodbbridg
 target_link_libraries(_mlir PRIVATE LLVMSupport LLVMDemangle)
 install(TARGETS _mlir LIBRARY DESTINATION lingodbbridge/mlir/_mlir_libs)
 
-nanobind_add_module(mlir_init src/extensions/init_mlir_context.cpp)
+nanobind_add_module(mlir_init FREE_THREADED src/extensions/init_mlir_context.cpp)
 target_compile_definitions(mlir_init PRIVATE MLIR_PYTHON_PACKAGE_PREFIX=lingodbbridge.mlir.)
 target_link_libraries(mlir_init PRIVATE LLVMSupport LLVMDemangle)
 install(TARGETS mlir_init LIBRARY DESTINATION lingodbbridge/mlir/_mlir_libs)
 
-nanobind_add_module(mlir_lingodb src/extensions/custom_dialects_py)
+nanobind_add_module(mlir_lingodb FREE_THREADED src/extensions/custom_dialects_py)
 target_compile_definitions(mlir_lingodb PRIVATE MLIR_PYTHON_PACKAGE_PREFIX=lingodbbridge.mlir.)
 target_link_libraries(mlir_lingodb PRIVATE LLVMSupport LLVMDemangle)
 install(TARGETS mlir_lingodb LIBRARY DESTINATION lingodbbridge/mlir/_mlir_libs)

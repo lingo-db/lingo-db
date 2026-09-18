@@ -1,5 +1,9 @@
 [build-system]
-requires = ["scikit-build-core", "nanobind", "cmake", "ninja","pyarrow===24.0.0"]
+# nanobind is pinned to MLIR 20.1's supported range (mlir/python/requirements.txt:
+# "nanobind>=2.4, <3.0"). The vendored MLIR C++ bindings (src/extensions/mlir_vendored)
+# use APIs removed in nanobind 3.x (e.g. nanobind::detail::fast_iterator), so an
+# unpinned nanobind (which resolves to 3.x) fails to compile.
+requires = ["scikit-build-core", "nanobind>=2.4,<3.0", "cmake", "ninja","pyarrow===24.0.0"]
 build-backend = "scikit_build_core.build"
 
 [project]
@@ -12,12 +16,12 @@ dependencies = [
 
 [tool.scikit-build]
 wheel.packages = ["src/lingodbbridge","src/lingodbbridge.mlir", "src/lingodbbridge.mlir.dialects"]   # Include the package
-cmake.verbose = true                 # Useful for debugging
+build.verbose = true                 # Useful for debugging (was cmake.verbose; renamed in scikit-build-core >= 0.10)
 cmake.args = [
     "-DCMAKE_CXX_STANDARD=20",        # Adjust as needed
     "-DCMAKE_CXX_FLAGS=-O3"
 ]
-cmake.minimum-version = "3.18"
+cmake.version = ">=3.18"             # was cmake.minimum-version; renamed in scikit-build-core >= 0.8
 
 #[tool.scikit-build.generate]
 #manifest.in = true   # Ensures non-Python files (like .so) are included
