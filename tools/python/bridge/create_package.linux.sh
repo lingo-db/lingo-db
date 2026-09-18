@@ -1,15 +1,14 @@
 set -e
 
 # Usage: create_package.linux.sh <pyver> [with-python-udf]
-#   <pyver>           e.g. cp312-cp312, cp313-cp313 — picks the manylinux
+#   <pyver>           e.g. cp312-cp312, cp314-cp314t — picks the manylinux
 #                     Python under /opt/python/<pyver>.
-#   with-python-udf   if present, build the wheel with embedded CPython
-#                     sub-interpreter UDF support. Currently requires
-#                     Python 3.13+ at runtime: the cross-thread
-#                     Py_EndInterpreter that ~Session needs (when the wheel
-#                     is unloaded) only has the safe Py_FinalizeEx auto-
-#                     reaping path in 3.13. cp312 wheels are therefore
-#                     built without UDF support.
+#   with-python-udf   if present, build the wheel with embedded-CPython UDF
+#                     support. The UDF runtime runs all workers in one shared
+#                     interpreter with no GIL (src/runtime/ExecutionContext.cpp),
+#                     so it needs a FREE-THREADED CPython — use a cp*t <pyver>
+#                     such as cp314-cp314t. The non-free-threaded wheels
+#                     (cp312/cp313/cp314) are built without UDF support.
 
 # baseline backend's CMake config does find_program(... clang-20 clang-19),
 # which only resolves once the container's custom LLVM bin dir is on PATH.

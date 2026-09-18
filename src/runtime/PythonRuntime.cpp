@@ -634,17 +634,19 @@ ArrowTable* PythonRuntime::toArrowTable(PyObjectPtr obj) {
 #else
 
 // Stubs when ENABLE_PYTHON=OFF — calling these means the module was compiled without Python support.
-// Note for the lingodb wheel: the cp312 wheel intentionally does NOT include Python UDF support
-// because cross-thread Py_EndInterpreter only became safe with CPython 3.13's Py_FinalizeEx
-// auto-reaping of leftover sub-interpreters. Use the cp313 wheel for Python UDFs.
+// Note for the lingodb wheel: only the free-threaded wheel (cp314t) ships Python
+// UDF support. The UDF runtime runs every worker in one shared interpreter with
+// no GIL (see src/runtime/ExecutionContext.cpp), so it needs a free-threaded
+// CPython build; the regular cp312/cp313/cp314 wheels are built without UDFs.
 namespace {
 [[noreturn]] void noPython() {
    throw std::runtime_error(
       "LingoDB Python UDFs are not available in this build. "
-      "If you are using the lingodb Python wheel, install the cp313 wheel "
-      "(Python 3.13 or newer) — sub-interpreter teardown requires the "
-      "Py_FinalizeEx auto-reap added in CPython 3.13. "
-      "If you are building lingodb yourself, configure with -DENABLE_PYTHON=CPYTHON.");
+      "If you are using the lingodb Python wheel, install the free-threaded "
+      "cp314t wheel (a free-threaded CPython 3.14 build) — the UDF runtime uses a "
+      "shared, no-GIL interpreter. "
+      "If you are building lingodb yourself, configure with -DENABLE_PYTHON=CPYTHON "
+      "against a free-threaded interpreter (-DPython3_EXECUTABLE=<python3.14t>).");
 }
 } // namespace
 PyObjectPtr PythonRuntime::createModule(size_t, runtime::VarLen32, runtime::VarLen32) { noPython(); }
