@@ -217,11 +217,11 @@ jobs:
           LINGODB_EXECUTION_MODE: BASELINE
 
 
-  # cp312 wheel: built WITHOUT embedded-CPython UDF support. The
-  # Py_FinalizeEx auto-reap of leftover sub-interpreters that the
-  # destructor relies on lives only in CPython 3.13+. Anyone using the
-  # cp312 wheel still gets full SQL/MLIR functionality, just no Python
-  # UDFs.
+  # cp312 wheel: built WITHOUT embedded-CPython UDF support. The UDF runtime
+  # runs every worker in one shared, no-GIL interpreter, so it needs a
+  # free-threaded CPython build (see build_lingodb_python_314t below). Anyone
+  # using the cp312 wheel still gets full SQL/MLIR functionality, just no
+  # Python UDFs.
   build_lingodb_python:
     runs-on: ubuntu-24.04
     container: ghcr.io/lingo-db/lingodb-py-dev:a49b5b26648d55dda2817c23b70376d94e8f9084
@@ -259,9 +259,10 @@ jobs:
           python3 tools/python/test/test.py
           python3 tools/python/test/mlir-construction.py
 
-  # cp313 wheel: built WITH embedded-CPython UDF support. CPython 3.13
-  # added Py_FinalizeEx auto-reaping of leftover sub-interpreters, which
-  # lets ~Session safely defer cross-thread teardown to the runtime.
+  # cp313 wheel: built WITH embedded-CPython UDF support, but on a
+  # non-free-threaded interpreter. UDFs run correctly; the shared-interpreter
+  # runtime simply serialises them on the GIL. The free-threaded cp314t wheel
+  # (build_lingodb_python_314t) runs the same UDFs in parallel with no GIL.
   build_lingodb_python_313:
     # Python-UDF jobs are gated: run on every pull_request, and on pushes
     # only when the branch name contains "python". For everyday work on
@@ -314,6 +315,56 @@ jobs:
           python3 tools/python/test/python-udf.py
           python3 tools/python/test/python-udf-heavy.py
 
+  # cp314t wheel: the free-threaded UDF wheel. Same shared-interpreter runtime as
+  # cp313, but on a free-threaded CPython it runs Python UDFs across all workers
+  # with no GIL. Same gating as the other UDF jobs.
+  build_lingodb_python_314t:
+    if: github.event_name == 'pull_request' || contains(github.ref, 'python')
+    runs-on: ubuntu-24.04
+    container: ghcr.io/lingo-db/lingodb-py-dev:a49b5b26648d55dda2817c23b70376d94e8f9084
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+            submodules: recursive
+      - name: Build
+        run: |
+          rm -rf /built-packages
+          mkdir -p /built-packages
+          bash tools/python/bridge/create_package.linux.sh cp314-cp314t with-python-udf
+          cd tools/python
+          /opt/python/cp314-cp314t/bin/python3 -m build .
+          cp dist/*.whl /built-packages/.
+      - uses: actions/upload-artifact@master
+        with:
+          name: lingodb-python-build-314t
+          path: /built-packages
+
+  test_lingodb_python_314t:
+    if: github.event_name == 'pull_request' || contains(github.ref, 'python')
+    needs: build_lingodb_python_314t
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@master
+      - name: Setup Python 3.14 (free-threaded)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14t'
+      - uses: actions/download-artifact@master
+        with:
+          name: lingodb-python-build-314t
+          path: built-packages
+      - name: Test
+        run: |
+          python3 -m pip install built-packages/*.whl
+          python3 -m pip install pandas
+          # The wheel must import without re-enabling the GIL (nanobind FREE_THREADED).
+          python3 -c "import sys; assert not sys._is_gil_enabled(), 'not free-threaded'; import lingodb; assert not sys._is_gil_enabled(), 'import lingodb re-enabled the GIL'; print('GIL stays disabled after import lingodb')"
+          python3 tools/python/test/test.py
+          python3 tools/python/test/mlir-construction.py
+          python3 tools/python/test/python-udf.py
+          python3 tools/python/test/python-udf-heavy.py
+
   python_udfs:
     # Same gating as the wheel jobs — UDF-specific.
     if: github.event_name == 'pull_request' || contains(github.ref, 'python')
@@ -357,13 +408,12 @@ jobs:
       - name: Install python mode-specific deps
         run: |
           if [ "${{ matrix.python_mode }}" = "CPYTHON" ]; then
-            apt-get update
-            apt-get install -y python3-dev python3-pip
-            # pyarrow + pandas are only needed at test time: tabular Python
-            # UDFs bridge arrow::Table ↔ pyarrow via the Arrow C Data
-            # Interface (no host-side libarrow_python link), and the
-            # tabular UDF tests use pandas internally.
-            python3 -m pip install --break-system-packages pyarrow pandas
+            # Nothing to install: the dev image ships the free-threaded
+            # /usr/local/bin/python3.14t, the /opt/venv314t venv carrying
+            # free-threaded pyarrow/numpy/pandas (tabular UDF tests import them
+            # via the Arrow C Data Interface), and /opt/cmake-ft (CMake >= 3.30,
+            # needed to detect the free-threaded ABI).
+            echo "using image-provided free-threaded python3.14t + /opt/venv314t + /opt/cmake-ft"
           fi
           if [ "${{ matrix.python_mode }}" = "WASM" ]; then
             # The wasix-python-bridge crate is built via cargo. unzip
@@ -414,7 +464,16 @@ jobs:
       - name: Build
         run: |
           make clean
-          make build-release ENABLE_PYTHON=${{ matrix.python_mode }}
+          if [ "${{ matrix.python_mode }}" = "CPYTHON" ]; then
+            # Embed the free-threaded interpreter so Python UDFs run with no GIL.
+            # CMAKE=/opt/cmake-ft/bin/cmake (>= 3.30) is required to detect the
+            # free-threaded ("t") ABI; older CMake falls back to a GIL Python.
+            make build-release ENABLE_PYTHON=CPYTHON \
+              CMAKE=/opt/cmake-ft/bin/cmake \
+              PYTHON3_EXECUTABLE=/usr/local/bin/python3.14t
+          else
+            make build-release ENABLE_PYTHON=${{ matrix.python_mode }}
+          fi
         env:
           CC: clang-20
           CXX: clang++-20
@@ -467,14 +526,24 @@ jobs:
         run: |
           build/lingodb-release/sqlite-tester test/sqlite-small-python/python-udfs-numpy.test
       - name: Test python-udfs (tabular, CPYTHON)
-        # Tabular UDFs need pyarrow (loaded above) and the "compatible"
-        # sub-interpreter mode; pyarrow's C extension is single-phase
-        # init and refuses to load into a CPython sub-interpreter.
+        # Tabular UDFs import pyarrow into the single shared free-threaded
+        # interpreter — no "compatible" sub-interpreter mode needed anymore (that
+        # only existed to load legacy single-phase-init extensions that could not
+        # go into the old per-worker sub-interpreters). PYTHONPATH points the
+        # embedded interpreter at the venv holding free-threaded pyarrow/pandas.
         if: matrix.python_mode == 'CPYTHON'
         env:
-          LINGODB_PYTHON_SUBINTERPRETER_MODE: compatible
+          PYTHONPATH: /opt/venv314t/lib/python3.14t/site-packages
         run: |
           build/lingodb-release/sqlite-tester test/sqlite-small-python/python-udfs-tabular.test
+      - name: Test python-udfs (numpy, CPYTHON)
+        # Now that the embedded free-threaded interpreter can see numpy (via the
+        # /opt/venv314t venv), exercise the numpy scalar UDFs on CPYTHON too.
+        if: matrix.python_mode == 'CPYTHON'
+        env:
+          PYTHONPATH: /opt/venv314t/lib/python3.14t/site-packages
+        run: |
+          build/lingodb-release/sqlite-tester test/sqlite-small-python/python-udfs-numpy.test
       - name: Test python-udfs (tabular, WASM)
         # WASM mode bridges arrow::Table <-> pa.Table via Arrow IPC bytes;
         # the pyarrow wasix wheel is fetched + unpacked by cmake into the

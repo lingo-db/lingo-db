@@ -1,6 +1,15 @@
 ROOT_DIR := $(dir $(abspath $(firstword $(MAKEFILE_LIST))))
 NPROCS := $(shell if [ "$(shell uname)" = "Darwin" ]; then sysctl -n hw.logicalcpu; else nproc; fi)
 LLVM_LIT_BINARY := lit
+# CMake binary. Override to a >= 3.30 build when configuring an embedded
+# free-threaded CPython (ENABLE_PYTHON=CPYTHON against a cp*t interpreter):
+# older CMake can't detect the free-threaded ("t") ABI and silently falls back
+# to a non-free-threaded Python.
+CMAKE ?= cmake
+# Optional: pin the Python the embedded-CPython UDF build links against
+# (ENABLE_PYTHON=CPYTHON), e.g. a free-threaded /usr/bin/python3.14t. Empty =
+# let CMake's find_package pick.
+PYTHON3_EXECUTABLE ?=
 CMAKE_PREFIX_PATH ?= ""
 CMAKE_PREFIX_PATH_FLAG := -DCMAKE_PREFIX_PATH=$(CMAKE_PREFIX_PATH)
 
@@ -49,7 +58,8 @@ LDB_ARGS= -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  \
 	   	 -DCMAKE_BUILD_TYPE=Debug \
 	   	 -DENABLE_BASELINE_BACKEND=$(ENABLE_BASELINE_BACKEND) \
 	   	 -DENABLE_MIMALLOC=$(ENABLE_MIMALLOC) \
-	   	 -DENABLE_PYTHON=$(ENABLE_PYTHON)
+	   	 -DENABLE_PYTHON=$(ENABLE_PYTHON) \
+	   	 $(if $(PYTHON3_EXECUTABLE),-DPython3_EXECUTABLE=$(PYTHON3_EXECUTABLE),)
 
 build/lingodb-debug/.stamp: build
 	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS) -DCMAKE_BUILD_TYPE=Debug $(CMAKE_PREFIX_PATH_FLAG)
@@ -61,11 +71,11 @@ build/lingodb-debug/.buildstamp: build/lingodb-debug/.stamp
 
 
 build/lingodb-release/.buildstamp: build/lingodb-release/.stamp
-	cmake --build $(dir $@) -- -j${NPROCS}
+	$(CMAKE) --build $(dir $@) -- -j${NPROCS}
 	touch $@
 
 build/lingodb-release/.stamp: build
-	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS) -DCMAKE_BUILD_TYPE=Release $(CMAKE_PREFIX_PATH_FLAG)
+	$(CMAKE) -G Ninja . -B $(dir $@) $(LDB_ARGS) -DCMAKE_BUILD_TYPE=Release $(CMAKE_PREFIX_PATH_FLAG)
 	touch $@
 
 build/lingodb-asan/.buildstamp: build/lingodb-asan/.stamp
