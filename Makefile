@@ -8,7 +8,11 @@ LLVM_LIT_BINARY := lit
 CMAKE ?= cmake
 # Optional: pin the Python the embedded-CPython UDF build links against
 # (ENABLE_PYTHON=CPYTHON), e.g. a free-threaded /usr/bin/python3.14t. Empty =
-# let CMake's find_package pick.
+# let CMake's find_package pick. When set we also pass Python3_ROOT_DIR (derived
+# from the interpreter's base_prefix): with only Python3_EXECUTABLE, FindPython
+# rejects a free-threaded ("t" ABI) interpreter and silently falls back to a
+# non-free-threaded system Python — which then can't load free-threaded
+# extension wheels (pyarrow) at runtime.
 PYTHON3_EXECUTABLE ?=
 CMAKE_PREFIX_PATH ?= ""
 CMAKE_PREFIX_PATH_FLAG := -DCMAKE_PREFIX_PATH=$(CMAKE_PREFIX_PATH)
@@ -59,7 +63,7 @@ LDB_ARGS= -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  \
 	   	 -DENABLE_BASELINE_BACKEND=$(ENABLE_BASELINE_BACKEND) \
 	   	 -DENABLE_MIMALLOC=$(ENABLE_MIMALLOC) \
 	   	 -DENABLE_PYTHON=$(ENABLE_PYTHON) \
-	   	 $(if $(PYTHON3_EXECUTABLE),-DPython3_EXECUTABLE=$(PYTHON3_EXECUTABLE),)
+	   	 $(if $(PYTHON3_EXECUTABLE),-DPython3_EXECUTABLE=$(PYTHON3_EXECUTABLE) -DPython3_ROOT_DIR=$(shell $(PYTHON3_EXECUTABLE) -c 'import sys; print(sys.base_prefix)'),)
 
 build/lingodb-debug/.stamp: build
 	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS) -DCMAKE_BUILD_TYPE=Debug $(CMAKE_PREFIX_PATH_FLAG)
