@@ -3,19 +3,20 @@
 # "nanobind>=2.4, <3.0"). The vendored MLIR C++ bindings (src/extensions/mlir_vendored)
 # use APIs removed in nanobind 3.x (e.g. nanobind::detail::fast_iterator), so an
 # unpinned nanobind (which resolves to 3.x) fails to compile.
-requires = ["scikit-build-core", "nanobind>=2.4,<3.0", "cmake", "ninja","pyarrow===24.0.0"]
+requires = ["scikit-build-core", "nanobind>=2.4,<3.0", "cmake", "ninja","pyarrow==24.0.0"]
 build-backend = "scikit_build_core.build"
 
 [project]
 name = "lingodb-bridge"
 version = "0.0.5"
 dependencies = [
-    # numpy 1.26.4 only ships wheels up to CPython 3.12. Python 3.13+ (including
-    # the free-threaded cp313t/cp314t builds) needs numpy >= 2.1, which is where
-    # free-threaded wheels first appear.
-    "numpy===1.26.4; python_version < '3.13'",
-    "numpy>=2.1; python_version >= '3.13'",
-    "pyarrow===24.0.0"
+    # One NumPy floor for every interpreter we ship wheels for (currently
+    # cp312+). 2.1 is the first release with free-threaded (cp3XXt) wheels and
+    # still supports all our Pythons, so there is no need to special-case older
+    # ones with an environment marker. (Avoid the `===` arbitrary-equality
+    # operator here: older pips mis-handle it, especially alongside markers.)
+    "numpy>=2.1",
+    "pyarrow==24.0.0"
 ]
 
 [tool.scikit-build]
