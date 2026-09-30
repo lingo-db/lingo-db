@@ -17,6 +17,7 @@
 #include "mlir/Dialect/Async/IR/Async.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
 #include "mlir/Dialect/DLTI/DLTI.h"
+#include "mlir/Dialect/Func/Extensions/InlinerExtension.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -64,6 +65,14 @@ void lingodb::execution::initializeContext(mlir::MLIRContext& context, bool incl
    if (includeLLVM) {
       mlir::registerAllExtensions(registry);
       mlir::registerAllToLLVMIRTranslations(registry);
+   } else {
+      // Non-LLVM backends (e.g. the TPDE baseline backend) still run the MLIR
+      // inliner in DefaultQueryOptimizer. Without the func inliner extension the
+      // inliner cannot inline func.call/func.return, so hipy closures (generators
+      // /comprehensions) are never flattened and their func.call_indirect is
+      // never devirtualized -- which the baseline backend cannot compile. The
+      // LLVM path gets this via registerAllExtensions above.
+      mlir::func::registerInlinerExtension(registry);
    }
    context.appendDialectRegistry(registry);
    context.loadAllAvailableDialects();
