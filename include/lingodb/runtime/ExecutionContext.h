@@ -115,6 +115,17 @@ class ExecutionContext {
       return allocators[lingodb::scheduler::currentWorkerId()][group];
    }
 #ifdef USE_CPYTHON_RUNTIME
+   // Set before execution when the compiled plan contains py_interp ops, i.e.
+   // the query actually runs the embedded interpreter (runtime python /
+   // hipy_fallback / tabular UDFs). The many parallel pipeline tasks
+   // (TaskWithImplicitContext) only attach a worker to CPython when this is set,
+   // so plain SQL and pure ahead-of-time hipy queries pay no per-task Python
+   // overhead — which otherwise measurably hurts their parallel scaling in a
+   // Python-enabled build. The single main query task (TaskWithContext) always
+   // attaches, since the flag is only known once execution has started.
+   bool pythonUsed = false;
+   void markPythonUsed() { pythonUsed = true; }
+   bool isPythonUsed() const { return pythonUsed; }
    void setupPython();
    void teardownPython();
 #endif

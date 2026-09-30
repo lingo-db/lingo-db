@@ -35,7 +35,10 @@ class TaskWithImplicitContext : public Task {
    void setup() override {
       runtime::setCurrentExecutionContext(context);
 #ifdef USE_CPYTHON_RUNTIME
-      context->setupPython();
+      // These are the many parallel pipeline tasks (scans, joins, sorts, ...).
+      // Attach a worker to CPython only when the query actually uses it, so
+      // plain SQL keeps full parallel scaling even in a Python-enabled build.
+      if (context->isPythonUsed()) context->setupPython();
 #endif
 #ifdef USE_CPYTHON_WASM_RUNTIME
       context->setupWasm();
@@ -44,7 +47,7 @@ class TaskWithImplicitContext : public Task {
    void teardown() override {
       runtime::setCurrentExecutionContext(nullptr);
 #ifdef USE_CPYTHON_RUNTIME
-      context->teardownPython();
+      if (context->isPythonUsed()) context->teardownPython();
 #endif
 #ifdef USE_CPYTHON_WASM_RUNTIME
       context->teardownWasm();

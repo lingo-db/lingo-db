@@ -369,6 +369,21 @@ class DefaultQueryExecuter : public QueryExecuter {
          snapshotImportantStep("qopt", moduleOp, serializationState);
       }
 
+#ifdef USE_CPYTHON_RUNTIME
+      // Mark whether this query actually runs the embedded interpreter (the plan
+      // still carries py_interp ops here — they are lowered away in the steps
+      // below). setup/teardownPython attach a worker to CPython per task only
+      // when this is set, so plain SQL and pure ahead-of-time hipy queries pay
+      // no Python overhead even in a Python-enabled build.
+      moduleOp->walk([&](mlir::Operation* op) {
+         if (op->getName().getDialectNamespace() == "py_interp") {
+            executionContext->markPythonUsed();
+            return mlir::WalkResult::interrupt();
+         }
+         return mlir::WalkResult::advance();
+      });
+#endif
+
       bool parallelismEnabled = scheduler::getNumWorkers() != 1 && queryExecutionConfig->parallel;
       if (!frontend.isParallelismAllowed() || !parallelismEnabled) {
          moduleOp->setAttr("subop.sequential", mlir::UnitAttr::get(moduleOp->getContext()));
