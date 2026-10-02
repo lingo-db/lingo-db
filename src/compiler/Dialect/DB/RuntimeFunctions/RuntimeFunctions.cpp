@@ -4,6 +4,7 @@
 #include "lingodb/compiler/runtime/DateRuntime.h"
 #include "lingodb/compiler/runtime/DecimalRuntime.h"
 #include "lingodb/compiler/runtime/DumpRuntime.h"
+#include "lingodb/compiler/runtime/ExecutionContext.h"
 #include "lingodb/compiler/runtime/FloatRuntime.h"
 #include "lingodb/compiler/runtime/IntegerRuntime.h"
 #include "lingodb/compiler/runtime/StringRuntime.h"
@@ -293,6 +294,8 @@ mlir::Value concatMultipleImpl(mlir::OpBuilder& rewriter, mlir::ValueRange lower
 } // namespace
 std::shared_ptr<db::RuntimeFunctionRegistry> db::RuntimeFunctionRegistry::getBuiltinRegistry(mlir::MLIRContext* context) {
    auto builtinRegistry = std::make_shared<RuntimeFunctionRegistry>(context);
+   // aborts the query with a runtime error (e.g. hipy's checked nullable access)
+   builtinRegistry->add("RaiseError").hasSideEffects(true).matchesTypes({RuntimeFunction::stringLike}, RuntimeFunction::noReturnType).implementedAs(ExecutionContext::raiseError);
    builtinRegistry->add("DumpValue").hasSideEffects(true).handlesNulls().matchesTypes({RuntimeFunction::anyType}, RuntimeFunction::noReturnType).implementedAs(dumpValuesImpl);
    auto resTypeIsI64 = [](mlir::Type t, mlir::TypeRange) { return t.isInteger(64); };
    auto resTypeIsF64 = [](mlir::Type t, mlir::TypeRange) { return t.isF64(); };

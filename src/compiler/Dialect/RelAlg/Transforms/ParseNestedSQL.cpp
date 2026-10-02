@@ -9,7 +9,10 @@
 #include "lingodb/compiler/frontend/sql_context.h"
 #include "lingodb/compiler/frontend/sql_mlir_translator.h"
 
+#include "lingodb/compiler/Dialect/util/UtilOps.h"
+
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/BuiltinOps.h"
 
 #include <lingodb/catalog/TableCatalogEntry.h>
@@ -68,7 +71,7 @@ class ParseNestedSQL : public mlir::PassWrapper<ParseNestedSQL, mlir::OperationP
 
    // Cast `value` to the base type of `targetType`, keeping its nullability
    // (e.g. an int4 column read as hipy's sql.nullable(int)). With `exact`,
-   // also adapt the nullability to `targetType`.
+   // also make a non-nullable value nullable if `targetType` is.
    static mlir::Value coerce(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value value, mlir::Type targetType, bool exact) {
       auto* ctxt = builder.getContext();
       mlir::Type valueType = value.getType();
@@ -78,14 +81,23 @@ class ParseNestedSQL : public mlir::PassWrapper<ParseNestedSQL, mlir::OperationP
          if (valueNullable) castedType = db::NullableType::get(ctxt, castedType);
          value = builder.create<db::CastOp>(loc, castedType, value);
       }
-      if (exact && value.getType() != targetType) {
-         if (mlir::isa<db::NullableType>(targetType)) {
-            value = builder.create<db::AsNullableOp>(loc, targetType, value);
-         } else {
-            value = builder.create<db::NullableGetVal>(loc, targetType, value);
-         }
+      if (exact && !valueNullable && mlir::isa<db::NullableType>(targetType)) {
+         value = builder.create<db::AsNullableOp>(loc, targetType, value);
       }
       return value;
+   }
+
+   // The value of a nullable `value`; a runtime error if it is NULL (a nested
+   // query result declared non-nullable, e.g. sql.execute(int, ...)).
+   static mlir::Value checkedGetValue(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value value, llvm::StringRef message) {
+      auto nullableType = mlir::cast<db::NullableType>(value.getType());
+      mlir::Value isNull = builder.create<db::IsNullOp>(loc, value);
+      builder.create<mlir::scf::IfOp>(loc, isNull, [&](mlir::OpBuilder& b, mlir::Location loc) {
+         mlir::Value messageValue = b.create<db::ConstantOp>(loc, db::StringType::get(b.getContext()), b.getStringAttr(message));
+         b.create<db::RuntimeCall>(loc, mlir::TypeRange{}, "RaiseError", mlir::ValueRange{messageValue});
+         b.create<mlir::scf::YieldOp>(loc);
+      });
+      return builder.create<db::NullableGetVal>(loc, nullableType.getType(), value);
    }
 
    // Append a relalg.map to `rel` computing new columns of types
@@ -151,38 +163,53 @@ class ParseNestedSQL : public mlir::PassWrapper<ParseNestedSQL, mlir::OperationP
       mlir::Type resultType = op.getResult().getType();
       auto tupleType = mlir::dyn_cast<mlir::TupleType>(resultType);
       if (!tupleType) {
+         // getscalar yields NULL for "no row" as well, so it is always
+         // nullable; a non-nullable result type gets a runtime error instead
          std::vector<bool> zeroInsteadOfNull;
          auto materializeOp = translate(op, builder, &zeroInsteadOfNull);
          if (!materializeOp) return {};
-         mlir::Value scalar = scalarFromColumn(builder, loc, materializeOp, 0, resultType);
          mlir::Type baseType = getBaseType(resultType);
-         if (!zeroInsteadOfNull.empty() && zeroInsteadOfNull[0] && mlir::isa<db::NullableType>(resultType) && (mlir::isa<mlir::IntegerType>(baseType) || mlir::isa<mlir::FloatType>(baseType))) {
+         mlir::Type scalarType = db::NullableType::get(&getContext(), baseType);
+         mlir::Value scalar = scalarFromColumn(builder, loc, materializeOp, 0, scalarType);
+         if (!zeroInsteadOfNull.empty() && zeroInsteadOfNull[0] && (mlir::isa<mlir::IntegerType>(baseType) || mlir::isa<mlir::FloatType>(baseType))) {
             mlir::Value isNull = builder.create<db::IsNullOp>(loc, scalar);
             mlir::Value value = builder.create<db::NullableGetVal>(loc, baseType, scalar);
             mlir::Attribute zeroAttr = mlir::isa<mlir::FloatType>(baseType) ? mlir::Attribute(builder.getFloatAttr(baseType, 0.0)) : mlir::Attribute(builder.getIntegerAttr(baseType, 0));
             mlir::Value zero = builder.create<db::ConstantOp>(loc, baseType, zeroAttr);
             mlir::Value count = builder.create<mlir::arith::SelectOp>(loc, isNull, zero, value);
-            return builder.create<db::AsNullableOp>(loc, resultType, count);
+            if (mlir::isa<db::NullableType>(resultType)) return builder.create<db::AsNullableOp>(loc, resultType, count);
+            return count;
          }
-         return scalar;
+         if (mlir::isa<db::NullableType>(resultType)) return scalar;
+         return checkedGetValue(builder, loc, scalar, "nested SQL query returned NULL or no row for a non-nullable result type");
       }
       // Row-valued query: the values of its first row, one per declared tuple
       // element (cast to the declared element types); a runtime error if it
-      // yields no row.
+      // yields no row, or NULL for a non-nullable element.
       auto materializeOp = translate(op, builder);
       if (!materializeOp) return {};
       if (!checkColumnCount(op, materializeOp, tupleType.size())) return {};
       mlir::Value rel = materializeOp.getRel();
       llvm::SmallVector<tuples::ColumnRefAttr> cols;
+      // the declared element types, but nullable where a non-nullable element
+      // is read from a nullable column (checked after getfirstrow)
+      llvm::SmallVector<mlir::Type> rowTypes;
       bool needsCast = false;
+      bool needsCheck = false;
       for (auto [col, type] : llvm::zip(materializeOp.getCols(), tupleType.getTypes())) {
          cols.push_back(mlir::cast<tuples::ColumnRefAttr>(col));
-         needsCast |= cols.back().getColumn().type != type;
+         mlir::Type rowType = type;
+         if (mlir::isa<db::NullableType>(cols.back().getColumn().type) && !mlir::isa<db::NullableType>(type)) {
+            rowType = db::NullableType::get(&getContext(), type);
+            needsCheck = true;
+         }
+         rowTypes.push_back(rowType);
+         needsCast |= cols.back().getColumn().type != rowType;
       }
       if (needsCast) {
-         std::tie(rel, cols) = addMap(builder, loc, rel, tupleType.getTypes(), cols, [&](mlir::OpBuilder& b, llvm::ArrayRef<mlir::Value> values) {
+         std::tie(rel, cols) = addMap(builder, loc, rel, rowTypes, cols, [&](mlir::OpBuilder& b, llvm::ArrayRef<mlir::Value> values) {
             llvm::SmallVector<mlir::Value> casted;
-            for (auto [value, type] : llvm::zip(values, tupleType.getTypes())) {
+            for (auto [value, type] : llvm::zip(values, rowTypes)) {
                casted.push_back(coerce(b, loc, value, type, /*exact=*/true));
             }
             return casted;
@@ -191,7 +218,18 @@ class ParseNestedSQL : public mlir::PassWrapper<ParseNestedSQL, mlir::OperationP
       materializeOp->dropAllUses();
       materializeOp->erase();
       llvm::SmallVector<mlir::Attribute> colAttrs(cols.begin(), cols.end());
-      return builder.create<relalg::GetFirstRowOp>(loc, resultType, rel, builder.getArrayAttr(colAttrs));
+      mlir::Type rowTupleType = mlir::TupleType::get(&getContext(), rowTypes);
+      mlir::Value row = builder.create<relalg::GetFirstRowOp>(loc, rowTupleType, rel, builder.getArrayAttr(colAttrs));
+      if (!needsCheck) return row;
+      auto checkRow = [&](mlir::OpBuilder& b, mlir::Value row) -> mlir::Value {
+         auto values = b.create<util::UnPackOp>(loc, row).getResults();
+         llvm::SmallVector<mlir::Value> checked;
+         for (auto [value, type] : llvm::zip(values, tupleType.getTypes())) {
+            checked.push_back(value.getType() == type ? mlir::Value(value) : checkedGetValue(b, loc, value, "nested SQL query returned NULL for a non-nullable result type"));
+         }
+         return b.create<util::PackOp>(loc, tupleType, checked);
+      };
+      return checkRow(builder, row);
    }
 
    public:

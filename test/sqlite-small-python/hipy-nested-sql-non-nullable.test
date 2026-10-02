@@ -1,0 +1,125 @@
+# Nested SQL with a non-nullable result type (ByePy savings H8):
+# sql.execute(int, ...) / sql.execute(float, ...) yield plain values (before:
+# the result stayed !db.nullable and the UDF failed to compile, e.g.
+# "'arith.addi' op operand #0 must be signless-integer-like"); NULL or no row
+# is a runtime error. Likewise for non-nullable sql.row elements read from a
+# nullable column (before: NULL silently became an undefined value).
+
+statement ok
+create table kv(k int8 not null, v int8, f float8);
+
+statement ok
+insert into kv values (0, 10, 1.5), (1, NULL, 2.5), (2, 12, NULL);
+
+# straight-line: count(*) is never NULL, min(...) over a non-empty set isn't
+statement ok
+CREATE OR REPLACE FUNCTION cnt(x INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def cnt(x):
+    n = sql.execute(int, "SELECT COUNT(*) FROM kv WHERE k < PARAM(1)", x)
+    return n + 100
+$$ LANGUAGE hipy;
+
+query I
+select x, cnt(x) from (values (0), (2), (9)) as t(x) order by x
+----
+0
+100
+2
+102
+9
+103
+
+statement ok
+CREATE OR REPLACE FUNCTION minf(x INT8) RETURNS FLOAT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def minf(x):
+    return sql.execute(float, "SELECT min(f) FROM kv WHERE k >= PARAM(1)", x) * 2.0
+$$ LANGUAGE hipy;
+
+query R
+select minf(0)
+----
+3
+
+# min over an empty set is NULL
+statement runtime-error nested SQL query returned NULL or no row for a non-nullable result type
+select minf(5)
+
+# inside a loop
+statement ok
+CREATE OR REPLACE FUNCTION vsum(x INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def vsum(x):
+    total = 0
+    for i in range(x):
+        total += sql.execute(int, "SELECT v FROM kv WHERE k = PARAM(1)", i * 2)
+    return total
+$$ LANGUAGE hipy;
+
+query I
+select vsum(2)
+----
+22
+
+# no row (k = 4)
+statement runtime-error nested SQL query returned NULL or no row for a non-nullable result type
+select vsum(3)
+
+# NULL value (k = 1), straight-line and in a loop
+statement ok
+CREATE OR REPLACE FUNCTION vat(x INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def vat(x):
+    return sql.execute(int, "SELECT v FROM kv WHERE k = PARAM(1)", x)
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION vsum1(x INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def vsum1(x):
+    total = 0
+    for i in range(x):
+        total += sql.execute(int, "SELECT v FROM kv WHERE k = PARAM(1)", i)
+    return total
+$$ LANGUAGE hipy;
+
+query I
+select vat(0) + vsum1(1)
+----
+20
+
+statement runtime-error nested SQL query returned NULL or no row for a non-nullable result type
+select vat(1)
+
+statement runtime-error nested SQL query returned NULL or no row for a non-nullable result type
+select vsum1(2)
+
+# sql.row with non-nullable elements over nullable columns
+statement ok
+CREATE OR REPLACE FUNCTION vrow(x INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def vrow(x):
+    k, v = sql.execute(sql.row(int, int), "SELECT k, v FROM kv WHERE k = PARAM(1)", x)
+    return k * 100 + v
+$$ LANGUAGE hipy;
+
+query I
+select vrow(2)
+----
+212
+
+statement runtime-error nested SQL query returned NULL for a non-nullable result type
+select vrow(1)
