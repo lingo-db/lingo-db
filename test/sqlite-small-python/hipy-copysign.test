@@ -1,0 +1,50 @@
+# hipy math.copysign (magnitude of x, sign of y, incl. the sign of -0.0; int
+# arguments are converted to float; hipy's math module needs `import
+# hipy.lib.math`). Used by the ByePy markov example as
+# copysign(1, total_reward). Expected values from CPython.
+
+statement ok
+create table xy(x float8, y float8);
+
+statement ok
+insert into xy values (2.5, 1.0), (2.5, 0.0), (0.0, 7.0), (1.0, 3.0);
+
+statement ok
+CREATE OR REPLACE FUNCTION csign(x FLOAT8, y FLOAT8) RETURNS FLOAT8 AS $$
+import hipy
+import hipy.lib.math
+from math import copysign
+@hipy.compiled_function
+def csign(x, y):
+    return copysign(x, y)
+$$ LANGUAGE hipy;
+
+# int magnitude, as in the markov example
+statement ok
+CREATE OR REPLACE FUNCTION signof(y FLOAT8) RETURNS FLOAT8 AS $$
+import hipy
+import hipy.lib.math
+from math import copysign
+@hipy.compiled_function
+def signof(y):
+    return copysign(1, y)
+$$ LANGUAGE hipy;
+
+# -0.0 has a negative sign; via `import math`
+statement ok
+CREATE OR REPLACE FUNCTION negzero(x FLOAT8) RETURNS FLOAT8 AS $$
+import hipy
+import hipy.lib.math
+import math
+@hipy.compiled_function
+def negzero(x):
+    return math.copysign(x, -0.0) + math.copysign(3, -x)
+$$ LANGUAGE hipy;
+
+query tsv rowsort 1
+select x, y, csign(x, y), csign(x, 0 - y), csign(0 - x, y), signof(0 - y), negzero(x) from xy;
+----
+0	7	0	-0	0	-1	-3
+1	3	1	-1	1	-1	-4
+2.5	0	2.5	2.5	2.5	1	-5.5
+2.5	1	2.5	-2.5	2.5	-1	-5.5
