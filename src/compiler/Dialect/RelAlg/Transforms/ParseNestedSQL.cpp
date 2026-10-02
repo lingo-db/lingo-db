@@ -22,7 +22,8 @@ using namespace lingodb::compiler::dialect;
 // to the analyzer/translator. The translator emits a `relalg.materialize`
 // for the parsed query — we convert that to a `relalg.getscalar` since the
 // surrounding hipy UDF expects a single scalar value (typically wrapped in
-// a nullable<T>).
+// a nullable<T>) or, for a row-valued query (result type tuple<...>, hipy's
+// sql.row(...)), one value per result column.
 class ParseNestedSQL : public mlir::PassWrapper<ParseNestedSQL, mlir::OperationPass<mlir::ModuleOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-parse-nested-sql"; }
    lingodb::catalog::Catalog& catalog;
@@ -127,11 +128,50 @@ class ParseNestedSQL : public mlir::PassWrapper<ParseNestedSQL, mlir::OperationP
       return res;
    }
 
+   bool checkColumnCount(relalg::SQLQueryOp op, relalg::MaterializeOp materializeOp, size_t expected) {
+      if (materializeOp.getCols().size() != expected) {
+         op.emitError("Nested SQL returns ") << materializeOp.getCols().size() << " columns, but the declared row type has " << expected;
+         return false;
+      }
+      return true;
+   }
+
    // Lower one relalg.sql_query; returns the replacement value or null.
    mlir::Value lower(relalg::SQLQueryOp op, mlir::OpBuilder& builder) {
+      auto loc = op.getLoc();
+      mlir::Type resultType = op.getResult().getType();
+      auto tupleType = mlir::dyn_cast<mlir::TupleType>(resultType);
+      if (!tupleType) {
+         auto materializeOp = translate(op, builder);
+         if (!materializeOp) return {};
+         return scalarFromColumn(builder, loc, materializeOp, 0, resultType);
+      }
+      // Row-valued query: the values of its first row, one per declared tuple
+      // element (cast to the declared element types); a runtime error if it
+      // yields no row.
       auto materializeOp = translate(op, builder);
       if (!materializeOp) return {};
-      return scalarFromColumn(builder, op.getLoc(), materializeOp, 0, op.getResult().getType());
+      if (!checkColumnCount(op, materializeOp, tupleType.size())) return {};
+      mlir::Value rel = materializeOp.getRel();
+      llvm::SmallVector<tuples::ColumnRefAttr> cols;
+      bool needsCast = false;
+      for (auto [col, type] : llvm::zip(materializeOp.getCols(), tupleType.getTypes())) {
+         cols.push_back(mlir::cast<tuples::ColumnRefAttr>(col));
+         needsCast |= cols.back().getColumn().type != type;
+      }
+      if (needsCast) {
+         std::tie(rel, cols) = addMap(builder, loc, rel, tupleType.getTypes(), cols, [&](mlir::OpBuilder& b, llvm::ArrayRef<mlir::Value> values) {
+            llvm::SmallVector<mlir::Value> casted;
+            for (auto [value, type] : llvm::zip(values, tupleType.getTypes())) {
+               casted.push_back(coerce(b, loc, value, type, /*exact=*/true));
+            }
+            return casted;
+         });
+      }
+      materializeOp->dropAllUses();
+      materializeOp->erase();
+      llvm::SmallVector<mlir::Attribute> colAttrs(cols.begin(), cols.end());
+      return builder.create<relalg::GetFirstRowOp>(loc, resultType, rel, builder.getArrayAttr(colAttrs));
    }
 
    public:

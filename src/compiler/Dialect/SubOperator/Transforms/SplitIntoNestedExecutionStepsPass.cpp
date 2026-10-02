@@ -364,13 +364,15 @@ class SplitIntoNestedExecutionStepsPass : public mlir::PassWrapper<SplitIntoNest
 
    // A block of imperative code nested inside an execution step (e.g. the
    // body of an scf.for in a subop.map lambda — nested SQL issued per loop
-   // iteration by a hipy UDF) that directly contains subop ops. Those ops
-   // form an "island": a nested query that is executed in place, each time
-   // control reaches it.
+   // iteration by a hipy UDF — or a subop.map lambda itself) that directly
+   // contains subop ops. Those ops form an "island": a nested query that is
+   // executed in place, each time control reaches it.
    static bool isIslandBlock(mlir::Block& block) {
       auto* parentOp = block.getParentOp();
       if (!parentOp) return false;
-      if (mlir::isa<subop::SubOperatorDialect>(parentOp->getDialect())) return false;
+      // subop ops directly in a map lambda: a nested query evaluated in place
+      // per tuple (e.g. relalg.getfirstrow outside of a loop)
+      if (mlir::isa<subop::SubOperatorDialect>(parentOp->getDialect()) && !mlir::isa<subop::MapOp>(parentOp)) return false;
       if (mlir::isa<mlir::func::FuncOp, mlir::ModuleOp>(parentOp)) return false;
       if (!parentOp->getParentOfType<subop::ExecutionStepOp>()) return false;
       // Only real query work forms an island (e.g. not the generate_emit ops

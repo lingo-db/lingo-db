@@ -231,11 +231,11 @@ bool isNestedInLoop(mlir::Operation* op);
 
 // True if the operator `op` must be evaluated in place (inside the lambda it
 // is nested in) instead of being extracted and decorrelated: it is nested in
-// a loop (isNestedInLoop), or so is the operator consuming its result.
+// a loop (isNestedInLoop) or its result is consumed by a relalg.getfirstrow.
 bool isEvaluatedInPlace(mlir::Operation* op);
 
 // Columns read by a non-Operator consumer of a tuple stream: relalg.materialize,
-// or a subquery op (relalg.getscalar / relalg.getlist)
+// or a subquery op (relalg.getscalar / relalg.getlist / relalg.getfirstrow)
 // that was left in place (see isEvaluatedInPlace). Empty for any other op.
 ColumnSet getColumnsUsedBySink(mlir::Operation* op);
 } // namespace lingodb::compiler::dialect::relalg::detail

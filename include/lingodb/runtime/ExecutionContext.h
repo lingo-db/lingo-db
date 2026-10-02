@@ -14,6 +14,7 @@ struct WASMSession;
 } // namespace lingodb::wasm
 #endif
 namespace lingodb::runtime {
+class VarLen32;
 class Database;
 //some state required for query processing;
 struct State {
@@ -108,6 +109,8 @@ class ExecutionContext {
    static uint8_t* allocStateRaw(size_t size);
    static void clearResult(uint32_t id);
    static void setTupleCount(uint32_t id, int64_t tupleCount);
+   // throws a std::runtime_error, reported as a runtime error of the query
+   static void raiseError(VarLen32 message);
    void registerState(const State& s) {
       perWorkerStates[lingodb::scheduler::currentWorkerId()].push_back(s);
    }

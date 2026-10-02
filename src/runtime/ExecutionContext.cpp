@@ -1,5 +1,6 @@
 #include "lingodb/runtime/ExecutionContext.h"
 #include "lingodb/runtime/PythonRuntime.h"
+#include "lingodb/runtime/helpers.h"
 #include "lingodb/utility/Setting.h"
 #ifdef USE_CPYTHON_RUNTIME
 #include "Python.h"
@@ -33,6 +34,9 @@ void lingodb::runtime::ExecutionContext::setResult(uint32_t id, uint8_t* ptr) {
    auto* context = getCurrentExecutionContext();
    assert(context);
    context->results[id] = ptr;
+}
+void lingodb::runtime::ExecutionContext::raiseError(VarLen32 message) {
+   throw std::runtime_error(message.str());
 }
 void lingodb::runtime::ExecutionContext::clearResult(uint32_t id) {
    auto* context = getCurrentExecutionContext();

@@ -1,0 +1,66 @@
+# Row-valued nested SQL: sql.execute(sql.row(t1, t2, ...), ...) in LANGUAGE
+# hipy UDFs. The query is lowered to relalg.getfirstrow (evaluated in place,
+# inside or outside of loops): the values of its first row as a tuple, cast to
+# the declared element types (int4 -> int8, non-nullable -> nullable, NULL
+# columns into nullable elements), and a runtime error if there is no row.
+
+statement ok
+create table kv(k int, v int not null, s text);
+
+statement ok
+insert into kv values (0,10,'a'),(1,11,'b'),(2,12,NULL);
+
+statement ok
+CREATE OR REPLACE FUNCTION rowloop(x INT8) RETURNS TEXT AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def rowloop(x):
+    res = ""
+    for i in range(x):
+        v, s = sql.execute(sql.row(sql.nullable(int), sql.nullable(str)), "SELECT v, s FROM kv WHERE k = PARAM(1)", i)
+        res = res + str(v.get_value()) + s.get_value_or_default("-") + ";"
+    return res
+$$ LANGUAGE hipy;
+
+query tsv rowsort 1
+select rowloop(3);
+----
+10a;11b;12-;
+
+statement ok
+CREATE OR REPLACE FUNCTION rowstraight(x INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def rowstraight(x):
+    k, v = sql.execute(sql.row(int, int), "SELECT k, v FROM kv WHERE k = PARAM(1)", x)
+    return k * 100 + v
+$$ LANGUAGE hipy;
+
+query tsv rowsort 2
+select rowstraight(2);
+----
+212
+
+statement ok
+create table ks(k int8);
+
+statement ok
+insert into ks values (0),(1),(2),(0),(1),(2);
+
+query tsv rowsort 3
+select sum(rowstraight(k)) from ks;
+----
+666
+
+statement runtime-error nested SQL query returned no row
+select rowstraight(7);
+
+statement runtime-error nested SQL query returned no row
+select rowloop(5);
+
+query tsv rowsort 4
+select rowloop(1);
+----
+10a;

@@ -14,6 +14,7 @@
 #include "lingodb/compiler/Dialect/util/FunctionHelper.h"
 #include "lingodb/compiler/Dialect/util/UtilDialect.h"
 #include "lingodb/compiler/Dialect/util/UtilOps.h"
+#include "lingodb/compiler/runtime/ExecutionContext.h"
 #include "lingodb/runtime/ExternalDataSourceProperty.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -3067,6 +3068,64 @@ class GetScalarLowering : public OpConversionPattern<relalg::GetScalarOp> {
    }
 };
 
+// relalg.getfirstrow is evaluated in place (see
+// relalg::detail::isEvaluatedInPlace): scatter the row's columns plus a
+// "found" flag into a fresh simple_state, read it back via
+// subop.state_to_native and raise a runtime error if no row was found.
+class GetFirstRowLowering : public OpConversionPattern<relalg::GetFirstRowOp> {
+   public:
+   using OpConversionPattern<relalg::GetFirstRowOp>::OpConversionPattern;
+
+   LogicalResult matchAndRewrite(relalg::GetFirstRowOp getFirstRowOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = getFirstRowOp->getLoc();
+      auto* ctxt = rewriter.getContext();
+      auto resultType = mlir::cast<mlir::TupleType>(getFirstRowOp.getType());
+      auto foundMember = createMember(ctxt, "found", rewriter.getI1Type());
+      llvm::SmallVector<Member> members{foundMember};
+      RefMappingCollector scatterMapping;
+      for (auto [col, type] : llvm::zip(getFirstRowOp.getCols(), resultType.getTypes())) {
+         auto member = createMember(ctxt, "col", type);
+         members.push_back(member);
+         scatterMapping.push_back({member, mlir::cast<tuples::ColumnRefAttr>(col)});
+      }
+      auto stateType = subop::SimpleStateType::get(ctxt, createStateMembersAttr(ctxt, members));
+      auto createOp = rewriter.create<subop::CreateSimpleStateOp>(loc, stateType);
+      {
+         // only the flag is initialized; the columns are only read if set
+         Block* initialValueBlock = new Block;
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(initialValueBlock);
+         mlir::Value notFound = rewriter.create<db::ConstantOp>(loc, rewriter.getI1Type(), rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
+         rewriter.create<tuples::ReturnOp>(loc, notFound);
+         createOp.getInitFn().push_back(initialValueBlock);
+      }
+      auto [foundDef, foundRef] = createColumn(rewriter.getI1Type(), "getfirstrow", "found");
+      mlir::Value stream = map(adaptor.getRel(), rewriter, loc, rewriter.getArrayAttr(foundDef), [&](mlir::ConversionPatternRewriter& b, subop::MapCreationHelper&, mlir::Location loc) -> std::vector<mlir::Value> {
+         return {b.create<db::ConstantOp>(loc, b.getI1Type(), b.getIntegerAttr(b.getI1Type(), 1))};
+      });
+      scatterMapping.push_back({foundMember, foundRef});
+      auto entryRefType = subop::LookupEntryRefType::get(ctxt, stateType);
+      auto [entryDef, entryRef] = createColumn(entryRefType, "lookup", "entryref");
+      auto afterLookup = rewriter.create<subop::LookupOp>(loc, tuples::TupleStreamType::get(ctxt), stream, createOp.getRes(), rewriter.getArrayAttr({}), entryDef);
+      rewriter.create<subop::ScatterOp>(loc, afterLookup, entryRef, createColumnRefMemberMappingAttr(ctxt, scatterMapping));
+
+      llvm::SmallVector<mlir::Type> nativeTypes{rewriter.getI1Type()};
+      nativeTypes.append(resultType.getTypes().begin(), resultType.getTypes().end());
+      mlir::Value native = rewriter.create<subop::StateToNativeOp>(loc, mlir::TupleType::get(ctxt, nativeTypes), createOp.getRes());
+      auto unpacked = rewriter.create<util::UnPackOp>(loc, native).getResults();
+      mlir::Value trueValue = rewriter.create<mlir::arith::ConstantIntOp>(loc, 1, rewriter.getI1Type());
+      mlir::Value notFound = rewriter.create<mlir::arith::XOrIOp>(loc, unpacked[0], trueValue);
+      rewriter.create<mlir::scf::IfOp>(loc, notFound, [&](mlir::OpBuilder& b, mlir::Location loc) {
+         mlir::Value message = b.create<util::CreateConstVarLen>(loc, util::VarLen32Type::get(ctxt), "nested SQL query returned no row");
+         lingodb::compiler::runtime::ExecutionContext::raiseError(b, loc)({message});
+         b.create<mlir::scf::YieldOp>(loc);
+      });
+      llvm::SmallVector<mlir::Value> values(unpacked.begin() + 1, unpacked.end());
+      rewriter.replaceOpWithNewOp<util::PackOp>(getFirstRowOp, resultType, values);
+      return success();
+   }
+};
+
 class TrackTuplesLowering : public OpConversionPattern<relalg::TrackTuplesOP> {
    public:
    using OpConversionPattern<relalg::TrackTuplesOP>::OpConversionPattern;
@@ -3176,6 +3235,7 @@ void RelalgToSubOpLoweringPass::runOnOperation() {
    patterns.insert<GroupJoinLowering>(ctxt);
    patterns.insert<NestedLowering>(ctxt);
    patterns.insert<GetScalarLowering>(ctxt);
+   patterns.insert<GetFirstRowLowering>(ctxt);
    patterns.insert<TrackTuplesLowering>(ctxt);
 
    if (failed(applyFullConversion(module, target, std::move(patterns))))

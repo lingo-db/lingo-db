@@ -512,6 +512,21 @@ def GetScalarOp : RelAlg_Op<"getscalar", [Pure]> {
     let assemblyFormat = [{  custom<CustRef>($attr) $rel `:` type($res) attr-dict }];
 }
 
+def GetFirstRowOp : RelAlg_Op<"getfirstrow", []> {
+    let summary = "values of the first row of a relation, as a tuple";
+    let description = [{
+        Returns the values of the columns `cols` of the first row of `rel`
+        (one tuple element per column; for more than one row, an arbitrary
+        one), and raises a runtime error if `rel` is empty. Used for
+        row-valued nested SQL (e.g. hipy's sql.row(...)). Like a subquery
+        inside a loop, it is evaluated in place: the subtree it consumes is
+        neither extracted nor decorrelated.
+    }];
+    let arguments = (ins TupleStream:$rel, ArrayAttr:$cols);
+    let results = (outs TupleOf<[AnyType]>:$res);
+    let assemblyFormat = [{ $rel custom<CustRefArr>($cols) `:` type($res) attr-dict }];
+}
+
 def GetListOp : RelAlg_Op<"getlist", [Pure]> {
     let summary = "get multiple columns";
 
