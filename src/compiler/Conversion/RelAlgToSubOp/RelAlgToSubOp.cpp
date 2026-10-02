@@ -91,9 +91,7 @@ static relalg::ColumnSet getRequired(Operator op, llvm::DenseMap<Operator, relal
          required.insert(getRequired(consumingOp, requiredCols, cache));
          required.insert(consumingOp.getUsedColumns());
       }
-      if (auto materializeOp = mlir::dyn_cast_or_null<relalg::MaterializeOp>(user)) {
-         required.insert(relalg::ColumnSet::fromArrayAttr(materializeOp.getCols()));
-      }
+      required.insert(relalg::detail::getColumnsUsedBySink(user));
    }
    auto res = available.intersect(required);
    requiredCols.insert({op, res});
@@ -161,11 +159,51 @@ static std::pair<tuples::ColumnDefAttr, tuples::ColumnRefAttr> createColumn(mlir
    return {markAttrDef, columnManager.createRef(&ra)};
 }
 
+static bool isDefinedIn(mlir::Value v, mlir::Block* block) {
+   for (auto* current = v.getParentBlock(); current;) {
+      if (current == block) return true;
+      auto* parentOp = current->getParentOp();
+      current = parentOp ? parentOp->getBlock() : nullptr;
+   }
+   return false;
+}
+// subop.map regions are isolated from above. An operator evaluated inside a
+// loop (see relalg::detail::isNestedInLoop) may use SSA values of the
+// surrounding imperative code in its lambdas, e.g. a loop induction variable
+// used as a nested-SQL parameter. Turn every such value into a column of the
+// input stream (subop.combine_tuple_with_values) and read it through the
+// map block's arguments instead.
+static mlir::Value captureFreeValues(mlir::Value stream, subop::MapCreationHelper& helper, mlir::OpBuilder& rewriter, mlir::Location loc) {
+   auto* mapBlock = helper.getMapBlock();
+   llvm::SetVector<mlir::Value> freeValues;
+   mapBlock->walk([&](mlir::Operation* op) {
+      for (auto operand : op->getOperands()) {
+         // tuple values (lambda arguments) are never captured: getcols on them
+         // are rewritten by the caller.
+         if (mlir::isa<tuples::TupleType>(operand.getType())) continue;
+         if (!isDefinedIn(operand, mapBlock)) freeValues.insert(operand);
+      }
+   });
+   if (freeValues.empty()) return stream;
+   auto& colManager = rewriter.getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+   std::string scope = colManager.getUniqueScope("captured");
+   llvm::SmallVector<mlir::Attribute> defs;
+   for (auto [i, freeValue] : llvm::enumerate(freeValues)) {
+      mlir::Value v = freeValue;
+      auto def = colManager.createDef(scope, "v" + std::to_string(i));
+      def.getColumn().type = v.getType();
+      defs.push_back(def);
+      mlir::Value arg = helper.access(colManager.createRef(&def.getColumn()), loc);
+      v.replaceUsesWithIf(arg, [&](mlir::OpOperand& use) { return mapBlock->findAncestorOpInBlock(*use.getOwner()) != nullptr; });
+   }
+   return rewriter.create<subop::CombineTupleWithValues>(loc, tuples::TupleStreamType::get(rewriter.getContext()), stream, freeValues.getArrayRef(), rewriter.getArrayAttr(defs));
+}
 static mlir::Value map(mlir::Value stream, mlir::ConversionPatternRewriter& rewriter, mlir::Location loc, mlir::ArrayAttr createdColumns, std::function<std::vector<mlir::Value>(mlir::ConversionPatternRewriter&, subop::MapCreationHelper& helper, mlir::Location)> fn) {
    subop::MapCreationHelper helper(rewriter.getContext());
    helper.buildBlock(rewriter, [&](mlir::ConversionPatternRewriter& rewriter) {
       rewriter.create<tuples::ReturnOp>(loc, fn(rewriter, helper, loc));
    });
+   stream = captureFreeValues(stream, helper, rewriter, loc);
    auto mapOp = rewriter.create<subop::MapOp>(loc, tuples::TupleStreamType::get(rewriter.getContext()), stream, createdColumns, helper.getColRefs());
    mapOp.getFn().push_back(helper.getMapBlock());
    return mapOp.getResult();
@@ -239,7 +277,9 @@ static mlir::Value translateSelection(mlir::Value stream, mlir::Region& predicat
                   predVal = b.create<db::DeriveTruth>(loc, predVal);
                }
                std::vector<mlir::Operation*> toErase;
+               mlir::Value predicateTuple = predicate.front().getArgument(0);
                b.getInsertionBlock()->walk([&](tuples::GetColumnOp getColumnOp) {
+                  if (getColumnOp.getTuple() != predicateTuple) return;
                   getColumnOp.replaceAllUsesWith(helper.access(getColumnOp.getAttr(), getColumnOp->getLoc()));
                   toErase.push_back(getColumnOp);
                });
@@ -288,14 +328,19 @@ class MapLowering : public OpConversionPattern<relalg::MapOp> {
          helper.getMapBlock()->push_back(op);
       }
       std::vector<mlir::Operation*> toErase;
+      mlir::Value lambdaTuple = mapOp.getLambdaArgument();
       helper.getMapBlock()->walk([&](tuples::GetColumnOp getColumnOp) {
+         // Operators left inside the lambda (e.g. nested SQL in a loop) have
+         // lambdas of their own: their getcols read *their* tuple, not ours.
+         if (getColumnOp.getTuple() != lambdaTuple) return;
          getColumnOp.replaceAllUsesWith(helper.access(getColumnOp.getAttr(), getColumnOp->getLoc()));
          toErase.push_back(getColumnOp);
       });
       for (auto* op : toErase) {
          rewriter.eraseOp(op);
       }
-      auto mapOp2 = rewriter.replaceOpWithNewOp<subop::MapOp>(mapOp, tuples::TupleStreamType::get(rewriter.getContext()), adaptor.getRel(), mapOp.getComputedCols(), helper.getColRefs());
+      mlir::Value stream = captureFreeValues(adaptor.getRel(), helper, rewriter, mapOp->getLoc());
+      auto mapOp2 = rewriter.replaceOpWithNewOp<subop::MapOp>(mapOp, tuples::TupleStreamType::get(rewriter.getContext()), stream, mapOp.getComputedCols(), helper.getColRefs());
       mapOp2.getFn().push_back(helper.getMapBlock());
       return success();
    }
@@ -2974,6 +3019,54 @@ class NestedLowering : public OpConversionPattern<relalg::NestedOp> {
    }
 };
 
+// A relalg.getscalar that survived the optimizer sits inside a loop of a map
+// lambda (see relalg::detail::isNestedInLoop): it is evaluated in place, once
+// per iteration. Lower it to a nested query that scatters the column into a
+// fresh simple_state (initialized to NULL for "no row") and hands the value
+// back to the surrounding imperative code via subop.state_to_native.
+class GetScalarLowering : public OpConversionPattern<relalg::GetScalarOp> {
+   public:
+   using OpConversionPattern<relalg::GetScalarOp>::OpConversionPattern;
+
+   LogicalResult matchAndRewrite(relalg::GetScalarOp getScalarOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = getScalarOp->getLoc();
+      auto* ctxt = rewriter.getContext();
+      mlir::Type resType = getScalarOp.getType();
+      auto* column = &getScalarOp.getAttr().getColumn();
+      auto member = createMember(ctxt, "scalar", resType);
+      auto stateType = subop::SimpleStateType::get(ctxt, createStateMembersAttr(ctxt, {member}));
+      auto createOp = rewriter.create<subop::CreateSimpleStateOp>(loc, stateType);
+      if (mlir::isa<db::NullableType>(resType)) {
+         Block* initialValueBlock = new Block;
+         {
+            mlir::OpBuilder::InsertionGuard guard(rewriter);
+            rewriter.setInsertionPointToStart(initialValueBlock);
+            mlir::Value nullValue = rewriter.create<db::NullOp>(loc, resType);
+            rewriter.create<tuples::ReturnOp>(loc, nullValue);
+         }
+         createOp.getInitFn().push_back(initialValueBlock);
+      }
+      mlir::Value stream = adaptor.getRel();
+      auto columnRef = getScalarOp.getAttr();
+      if (column->type != resType) {
+         auto [castedDef, castedRef] = createColumn(resType, "getscalar", "casted");
+         stream = map(stream, rewriter, loc, rewriter.getArrayAttr(castedDef), [&](mlir::ConversionPatternRewriter& b, subop::MapCreationHelper& helper, mlir::Location loc) -> std::vector<mlir::Value> {
+            mlir::Value value = helper.access(columnRef, loc);
+            return {b.create<db::AsNullableOp>(loc, resType, value)};
+         });
+         columnRef = castedRef;
+      }
+      auto entryRefType = subop::LookupEntryRefType::get(ctxt, stateType);
+      auto [entryDef, entryRef] = createColumn(entryRefType, "lookup", "entryref");
+      auto afterLookup = rewriter.create<subop::LookupOp>(loc, tuples::TupleStreamType::get(ctxt), stream, createOp.getRes(), rewriter.getArrayAttr({}), entryDef);
+      rewriter.create<subop::ScatterOp>(loc, afterLookup, entryRef, createColumnRefMemberMappingAttr(ctxt, {{member, columnRef}}));
+      auto tupleType = mlir::TupleType::get(ctxt, {resType});
+      mlir::Value native = rewriter.create<subop::StateToNativeOp>(loc, tupleType, createOp.getRes());
+      rewriter.replaceOpWithNewOp<util::UnPackOp>(getScalarOp, native);
+      return success();
+   }
+};
+
 class TrackTuplesLowering : public OpConversionPattern<relalg::TrackTuplesOP> {
    public:
    using OpConversionPattern<relalg::TrackTuplesOP>::OpConversionPattern;
@@ -3082,6 +3175,7 @@ void RelalgToSubOpLoweringPass::runOnOperation() {
    patterns.insert<CountingSetOperationLowering>(ctxt);
    patterns.insert<GroupJoinLowering>(ctxt);
    patterns.insert<NestedLowering>(ctxt);
+   patterns.insert<GetScalarLowering>(ctxt);
    patterns.insert<TrackTuplesLowering>(ctxt);
 
    if (failed(applyFullConversion(module, target, std::move(patterns))))

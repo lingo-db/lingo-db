@@ -7,6 +7,7 @@
 
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/OpImplementation.h"
+#include "mlir/Interfaces/LoopLikeInterface.h"
 
 #include <functional>
 #include <unordered_set>
@@ -693,6 +694,33 @@ void relalg::detail::inlineOpIntoBlock(mlir::Operation* vop, mlir::Operation* in
          first = cloneOp;
       }
    }
+}
+bool relalg::detail::isNestedInLoop(mlir::Operation* op) {
+   for (auto* parent = op->getParentOp(); parent && !mlir::isa<Operator>(parent); parent = parent->getParentOp()) {
+      if (mlir::isa<mlir::LoopLikeOpInterface>(parent)) return true;
+   }
+   return false;
+}
+bool relalg::detail::isEvaluatedInPlace(mlir::Operation* op) {
+   if (isNestedInLoop(op)) return true;
+   for (auto* user : op->getUsers()) {
+      if (mlir::isa<Operator>(user) && isEvaluatedInPlace(user)) return true;
+   }
+   return false;
+}
+relalg::ColumnSet relalg::detail::getColumnsUsedBySink(mlir::Operation* op) {
+   if (auto materializeOp = mlir::dyn_cast_or_null<relalg::MaterializeOp>(op)) {
+      return relalg::ColumnSet::fromArrayAttr(materializeOp.getCols());
+   }
+   if (auto getScalarOp = mlir::dyn_cast_or_null<relalg::GetScalarOp>(op)) {
+      relalg::ColumnSet res;
+      res.insert(&getScalarOp.getAttr().getColumn());
+      return res;
+   }
+   if (auto getListOp = mlir::dyn_cast_or_null<relalg::GetListOp>(op)) {
+      return relalg::ColumnSet::fromArrayAttr(getListOp.getCols());
+   }
+   return {};
 }
 void relalg::detail::moveSubTreeBefore(mlir::Operation* op, mlir::Operation* before) {
    auto tree = mlir::dyn_cast_or_null<Operator>(op);

@@ -38,6 +38,7 @@
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamDialect.h"
 #include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
 
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/IRMapping.h"
 
@@ -96,12 +97,23 @@ class SplitIntoNestedExecutionStepsPass : public mlir::PassWrapper<SplitIntoNest
       }
    }
 
+   // Is `block` `body` itself or a block nested (at any depth) in an op of
+   // `body`? Works for detached bodies (islands, see below) too.
+   static bool isInsideBody(mlir::Block* block, mlir::Block* body) {
+      while (block) {
+         if (block == body) return true;
+         auto* parentOp = block->getParentOp();
+         block = parentOp ? parentOp->getBlock() : nullptr;
+      }
+      return false;
+   }
+
    // Required state of pipeline P: non-stream values used by ops in P that are
    // defined outside P. Sources:
    //   - block args of `body`
    //   - values defined elsewhere in `body` but in a different pipeline
-   //   - values defined strictly outside the ContainsNestedSubOps op
-   void computeStates(subop::ContainsNestedSubOps cn, mlir::Block* body, Analysis& a) {
+   //   - values defined strictly outside `body`
+   void computeStates(mlir::Block* body, Analysis& a) {
       llvm::DenseMap<mlir::Operation*, llvm::DenseSet<mlir::Operation*>> pipelineOpSet;
       for (auto& [root, ops] : a.pipelines) {
          for (auto* op : ops) pipelineOpSet[root].insert(op);
@@ -121,23 +133,11 @@ class SplitIntoNestedExecutionStepsPass : public mlir::PassWrapper<SplitIntoNest
                   if (isStream(operand)) continue;
                   if (auto blockArg = mlir::dyn_cast<mlir::BlockArgument>(operand)) {
                      mlir::Block* ownerBlock = blockArg.getOwner();
-                     if (ownerBlock == body) {
-                        // Per-tuple arg of cn — required.
-                        requiredSet.insert(operand);
-                        continue;
-                     }
-                     // Args of a block strictly nested inside an op of the
-                     // body are internal (the enclosing op gets moved into
-                     // its step as a unit). Args of any block at or above
-                     // cn's level are external.
-                     bool insideCn = false;
-                     for (mlir::Operation* p = ownerBlock->getParentOp(); p; p = p->getParentOp()) {
-                        if (p == cn.getOperation()) {
-                           insideCn = true;
-                           break;
-                        }
-                     }
-                     if (!insideCn) {
+                     // Per-tuple arg of the body, or an arg of a block above
+                     // it: required. Args of a block strictly nested inside an
+                     // op of the body are internal (the enclosing op gets
+                     // moved into its step as a unit).
+                     if (ownerBlock == body || !isInsideBody(ownerBlock, body)) {
                         requiredSet.insert(operand);
                      }
                      continue;
@@ -151,14 +151,10 @@ class SplitIntoNestedExecutionStepsPass : public mlir::PassWrapper<SplitIntoNest
                      }
                      continue;
                   }
-                  // Defined outside body. If it's still inside `cn`, the
-                  // producer must be inside a nested region of some op in
-                  // the body (e.g., the constant-init region of a
-                  // simple_state). Internal — skip.
-                  mlir::Operation* p = prod;
-                  while (p && p != cn.getOperation()) p = p->getParentOp();
-                  if (p == cn.getOperation()) continue;
-                  // Strictly outside cn: required input from above.
+                  // Defined inside a nested region of some op in the body
+                  // (e.g., the constant-init region of a simple_state):
+                  // internal. Otherwise: required input from above.
+                  if (isInsideBody(prod->getBlock(), body)) continue;
                   requiredSet.insert(operand);
                }
             });
@@ -240,8 +236,9 @@ class SplitIntoNestedExecutionStepsPass : public mlir::PassWrapper<SplitIntoNest
    }
 
    // Materialize the new IR: NestedExecutionGroupOp containing ExecutionStepOps
-   // in topo order, body terminator rewired through state mapping.
-   void materialize(subop::ContainsNestedSubOps cn, mlir::Block* body, Analysis& a) {
+   // in topo order, inserted before `insertBefore`. Every use of an `escaping`
+   // value outside the new group is rewired to the corresponding group result.
+   void materialize(mlir::Location loc, mlir::Operation* insertBefore, llvm::ArrayRef<mlir::Value> escaping, Analysis& a) {
       llvm::DenseMap<mlir::Value, mlir::Value> stateMapping;
       llvm::DenseMap<mlir::Value, size_t> valueToNestedGroupArg;
 
@@ -250,7 +247,7 @@ class SplitIntoNestedExecutionStepsPass : public mlir::PassWrapper<SplitIntoNest
 
       mlir::OpBuilder builder(&getContext());
       builder.setInsertionPointToStart(nestedExecutionBlock);
-      auto returnOp = builder.create<subop::NestedExecutionGroupReturnOp>(cn.getLoc(), mlir::ValueRange{});
+      auto returnOp = builder.create<subop::NestedExecutionGroupReturnOp>(loc, mlir::ValueRange{});
 
       for (auto* root : a.topoOrder) {
          std::vector<mlir::Type> resultTypes;
@@ -313,52 +310,140 @@ class SplitIntoNestedExecutionStepsPass : public mlir::PassWrapper<SplitIntoNest
          }
       }
 
-      // Rewire body terminator through stateMapping; create the
-      // NestedExecutionGroupOp and plumb out its results.
-      auto* terminator = body->getTerminator();
-      builder.setInsertionPoint(terminator);
+      // Create the NestedExecutionGroupOp and plumb out its results.
+      builder.setInsertionPoint(insertBefore);
       std::vector<mlir::Value> toReturn;
       std::vector<mlir::Value> toMap;
       std::vector<mlir::Type> toReturnTypes;
-      for (auto operand : terminator->getOperands()) {
-         if (stateMapping.count(operand)) {
-            toReturn.push_back(stateMapping[operand]);
-            toReturnTypes.push_back(operand.getType());
-            toMap.push_back(operand);
+      for (auto value : escaping) {
+         if (stateMapping.count(value)) {
+            toReturn.push_back(stateMapping[value]);
+            toReturnTypes.push_back(value.getType());
+            toMap.push_back(value);
          }
       }
       returnOp->setOperands(toReturn);
       auto nestedExecutionGroup = builder.create<subop::NestedExecutionGroupOp>(
-         cn.getLoc(), toReturnTypes, nestedExecutionOperands);
+         loc, toReturnTypes, nestedExecutionOperands);
       nestedExecutionGroup.getSubOps().getBlocks().clear();
       nestedExecutionGroup.getSubOps().push_back(nestedExecutionBlock);
       for (auto [from, to] : llvm::zip(toMap, nestedExecutionGroup.getResults())) {
          from.replaceUsesWithIf(to, [&](mlir::OpOperand& operand) {
-            return terminator == operand.getOwner();
+            return !nestedExecutionGroup->isAncestor(operand.getOwner());
          });
       }
+   }
+
+   // Split `body` (terminated; the terminator itself is not moved) into
+   // steps of a new NestedExecutionGroupOp placed before `insertBefore`.
+   bool splitBody(mlir::Operation* errorOp, mlir::Block* body, mlir::Operation* insertBefore, llvm::ArrayRef<mlir::Value> escaping) {
+      Analysis a;
+      buildPipelines(body, a);
+      computeStates(body, a);
+      buildSSADeps(a);
+      auto firstPos = computeFirstPos(body, a);
+      a.topoOrder = subop::kahnTopoSort(a.roots, a.dependencies, firstPos);
+      if (a.topoOrder.size() != a.roots.size()) {
+         errorOp->emitError("SplitIntoNestedExecutionStepsPass: cycle in SSA dependencies of nested body");
+         return false;
+      }
+      addMemberConflictDeps(body, a);
+      // Member-conflict edges are added in topo direction, so the augmented
+      // graph stays acyclic and the existing topoOrder is still valid.
+      materialize(errorOp->getLoc(), insertBefore, escaping, a);
+      return true;
    }
 
    void splitContainsNestedSubOps(subop::ContainsNestedSubOps cn) {
       mlir::Block* body = cn.getBody();
       if (!body) return;
-      Analysis a;
-      buildPipelines(body, a);
-      computeStates(cn, body, a);
-      buildSSADeps(a);
-      auto firstPos = computeFirstPos(body, a);
-      a.topoOrder = subop::kahnTopoSort(a.roots, a.dependencies, firstPos);
-      if (a.topoOrder.size() != a.roots.size()) {
-         cn.emitError("SplitIntoNestedExecutionStepsPass: cycle in SSA dependencies of nested body");
-         return signalPassFailure();
+      auto* terminator = body->getTerminator();
+      llvm::SmallVector<mlir::Value> escaping(terminator->getOperands().begin(), terminator->getOperands().end());
+      if (!splitBody(cn.getOperation(), body, terminator, escaping)) return signalPassFailure();
+   }
+
+   // A block of imperative code nested inside an execution step (e.g. the
+   // body of an scf.for in a subop.map lambda — nested SQL issued per loop
+   // iteration by a hipy UDF) that directly contains subop ops. Those ops
+   // form an "island": a nested query that is executed in place, each time
+   // control reaches it.
+   static bool isIslandBlock(mlir::Block& block) {
+      auto* parentOp = block.getParentOp();
+      if (!parentOp) return false;
+      if (mlir::isa<subop::SubOperatorDialect>(parentOp->getDialect())) return false;
+      if (mlir::isa<mlir::func::FuncOp, mlir::ModuleOp>(parentOp)) return false;
+      if (!parentOp->getParentOfType<subop::ExecutionStepOp>()) return false;
+      // Only real query work forms an island (e.g. not the generate_emit ops
+      // of a subop.generate region's imperative body).
+      for (auto& op : block) {
+         if (mlir::isa<subop::SubOperator>(&op)) return true;
       }
-      addMemberConflictDeps(body, a);
-      // Member-conflict edges are added in topo direction, so the augmented
-      // graph stays acyclic and the existing topoOrder is still valid.
-      materialize(cn, body, a);
+      return false;
+   }
+   static bool isIslandOp(mlir::Operation* op) {
+      return mlir::isa<subop::SubOperatorDialect>(op->getDialect()) && !mlir::isa<subop::NestedExecutionGroupOp>(op);
+   }
+
+   // Wrap the island of `block` into a NestedExecutionGroupOp at the position
+   // of its last subop op. Imperative ops in between that consume island
+   // results (transitively) join the island, so that every value the group
+   // needs is defined before it and every result is only used after it.
+   bool splitIsland(mlir::Block& block) {
+      llvm::SetVector<mlir::Operation*> island;
+      for (auto& op : block) {
+         if (isIslandOp(&op)) island.insert(&op);
+      }
+      mlir::Operation* last = island.back();
+      auto usesIsland = [&](mlir::Operation* op) {
+         bool res = false;
+         op->walk([&](mlir::Operation* nested) {
+            for (auto operand : nested->getOperands()) {
+               if (auto* def = operand.getDefiningOp(); def && def->getBlock() == &block && island.contains(def)) res = true;
+            }
+         });
+         return res;
+      };
+      for (auto& op : block) {
+         if (&op == last) break;
+         if (!island.contains(&op) && usesIsland(&op)) island.insert(&op);
+      }
+      llvm::SmallVector<mlir::Operation*> ordered;
+      for (auto& op : block) {
+         if (island.contains(&op)) ordered.push_back(&op);
+      }
+      llvm::SetVector<mlir::Value> escaping;
+      for (auto* op : ordered) {
+         for (auto result : op->getResults()) {
+            for (auto* user : result.getUsers()) {
+               if (!island.contains(block.findAncestorOpInBlock(*user))) escaping.insert(result);
+            }
+         }
+      }
+      auto* insertBefore = last->getNextNode();
+      auto loc = ordered.front()->getLoc();
+      auto* tmpBody = new mlir::Block;
+      for (auto* op : ordered) {
+         op->remove();
+         tmpBody->push_back(op);
+      }
+      mlir::OpBuilder builder(&getContext());
+      builder.setInsertionPointToEnd(tmpBody);
+      builder.create<subop::NestedExecutionGroupReturnOp>(loc, mlir::ValueRange{});
+      bool success = splitBody(insertBefore, tmpBody, insertBefore, escaping.getArrayRef());
+      delete tmpBody;
+      return success;
    }
 
    void runOnOperation() override {
+      // Islands first, innermost first (post-order), so that an island nested
+      // in an op of an enclosing island/body is moved along as a unit.
+      std::vector<mlir::Block*> islands;
+      getOperation()->walk([&](mlir::Block* block) {
+         if (isIslandBlock(*block)) islands.push_back(block);
+      });
+      for (auto* block : islands) {
+         if (!splitIsland(*block)) return signalPassFailure();
+      }
       // Collect first; mutating during walk would invalidate the iteration.
       std::vector<subop::ContainsNestedSubOps> targets;
       getOperation()->walk<mlir::WalkOrder::PreOrder>([&](subop::ContainsNestedSubOps cn) {

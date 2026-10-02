@@ -45,8 +45,8 @@ class ColumnFoldingPass : public mlir::PassWrapper<ColumnFoldingPass, mlir::Oper
          getOperation()->walk([&](Operator op) {
             usedColumns.insert(op.getUsedColumns());
          });
-         getOperation()->walk([&](relalg::MaterializeOp op) {
-            usedColumns.insert(relalg::ColumnSet::fromArrayAttr(op.getCols()));
+         getOperation()->walk([&](mlir::Operation* op) {
+            if (!mlir::isa<Operator>(op)) usedColumns.insert(relalg::detail::getColumnsUsedBySink(op));
          });
          bool existsSucceed = false;
          getOperation()->walk([&](ColumnFoldable columnFoldable) {

@@ -83,6 +83,11 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
          if (!surroundingOperator) {
             return;
          }
+         // Subqueries inside a loop are evaluated per iteration; they cannot
+         // become a join with the surrounding operator's input.
+         if (relalg::detail::isNestedInLoop(op)) {
+            return;
+         }
          Value treeVal = surroundingOperator->getOperand(0);
          if (auto getscalarop = mlir::dyn_cast_or_null<relalg::GetScalarOp>(op)) {
             OpBuilder builder(surroundingOperator);

@@ -1,0 +1,226 @@
+# Nested SQL (hipy.lib.sql.execute) inside loops of LANGUAGE hipy UDFs. The
+# subqueries depend on loop-carried values, so they stay inside the loop and
+# are evaluated per iteration (ExtractNestedOperators / ImplicitToExplicitJoins
+# leave them in place; they are lowered to a nested execution group inside the
+# loop). Covers for/while loops, conditionals in/around loops, nested loops,
+# NULL (no row), string results, aggregates, loop-invariant queries,
+# parameters read from a list, multiple parameters, and many concurrent UDF
+# invocations. Nested SQL strings stay on one line each.
+
+statement ok
+create table program(loc int8, opc text, reg1 int8, reg2 int8, reg3 int8);
+
+statement ok
+insert into program values (0,'lod',1,5,0),(1,'add',1,1,1),(2,'jeq',1,1,4),(3,'jmp',0,0,0),(4,'hlt',1,0,0);
+
+statement ok
+CREATE OR REPLACE FUNCTION f(x INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def f(x):
+    acc = 0
+    for i in range(x):
+        acc += sql.execute(sql.nullable(int), "SELECT reg1 FROM program WHERE loc = PARAM(1)", i).get_value()
+    return acc
+$$ LANGUAGE hipy;
+
+query tsv rowsort 1
+select f(3);
+----
+3
+
+statement ok
+create table kv(k int8, v int8, s text);
+
+statement ok
+insert into kv values (0,10,'a'),(1,11,'b'),(2,12,'c'),(3,13,'d'),(4,14,'e'),(5,15,'f');
+
+statement ok
+CREATE OR REPLACE FUNCTION w(x INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def w(x):
+    i = 0
+    acc = 0
+    while i < x:
+        acc += sql.execute(sql.nullable(int), "SELECT v FROM kv WHERE k = PARAM(1)", i).get_value()
+        i += 1
+    return acc
+$$ LANGUAGE hipy;
+
+query tsv rowsort 2
+select w(3);
+----
+33
+
+statement ok
+CREATE OR REPLACE FUNCTION nullcase(x INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def nullcase(x):
+    misses = 0
+    for i in range(x):
+        if sql.execute(sql.nullable(int), "SELECT v FROM kv WHERE k = PARAM(1)", i + 4).is_null():
+            misses += 1
+    return misses
+$$ LANGUAGE hipy;
+
+query tsv rowsort 3
+select nullcase(5);
+----
+3
+
+statement ok
+CREATE OR REPLACE FUNCTION strs(x INT8) RETURNS TEXT AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def strs(x):
+    res = ""
+    for i in range(x):
+        res = res + sql.execute(sql.nullable(str), "SELECT s FROM kv WHERE k = PARAM(1)", x - 1 - i).get_value()
+    return res
+$$ LANGUAGE hipy;
+
+query tsv rowsort 4
+select strs(4);
+----
+dcba
+
+statement ok
+CREATE OR REPLACE FUNCTION ifinloop(x INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def ifinloop(x):
+    acc = 0
+    for i in range(x):
+        if i % 2 == 0:
+            acc += sql.execute(sql.nullable(int), "SELECT v FROM kv WHERE k = PARAM(1)", i).get_value()
+    return acc
+$$ LANGUAGE hipy;
+
+query tsv rowsort 5
+select ifinloop(5);
+----
+36
+
+statement ok
+CREATE OR REPLACE FUNCTION loopinif(x INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def loopinif(x):
+    acc = 0
+    if x > 2:
+        for i in range(x):
+            acc += sql.execute(sql.nullable(int), "SELECT v FROM kv WHERE k = PARAM(1)", i).get_value()
+    return acc
+$$ LANGUAGE hipy;
+
+query tsv rowsort 6
+select loopinif(3), loopinif(1);
+----
+33	0
+
+statement ok
+CREATE OR REPLACE FUNCTION nested(x INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def nested(x):
+    acc = 0
+    for i in range(x):
+        for j in range(x):
+            acc += sql.execute(sql.nullable(int), "SELECT v FROM kv WHERE k = PARAM(1)", i + j).get_value()
+    return acc
+$$ LANGUAGE hipy;
+
+query tsv rowsort 7
+select nested(3);
+----
+108
+
+statement ok
+CREATE OR REPLACE FUNCTION aggr(x INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def aggr(x):
+    acc = 0
+    for i in range(x):
+        acc += sql.execute(sql.nullable(int), "SELECT count(*) FROM kv WHERE k < PARAM(1)", i).get_value()
+        acc += sql.execute(sql.nullable(int), "SELECT sum(v) FROM kv WHERE k <= PARAM(1)", i).get_value_or_default(0)
+    return acc
+$$ LANGUAGE hipy;
+
+query tsv rowsort 8
+select aggr(3);
+----
+67
+
+statement ok
+CREATE OR REPLACE FUNCTION invariant(x INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def invariant(x):
+    acc = 0
+    for i in range(x):
+        acc += sql.execute(sql.nullable(int), "SELECT max(v) FROM kv").get_value()
+    return acc
+$$ LANGUAGE hipy;
+
+query tsv rowsort 9
+select invariant(4);
+----
+60
+
+statement ok
+CREATE OR REPLACE FUNCTION fromlist(x INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def fromlist(x):
+    keys = [5, 3, 1]
+    acc = 0
+    for i in range(x):
+        acc = acc * 100 + sql.execute(sql.nullable(int), "SELECT v FROM kv WHERE k = PARAM(1)", keys[i]).get_value()
+    return acc
+$$ LANGUAGE hipy;
+
+query tsv rowsort 10
+select fromlist(3);
+----
+151311
+
+statement ok
+CREATE OR REPLACE FUNCTION twoparams(x INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def twoparams(x):
+    acc = 0
+    for i in range(x):
+        acc += sql.execute(sql.nullable(int), "SELECT count(*) FROM kv WHERE k >= PARAM(1) AND v <= PARAM(2)", i, x + 10).get_value()
+    return acc
+$$ LANGUAGE hipy;
+
+query tsv rowsort 11
+select twoparams(4);
+----
+14
+
+statement ok
+create table many(n int8);
+
+statement ok
+insert into many values (0),(1),(2),(3),(4),(5),(6),(0),(1),(2),(3),(4),(5),(6),(0),(1),(2),(3),(4),(5),(6),(0),(1),(2),(3),(4),(5),(6);
+
+query tsv rowsort 12
+select sum(w(n)), count(*) from many;
+----
+980	28

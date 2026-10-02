@@ -222,6 +222,22 @@ void addPredicate(mlir::Operation* op, std::function<mlir::Value(mlir::Value, ml
 void initPredicate(mlir::Operation* op);
 
 void inlineOpIntoBlock(mlir::Operation* vop, mlir::Operation* includeChildren, mlir::Block* newBlock, mlir::IRMapping& mapping, mlir::Operation* first = nullptr);
+
+// True if `op` sits inside a loop (LoopLikeOpInterface, e.g. scf.for /
+// scf.while) between itself and the closest enclosing relalg Operator. Such
+// ops (e.g. nested SQL issued from a hipy UDF loop) are re-evaluated per
+// iteration and may use loop-carried values, so they must stay in the loop.
+bool isNestedInLoop(mlir::Operation* op);
+
+// True if the operator `op` must be evaluated in place (inside the lambda it
+// is nested in) instead of being extracted and decorrelated: it is nested in
+// a loop (isNestedInLoop), or so is the operator consuming its result.
+bool isEvaluatedInPlace(mlir::Operation* op);
+
+// Columns read by a non-Operator consumer of a tuple stream: relalg.materialize,
+// or a subquery op (relalg.getscalar / relalg.getlist)
+// that was left in place (see isEvaluatedInPlace). Empty for any other op.
+ColumnSet getColumnsUsedBySink(mlir::Operation* op);
 } // namespace lingodb::compiler::dialect::relalg::detail
 class Operator;
 #define GET_OP_CLASSES

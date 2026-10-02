@@ -391,9 +391,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
             required.insert(getRequired(consumingOp, cache));
             required.insert(consumingOp.getUsedColumns());
          }
-         if (auto materializeOp = mlir::dyn_cast_or_null<relalg::MaterializeOp>(user)) {
-            required.insert(relalg::ColumnSet::fromArrayAttr(materializeOp.getCols()));
-         }
+         required.insert(relalg::detail::getColumnsUsedBySink(user));
       }
       return available.intersect(required);
    }

@@ -22,9 +22,7 @@ class EliminateNullableTypes : public mlir::PassWrapper<EliminateNullableTypes, 
             required.insert(getRequired(consumingOp, cache));
             required.insert(consumingOp.getUsedColumns());
          }
-         if (auto materializeOp = mlir::dyn_cast_or_null<relalg::MaterializeOp>(user)) {
-            required.insert(relalg::ColumnSet::fromArrayAttr(materializeOp.getCols()));
-         }
+         required.insert(relalg::detail::getColumnsUsedBySink(user));
       }
       cache[op] = required;
       return required;
@@ -35,8 +33,8 @@ class EliminateNullableTypes : public mlir::PassWrapper<EliminateNullableTypes, 
       mlir::OpBuilder builder(op->getContext());
       builder.setInsertionPoint(op);
       relalg::ColumnSet required;
-      if (auto materializeOp = mlir::dyn_cast_or_null<relalg::MaterializeOp>(op)) {
-         required = relalg::ColumnSet::fromArrayAttr(materializeOp.getCols());
+      if (!mlir::isa<Operator>(op)) {
+         required = relalg::detail::getColumnsUsedBySink(op);
       } else {
          required = getRequired(mlir::cast<Operator>(op), cache);
          required.insert(mlir::cast<Operator>(op).getUsedColumns());

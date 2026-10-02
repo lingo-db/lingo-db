@@ -539,7 +539,18 @@ class SubOpRewriter {
          types.push_back(input.getType());
       }
       auto tupleType = mlir::TupleType::get(getContext(), types);
-      mlir::Value contextPtr = create<util::AllocaOp>(builder.getUnknownLoc(), util::RefType::get(getContext(), tupleType), mlir::Value());
+      // Allocate at function entry: a nested step may be lowered inside a loop
+      // (e.g. nested SQL issued per iteration of a hipy UDF loop), and an
+      // alloca in a loop body grows the (small, fiber) stack per iteration.
+      mlir::Value contextPtr;
+      auto contextType = util::RefType::get(getContext(), tupleType);
+      if (auto funcOp = builder.getInsertionBlock()->getParentOp()->getParentOfType<mlir::func::FuncOp>()) {
+         atStartOf(&funcOp.getFunctionBody().front(), [&](SubOpRewriter& rewriter) {
+            contextPtr = rewriter.create<util::AllocaOp>(builder.getUnknownLoc(), contextType, mlir::Value());
+         });
+      } else {
+         contextPtr = create<util::AllocaOp>(builder.getUnknownLoc(), contextType, mlir::Value());
+      }
       size_t offset = 0;
       for (auto [param, arg, isThreadLocal] : llvm::zip(executionStep.getInputs(), executionStep.getSubOps().front().getArguments(), executionStep.getIsThreadLocal())) {
          if (exclude && arg == exclude && arg.hasOneUse()) continue;
@@ -651,12 +662,20 @@ class SubOpRewriter {
       if (op->getDialect()->getNamespace() == "subop") {
          toRewrite.push_back(op);
       } else {
-         op->walk([&](mlir::Operation* nestedOp) {
+         op->walk<WalkOrder::PreOrder>([&](mlir::Operation* nestedOp) {
+            if (mlir::isa<subop::NestedExecutionGroupOp>(nestedOp)) {
+               // A nested query inside imperative code (e.g. in a loop of a
+               // map lambda, see SplitIntoNestedExecutionSteps): lower it in
+               // place.
+               toRewrite.push_back(nestedOp);
+               return WalkResult::skip();
+            }
             if (nestedOp->getDialect()->getNamespace() != "subop") {
                for (auto& operand : nestedOp->getOpOperands()) {
                   operand.set(getMapped(operand.get()));
                }
             }
+            return WalkResult::advance();
          });
       }
    }
@@ -836,6 +855,10 @@ class SubOpRewriter {
       builder.insert(op);
       if (op->getDialect()->getNamespace() == "subop") {
          rewrite(op);
+      } else {
+         // imperative glue inside a (nested) execution step: its operands may
+         // refer to step block arguments
+         registerOpInserted(op);
       }
    }
 
@@ -1100,6 +1123,18 @@ class CreateThreadLocalLowering : public SubOpConversionPattern<subop::CreateThr
 class StateToNativeLowering : public SubOpConversionPattern<subop::StateToNativeOp> {
    using SubOpConversionPattern<subop::StateToNativeOp>::SubOpConversionPattern;
    LogicalResult matchAndRewrite(subop::StateToNativeOp op, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
+      if (auto simpleStateType = mlir::dyn_cast<subop::SimpleStateType>(op.getState().getType())) {
+         // simple_state -> tuple<members...>: load every member (in
+         // declaration order) from the state's storage.
+         EntryStorageHelper storageHelper(op, simpleStateType.getMembers(), simpleStateType.hasLock(), typeConverter);
+         auto values = storageHelper.getValueMap(adaptor.getState(), rewriter, op->getLoc());
+         llvm::SmallVector<mlir::Value> loaded;
+         for (auto member : simpleStateType.getMembers().getMembers()) {
+            loaded.push_back(values.get(member));
+         }
+         rewriter.replaceOp(op, rewriter.create<util::PackOp>(op->getLoc(), loaded).getResult());
+         return success();
+      }
       auto arrowTableType = mlir::dyn_cast<lingodb::compiler::dialect::arrow::TableType>(op.getRes().getType());
       if (!arrowTableType) return failure();
       auto fromPtr = rewriter.create<lingodb::compiler::dialect::arrow::TableFromPtrOp>(
@@ -1449,7 +1484,11 @@ class GenerateLowering : public SubOpConversionPattern<subop::GenerateOp> {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPointAfter(emitOp);
          ColumnMapping mapping;
-         mapping.define(generateOp.getGeneratedColumns(), emitOp.getValues());
+         // emitted values may be step inputs (e.g. a loop variable passed into
+         // a nested execution step), which are only reachable via the mapping
+         llvm::SmallVector<mlir::Value> values;
+         for (auto v : emitOp.getValues()) values.push_back(rewriter.getMapped(v));
+         mapping.define(generateOp.getGeneratedColumns(), values);
          mlir::Value newInFlight = rewriter.createInFlight(mapping);
          streams.push_back(newInFlight);
          rewriter.eraseOp(emitOp);
@@ -4272,6 +4311,9 @@ class NestedExecutionGroupLowering : public SubOpConversionPattern<subop::Nested
             }
          }
       }
+      // The group's users are plain imperative ops that were already inserted
+      // (and remapped) before the group got lowered: rewire them directly.
+      nestedExecutionGroup->replaceAllUsesWith(toReplaceWith);
       rewriter.replaceOp(nestedExecutionGroup, toReplaceWith);
       return success();
    }

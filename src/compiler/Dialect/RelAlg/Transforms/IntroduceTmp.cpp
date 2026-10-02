@@ -18,10 +18,8 @@ class IntroduceTmp : public mlir::PassWrapper<IntroduceTmp, mlir::OperationPass<
             cols.insert(getUsed(user));
          }
          return cols;
-      } else if (auto matOp = mlir::dyn_cast_or_null<relalg::MaterializeOp>(op)) {
-         return relalg::ColumnSet::fromArrayAttr(matOp.getCols());
       }
-      return {};
+      return relalg::detail::getColumnsUsedBySink(op);
    }
    void runOnOperation() override {
       relalg::AvailabilityCache availabilityCache;
