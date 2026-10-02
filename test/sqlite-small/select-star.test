@@ -1,0 +1,38 @@
+# Stars in the select list.
+# - `*` / `t.*` next to other targets: before, the star's columns replaced the
+#   targets before it (`select u.k, t.*` returned only t's columns).
+
+statement ok
+create table kvs(k int8 not null, v int8, s text);
+
+statement ok
+insert into kvs values (0, 10, 'a'), (1, 11, 'b');
+
+query T
+select t.k * 100, t.*, u.k from kvs as t, kvs as u where u.k = t.k + 1
+----
+0
+0
+10
+a
+1
+
+query T
+select u.k, t.* from kvs as t, kvs as u where u.k = t.k + 1
+----
+1
+0
+10
+a
+
+query T
+select *, k + 1 from kvs order by k
+----
+0
+10
+a
+1
+1
+11
+b
+2

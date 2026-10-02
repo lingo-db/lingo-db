@@ -1109,17 +1109,16 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                   break;
                }
                case ast::ExpressionClass::BOUND_STAR: {
+                  // append the star's columns (in their order) after the targets before it
                   auto star = std::static_pointer_cast<ast::BoundStarExpression>(parsedExpression);
-                  targetColumns.resize(star->columnReferences.size());
-                  context->currentScope->targetInfo.resize(star->columnReferences.size());
-                  std::vector<catalog::Catalog> catalogs;
-                  std::string scope;
-                  std::vector<catalog::Column> columns;
+                  std::vector<std::shared_ptr<ast::ColumnReference>> starColumns(star->columnReferences.size());
                   for (auto& [columnReference, index] : star->columnReferences) {
-                     targetColumns[index] = columnReference;
-                     context->currentScope->targetInfo[(index)] = columnReference;
+                     starColumns[index] = columnReference;
                   }
-
+                  for (auto& columnReference : starColumns) {
+                     targetColumns.emplace_back(columnReference);
+                     context->currentScope->targetInfo.add(columnReference);
+                  }
                   break;
                }
                //NOTE: All other expressions should be moved into an ExtendNode or AggregationNode by canonicalize
