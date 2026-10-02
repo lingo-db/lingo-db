@@ -1,0 +1,49 @@
+# Several row-valued nested queries evaluated in place in the same block
+# (here: straight-line in the map lambda of the outer query), with imperative
+# code in between that uses the first query's result. Each nested query gets
+# its own nested execution group; before, they were merged into one group
+# together with the code in between, which failed to lower ("null operand
+# found").
+
+statement ok
+create table kv(k int8 not null, v int8);
+
+statement ok
+insert into kv values (0, 10), (1, 11), (2, 0);
+
+statement ok
+CREATE OR REPLACE FUNCTION r(x INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def r(x):
+    k, v = sql.execute(sql.row(int, int), "SELECT k, v FROM kv WHERE k = PARAM(1)", x)
+    return k + v
+$$ LANGUAGE hipy;
+
+# the second query's parameter is computed from the first query's result
+statement ok
+CREATE OR REPLACE FUNCTION chain(x INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def chain(x):
+    k, v = sql.execute(sql.row(int, int), "SELECT k, v FROM kv WHERE k = PARAM(1)", x)
+    k2, v2 = sql.execute(sql.row(int, int), "SELECT k, v FROM kv WHERE k = PARAM(1)", v - 10 + k)
+    return k2 * 100 + v2
+$$ LANGUAGE hipy;
+
+query I
+select r(0), r(1), r(0) + r(2)
+----
+10
+12
+12
+
+query I
+select x, chain(x) from (values (0), (1)) as t(x) order by x
+----
+0
+10
+1
+200

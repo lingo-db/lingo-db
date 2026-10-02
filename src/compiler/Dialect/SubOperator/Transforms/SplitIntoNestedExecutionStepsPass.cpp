@@ -386,28 +386,53 @@ class SplitIntoNestedExecutionStepsPass : public mlir::PassWrapper<SplitIntoNest
       return mlir::isa<subop::SubOperatorDialect>(op->getDialect()) && !mlir::isa<subop::NestedExecutionGroupOp>(op);
    }
 
-   // Wrap the island of `block` into a NestedExecutionGroupOp at the position
-   // of its last subop op. Imperative ops in between that consume island
-   // results (transitively) join the island, so that every value the group
-   // needs is defined before it and every result is only used after it.
-   bool splitIsland(mlir::Block& block) {
-      llvm::SetVector<mlir::Operation*> island;
+   // Does `op` (or an op nested in it) use a result of an op of `island` (ops of `block`)?
+   static bool usesIsland(mlir::Operation* op, mlir::Block& block, const llvm::SetVector<mlir::Operation*>& island) {
+      bool res = false;
+      op->walk([&](mlir::Operation* nested) {
+         for (auto operand : nested->getOperands()) {
+            if (auto* def = operand.getDefiningOp(); def && def->getBlock() == &block && island.contains(def)) res = true;
+         }
+      });
+      return res;
+   }
+
+   // Partition the subop ops of `block` into islands, one per nested query
+   // (in block order): an island ends at the first imperative op that consumes
+   // one of its results (e.g. the util.unpack after a state_to_native), so the
+   // imperative glue code between two nested queries (e.g. the second one
+   // using the first one's result as a parameter) runs between them instead of
+   // being moved into one group. Islands that share subop values (e.g. a
+   // common scan) stay together.
+   static std::vector<llvm::SetVector<mlir::Operation*>> partitionIslands(mlir::Block& block) {
+      std::vector<llvm::SetVector<mlir::Operation*>> islands;
+      llvm::SetVector<mlir::Operation*> current;
       for (auto& op : block) {
-         if (isIslandOp(&op)) island.insert(&op);
-      }
-      mlir::Operation* last = island.back();
-      auto usesIsland = [&](mlir::Operation* op) {
-         bool res = false;
-         op->walk([&](mlir::Operation* nested) {
-            for (auto operand : nested->getOperands()) {
-               if (auto* def = operand.getDefiningOp(); def && def->getBlock() == &block && island.contains(def)) res = true;
+         if (isIslandOp(&op)) {
+            if (!islands.empty() && current.empty() && usesIsland(&op, block, islands.back())) {
+               // uses a subop value of the previous island: continue that one
+               current = islands.back();
+               islands.pop_back();
             }
-         });
-         return res;
-      };
+            current.insert(&op);
+         } else if (!current.empty() && usesIsland(&op, block, current)) {
+            islands.push_back(current);
+            current.clear();
+         }
+      }
+      if (!current.empty()) islands.push_back(current);
+      return islands;
+   }
+
+   // Wrap `island` (ops of `block`) into a NestedExecutionGroupOp at the
+   // position of its last subop op. Imperative ops in between that consume
+   // island results (transitively) join the island, so that every value the
+   // group needs is defined before it and every result is only used after it.
+   bool splitIsland(mlir::Block& block, llvm::SetVector<mlir::Operation*> island) {
+      mlir::Operation* last = island.back();
       for (auto& op : block) {
          if (&op == last) break;
-         if (!island.contains(&op) && usesIsland(&op)) island.insert(&op);
+         if (!island.contains(&op) && usesIsland(&op, block, island)) island.insert(&op);
       }
       llvm::SmallVector<mlir::Operation*> ordered;
       for (auto& op : block) {
@@ -444,7 +469,9 @@ class SplitIntoNestedExecutionStepsPass : public mlir::PassWrapper<SplitIntoNest
          if (isIslandBlock(*block)) islands.push_back(block);
       });
       for (auto* block : islands) {
-         if (!splitIsland(*block)) return signalPassFailure();
+         for (auto& island : partitionIslands(*block)) {
+            if (!splitIsland(*block, island)) return signalPassFailure();
+         }
       }
       // Collect first; mutating during walk would invalidate the iteration.
       std::vector<subop::ContainsNestedSubOps> targets;
