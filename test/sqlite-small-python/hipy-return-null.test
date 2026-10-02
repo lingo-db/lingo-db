@@ -1,0 +1,123 @@
+# hipy UDFs that return SQL NULL (ByePy savings H2): `return None` in one
+# branch and a value in another makes the result a sql.nullable(T) (hipy), and
+# LingoDB treats the UDF's result as nullable (stored with the catalog entry
+# at CREATE FUNCTION time) instead of rejecting the call ("type mismatch
+# between returned value and column definition").
+
+statement ok
+create table nn(x int8 not null);
+
+statement ok
+insert into nn values (-2), (0), (3);
+
+statement ok
+create table nl(x int8);
+
+statement ok
+insert into nl values (-2), (NULL), (3);
+
+statement ok
+create table kv(k int8 not null, v int8);
+
+statement ok
+insert into kv values (0, 10), (1, NULL);
+
+# int result, None first
+statement ok
+CREATE OR REPLACE FUNCTION posdouble(x INT8) RETURNS INT8 AS $$
+import hipy
+@hipy.compiled_function
+def posdouble(x):
+    if x < 0:
+        return None
+    return x * 2
+$$ LANGUAGE hipy;
+
+# str result, None last
+statement ok
+CREATE OR REPLACE FUNCTION name(x INT8) RETURNS TEXT AS $$
+import hipy
+@hipy.compiled_function
+def name(x):
+    if x > 0:
+        return "pos" + str(x)
+    else:
+        return None
+$$ LANGUAGE hipy;
+
+# NOT NULL argument column
+query T
+select x, posdouble(x), name(x) from nn order by x
+----
+-2
+NULL
+NULL
+0
+0
+NULL
+3
+6
+pos3
+
+# nullable argument column (NULL in -> NULL out, without calling the UDF)
+query T
+select x, posdouble(x), name(x) from nl order by x
+----
+-2
+NULL
+NULL
+3
+6
+pos3
+NULL
+NULL
+NULL
+
+query I
+select count(*) from nn where posdouble(x) is null
+----
+1
+
+# a sql.nullable value returned directly
+statement ok
+CREATE OR REPLACE FUNCTION lookup(x INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def lookup(x):
+    return sql.execute(sql.nullable(int), "SELECT v FROM kv WHERE k = PARAM(1)", x)
+$$ LANGUAGE hipy;
+
+# a sql.nullable value in one branch, a plain value / None in the others
+statement ok
+CREATE OR REPLACE FUNCTION lookup_or(x INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def lookup_or(x):
+    if x < 0:
+        return None
+    if x > 5:
+        return 42
+    return sql.execute(sql.nullable(int), "SELECT v FROM kv WHERE k = PARAM(1)", x)
+$$ LANGUAGE hipy;
+
+# k = 1: NULL value; k = 2: no row
+query T
+select x, lookup(x), lookup_or(x) from (values (-1), (0), (1), (2), (7)) as t(x) order by x
+----
+-1
+NULL
+NULL
+0
+10
+10
+1
+NULL
+NULL
+2
+NULL
+NULL
+7
+NULL
+42

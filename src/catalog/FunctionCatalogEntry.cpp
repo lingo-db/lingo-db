@@ -48,6 +48,7 @@ std::shared_ptr<FunctionCatalogEntry> PythonFunctionCatalogEntry::deserialize(li
 void HiPyFunctionCatalogEntry::serializeEntry(lingodb::utility::Serializer& serializer) const {
    FunctionCatalogEntry::serializeEntry(serializer);
    serializer.writeProperty(6, byteCode);
+   serializer.writeProperty(7, nullableResult);
 }
 std::shared_ptr<FunctionCatalogEntry> HiPyFunctionCatalogEntry::deserialize(lingodb::utility::Deserializer& deserializer) {
    auto name = deserializer.readProperty<std::string>(2);
@@ -55,7 +56,8 @@ std::shared_ptr<FunctionCatalogEntry> HiPyFunctionCatalogEntry::deserialize(ling
    auto returnType = deserializer.readProperty<Type>(4);
    auto argumentTypes = deserializer.readProperty<std::vector<Type>>(5);
    auto byteCode = deserializer.readProperty<std::string>(6);
-   return std::make_shared<HiPyFunctionCatalogEntry>(name, code, returnType, argumentTypes, byteCode);
+   auto nullableResult = deserializer.readProperty<bool>(7);
+   return std::make_shared<HiPyFunctionCatalogEntry>(name, code, returnType, argumentTypes, byteCode, nullableResult);
 }
 
 void TableFunctionInput::serialize(lingodb::utility::Serializer& serializer) const {

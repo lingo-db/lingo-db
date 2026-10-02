@@ -3166,7 +3166,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeFunctionExpressio
             boundArgs.emplace_back(bound);
          }
          resultType = entry.value()->getReturnType();
-         resultType.isNullable |= anyNullableArgs;
+         resultType.isNullable |= anyNullableArgs || entry.value()->hasNullableResult();
          boundFunctionExpression = drv.nf.node<ast::BoundFunctionExpression>(function->loc, function->type, resultType, function->functionName, scope, fName, function->distinct, boundArgs);
          boundFunctionExpression->udfFunction = entry.value();
       }

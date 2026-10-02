@@ -35,6 +35,8 @@ class FunctionCatalogEntry : public CatalogEntry {
    [[nodiscard]] std::string getCode() const { return code; }
    [[nodiscard]] Type getReturnType() const { return returnType; }
    [[nodiscard]] std::vector<Type> getArgumentTypes() const { return argumentTypes; }
+   // whether the function itself may return NULL (independent of NULL arguments)
+   [[nodiscard]] virtual bool hasNullableResult() const { return false; }
    void serializeEntry(lingodb::utility::Serializer& serializer) const override;
 
    static std::shared_ptr<FunctionCatalogEntry> deserialize(lingodb::utility::Deserializer& deserializer);
@@ -64,12 +66,15 @@ class PythonFunctionCatalogEntry : public FunctionCatalogEntry {
 // py_interp ops). `code` keeps the original source for introspection/replace.
 class HiPyFunctionCatalogEntry : public FunctionCatalogEntry {
    std::string byteCode;
+   // the compiled function returns a nullable value (e.g. `return None` in a branch)
+   bool nullableResult;
 
    public:
-   HiPyFunctionCatalogEntry(std::string name, std::string code, Type returnType, std::vector<Type> argumentTypes, std::string byteCode)
-      : FunctionCatalogEntry(CatalogEntryType::HIPY_FUNCTION_ENTRY, name, code, returnType, argumentTypes), byteCode(std::move(byteCode)) {}
+   HiPyFunctionCatalogEntry(std::string name, std::string code, Type returnType, std::vector<Type> argumentTypes, std::string byteCode, bool nullableResult)
+      : FunctionCatalogEntry(CatalogEntryType::HIPY_FUNCTION_ENTRY, name, code, returnType, argumentTypes), byteCode(std::move(byteCode)), nullableResult(nullableResult) {}
 
    [[nodiscard]] const std::string& getByteCode() const { return byteCode; }
+   [[nodiscard]] bool hasNullableResult() const override { return nullableResult; }
    void serializeEntry(lingodb::utility::Serializer& serializer) const override;
    static std::shared_ptr<FunctionCatalogEntry> deserialize(lingodb::utility::Deserializer& deserializer);
 };

@@ -178,7 +178,8 @@ std::string catalogTypeToPythonType(lingodb::catalog::Type type) {
 // nullable, `emitCall` runs directly. Otherwise the call is placed in the
 // else-branch of an scf.if: when any input is null the result is NULL, and the
 // UDF only ever sees unwrapped non-null values. `emitCall` receives the
-// non-null values and must return a non-nullable native result.
+// non-null values and returns the native result (nullable if the function
+// itself may return NULL).
 mlir::Value emitScalarUDFCallWithNullGuard(
    mlir::OpBuilder& builder, mlir::Location loc, mlir::ValueRange args,
    const std::function<mlir::Value(mlir::OpBuilder&, mlir::Location, mlir::ValueRange)>& emitCall) {
@@ -204,7 +205,7 @@ mlir::Value emitScalarUDFCallWithNullGuard(
          notNullValues.push_back(mlir::isa<db::NullableType>(v.getType()) ? builder.create<db::NullableGetVal>(loc, mlir::cast<db::NullableType>(v.getType()).getType(), v).getResult() : v);
       }
       mlir::Value nativeRes = emitCall(builder, loc, notNullValues);
-      mlir::Value resNullable = builder.create<db::AsNullableOp>(loc, db::NullableType::get(nativeRes.getType()), nativeRes);
+      mlir::Value resNullable = mlir::isa<db::NullableType>(nativeRes.getType()) ? nativeRes : builder.create<db::AsNullableOp>(loc, db::NullableType::get(nativeRes.getType()), nativeRes);
       resType = resNullable.getType();
       builder.create<mlir::scf::YieldOp>(loc, resNullable);
    }
@@ -463,7 +464,7 @@ std::shared_ptr<catalog::MLIRTableUDFImplementor> createPythonTableUDFImplemente
 }
 
 #ifdef MLIR_DISABLED
-std::string compileHiPyUDF(std::string, std::string, std::vector<catalog::Type>, catalog::Type, bool) {
+CompiledHiPyUDF compileHiPyUDF(std::string, std::string, std::vector<catalog::Type>, catalog::Type, bool) {
    throw std::runtime_error("hipy UDFs are not available in standalone-query builds (MLIR_DISABLED)");
 }
 #else
@@ -501,9 +502,9 @@ void registerHiPyDialects(mlir::DialectRegistry& registry) {
 }
 } // namespace
 
-std::string compileHiPyUDF(std::string functionName, std::string code,
-                           std::vector<catalog::Type> argumentTypes,
-                           catalog::Type /*returnType*/, bool fallback) {
+CompiledHiPyUDF compileHiPyUDF(std::string functionName, std::string code,
+                               std::vector<catalog::Type> argumentTypes,
+                               catalog::Type /*returnType*/, bool fallback) {
    std::string pythonFilePath, outputFilePath;
    try {
       // Write the UDF source to a temp file with a .py suffix (compile.py
@@ -588,6 +589,12 @@ std::string compileHiPyUDF(std::string functionName, std::string code,
       if (!module) {
          throw std::runtime_error("Could not parse MLIR produced by hipy compile.py.");
       }
+      // entry point: see HiPyFunctionImplementer::mangledName
+      auto entryFunc = module->lookupSymbol<mlir::func::FuncOp>(functionName + "_" + functionName);
+      if (!entryFunc || entryFunc.getNumResults() != 1) {
+         throw std::runtime_error("hipy compile.py produced no function '" + functionName + "_" + functionName + "' with one result.");
+      }
+      bool nullableResult = mlir::isa<dialect::db::NullableType>(entryFunc.getResultTypes()[0]);
       std::string byteCode;
       llvm::raw_string_ostream os(byteCode);
       if (mlir::writeBytecodeToFile(module->getOperation(), os).failed()) {
@@ -595,7 +602,7 @@ std::string compileHiPyUDF(std::string functionName, std::string code,
       }
       removeIfExists(pythonFilePath);
       removeIfExists(outputFilePath);
-      return byteCode;
+      return {byteCode, nullableResult};
    } catch (...) {
       removeIfExists(pythonFilePath);
       removeIfExists(outputFilePath);

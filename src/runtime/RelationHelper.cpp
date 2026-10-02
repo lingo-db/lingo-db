@@ -59,8 +59,8 @@ void RelationHelper::createScalarFunction(runtime::VarLen32 meta) {
       // hipy is compiled ahead of time: lower the Python source to a LingoDB
       // MLIR module now and store it as bytecode in the catalog entry.
       bool fallback = def.language == "hipy_fallback";
-      std::string byteCode = compiler::frontend::compileHiPyUDF(def.name, def.code, def.argumentTypes, def.returnType, fallback);
-      func = std::make_shared<lingodb::catalog::HiPyFunctionCatalogEntry>(def.name, def.code, def.returnType, def.argumentTypes, byteCode);
+      auto compiled = compiler::frontend::compileHiPyUDF(def.name, def.code, def.argumentTypes, def.returnType, fallback);
+      func = std::make_shared<lingodb::catalog::HiPyFunctionCatalogEntry>(def.name, def.code, def.returnType, def.argumentTypes, compiled.byteCode, compiled.nullableResult);
 #endif
    } else {
       throw std::runtime_error("unsupported function language: " + def.language);
