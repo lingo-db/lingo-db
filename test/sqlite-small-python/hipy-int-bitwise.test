@@ -1,0 +1,71 @@
+# hipy int bitwise operators & (__and__), ~ (__invert__), &= and the
+# lowest-set-bit idiom x & -x (used by the ByePy packing example), lowered to
+# arith.andi / arith.xori by hipy's MLIR backend. hipy ints are i64; the
+# expected values are CPython's (identical for these small values).
+
+statement ok
+create table xy(x int8, y int8);
+
+statement ok
+insert into xy values (12, 10), (-7, 3), (0, 5), (255, -16);
+
+statement ok
+CREATE OR REPLACE FUNCTION band(x INT8, y INT8) RETURNS INT8 AS $$
+import hipy
+@hipy.compiled_function
+def band(x, y):
+    return x & y
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION binv(x INT8) RETURNS INT8 AS $$
+import hipy
+@hipy.compiled_function
+def binv(x):
+    return ~x
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION lowbit(x INT8) RETURNS INT8 AS $$
+import hipy
+@hipy.compiled_function
+def lowbit(x):
+    return x & -x
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION clearbits(x INT8, y INT8) RETURNS INT8 AS $$
+import hipy
+@hipy.compiled_function
+def clearbits(x, y):
+    z = x
+    z &= ~y
+    return z
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION popcount(x INT8) RETURNS INT8 AS $$
+import hipy
+@hipy.compiled_function
+def popcount(x):
+    n = 0
+    while x != 0:
+        x &= x - 1
+        n += 1
+    return n
+$$ LANGUAGE hipy;
+
+query tsv rowsort 1
+select x, y, band(x, y), binv(x), lowbit(x), clearbits(x, y) from xy;
+----
+-7	3	1	6	1	-8
+0	5	0	-1	0	0
+12	10	8	-13	4	4
+255	-16	240	-256	1	15
+
+query tsv rowsort 2
+select x, popcount(x) from xy where x >= 0;
+----
+0	0
+12	2
+255	8
