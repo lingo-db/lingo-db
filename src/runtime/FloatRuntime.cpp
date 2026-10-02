@@ -1,6 +1,7 @@
 #include "lingodb/runtime/FloatRuntime.h"
 #include <cassert>
 #include <cmath>
+#include <random>
 
 double lingodb::runtime::FloatRuntime::sqrt(double x) {
    return ::sqrt(x);
@@ -34,6 +35,11 @@ double lingodb::runtime::FloatRuntime::pow(double x, double y) {
 }
 int64_t lingodb::runtime::FloatRuntime::ceil(double x) {
    return ::ceil(x);
+}
+double lingodb::runtime::FloatRuntime::random() {
+   thread_local std::mt19937_64 generator{std::random_device{}()};
+   // 53 random bits -> a double in [0, 1), like Python's random.random()
+   return static_cast<double>(generator() >> 11) * 0x1.0p-53;
 }
 
 namespace {

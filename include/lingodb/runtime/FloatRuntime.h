@@ -15,6 +15,8 @@ struct FloatRuntime {
    static double pow(double, double);
    static int64_t ceil(double);
    static double round(double, int64_t);
+   // uniformly distributed in [0, 1), from a per-thread generator (nondeterministic, not seedable)
+   static double random();
 };
 
 } // namespace lingodb::runtime

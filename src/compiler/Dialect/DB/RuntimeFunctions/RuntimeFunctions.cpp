@@ -385,6 +385,8 @@ std::shared_ptr<db::RuntimeFunctionRegistry> db::RuntimeFunctionRegistry::getBui
    builtinRegistry->add("ASin").matchesTypes({RuntimeFunction::float64}, resTypeIsF64).implementedAs(FloatRuntime::arcsin);
    builtinRegistry->add("ACos").matchesTypes({RuntimeFunction::float64}, resTypeIsF64).implementedAs(FloatRuntime::arccos);
    builtinRegistry->add("ATan2").matchesTypes({RuntimeFunction::float64, RuntimeFunction::float64}, resTypeIsF64).implementedAs(FloatRuntime::arctan2);
+   // nondeterministic: side effects keep every call (no CSE, no hoisting out of loops)
+   builtinRegistry->add("Random").hasSideEffects(true).matchesTypes({}, resTypeIsF64).implementedAs(FloatRuntime::random);
    builtinRegistry->add("Hash").matchesTypes({RuntimeFunction::anyType}, resTypeIsIndex).needsWrapping().implementedAs([](mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, const mlir::TypeConverter* typeConverter, mlir::Location loc) -> mlir::Value {
       return rewriter.create<lingodb::compiler::dialect::db::Hash>(loc, loweredArguments[0]);
    });

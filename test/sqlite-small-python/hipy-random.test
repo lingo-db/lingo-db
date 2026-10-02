@@ -1,0 +1,67 @@
+# hipy random.random(): nondeterministic, uniform in [0, 1) (LingoDB runtime
+# function Random, a per-thread generator). Only properties are checked. The
+# calls have side effects, so they are neither merged nor hoisted out of loops.
+# hipy's random module needs `import hipy.lib.random`; `from random import
+# random` imports a bound method (no __module__), which crashed hipy before.
+
+statement ok
+create table d(x int8 not null);
+
+statement ok
+insert into d values (0), (1), (2), (3), (4), (5), (6), (7), (8), (9);
+
+statement ok
+CREATE OR REPLACE FUNCTION rnd(x INT8) RETURNS FLOAT8 AS $$
+import hipy
+import hipy.lib.random
+import random
+@hipy.compiled_function
+def rnd(x):
+    return random.random()
+$$ LANGUAGE hipy;
+
+# two calls in one invocation give different values
+statement ok
+CREATE OR REPLACE FUNCTION twodiffer(x INT8) RETURNS BOOL AS $$
+import hipy
+import hipy.lib.random
+from random import random
+@hipy.compiled_function
+def twodiffer(x):
+    return random() != random()
+$$ LANGUAGE hipy;
+
+# a call in a loop gives a new value per iteration
+statement ok
+CREATE OR REPLACE FUNCTION changes(n INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.random
+from random import random
+@hipy.compiled_function
+def changes(n):
+    prev = random()
+    changed = 0
+    for i in range(n):
+        curr = random()
+        if curr != prev and curr >= 0.0 and curr < 1.0:
+            changed += 1
+        prev = curr
+    return changed
+$$ LANGUAGE hipy;
+
+# 1000 rows: all values in [0, 1), all different, mean about 0.5 (standard
+# deviation of the mean: 0.009)
+query tsv nosort 1
+select mn >= 0.0, mx < 1.0, cnt, av > 0.45, av < 0.55 from (select min(r) as mn, max(r) as mx, count(distinct r) as cnt, avg(r) as av from (select rnd(a.x * 100 + b.x * 10 + c.x) as r from d a, d b, d c) s) t;
+----
+t	t	1000	t	t
+
+query tsv nosort 2
+select count(*) from d where twodiffer(x);
+----
+10
+
+query tsv nosort 3
+select changes(100);
+----
+100
