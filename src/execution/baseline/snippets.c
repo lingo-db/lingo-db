@@ -18,6 +18,7 @@ uint32_t arith_lor_i32(uint32_t a, uint32_t b) { return (a | b); }
 uint32_t arith_lxor_i32(uint32_t a, uint32_t b) { return (a ^ b); }
 uint32_t arith_shl_i32(uint32_t a, uint32_t b) { return (a << b); }
 uint32_t arith_shr_u32(uint32_t a, uint32_t b) { return (a >> b); }
+int32_t arith_shr_i32(int32_t a, uint32_t b) { return (a >> b); }
 uint32_t arith_minui_i32(uint32_t lhs, uint32_t rhs) { return lhs < rhs ? lhs : rhs; }
 int32_t arith_minsi_i32(int32_t lhs, int32_t rhs) { return lhs < rhs ? lhs : rhs; }
 uint32_t arith_maxui_i32(uint32_t lhs, uint32_t rhs) { return lhs > rhs ? lhs : rhs; }
@@ -35,6 +36,7 @@ uint64_t arith_lor_i64(uint64_t a, uint64_t b) { return (a | b); }
 uint64_t arith_lxor_i64(uint64_t a, uint64_t b) { return (a ^ b); }
 uint64_t arith_shl_i64(uint64_t a, uint64_t b) { return (a << b); }
 uint64_t arith_shr_u64(uint64_t a, uint64_t b) { return (a >> b); }
+int64_t arith_shr_i64(int64_t a, uint64_t b) { return (a >> b); }
 uint64_t arith_minui_i64(uint64_t lhs, uint64_t rhs) { return lhs < rhs ? lhs : rhs; }
 int64_t arith_minsi_i64(int64_t lhs, int64_t rhs) { return lhs < rhs ? lhs : rhs; }
 uint64_t arith_maxui_i64(uint64_t lhs, uint64_t rhs) { return lhs > rhs ? lhs : rhs; }

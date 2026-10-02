@@ -479,7 +479,7 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
          auto [res_vr, res_pr] = this->result_ref_single(op->getResult(0));
 
          // encode functions for 32/64 bit operations
-         static llvm::SmallDenseMap<llvm::StringRef, std::array<bool (Derived::*)(GenericValuePart&&, GenericValuePart&&, ValuePart&&), 2>, 16> encoder_lookup_int;
+         static llvm::SmallDenseMap<llvm::StringRef, std::array<bool (Derived::*)(GenericValuePart&&, GenericValuePart&&, ValuePart&&), 2>, 32> encoder_lookup_int;
          static llvm::SmallDenseMap<llvm::StringRef, std::array<bool (Derived::*)(GenericValuePart&&, GenericValuePart&&, ValuePart&&), 2>, 4> encoder_lookup_float;
 
          auto encoder_call = [&](auto encoder_table) {
@@ -519,6 +519,7 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
                   {"arith.xori", {&Derived::encode_arith_lxor_i32, &Derived::encode_arith_lxor_i64}},
                   {"arith.andi", {&Derived::encode_arith_land_i32, &Derived::encode_arith_land_i64}},
                   {"arith.shrui", {&Derived::encode_arith_shr_u32, &Derived::encode_arith_shr_u64}},
+                  {"arith.shrsi", {&Derived::encode_arith_shr_i32, &Derived::encode_arith_shr_i64}},
                   {"arith.shli", {&Derived::encode_arith_shl_i32, &Derived::encode_arith_shl_i64}},
                   {"arith.minsi", {&Derived::encode_arith_minsi_i32, &Derived::encode_arith_minsi_i64}},
                   {"arith.maxsi", {&Derived::encode_arith_maxsi_i32, &Derived::encode_arith_maxsi_i64}},
@@ -1702,7 +1703,7 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
          .Case<mlir::arith::AddIOp, mlir::arith::SubIOp, mlir::arith::MulIOp, mlir::arith::DivSIOp,
                mlir::arith::DivUIOp, mlir::arith::RemSIOp, mlir::arith::RemUIOp,
                mlir::arith::AndIOp, mlir::arith::OrIOp, mlir::arith::XOrIOp, mlir::arith::ShLIOp,
-               mlir::arith::ShRUIOp, mlir::arith::AddFOp, mlir::arith::SubFOp, mlir::arith::MulFOp,
+               mlir::arith::ShRUIOp, mlir::arith::ShRSIOp, mlir::arith::AddFOp, mlir::arith::SubFOp, mlir::arith::MulFOp,
                mlir::arith::DivFOp, mlir::arith::MaxSIOp, mlir::arith::MinSIOp, mlir::arith::MaxUIOp,
                mlir::arith::MinUIOp>([&](auto op) {
             return compile_arith_binary_op(op);

@@ -46,5 +46,13 @@ select s from bits where 6 & (1 << s - 1) <> 0;
 ----
 2
 
+# >> is an arithmetic (sign-propagating) shift, on int4 and int8 at runtime
+# (not constant-folded): the baseline backend needs arith.shrsi for both widths
+query tsv rowsort 7
+select b, b >> s, (0 - b) >> s, (0 - a) >> s from bits where b is not null;
+----
+1	0	-1	0
+3	1	-2	-3
+
 statement frontend-error: Operator & expects integer operands
 select 1.5 & 1;
