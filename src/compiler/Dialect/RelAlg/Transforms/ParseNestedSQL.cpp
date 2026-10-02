@@ -162,6 +162,13 @@ class ParseNestedSQL : public mlir::PassWrapper<ParseNestedSQL, mlir::OperationP
       auto loc = op.getLoc();
       mlir::Type resultType = op.getResult().getType();
       auto tupleType = mlir::dyn_cast<mlir::TupleType>(resultType);
+      // sql.nullable(sql.row(...)): NULL instead of a runtime error if there is no row
+      bool optionalRow = false;
+      if (auto nullableType = mlir::dyn_cast<db::NullableType>(resultType)) {
+         if ((tupleType = mlir::dyn_cast<mlir::TupleType>(nullableType.getType()))) {
+            optionalRow = true;
+         }
+      }
       if (!tupleType) {
          // getscalar yields NULL for "no row" as well, so it is always
          // nullable; a non-nullable result type gets a runtime error instead
@@ -185,7 +192,7 @@ class ParseNestedSQL : public mlir::PassWrapper<ParseNestedSQL, mlir::OperationP
       }
       // Row-valued query: the values of its first row, one per declared tuple
       // element (cast to the declared element types); a runtime error if it
-      // yields no row, or NULL for a non-nullable element.
+      // yields no row (unless optionalRow), or NULL for a non-nullable element.
       auto materializeOp = translate(op, builder);
       if (!materializeOp) return {};
       if (!checkColumnCount(op, materializeOp, tupleType.size())) return {};
@@ -219,6 +226,7 @@ class ParseNestedSQL : public mlir::PassWrapper<ParseNestedSQL, mlir::OperationP
       materializeOp->erase();
       llvm::SmallVector<mlir::Attribute> colAttrs(cols.begin(), cols.end());
       mlir::Type rowTupleType = mlir::TupleType::get(&getContext(), rowTypes);
+      if (optionalRow) rowTupleType = db::NullableType::get(&getContext(), rowTupleType);
       mlir::Value row = builder.create<relalg::GetFirstRowOp>(loc, rowTupleType, rel, builder.getArrayAttr(colAttrs));
       if (!needsCheck) return row;
       auto checkRow = [&](mlir::OpBuilder& b, mlir::Value row) -> mlir::Value {
@@ -229,7 +237,16 @@ class ParseNestedSQL : public mlir::PassWrapper<ParseNestedSQL, mlir::OperationP
          }
          return b.create<util::PackOp>(loc, tupleType, checked);
       };
-      return checkRow(builder, row);
+      if (!optionalRow) return checkRow(builder, row);
+      mlir::Value isNull = builder.create<db::IsNullOp>(loc, row);
+      auto ifOp = builder.create<mlir::scf::IfOp>(
+         loc, isNull, [&](mlir::OpBuilder& b, mlir::Location loc) {
+            mlir::Value null = b.create<db::NullOp>(loc, resultType);
+            b.create<mlir::scf::YieldOp>(loc, null); }, [&](mlir::OpBuilder& b, mlir::Location loc) {
+            mlir::Value value = b.create<db::NullableGetVal>(loc, getBaseType(row.getType()), row);
+            mlir::Value checked = b.create<db::AsNullableOp>(loc, resultType, checkRow(b, value));
+            b.create<mlir::scf::YieldOp>(loc, checked); });
+      return ifOp.getResult(0);
    }
 
    public:

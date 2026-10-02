@@ -517,14 +517,21 @@ def GetFirstRowOp : RelAlg_Op<"getfirstrow", []> {
     let description = [{
         Returns the values of the columns `cols` of the first row of `rel`
         (one tuple element per column; for more than one row, an arbitrary
-        one), and raises a runtime error if `rel` is empty. Used for
-        row-valued nested SQL (e.g. hipy's sql.row(...)). Like a subquery
-        inside a loop, it is evaluated in place: the subtree it consumes is
-        neither extracted nor decorrelated.
+        one), and raises a runtime error if `rel` is empty. With a nullable
+        tuple as result type (!db.nullable<tuple<...>>), an empty `rel`
+        yields NULL instead. Used for row-valued nested SQL (e.g. hipy's
+        sql.row(...) / sql.nullable(sql.row(...))). Like a subquery inside a
+        loop, it is evaluated in place: the subtree it consumes is neither
+        extracted nor decorrelated.
     }];
     let arguments = (ins TupleStream:$rel, ArrayAttr:$cols);
-    let results = (outs TupleOf<[AnyType]>:$res);
+    let results = (outs AnyType:$res);
     let assemblyFormat = [{ $rel custom<CustRefArr>($cols) `:` type($res) attr-dict }];
+    let hasVerifier = 1;
+    let extraClassDeclaration = [{
+        // the row type (the result type without nullability)
+        mlir::TupleType getRowType();
+    }];
 }
 
 def GetListOp : RelAlg_Op<"getlist", [Pure]> {

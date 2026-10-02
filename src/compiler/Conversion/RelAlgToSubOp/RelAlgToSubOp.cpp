@@ -3219,7 +3219,9 @@ class GetFirstRowLowering : public OpConversionPattern<relalg::GetFirstRowOp> {
    LogicalResult matchAndRewrite(relalg::GetFirstRowOp getFirstRowOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto loc = getFirstRowOp->getLoc();
       auto* ctxt = rewriter.getContext();
-      auto resultType = mlir::cast<mlir::TupleType>(getFirstRowOp.getType());
+      auto resultType = getFirstRowOp.getRowType();
+      // a nullable result: NULL instead of a runtime error if there is no row
+      bool optional = mlir::isa<db::NullableType>(getFirstRowOp.getType());
       auto foundMember = createMember(ctxt, "found", rewriter.getI1Type());
       llvm::SmallVector<Member> members{foundMember};
       RefMappingCollector scatterMapping;
@@ -3253,6 +3255,19 @@ class GetFirstRowLowering : public OpConversionPattern<relalg::GetFirstRowOp> {
       nativeTypes.append(resultType.getTypes().begin(), resultType.getTypes().end());
       mlir::Value native = rewriter.create<subop::StateToNativeOp>(loc, mlir::TupleType::get(ctxt, nativeTypes), createOp.getRes());
       auto unpacked = rewriter.create<util::UnPackOp>(loc, native).getResults();
+      llvm::SmallVector<mlir::Value> values(unpacked.begin() + 1, unpacked.end());
+      if (optional) {
+         auto nullableType = getFirstRowOp.getType();
+         auto ifOp = rewriter.create<mlir::scf::IfOp>(
+            loc, unpacked[0], [&](mlir::OpBuilder& b, mlir::Location loc) {
+               mlir::Value row = b.create<util::PackOp>(loc, resultType, values);
+               mlir::Value nullableRow = b.create<db::AsNullableOp>(loc, nullableType, row);
+               b.create<mlir::scf::YieldOp>(loc, nullableRow); }, [&](mlir::OpBuilder& b, mlir::Location loc) {
+               mlir::Value null = b.create<db::NullOp>(loc, nullableType);
+               b.create<mlir::scf::YieldOp>(loc, null); });
+         rewriter.replaceOp(getFirstRowOp, ifOp.getResult(0));
+         return success();
+      }
       mlir::Value trueValue = rewriter.create<mlir::arith::ConstantIntOp>(loc, 1, rewriter.getI1Type());
       mlir::Value notFound = rewriter.create<mlir::arith::XOrIOp>(loc, unpacked[0], trueValue);
       rewriter.create<mlir::scf::IfOp>(loc, notFound, [&](mlir::OpBuilder& b, mlir::Location loc) {
@@ -3260,7 +3275,6 @@ class GetFirstRowLowering : public OpConversionPattern<relalg::GetFirstRowOp> {
          lingodb::compiler::runtime::ExecutionContext::raiseError(b, loc)({message});
          b.create<mlir::scf::YieldOp>(loc);
       });
-      llvm::SmallVector<mlir::Value> values(unpacked.begin() + 1, unpacked.end());
       rewriter.replaceOpWithNewOp<util::PackOp>(getFirstRowOp, resultType, values);
       return success();
    }

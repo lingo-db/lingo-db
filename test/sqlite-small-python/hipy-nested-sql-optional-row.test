@@ -1,0 +1,82 @@
+# Optional rows (ByePy savings H4): sql.execute(sql.nullable(sql.row(...)),
+# ...) is NULL if the query yields no row (instead of a runtime error, as for
+# sql.row(...)); `is None` / get_value() as for other nullables. Before:
+# "failed to legalize operation 'db.cast'".
+
+statement ok
+create table kvs(k int8 not null, v int8, s text);
+
+statement ok
+insert into kvs values (0, 10, 'a'), (1, NULL, 'b'), (2, 12, NULL);
+
+# straight-line, as in savings (`order = SQL(...); if order is None: ...`)
+statement ok
+CREATE OR REPLACE FUNCTION opt(x INT8) RETURNS TEXT AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def opt(x):
+    row = sql.execute(sql.nullable(sql.row(int, sql.nullable(int), sql.nullable(str))), "SELECT * FROM kvs WHERE k = PARAM(1)", x)
+    if row is None:
+        return "none"
+    k, v, s = row.get_value()
+    return str(k) + ":" + str(v.get_value_or_default(-1)) + ":" + s.get_value_or_default("-")
+$$ LANGUAGE hipy;
+
+# inside a loop, with casts (int4 count -> int, decimal -> float)
+statement ok
+CREATE OR REPLACE FUNCTION optloop(x INT8) RETURNS TEXT AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def optloop(x):
+    res = ""
+    for i in range(x):
+        row = sql.execute(sql.nullable(sql.row(int, float)), "SELECT k, cast(k AS decimal(5, 2)) / 2 FROM kvs WHERE k = PARAM(1)", i)
+        if row is not None:
+            k, half = row.get_value()
+            res = res + str(k) + "=" + str(round(half * 10.0)) + ";"
+        else:
+            res = res + "none;"
+    return res
+$$ LANGUAGE hipy;
+
+query T
+select x, opt(x) from (values (0), (1), (2), (5)) as t(x) order by x
+----
+0
+0:10:a
+1
+1:-1:b
+2
+2:12:-
+5
+none
+
+query T
+select optloop(4)
+----
+0=0;1=5;2=10;none;
+
+# a non-nullable element with a NULL value is still a runtime error
+statement ok
+CREATE OR REPLACE FUNCTION optstrict(x INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def optstrict(x):
+    row = sql.execute(sql.nullable(sql.row(int, int)), "SELECT k, v FROM kvs WHERE k = PARAM(1)", x)
+    if row is None:
+        return -1
+    k, v = row.get_value()
+    return k + v
+$$ LANGUAGE hipy;
+
+query I
+select optstrict(0), optstrict(7)
+----
+10
+-1
+
+statement runtime-error nested SQL query returned NULL for a non-nullable result type
+select optstrict(1)

@@ -30,9 +30,26 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
       return false;
    }
 
+   // A nullable tuple (e.g. an optional row of nested SQL) is managed via its
+   // elements, like a tuple: emits `if (!isnull(val)) { fn(value, terminator) }`
+   // before `insertBeforeOp` and returns true, or returns false for other types.
+   bool forNullableTuple(mlir::Value val, mlir::Operation* insertBeforeOp, const std::function<void(mlir::Value, mlir::Operation*)>& fn) {
+      auto nullableType = mlir::dyn_cast<db::NullableType>(val.getType());
+      if (!nullableType || !mlir::isa<mlir::TupleType>(nullableType.getType())) return false;
+      mlir::OpBuilder builder(insertBeforeOp);
+      auto loc = insertBeforeOp->getLoc();
+      mlir::Value isNull = builder.create<db::IsNullOp>(loc, val);
+      auto ifOp = builder.create<mlir::scf::IfOp>(loc, mlir::TypeRange{}, isNull, /*withElseRegion=*/true);
+      mlir::OpBuilder elseBuilder = ifOp.getElseBodyBuilder();
+      mlir::Value tuple = elseBuilder.create<db::NullableGetVal>(loc, nullableType.getType(), val);
+      fn(tuple, ifOp.elseBlock()->getTerminator());
+      return true;
+   }
+
    void addUse(mlir::Value val, mlir::Operation* insertBeforeOp, llvm::DenseSet<mlir::Value>& notCounted) {
       if (notCounted.contains(val)) return;
       if (!typeNeedsManagement(val.getType())) return;
+      if (forNullableTuple(val, insertBeforeOp, [&](mlir::Value tuple, mlir::Operation* insertBefore) { addUse(tuple, insertBefore, notCounted); })) return;
       mlir::OpBuilder builder(insertBeforeOp);
       if (mlir::isa<mlir::TupleType>(val.getType())) {
          llvm::SmallVector<mlir::Value> unpacked;
@@ -48,6 +65,7 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
    void addUseAfter(mlir::Value val, mlir::Operation* insertAfterOp, llvm::DenseSet<mlir::Value>& notCounted) {
       if (notCounted.contains(val)) return;
       if (!typeNeedsManagement(val.getType())) return;
+      if (forNullableTuple(val, insertAfterOp->getNextNode(), [&](mlir::Value tuple, mlir::Operation* insertBefore) { addUse(tuple, insertBefore, notCounted); })) return;
       mlir::OpBuilder builder(insertAfterOp->getContext());
       builder.setInsertionPointAfter(insertAfterOp);
       if (mlir::isa<mlir::TupleType>(val.getType())) {
@@ -64,6 +82,7 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
 
    void cleanupUse(mlir::Operation* insertBeforeOp, mlir::Value val, llvm::DenseSet<mlir::Value>& notCounted) {
       if (notCounted.contains(val)) return;
+      if (typeNeedsManagement(val.getType()) && forNullableTuple(val, insertBeforeOp, [&](mlir::Value tuple, mlir::Operation* insertBefore) { cleanupUse(insertBefore, tuple, notCounted); })) return;
       if (auto tupleType = mlir::dyn_cast<mlir::TupleType>(val.getType())) {
          mlir::OpBuilder builder(insertBeforeOp);
          llvm::SmallVector<mlir::Value> unpacked;

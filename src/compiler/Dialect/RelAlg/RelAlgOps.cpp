@@ -335,6 +335,19 @@ void relalg::BaseTableOp::print(OpAsmPrinter& p) {
    p << utility::serializeToHexString(getRestriction()) << "\"";
 }
 
+mlir::TupleType relalg::GetFirstRowOp::getRowType() {
+   return mlir::cast<mlir::TupleType>(getBaseType(getType()));
+}
+::mlir::LogicalResult relalg::GetFirstRowOp::verify() {
+   auto rowType = mlir::dyn_cast<mlir::TupleType>(getBaseType(getType()));
+   if (!rowType) {
+      return emitOpError("result must be a tuple or a nullable tuple");
+   }
+   if (rowType.size() != getCols().size()) {
+      return emitOpError("result tuple must have one element per column");
+   }
+   return mlir::success();
+}
 ::mlir::LogicalResult relalg::MapOp::verify() {
    if (getPredicate().empty() || getPredicate().front().empty()) {
       emitError("mapOp without body");
