@@ -1,0 +1,132 @@
+# ByePy "TPC-H Packing" example (vendored/byepy-examples/packing/packing.py,
+# see docs/byepy-packing.md), adapted to LANGUAGE hipy: greedily bin-packs the
+# lineitems of an order into containers of a given capacity (part size
+# p_size). Lineitem sets are bit sets (int: & ~ -x << &=); per container, one
+# nested SQL query (a lineitem-part join with a bit test, SQL & and <<) per
+# subset of the remaining lineitems, inside two nested loops. The result
+# (list[list[int]]) is returned as its Python repr (RETURNS TEXT). The local
+# `pack` of the original is renamed to `current_pack` (hipy resolves a local
+# shadowing the function's own name to the function).
+# Data: the TPC-H sf0.01 rows of orders 1-7, 32-36, 128 and 228 (only the
+# columns the UDF uses, NOT NULL as in TPC-H); expected values from the
+# original algorithm in CPython (docs/byepy-packing/reference.py).
+# Nested SQL strings stay on one line each.
+
+statement ok
+create table orders(o_orderkey integer not null, o_orderstatus char(1) not null);
+
+statement ok
+insert into orders values (1,'O'), (2,'O'), (3,'F'), (4,'O'), (5,'F'), (6,'F'), (7,'O'), (32,'O'), (33,'F'), (34,'O'), (35,'O'), (36,'O'), (128,'F'), (228,'F');
+
+statement ok
+create table lineitem(l_orderkey integer not null, l_partkey integer not null, l_linenumber integer not null);
+
+statement ok
+insert into lineitem values (1,1552,1), (1,674,2), (1,637,3), (1,22,4), (1,241,5), (1,157,6), (2,1062,1), (3,43,1), (3,191,2), (3,1285,3), (3,294,4), (3,1831,5), (3,622,6), (4,881,1), (5,1086,1), (5,1240,2), (5,376,3), (6,1397,1), (7,1821,1), (7,1453,2), (7,948,3), (7,1631,4), (7,1519,5), (7,793,6), (7,1573,7), (32,828,1), (32,1980,2), (32,442,3), (32,28,4), (32,859,5), (32,117,6), (33,614,1), (33,606,2), (33,1375,3), (33,340,4), (34,884,1), (34,895,2), (34,1696,3), (35,5,1), (35,1620,2), (35,1209,3), (35,852,4), (35,1200,5), (35,308,6), (36,1198,1), (128,1069,1), (228,41,1);
+
+statement ok
+create table part(p_partkey integer not null, p_size integer not null);
+
+statement ok
+insert into part values (5,15), (22,19), (28,19), (41,7), (43,5), (117,25), (157,26), (191,36), (241,3), (294,35), (308,40), (340,3), (376,44), (442,22), (606,36), (614,6), (622,19), (637,48), (674,5), (793,28), (828,11), (852,47), (859,10), (881,12), (884,38), (895,17), (948,31), (1062,12), (1069,1), (1086,49), (1198,26), (1200,42), (1209,32), (1240,19), (1285,36), (1375,35), (1397,10), (1453,16), (1519,4), (1552,10), (1573,36), (1620,42), (1631,49), (1696,46), (1821,39), (1831,37), (1980,13);
+
+statement ok
+CREATE OR REPLACE FUNCTION pack(orderkey INT8, capacity INT8) RETURNS TEXT AS $$
+import hipy
+import hipy.lib.sql as sql
+
+
+@hipy.compiled_function
+def pack(orderkey, capacity):
+    # # of lineitems in order
+    n = sql.execute(sql.nullable(int), "SELECT COUNT(*) FROM lineitem AS l WHERE l.l_orderkey = PARAM(1)", orderkey).get_value()
+
+    if (
+        # order key not found?
+        n == 0
+        # container capacity sufficient to hold largest part?
+        or capacity < sql.execute(sql.nullable(int), "SELECT MAX(p.p_size) FROM lineitem AS l, part AS p WHERE l.l_orderkey = PARAM(1) AND l.l_partkey = p.p_partkey", orderkey).get_value()
+    ):
+        return "[]"
+
+    # initialize empty pack of packs
+    packs = []
+    # create full set of linenumbers {1,2,...,n}
+    items = (1 << n) - 1
+
+    # as long as there are still lineitems to pack...
+    while items != 0:
+        max_size = 0
+        max_subset = 0  # empty set
+
+        subset = items & -items
+
+        while True:
+            # find size of current lineitem subset
+            size = sql.execute(sql.nullable(int), "SELECT SUM(p.p_size) FROM lineitem AS l, part AS p WHERE l.l_orderkey = PARAM(1) AND PARAM(2) & (1 << l.l_linenumber - 1) <> 0 AND l.l_partkey = p.p_partkey", orderkey, subset).get_value()
+
+            if size <= capacity and size > max_size:
+                max_size = size
+                max_subset = subset
+
+            # exit if iterated through all lineitem subsets ...
+            if subset == items:
+                break
+            else:
+                # ... else, consider next lineitem subset
+                subset = items & (subset - items)
+
+        # convert bit set max_subset into set of linenumbers
+        current_pack = []
+        for linenumber in range(n):
+            current_pack.append(
+                linenumber + 1
+                if max_subset & (1 << linenumber) != 0
+                else 0
+            )
+
+        # add pack to current packing
+        packs.append(current_pack)
+
+        # we've selected lineitems in set max_subset,
+        # update items to remove these lineitems
+        items &= ~max_subset
+
+    return repr(packs)
+$$ LANGUAGE hipy;
+
+# the original driver: all finished orders, capacity 10 (3 subset queries)
+query tsv rowsort 1
+select o_orderkey, pack(o_orderkey, 10) from orders where o_orderstatus = 'F';
+----
+128	[[1]]
+228	[[1]]
+3	[]
+33	[]
+5	[]
+6	[[1]]
+
+# capacity 50: every order fits (567 subset queries)
+query tsv rowsort 2
+select o_orderkey, pack(o_orderkey, 50) from orders;
+----
+1	[[0, 2, 0, 4, 0, 6], [0, 0, 3, 0, 0, 0], [1, 0, 0, 0, 5, 0]]
+128	[[1]]
+2	[[1]]
+228	[[1]]
+3	[[1, 0, 0, 0, 5, 0], [0, 2, 0, 0, 0, 0], [0, 0, 3, 0, 0, 0], [0, 0, 0, 4, 0, 0], [0, 0, 0, 0, 0, 6]]
+32	[[1, 2, 0, 0, 0, 6], [0, 0, 3, 4, 0, 0], [0, 0, 0, 0, 5, 0]]
+33	[[1, 2, 0, 4], [0, 0, 3, 0]]
+34	[[0, 0, 3], [1, 0, 0], [0, 2, 0]]
+35	[[1, 0, 3, 0, 0, 0], [0, 0, 0, 4, 0, 0], [0, 2, 0, 0, 0, 0], [0, 0, 0, 0, 5, 0], [0, 0, 0, 0, 0, 6]]
+36	[[1]]
+4	[[1]]
+5	[[1, 0, 0], [0, 0, 3], [0, 2, 0]]
+6	[[1]]
+7	[[0, 0, 0, 4, 0, 0, 0], [0, 2, 0, 0, 5, 6, 0], [1, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 7], [0, 0, 3, 0, 0, 0, 0]]
+
+# unknown order key
+query tsv rowsort 3
+select pack(8, 10);
+----
+[]
