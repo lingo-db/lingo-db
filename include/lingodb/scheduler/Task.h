@@ -13,6 +13,11 @@ class Task {
       return !workExhausted.load();
    }
 
+   // stop handing out further work (e.g. after performWork threw)
+   void stopWork() {
+      workExhausted.store(true);
+   }
+
    virtual bool allocateWork() = 0;
    virtual void performWork() = 0;
    //e.g., to prepare environment

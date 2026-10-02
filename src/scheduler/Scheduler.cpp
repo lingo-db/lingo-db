@@ -4,6 +4,7 @@
 #include <condition_variable>
 #include <csignal>
 #include <deque>
+#include <exception>
 #include <iostream>
 #include <memory>
 #include <thread>
@@ -301,6 +302,26 @@ struct TaskWrapper {
    //this is only to be called after the task is done, returned to the scheduler from all workers, and is not anymore used in the scheduler either
    std::function<void()> onFinalize = nullptr;
    std::mutex finalizeMutex = {};
+   // first exception thrown by performWork (on any worker); rethrown in the
+   // thread/fiber that awaits the task (awaitEntryTask / awaitChildTask)
+   std::exception_ptr exception = nullptr;
+   std::mutex exceptionMutex = {};
+
+   void setException(std::exception_ptr e) {
+      {
+         std::lock_guard<std::mutex> lock(exceptionMutex);
+         if (!exception) exception = std::move(e);
+      }
+      task->stopWork();
+   }
+   void rethrowException() {
+      std::exception_ptr e;
+      {
+         std::lock_guard<std::mutex> lock(exceptionMutex);
+         e = exception;
+      }
+      if (e) std::rethrow_exception(e);
+   }
 
    bool done() {
       return !task->hasWork() && nonCompletedFibers.load() == 0;
@@ -637,6 +658,7 @@ class Worker {
       }
       toYield->yield();
       assert(taskWrapper->finalized);
+      taskWrapper->rethrowException();
    }
 
    void work() {
@@ -696,7 +718,13 @@ class Worker {
                assert(currentFiber);
                // Step 3. consume reserved work
                auto fiberDone = currentFiber->run(this, currTask, [&] {
-                  currTask->task->performWork();
+                  // Exceptions must not escape the fiber (its entry function
+                  // is noexcept): hand them to whoever awaits the task.
+                  try {
+                     currTask->task->performWork();
+                  } catch (...) {
+                     currTask->setException(std::current_exception());
+                  }
                });
                if (fiberDone) {
                   this->startWaitTime = TimePoint::min();
@@ -919,6 +947,7 @@ void awaitEntryTask(std::unique_ptr<Task> task) {
    cvFinished.wait(lk, [&]() { return finished; });
    // taskWrapper will be automatically destroyed when it goes out of scope
    lk.release();
+   taskWrapper->rethrowException();
 }
 void awaitChildTask(std::unique_ptr<Task> task) {
    currentWorker->awaitChildTask(std::move(task));

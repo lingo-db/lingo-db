@@ -268,6 +268,7 @@ class DefaultQueryExecuter : public QueryExecuter {
                (P == Error::optimizer)      ? "OPTIMIZER" :
                (P == Error::tuple_tracking) ? "TUPLE_TRACKING" :
                (P == Error::lowering)       ? "LOWERING" :
+               (P == Error::runtime)        ? "RUNTIME" :
                                               "BACKEND";
             std::cerr << phaseName << ": " << e.getMessage() << std::endl;
             exit(1);
@@ -401,10 +402,21 @@ class DefaultQueryExecuter : public QueryExecuter {
       if (queryExecutionConfig->executionBackend) {
          auto& executionBackend = *queryExecutionConfig->executionBackend;
          executionBackend.setSerializationState(serializationState);
-         executionBackend.execute(moduleOp, executionContext.get());
+         // Exceptions thrown by runtime functions unwind through the compiled
+         // query (and through awaited child tasks, see the scheduler) up to
+         // here: report them as a regular (runtime) error.
+         Error runtimeError;
+         try {
+            executionBackend.execute(moduleOp, executionContext.get());
+         } catch (const std::exception& e) {
+            runtimeError.emit() << e.what();
+         } catch (...) {
+            runtimeError.emit() << "unknown exception during query execution";
+         }
 #ifdef TRACER
          utility::Tracer::dump();
 #endif
+         if (handleError<Error::ErrorPhase::runtime>(runtimeError)) return;
          if (handleError<Error::ErrorPhase::backend>(executionBackend.getError())) return;
          handleTiming(executionBackend.getTiming());
          if (queryExecutionConfig->resultProcessor) {

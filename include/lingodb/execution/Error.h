@@ -11,6 +11,9 @@ class Error {
       tuple_tracking,
       lowering,
       backend,
+      // an exception thrown while executing the compiled query (e.g. by a
+      // runtime function such as the hipy UDF compiler for CREATE FUNCTION)
+      runtime,
       unknown
    };
 

@@ -147,37 +147,46 @@ PyObject* PythonRuntime::call0(PyObject* callable) {
    }
    return res;
 }
+// A NULL result means the Python callable raised: turn it into a C++
+// exception (reported as a runtime error of the query) instead of handing NULL
+// to the generated code.
+static PyObject* checkCallResult(PyObject* res) {
+   if (!res) {
+      throw_python_error();
+   }
+   return res;
+}
 PyObject* PythonRuntime::call1(PyObject* callable, PyObject* arg1) {
    std::array<PyObject*, 1> args = {arg1};
-   return PyObject_Vectorcall(callable, args.data(), 1, NULL);
+   return checkCallResult(PyObject_Vectorcall(callable, args.data(), 1, NULL));
 }
 PyObject* PythonRuntime::call2(PyObject* callable, PyObject* arg1, PyObject* arg2) {
    std::array<PyObject*, 2> args = {arg1, arg2};
-   return PyObject_Vectorcall(callable, args.data(), 2, NULL);
+   return checkCallResult(PyObject_Vectorcall(callable, args.data(), 2, NULL));
 }
 PyObject* PythonRuntime::call3(PyObject* callable, PyObject* arg1, PyObject* arg2, PyObject* arg3) {
-   return PyObject_CallFunctionObjArgs(callable, arg1, arg2, arg3, NULL);
+   return checkCallResult(PyObject_CallFunctionObjArgs(callable, arg1, arg2, arg3, NULL));
 }
 PyObject* PythonRuntime::call4(PyObject* callable, PyObject* arg1, PyObject* arg2, PyObject* arg3, PyObject* arg4) {
-   return PyObject_CallFunctionObjArgs(callable, arg1, arg2, arg3, arg4, NULL);
+   return checkCallResult(PyObject_CallFunctionObjArgs(callable, arg1, arg2, arg3, arg4, NULL));
 }
 PyObject* PythonRuntime::call5(PyObject* callable, PyObject* arg1, PyObject* arg2, PyObject* arg3, PyObject* arg4, PyObject* arg5) {
-   return PyObject_CallFunctionObjArgs(callable, arg1, arg2, arg3, arg4, arg5, NULL);
+   return checkCallResult(PyObject_CallFunctionObjArgs(callable, arg1, arg2, arg3, arg4, arg5, NULL));
 }
 PyObject* PythonRuntime::call6(PyObject* callable, PyObject* arg1, PyObject* arg2, PyObject* arg3, PyObject* arg4, PyObject* arg5, PyObject* arg6) {
-   return PyObject_CallFunctionObjArgs(callable, arg1, arg2, arg3, arg4, arg5, arg6, NULL);
+   return checkCallResult(PyObject_CallFunctionObjArgs(callable, arg1, arg2, arg3, arg4, arg5, arg6, NULL));
 }
 PyObject* PythonRuntime::call7(PyObject* callable, PyObject* arg1, PyObject* arg2, PyObject* arg3, PyObject* arg4, PyObject* arg5, PyObject* arg6, PyObject* arg7) {
-   return PyObject_CallFunctionObjArgs(callable, arg1, arg2, arg3, arg4, arg5, arg6, arg7, NULL);
+   return checkCallResult(PyObject_CallFunctionObjArgs(callable, arg1, arg2, arg3, arg4, arg5, arg6, arg7, NULL));
 }
 PyObject* PythonRuntime::call8(PyObject* callable, PyObject* arg1, PyObject* arg2, PyObject* arg3, PyObject* arg4, PyObject* arg5, PyObject* arg6, PyObject* arg7, PyObject* arg8) {
-   return PyObject_CallFunctionObjArgs(callable, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, NULL);
+   return checkCallResult(PyObject_CallFunctionObjArgs(callable, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, NULL));
 }
 PyObject* PythonRuntime::call9(PyObject* callable, PyObject* arg1, PyObject* arg2, PyObject* arg3, PyObject* arg4, PyObject* arg5, PyObject* arg6, PyObject* arg7, PyObject* arg8, PyObject* arg9) {
-   return PyObject_CallFunctionObjArgs(callable, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, NULL);
+   return checkCallResult(PyObject_CallFunctionObjArgs(callable, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, NULL));
 }
 PyObject* PythonRuntime::call10(PyObject* callable, PyObject* arg1, PyObject* arg2, PyObject* arg3, PyObject* arg4, PyObject* arg5, PyObject* arg6, PyObject* arg7, PyObject* arg8, PyObject* arg9, PyObject* arg10) {
-   return PyObject_CallFunctionObjArgs(callable, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, NULL);
+   return checkCallResult(PyObject_CallFunctionObjArgs(callable, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, NULL));
 }
 
 int64_t PythonRuntime::toInt64(PyObject* obj) {
