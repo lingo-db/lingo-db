@@ -1603,6 +1603,14 @@ class OuterJoinLowering : public OpConversionPattern<relalg::OuterJoinOp> {
       return success();
    }
 };
+// Initial value of a simple_state member that is only read after it has
+// been written (behind a "found" flag): refcounted values (strings) must
+// still be valid, as reading the state back copies (and add_use's) them.
+static mlir::Value createPlaceholderValue(mlir::OpBuilder& builder, mlir::Location loc, mlir::Type type) {
+   if (mlir::isa<db::NullableType>(type)) return builder.create<db::NullOp>(loc, type);
+   if (mlir::isa<db::StringType, db::CharType>(type)) return builder.create<db::ConstantOp>(loc, type, builder.getStringAttr(""));
+   return builder.create<util::UndefOp>(loc, type);
+}
 class SingleJoinLowering : public OpConversionPattern<relalg::SingleJoinOp> {
    const RequiredColumnsMap& requiredColumns;
 
@@ -1621,20 +1629,62 @@ class SingleJoinLowering : public OpConversionPattern<relalg::SingleJoinOp> {
       auto nullsEqual = singleJoinOp->getAttrOfType<mlir::ArrayAttr>("nullsEqual");
 
       if (isConstantJoin) {
+         // the right side's (single) row is scattered into a simple state; a
+         // "found" flag (initially false) tells whether there was a row at all
+         // (otherwise the result columns are NULL, not the uninitialized state)
+         auto* ctxt = rewriter.getContext();
          auto columnsToMaterialize = requiredColumns.lookup(mlir::cast<Operator>(singleJoinOp.getRight().getDefiningOp()));
-         MaterializationHelper helper(columnsToMaterialize, rewriter.getContext());
-         auto constantStateType = subop::SimpleStateType::get(rewriter.getContext(), helper.createStateMembersAttr());
-         mlir::Value constantState = rewriter.create<subop::CreateSimpleStateOp>(loc, constantStateType);
-         auto entryRefType = subop::LookupEntryRefType::get(rewriter.getContext(), constantStateType);
+         MaterializationHelper helper(columnsToMaterialize, ctxt);
+         auto foundMember = createMember(ctxt, "found", rewriter.getI1Type());
+         auto [foundDef, foundRef] = createColumn(rewriter.getI1Type(), "singlejoin", "found");
+         auto constantStateType = subop::SimpleStateType::get(ctxt, helper.createStateMembersAttr({foundMember}));
+         auto createOp = rewriter.create<subop::CreateSimpleStateOp>(loc, constantStateType);
+         {
+            // the columns are only used if the flag is set (placeholders otherwise)
+            Block* initialValueBlock = new Block;
+            mlir::OpBuilder::InsertionGuard guard(rewriter);
+            rewriter.setInsertionPointToStart(initialValueBlock);
+            llvm::SmallVector<mlir::Value> initialValues{rewriter.create<db::ConstantOp>(loc, rewriter.getI1Type(), rewriter.getIntegerAttr(rewriter.getI1Type(), 0))};
+            for (size_t i = 0; i < columnsToMaterialize.size(); i++) {
+               initialValues.push_back(createPlaceholderValue(rewriter, loc, helper.getType(i)));
+            }
+            rewriter.create<tuples::ReturnOp>(loc, initialValues);
+            createOp.getInitFn().push_back(initialValueBlock);
+         }
+         mlir::Value constantState = createOp.getRes();
+         auto entryRefType = subop::LookupEntryRefType::get(ctxt, constantStateType);
          auto [entryDef, entryRef] = createColumn(entryRefType, "lookup", "entryref");
-         auto afterLookup = rewriter.create<subop::LookupOp>(loc, tuples::TupleStreamType::get(rewriter.getContext()), adaptor.getRight(), constantState, rewriter.getArrayAttr({}), entryDef);
-         rewriter.create<subop::ScatterOp>(loc, afterLookup, entryRef, helper.createColumnstateMapping());
+         auto right = mapBool(adaptor.getRight(), rewriter, loc, true, &foundDef.getColumn());
+         auto afterLookup = rewriter.create<subop::LookupOp>(loc, tuples::TupleStreamType::get(ctxt), right, constantState, rewriter.getArrayAttr({}), entryDef);
+         rewriter.create<subop::ScatterOp>(loc, afterLookup, entryRef, helper.createColumnstateMapping({{foundMember, foundRef}}));
          auto [entryDefLeft, entryRefLeft] = createColumn(entryRefType, "lookup", "entryref");
 
-         auto afterLookupLeft = rewriter.create<subop::LookupOp>(loc, tuples::TupleStreamType::get(rewriter.getContext()), adaptor.getLeft(), constantState, rewriter.getArrayAttr({}), entryDefLeft);
-         auto gathered = rewriter.create<subop::GatherOp>(loc, afterLookupLeft, entryRefLeft, helper.createStateColumnMapping());
-         auto mappedNullable = mapColsToNullable(gathered.getRes(), rewriter, loc, singleJoinOp.getMapping());
-         rewriter.replaceOp(singleJoinOp, mappedNullable);
+         auto afterLookupLeft = rewriter.create<subop::LookupOp>(loc, tuples::TupleStreamType::get(ctxt), adaptor.getLeft(), constantState, rewriter.getArrayAttr({}), entryDefLeft);
+         auto& colManager = ctxt->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+         auto gathered = rewriter.create<subop::GatherOp>(loc, afterLookupLeft, entryRefLeft, helper.createStateColumnMapping({{foundMember, colManager.createDef(&foundDef.getColumn())}}));
+         std::vector<mlir::Attribute> defAttrs;
+         subop::MapCreationHelper mapHelper(ctxt);
+         mapHelper.buildBlock(rewriter, [&](mlir::OpBuilder& b) {
+            mlir::Value found = mapHelper.access(foundRef, loc);
+            std::vector<mlir::Value> res;
+            for (mlir::Attribute attr : singleJoinOp.getMapping()) {
+               auto* defAttr = &mlir::cast<tuples::ColumnDefAttr>(attr).getColumn();
+               auto fromExisting = mlir::cast<tuples::ColumnRefAttr>(mlir::cast<mlir::ArrayAttr>(mlir::cast<tuples::ColumnDefAttr>(attr).getFromExisting())[0]);
+               mlir::Value value = mapHelper.access(fromExisting, loc);
+               auto ifOp = b.create<mlir::scf::IfOp>(
+                  loc, found, [&](mlir::OpBuilder& b, mlir::Location loc) {
+                     mlir::Value nullable = value.getType() == defAttr->type ? value : b.create<db::AsNullableOp>(loc, defAttr->type, value).getResult();
+                     b.create<mlir::scf::YieldOp>(loc, nullable); }, [&](mlir::OpBuilder& b, mlir::Location loc) {
+                     mlir::Value null = b.create<db::NullOp>(loc, defAttr->type);
+                     b.create<mlir::scf::YieldOp>(loc, null); });
+               res.push_back(ifOp.getResult(0));
+               defAttrs.push_back(colManager.createDef(defAttr));
+            }
+            b.create<tuples::ReturnOp>(loc, res);
+         });
+         auto mapOp = rewriter.create<subop::MapOp>(loc, tuples::TupleStreamType::get(ctxt), gathered.getRes(), rewriter.getArrayAttr(defAttrs), mapHelper.getColRefs());
+         mapOp.getFn().push_back(mapHelper.getMapBlock());
+         rewriter.replaceOp(singleJoinOp, mapOp.getResult());
       } else if (!reverse) {
          rewriter.replaceOp(singleJoinOp, translateNL(adaptor.getLeft(), adaptor.getRight(), useHash, useIndexNestedLoop, nullsEqual, leftHash, rightHash, requiredColumns.lookup(mlir::cast<Operator>(singleJoinOp.getRight().getDefiningOp())), rewriter, singleJoinOp, [loc, &singleJoinOp](mlir::Value v, mlir::ConversionPatternRewriter& rewriter) -> mlir::Value {
                                auto filtered = translateSelection(v, singleJoinOp.getPredicate(), rewriter, loc);

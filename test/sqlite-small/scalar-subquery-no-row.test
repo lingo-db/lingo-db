@@ -1,0 +1,47 @@
+# An uncorrelated scalar subquery without a row is NULL. It is lowered as a
+# "constant" single join that scatters the right side's row into a simple
+# state; without a row, the state was read uninitialized (random values,
+# found while testing hipy's checked get_value()).
+
+statement ok
+create table kv(k int8 not null, v int8);
+
+statement ok
+insert into kv values (0, 10), (1, NULL);
+
+statement ok
+create table xs(x int8 not null);
+
+statement ok
+insert into xs values (1), (2);
+
+# nullable and non-nullable column, no row
+query I
+select (select v from kv where k = 5), (select k from kv where k = 5)
+----
+NULL
+NULL
+
+# a row (with a NULL value, and with a value)
+query I
+select (select v from kv where k = 1), (select k from kv where k = 1), (select v from kv where k = 0)
+----
+NULL
+1
+10
+
+# combined with an outer table
+query I
+select x, (select k from kv where k = 5), (select k from kv where k = 1) from xs order by x
+----
+1
+NULL
+1
+2
+NULL
+1
+
+query I
+select count(*) from xs where (select k from kv where k = 5) is null
+----
+2
