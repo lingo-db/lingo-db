@@ -11,6 +11,7 @@
 
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/IRMapping.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include <iostream>
 #include <queue>
@@ -67,6 +68,31 @@ class InlineNestedMapPass : public mlir::PassWrapper<InlineNestedMapPass, mlir::
       }
       unionOp->replaceAllUsesWith(mlir::ValueRange{operands.back()});
       unionOp->erase();
+   }
+
+   // Ops moved into a nested_map body may use non-stream values (typically
+   // states, e.g. the simple_state of an aggregation) that are defined after
+   // the nested_map in the same block. At the top level,
+   // OrganizeExecutionStepsPass already turned these into step inputs, but
+   // blocks it does not organize (e.g. a nested query that is evaluated
+   // inside a loop of a map lambda) are still in program order. Hoist such
+   // (pure) definitions before the nested_map, so that they dominate their
+   // new uses.
+   mlir::LogicalResult hoistDefinitionsBefore(mlir::Operation* anchor, mlir::Operation* user) {
+      llvm::SetVector<mlir::Value> usedValues;
+      user->walk([&](mlir::Operation* nestedOp) {
+         usedValues.insert(nestedOp->getOperands().begin(), nestedOp->getOperands().end());
+      });
+      for (auto value : usedValues) {
+         auto* def = value.getDefiningOp();
+         if (!def || def->getBlock() != anchor->getBlock() || def->isBeforeInBlock(anchor)) continue;
+         if (mlir::isa<tuples::TupleStreamType>(value.getType()) || !mlir::isPure(def)) {
+            return user->emitError("can not inline into nested_map: operand is defined later by an operation that can not be moved: ") << def->getName();
+         }
+         if (mlir::failed(hoistDefinitionsBefore(anchor, def))) return mlir::failure();
+         def->moveBefore(anchor);
+      }
+      return mlir::success();
    }
 
    void runOnOperation() override {
@@ -148,6 +174,9 @@ class InlineNestedMapPass : public mlir::PassWrapper<InlineNestedMapPass, mlir::
          }
          streamResult.replaceAllUsesWith(replacement);
          returnOp->setOperands({});
+         for (auto* op : opsToMove) {
+            if (mlir::failed(hoistDefinitionsBefore(nestedMap, op))) return signalPassFailure();
+         }
          // The union (if any) is now consumed by `replacement` (a SubOperator),
          // so we can fold it via consumer-chain cloning. Any NestedMaps
          // cloned by the fold need to go through this pass too — their outer
