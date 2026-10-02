@@ -1,0 +1,89 @@
+# Nested SQL (hipy.lib.sql.execute) whose result column type differs from the
+# type the UDF declares: ParseNestedSQL casts to the declared base type
+# (int4 -> int8, float4 -> float8, decimal -> float8), in straight-line code,
+# inside an if, and inside a loop (per-iteration subquery).
+
+statement ok
+create table t4(k int, v int, f float4, d decimal(10,2));
+
+statement ok
+insert into t4 values (0, 10, 1.5, 2.25), (1, 11, 2.5, 3.5), (2, 12, 3.5, 4.75);
+
+statement ok
+CREATE OR REPLACE FUNCTION straight(x INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def straight(x):
+    return sql.execute(sql.nullable(int), "SELECT v FROM t4 WHERE k = PARAM(1)", x).get_value() + 1
+$$ LANGUAGE hipy;
+
+query tsv rowsort 1
+select straight(1);
+----
+12
+
+statement ok
+CREATE OR REPLACE FUNCTION inif(x INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def inif(x):
+    r = 0
+    if x > 0:
+        r = sql.execute(sql.nullable(int), "SELECT v FROM t4 WHERE k = PARAM(1)", x).get_value()
+    return r
+$$ LANGUAGE hipy;
+
+query tsv rowsort 2
+select inif(2);
+----
+12
+
+statement ok
+CREATE OR REPLACE FUNCTION inloop(x INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def inloop(x):
+    acc = 0
+    for i in range(x):
+        acc += sql.execute(sql.nullable(int), "SELECT v FROM t4 WHERE k = PARAM(1)", i).get_value()
+    return acc
+$$ LANGUAGE hipy;
+
+query tsv rowsort 3
+select inloop(3);
+----
+33
+
+statement ok
+CREATE OR REPLACE FUNCTION fl(x INT8) RETURNS FLOAT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def fl(x):
+    acc = 0.0
+    for i in range(x):
+        acc += sql.execute(sql.nullable(float), "SELECT f FROM t4 WHERE k = PARAM(1)", i).get_value()
+    return acc
+$$ LANGUAGE hipy;
+
+query tsv rowsort 4
+select fl(3);
+----
+7.5
+
+statement ok
+CREATE OR REPLACE FUNCTION dec(x INT8) RETURNS FLOAT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def dec(x):
+    return sql.execute(sql.nullable(float), "SELECT d FROM t4 WHERE k = PARAM(1)", x).get_value()
+$$ LANGUAGE hipy;
+
+query tsv rowsort 5
+select dec(2);
+----
+4.75
