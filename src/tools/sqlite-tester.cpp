@@ -487,11 +487,14 @@ int main(int argc, char** argv) {
             first = false;
             continue;
          }
+         // runQuery advances `line` past the query, so remember its description for the error message
+         auto description = lines[line];
          try {
             runQuery(*session, lines, line);
          } catch (const std::exception& e) {
             std::cerr << "ERROR: " << e.what() << std::endl;
-            std::cerr << "while executing query: " << lines[line] << std::endl;
+            std::cerr << "while executing query: " << description << std::endl;
+            exit(1);
          }
       }
       if (parts[0] == "hash-threshold") {

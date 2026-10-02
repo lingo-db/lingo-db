@@ -66,7 +66,8 @@ tools = [
     'mlir-db-opt',
     'run-mlir',
     'sql-to-mlir',
-    'run-sql'
+    'run-sql',
+    'sqlite-tester'
 ]
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)
