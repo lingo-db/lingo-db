@@ -15,6 +15,7 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/IRMapping.h"
 
+#include <map>
 #include <queue>
 
 namespace {
@@ -56,7 +57,9 @@ class CommonPipelineEliminationPass : public mlir::PassWrapper<CommonPipelineEli
       auto columnUsageAnalysis = getAnalysis<subop::ColumnUsageAnalysis>();
       auto& memberManager = getContext().getLoadedDialect<subop::SubOperatorDialect>()->getMemberManager();
 
-      std::unordered_map<std::string, std::vector<InsertingPipeline>> pipelines;
+      // Only pipelines in the same block can share their state: e.g. a pipeline of a nested query
+      // that is evaluated inside a loop (of a map lambda) runs once per iteration.
+      std::map<std::pair<mlir::Block*, std::string>, std::vector<InsertingPipeline>> pipelines;
       getOperation()->walk([&](subop::ScanOp scanOp) {
          if (auto tableType = mlir::dyn_cast<subop::TableType>(scanOp.getState().getType())) {
             std::vector<mlir::Operation*> users(scanOp->getUsers().begin(), scanOp->getUsers().end());
@@ -86,16 +89,16 @@ class CommonPipelineEliminationPass : public mlir::PassWrapper<CommonPipelineEli
             }
             if (auto getExternalOp = mlir::dyn_cast_or_null<subop::GetExternalOp>(scanOp.getState().getDefiningOp())) {
                auto dataSource = lingodb::utility::deserializeFromHexString<lingodb::runtime::ExternalDatasourceProperty>(getExternalOp.getDescr());
-               pipelines[dataSource.tableName].push_back({dataSource,
-                                                          scanOp,
-                                                          insertOp,
-                                                          createOp,
-                                                          false});
+               pipelines[{insertOp->getBlock(), dataSource.tableName}].push_back({dataSource,
+                                                                                  scanOp,
+                                                                                  insertOp,
+                                                                                  createOp,
+                                                                                  false});
             }
          }
       });
       std::vector<std::vector<InsertingPipeline>> toMerge;
-      for (auto& [tableName, pipelineList] : pipelines) {
+      for (auto& [key, pipelineList] : pipelines) {
          if (pipelineList.size() < 2) {
             continue;
          }

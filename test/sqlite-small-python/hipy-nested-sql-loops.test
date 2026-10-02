@@ -280,3 +280,29 @@ select o, joinwhile(o) from li;
 1	0
 2	8
 3	11
+
+# The same join outside and inside a loop: the outer query is decorrelated
+# into a single join with the UDF's input (a union, so InlineNestedMapPass
+# clones the map lambda containing the loop, and must inline the in-loop
+# nested_map of the clone too), and the two identical hash-join build
+# pipelines on `part` must not be merged across blocks
+# (subop-common-pipeline-elimination).
+statement ok
+CREATE OR REPLACE FUNCTION joinboth(o INT8, n INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def joinboth(o, n):
+    s = sql.execute(sql.nullable(int), "SELECT MAX(part.sz) FROM li, part WHERE li.o = PARAM(1) AND li.p = part.pk", o).get_value()
+    for i in range(n):
+        s += sql.execute(sql.nullable(int), "SELECT SUM(part.sz) FROM li, part WHERE li.o = PARAM(1) AND li.p = part.pk", o).get_value()
+    return s
+$$ LANGUAGE hipy;
+
+query tsv rowsort 15
+select o, joinboth(o, 2) from li;
+----
+1	21
+1	21
+2	9
+3	21
