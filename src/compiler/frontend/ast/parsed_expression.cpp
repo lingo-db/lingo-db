@@ -274,6 +274,8 @@ OperatorExpression::OperatorExpression(ExpressionType type, std::shared_ptr<Pars
 }
 OperatorExpression::OperatorExpression(std::string opString, std::shared_ptr<ParsedExpression> left, std::shared_ptr<ParsedExpression> right) : ParsedExpression(ExpressionType::OPERATOR_UNKNOWN, cType), children(std::vector{left, right}), opString(opString) {
 }
+OperatorExpression::OperatorExpression(std::string opString, std::shared_ptr<ParsedExpression> child) : ParsedExpression(ExpressionType::OPERATOR_UNKNOWN, cType), children(std::vector{child}), opString(opString) {
+}
 size_t OperatorExpression::hash() {
    size_t result = ParsedExpression::hash();
 

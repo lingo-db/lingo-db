@@ -1,0 +1,13 @@
+# Generic (multi-character / user-defined style) operators such as ||:
+# PostgreSQL precedence (above comparisons, below + and -, left-associative)
+# and prefix operators.
+
+# was parsed as 'a' || ('b' <= 'ab') (and aborted)
+query tsv nosort 1
+select 'a' || 'b' <= 'ab', 'a' || 'b' || 'c';
+----
+t	abc
+
+# an unknown prefix operator is an error (used to segfault)
+statement frontend-error: Unknown operator: !
+select !5;

@@ -2507,7 +2507,7 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
 
 std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeOperatorExpression(std::shared_ptr<ast::OperatorExpression> operatorExpr, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope) {
    if (operatorExpr->type == ast::ExpressionType::OPERATOR_UNKNOWN) {
-      operatorExpr->type = stringToExpressionType(operatorExpr->opString);
+      operatorExpr->type = stringToExpressionType(operatorExpr->opString, operatorExpr->children.size());
       if (operatorExpr->type == ast::ExpressionType::OPERATOR_UNKNOWN) {
          error("Unknown operator: " << operatorExpr->opString, operatorExpr->loc);
       }

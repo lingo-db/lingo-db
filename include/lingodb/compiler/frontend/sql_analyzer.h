@@ -199,7 +199,11 @@ class SQLQueryAnalyzer {
    std::shared_ptr<ast::BoundExpression> analyzeFunctionExpression(std::shared_ptr<ast::FunctionExpression> function, std::shared_ptr<SQLContext> context, ResolverScope& resolverScope);
    std::shared_ptr<ast::BoundColumnRefExpression> analyzeColumnRefExpression(std::shared_ptr<ast::ColumnRefExpression> columnRef, std::shared_ptr<SQLContext> context);
 
-   ast::ExpressionType stringToExpressionType(const std::string& parserStr) {
+   ast::ExpressionType stringToExpressionType(const std::string& parserStr, size_t numOperands) {
+      if (numOperands == 1) {
+         // no prefix operators supported yet
+         return ast::ExpressionType::OPERATOR_UNKNOWN;
+      }
       std::string str = parserStr;
       std::transform(str.begin(), str.end(), str.begin(), ::toupper);
       return llvm::StringSwitch<ast::ExpressionType>(str)

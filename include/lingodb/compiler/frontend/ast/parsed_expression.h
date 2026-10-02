@@ -392,6 +392,8 @@ class OperatorExpression : public ParsedExpression {
    OperatorExpression(ExpressionType type, std::shared_ptr<ParsedExpression> left);
    OperatorExpression(ExpressionType type, std::shared_ptr<ParsedExpression> left, std::shared_ptr<ParsedExpression> right);
    OperatorExpression(std::string opString, std::shared_ptr<ParsedExpression> left, std::shared_ptr<ParsedExpression> right);
+   // prefix operator
+   OperatorExpression(std::string opString, std::shared_ptr<ParsedExpression> child);
    std::vector<std::shared_ptr<ParsedExpression>> children;
 
    size_t hash() override;

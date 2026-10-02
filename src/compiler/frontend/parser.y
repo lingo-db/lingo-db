@@ -1551,13 +1551,13 @@ a_expr:
     {
         $$ = mkNode<lingodb::ast::OperatorExpression>(@$, lingodb::ast::ExpressionType::OPERATOR_IS_NOT_NULL, $1);
     }
-    | a_expr[left] qual_Op a_expr[right] %prec QUAL_OP
+    | a_expr[left] qual_Op a_expr[right] %prec Op
     {
         $$ = mkNode<lingodb::ast::OperatorExpression>(@$, $2, $left, $right);
     }
-    | qual_Op a_expr[right]  %prec QUAL_OP
+    | qual_Op a_expr[right]  %prec Op
     {
-        $$ = mkNode<lingodb::ast::OperatorExpression>(@$, $qual_Op, nullptr, $right);
+        $$ = mkNode<lingodb::ast::OperatorExpression>(@$, $qual_Op, $right);
     }
     | a_expr[left] basicComparisonType sub_type select_with_parens  %prec Op
     {
