@@ -796,6 +796,10 @@ class SubOpRewriter {
             llvm::SmallVector<mlir::Operation*> localRewrite = std::move(toRewrite);
             for (auto* r : localRewrite) {
                if (shouldRewrite(r)) {
+                  // rewriting r moves the insertion point to r (e.g. a nested
+                  // execution group inside an inlined map lambda); keep the
+                  // caller's, which may insert more code afterwards
+                  mlir::OpBuilder::InsertionGuard guard(builder);
                   rewrite(r);
                }
             }

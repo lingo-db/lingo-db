@@ -1,0 +1,81 @@
+# A UDF with an in-place nested query (row query, or a query in a loop) on the
+# output of a decorrelated scalar subquery (a single join): the rows without a
+# match in the subquery were lost. The single join's "no match" step was
+# generated inside the "match" branch of the step before it: lowering the
+# nested query's execution group (deferred, inside the inlined map lambda)
+# left the rewriter's insertion point there.
+
+statement ok
+create table kv(k int8 not null, v int8);
+
+statement ok
+insert into kv values (1, 10), (1, 11), (2, 0);
+
+statement ok
+create table ks(k int8 not null);
+
+statement ok
+insert into ks values (1), (2), (3);
+
+statement ok
+CREATE OR REPLACE FUNCTION getrow(x INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def getrow(x):
+    k, = sql.execute(sql.row(int), "SELECT * FROM ks WHERE k = PARAM(1)", x)
+    return k * 10
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION inloop(x INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def inloop(x):
+    r = 0
+    for i in range(x, x + 2):
+        r = r + sql.execute(sql.nullable(int), "SELECT max(k) FROM ks WHERE k = PARAM(1)", i).get_value_or_default(0)
+    return r
+$$ LANGUAGE hipy;
+
+# k = 3 has no match in kv
+query I
+select k, getrow(k), inloop(k), (select count(*) from kv where kv.k = t.k) from (values (2), (1), (3)) as t(k) order by k
+----
+1
+10
+3
+2
+2
+20
+5
+1
+3
+30
+3
+0
+
+# the same within one UDF (as in the ByePy savings example: the order row,
+# then a COUNT over another table)
+statement ok
+CREATE OR REPLACE FUNCTION both(x INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def both(x):
+    o = sql.execute(sql.nullable(sql.row(int)), "SELECT * FROM ks WHERE k = PARAM(1)", x)
+    if o is None:
+        return None
+    return sql.execute(int, "SELECT COUNT(*) FROM kv WHERE k = PARAM(1)", x)
+$$ LANGUAGE hipy;
+
+query I
+select k, both(k) from (values (-5), (1), (3)) as t(k) order by k
+----
+-5
+NULL
+1
+2
+3
+0
