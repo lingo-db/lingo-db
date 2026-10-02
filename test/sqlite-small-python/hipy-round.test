@@ -1,0 +1,47 @@
+# hipy round(float) without ndigits returns an int (Python semantics: half to
+# even). Lowered to LingoDB's RoundFloat (f64, int) -> f64 + a conversion to
+# int; before, hipy called RoundFloat with an i64 result, which doesn't exist
+# ("could not find matching runtime function" at CREATE FUNCTION).
+# Expected values from CPython.
+
+statement ok
+create table f(x float8);
+
+statement ok
+insert into f values (2.5), (3.5), (0.4), (1.6), (7.0), (1000000.5);
+
+statement ok
+CREATE OR REPLACE FUNCTION rnd(x FLOAT8) RETURNS INT8 AS $$
+import hipy
+@hipy.compiled_function
+def rnd(x):
+    return round(x)
+$$ LANGUAGE hipy;
+
+# the result is an int: integer arithmetic on it
+statement ok
+CREATE OR REPLACE FUNCTION rndsteps(x FLOAT8) RETURNS INT8 AS $$
+import hipy
+@hipy.compiled_function
+def rndsteps(x):
+    return round(x * 3) // 2
+$$ LANGUAGE hipy;
+
+# round with ndigits still returns a float
+statement ok
+CREATE OR REPLACE FUNCTION rnd1(x FLOAT8) RETURNS FLOAT8 AS $$
+import hipy
+@hipy.compiled_function
+def rnd1(x):
+    return round(x, 1)
+$$ LANGUAGE hipy;
+
+query tsv rowsort 1
+select x, rnd(x), rnd(0 - x), rndsteps(x), rnd1(x + 0.04) from f;
+----
+0.4	0	0	0	0.4
+1.6	2	-2	2	1.6
+1000000.5	1000000	-1000000	1500001	1000000.5
+2.5	2	-2	4	2.5
+3.5	4	-4	5	3.5
+7	7	-7	10	7
