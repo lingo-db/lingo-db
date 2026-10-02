@@ -1,0 +1,128 @@
+# hipy dicts with runtime keys (ByePy savings H10). One function per fix;
+# expected values from CPython.
+
+statement ok
+create table nums(x int8 not null);
+
+statement ok
+insert into nums values (0), (1), (2), (5), (7);
+
+# d[k], d[k] = v, k in d with a runtime key: hipy's MLIR backend called the
+# db.Hash binding with a single value instead of a list (TypeError at
+# CREATE FUNCTION time).
+statement ok
+CREATE OR REPLACE FUNCTION hist(n INT8) RETURNS INT8 AS $$
+import hipy
+@hipy.compiled_function
+def hist(n):
+    d = {}
+    for i in range(n):
+        k = i % 3
+        if k in d:
+            d[k] = d[k] + 1
+        else:
+            d[k] = 1
+    return d.get(0, 0) * 100 + d.get(1, 0) * 10 + d.get(2, 0)
+$$ LANGUAGE hipy;
+
+query I
+select x, hist(x) from nums order by x
+----
+0
+0
+1
+100
+2
+110
+5
+221
+7
+322
+
+# `k in d` with a runtime key on a dict built from a literal: the literal
+# could not be materialized with int keys (constant keys were typed i64
+# instead of int -> NotImplementedError), and the result of `in` was dropped
+# (None -> AttributeError when used as a condition).
+statement ok
+CREATE OR REPLACE FUNCTION has(n INT8) RETURNS INT8 AS $$
+import hipy
+@hipy.compiled_function
+def has(n):
+    d = {1: 10, 5: 50}
+    if n in d:
+        return d[n]
+    return -1
+$$ LANGUAGE hipy;
+
+query I
+select x, has(x) from nums order by x
+----
+0
+-1
+1
+10
+2
+-1
+5
+50
+7
+-1
+
+# iterating over the keys and len(d): no lowering for dict.iter_keys and
+# dict.length.
+statement ok
+CREATE OR REPLACE FUNCTION keysum(n INT8) RETURNS INT8 AS $$
+import hipy
+@hipy.compiled_function
+def keysum(n):
+    d = {}
+    for i in range(n):
+        d[i * i] = i
+    total = 0
+    for k in d:
+        total += k
+    return total * 100 + len(d)
+$$ LANGUAGE hipy;
+
+query I
+select x, keysum(x) from nums order by x
+----
+0
+0
+1
+1
+2
+102
+5
+3005
+7
+9107
+
+# str keys (LingoDB: db.create_dict with a key type that is lowered to a
+# different type failed to legalize when the comparison function had been
+# converted before).
+statement ok
+CREATE OR REPLACE FUNCTION words(n INT8) RETURNS INT8 AS $$
+import hipy
+@hipy.compiled_function
+def words(n):
+    names = ["a", "b", "c"]
+    d = {}
+    for i in range(n):
+        d[names[i % 3]] = d.get(names[i % 3], 0) + i
+    return d.get("a", 0) * 100 + d.get("b", 0) * 10 + d.get("c", 0)
+$$ LANGUAGE hipy;
+
+query I
+select x, words(x) from nums order by x
+----
+0
+0
+1
+0
+2
+10
+5
+352
+7
+957
