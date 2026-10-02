@@ -228,8 +228,39 @@ static mlir::Value translateSelection(mlir::Value stream, mlir::Region& predicat
          }
       }
    }
+   bool hasNestedOperators = predicate.walk([](Operator) { return mlir::WalkResult::interrupt(); }).wasInterrupted();
    if (terminator.getResults().empty() || isTrivialSel) {
       return stream;
+   } else if (hasNestedOperators) {
+      // operators evaluated in place (e.g. nested SQL in a loop of a UDF) can not be cloned during the conversion
+      // (they would not be converted): move the whole predicate into the map, like MapLowering does (every
+      // lowering translates its predicate only once)
+      auto [predDef, predRef] = createColumn(rewriter.getI1Type(), "map", "pred");
+      stream = map(stream, rewriter, loc, rewriter.getArrayAttr(predDef), [&](mlir::ConversionPatternRewriter& b, subop::MapCreationHelper& helper, mlir::Location loc) -> std::vector<mlir::Value> {
+         std::vector<mlir::Operation*> toMove;
+         for (auto& op : predicate.front()) {
+            if (&op != terminator.getOperation()) toMove.push_back(&op);
+         }
+         for (auto* op : toMove) {
+            op->moveBefore(b.getInsertionBlock(), b.getInsertionPoint());
+         }
+         std::vector<mlir::Operation*> toErase;
+         mlir::Value predicateTuple = predicate.front().getArgument(0);
+         b.getInsertionBlock()->walk([&](tuples::GetColumnOp getColumnOp) {
+            if (getColumnOp.getTuple() != predicateTuple) return;
+            getColumnOp.replaceAllUsesWith(helper.access(getColumnOp.getAttr(), getColumnOp->getLoc()));
+            toErase.push_back(getColumnOp);
+         });
+         for (auto* op : toErase) {
+            b.eraseOp(op);
+         }
+         mlir::Value predVal = terminator.getResults()[0];
+         if (mlir::isa<db::NullableType>(predVal.getType())) {
+            predVal = b.create<db::DeriveTruth>(loc, predVal);
+         }
+         return {predVal};
+      });
+      return rewriter.create<subop::FilterOp>(loc, stream, subop::FilterSemantic::all_true, rewriter.getArrayAttr(predRef));
    } else {
       auto& predicateBlock = predicate.front();
       if (auto returnOp = mlir::dyn_cast_or_null<tuples::ReturnOp>(predicateBlock.getTerminator())) {
