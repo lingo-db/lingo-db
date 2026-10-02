@@ -16,6 +16,7 @@
 #include "lingodb/utility/Setting.h"
 #include "lingodb/utility/Tracer.h"
 
+#include <mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h>
 #include <mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h>
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/SCF/IR/SCF.h>
@@ -68,6 +69,9 @@ class BaselineBackend : public ExecutionBackend {
       pm2.addPass(std::make_unique<LegalizeForBackend>());
       //pm2.addPass(lingodb::compiler::createCanonicalizerPass());
       pm2.addPass(mlir::createConvertSCFToCFPass());
+      // type conversions of earlier lowerings (e.g. !arrow.table <-> !util.ref<i8> in lower-arrow/lower-py-interp) leave
+      // pairs of casts that cancel out; the LLVM backends remove them the same way
+      pm2.addPass(mlir::createReconcileUnrealizedCastsPass());
       if (mlir::failed(pm2.run(moduleOp))) {
          return false;
       }
