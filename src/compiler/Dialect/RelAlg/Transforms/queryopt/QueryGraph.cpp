@@ -134,7 +134,10 @@ std::unique_ptr<lingodb::compiler::support::eval::expr> buildEvalExpr(mlir::Valu
       auto type = constantOp.getType();
       return buildConstant(type, parseArg);
    } else if (auto attrRefOp = mlir::dyn_cast_or_null<tuples::GetColumnOp>(op)) {
-      return support::eval::createAttrRef(mapping.at(&attrRefOp.getAttr().getColumn()));
+      // columns not provided by the sampled table (e.g. columns of an enclosing query, read by a nested query that is evaluated in place) are unknown
+      auto it = mapping.find(&attrRefOp.getAttr().getColumn());
+      if (it == mapping.end()) return support::eval::createInvalid();
+      return support::eval::createAttrRef(it->second);
    } else if (auto cmpOp = mlir::dyn_cast_or_null<CmpOpInterface>(op)) {
       auto left = cmpOp.getLeft();
       auto right = cmpOp.getRight();

@@ -1,0 +1,53 @@
+# A nested query inside a loop of a hipy UDF is evaluated in place, so after
+# inlining its predicates can read columns of the enclosing query (here the
+# NOT NULL argument column `k`). The sample-based selectivity estimation
+# (QueryGraph / OptimizeImplementations, buildEvalExpr) must treat such
+# columns as unknown instead of looking them up in the sampled table
+# (used to fail with std::bad_alloc). With a nullable argument the predicate
+# reads db.nullable_get_val(...) and the estimation skipped it anyway.
+
+statement ok
+create table small(k int8 NOT NULL, v int);
+
+statement ok
+insert into small values (1,10),(2,20),(3,30);
+
+statement ok
+CREATE OR REPLACE FUNCTION g(k INT8, n INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def g(k, n):
+    acc = 0
+    for i in range(n):
+        acc += sql.execute(sql.nullable(int), "SELECT v FROM small WHERE k = PARAM(1)", k).get_value()
+    return acc
+$$ LANGUAGE hipy;
+
+query tsv rowsort 1
+select k, g(k, 2) from small;
+----
+1	20
+2	40
+3	60
+
+statement ok
+CREATE OR REPLACE FUNCTION h(k INT8, n INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def h(k, n):
+    acc = 0
+    i = 0
+    while i < n:
+        acc += sql.execute(sql.nullable(int), "SELECT COUNT(*) FROM small WHERE v > 15 AND k >= PARAM(1)", k).get_value()
+        i += 1
+    return acc
+$$ LANGUAGE hipy;
+
+query tsv rowsort 2
+select k, h(k, 3) from small;
+----
+1	6
+2	6
+3	3
