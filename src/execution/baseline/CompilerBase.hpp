@@ -1628,10 +1628,11 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
          auto val_vr = this->val_ref(vals[i]);
          auto val_type = vals[i].getType();
          mlir::TypeSwitch<mlir::Type>(val_type)
-            .Case<mlir::TupleType>([](const mlir::TupleType) {
-               ;
-               assert(0 && "Nested tuples are not supported");
-               return;
+            .Case<mlir::TupleType>([&](const mlir::TupleType t) {
+               // a nested tuple occupies its (flattened) parts in order
+               for (size_t j = 0; j < TupleHelper::numSlots(t); ++j) {
+                  res_vr.part(offset++).set_value(val_vr.part(j));
+               }
             })
             .template Case<mlir::IntegerType>([&](const mlir::IntegerType int_type) {
                res_vr.part(offset++).set_value(val_vr.part(0));
@@ -1676,7 +1677,8 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
                       });
       }
 
-      mlir::TypeSwitch<mlir::Type>(TupleHelper::typeAtSlot(tuple_type, offset))
+      // dispatch on the element type: typeAtSlot would return the first leaf type of a nested tuple
+      mlir::TypeSwitch<mlir::Type>(tuple_type.getType(op.getOffset()))
          .template Case<mlir::TupleType>([&](const mlir::TupleType t) {
             for (size_t i = 0; i < TupleHelper::numSlots(t); ++i) {
                res_vr.part(i).set_value(val_vr.part(offset + i));
