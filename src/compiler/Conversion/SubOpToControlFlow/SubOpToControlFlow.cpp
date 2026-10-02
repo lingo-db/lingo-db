@@ -646,7 +646,8 @@ class SubOpRewriter {
    template <typename OpTy, typename... Args>
    void createOrFold(llvm::SmallVector<Value>& results, Location location, Args&&... args) {
       OpTy res = builder.create<OpTy>(location, std::forward<Args>(args)...);
-      if (succeeded(builder.tryFold(res, results))) {
+      // an in-place fold (no results) keeps the operation
+      if (succeeded(builder.tryFold(res, results)) && !results.empty()) {
          // If folding was successful, we don't need to rewrite the operation.
          res->erase();
          return;
@@ -759,7 +760,8 @@ class SubOpRewriter {
       for (auto* op : toInsert) {
          op->remove();
          llvm::SmallVector<mlir::Value> res;
-         if (builder.tryFold(op, res).succeeded()) {
+         // an in-place fold (no results, e.g. a commutative op moving a constant operand to the right) keeps the op
+         if (builder.tryFold(op, res).succeeded() && !res.empty()) {
             op->replaceAllUsesWith(res);
             eraseOp(op);
          } else {
