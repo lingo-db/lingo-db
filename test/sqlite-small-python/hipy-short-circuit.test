@@ -1,0 +1,75 @@
+# hipy `and` / `or` short-circuit like Python: the right operand is not
+# evaluated if the left one decides the result. Before, both were always
+# evaluated: the right one here fails on NULL (a non-nullable nested SQL
+# result), as in the ByePy packing example (`n == 0 or capacity < <MAX
+# query>`).
+
+statement ok
+create table kv(k int8 not null, v int8);
+
+statement ok
+insert into kv values (1, 10), (2, 3);
+
+# the MAX query is NULL for k = 0 and 5, i.e. must not be evaluated there
+statement ok
+CREATE OR REPLACE FUNCTION orsc(x INT8) RETURNS TEXT AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def orsc(x):
+    if x == 0 or x == 5 or sql.execute(int, "SELECT max(v) FROM kv WHERE k = PARAM(1)", x) > 5:
+        return "yes"
+    return "no"
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION andsc(x INT8) RETURNS TEXT AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def andsc(x):
+    if x != 0 and x != 5 and sql.execute(int, "SELECT max(v) FROM kv WHERE k = PARAM(1)", x) > 5:
+        return "yes"
+    return "no"
+$$ LANGUAGE hipy;
+
+# results are bools (as before), also as values and in loops
+statement ok
+CREATE OR REPLACE FUNCTION boolvals(x INT8) RETURNS INT8 AS $$
+import hipy
+@hipy.compiled_function
+def boolvals(x):
+    n = 0
+    for i in range(x):
+        a = i % 2 == 0 and i % 3 == 0
+        b = i % 2 == 0 or i % 3 == 0
+        if a:
+            n += 100
+        if b:
+            n += 1
+    return n
+$$ LANGUAGE hipy;
+
+query T
+select x, orsc(x), andsc(x) from (values (0), (1), (2), (5)) as t(x) order by x
+----
+0
+yes
+no
+1
+yes
+yes
+2
+no
+no
+5
+yes
+no
+
+query I
+select boolvals(10)
+----
+207
+
+statement runtime-error nested SQL query returned NULL or no row for a non-nullable result type
+select orsc(7)
