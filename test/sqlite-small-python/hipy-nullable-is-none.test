@@ -1,0 +1,72 @@
+# `x is None` / `x is not None` on a sql.nullable value (ByePy savings H3):
+# the same as x.is_null() / not x.is_null(). Before, `is None` was constant
+# False for every value that is not None itself, i.e. silently wrong for
+# NULLs.
+
+statement ok
+create table kv(k int8 not null, v int8);
+
+statement ok
+insert into kv values (0, 10), (1, NULL), (2, 12);
+
+statement ok
+CREATE OR REPLACE FUNCTION isnone(x INT8) RETURNS TEXT AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def isnone(x):
+    v = sql.execute(sql.nullable(int), "SELECT v FROM kv WHERE k = PARAM(1)", x)
+    if v is None:
+        return "none"
+    return str(v.get_value())
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION isnotnone(x INT8) RETURNS TEXT AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def isnotnone(x):
+    v = sql.execute(sql.nullable(int), "SELECT v FROM kv WHERE k = PARAM(1)", x)
+    if v is not None:
+        return str(v.get_value())
+    return "none"
+$$ LANGUAGE hipy;
+
+# also with None on the left and as a value, inside a loop
+statement ok
+CREATE OR REPLACE FUNCTION countnone(x INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def countnone(x):
+    n = 0
+    for i in range(x):
+        v = sql.execute(sql.nullable(int), "SELECT v FROM kv WHERE k = PARAM(1)", i)
+        missing = None is v
+        if missing:
+            n += 1
+    return n
+$$ LANGUAGE hipy;
+
+# k = 1: NULL value; k = 5: no row (NULL as well)
+query T
+select k, isnone(k), isnotnone(k) from (values (0), (1), (2), (5)) as t(k) order by k
+----
+0
+10
+10
+1
+none
+none
+2
+12
+12
+5
+none
+none
+
+query I
+select countnone(6)
+----
+4
