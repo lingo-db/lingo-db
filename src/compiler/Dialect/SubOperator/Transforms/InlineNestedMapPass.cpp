@@ -33,9 +33,8 @@ class InlineNestedMapPass : public mlir::PassWrapper<InlineNestedMapPass, mlir::
       mlir::OpBuilder builder(op->getContext());
       builder.setInsertionPointAfter(mapping.lookup(val).getDefiningOp() ? mapping.lookup(val).getDefiningOp() : op);
       auto* cloned = mlir::cast<subop::SubOperator>(op).cloneSubOp(builder, mapping, columnMapping);
-      if (auto clonedNestedMap = mlir::dyn_cast<subop::NestedMapOp>(cloned)) {
-         producedNestedMaps.push_back(clonedNestedMap);
-      }
+      // also nested_maps inside the clone (e.g. of a nested query evaluated in place in a map lambda)
+      cloned->walk([&](subop::NestedMapOp clonedNestedMap) { producedNestedMaps.push_back(clonedNestedMap); });
       for (auto& use : op->getUses()) {
          cloneRec(use.getOwner(), mapping, use.get(), columnMapping, producedNestedMaps);
       }
@@ -151,9 +150,8 @@ class InlineNestedMapPass : public mlir::PassWrapper<InlineNestedMapPass, mlir::
                mlir::IRMapping mapping;
                mapping.map(currentUse.get(), v);
                auto* cloned = mlir::cast<subop::SubOperator>(op).cloneSubOp(builder, mapping, columnMapping);
-               if (auto clonedNestedMap = mlir::dyn_cast<subop::NestedMapOp>(cloned)) {
-                  nestedMapOps.push(clonedNestedMap);
-               }
+               // also nested_maps inside the clone (e.g. of a nested query evaluated in place in a map lambda)
+               cloned->walk([&](subop::NestedMapOp clonedNestedMap) { nestedMapOps.push(clonedNestedMap); });
                opsToMove.push_back(cloned);
                for (auto& use : op->getUses()) {
                   if (mlir::isa_and_nonnull<tuples::TupleStreamType>(use.get().getType())) {
