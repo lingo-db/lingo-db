@@ -1,0 +1,233 @@
+# Loop control flow in LANGUAGE hipy UDFs (rewritten on the AST by hipy before
+# staging): `return` inside loops (rewrite_loop_return: value slot + flag +
+# break, returned after the loop; a `while True` loop without break can only
+# be left by a return), also from nested loops and with a non-trivially typed
+# value, `break` out of `while` loops (the loop test must stop the loop, e.g.
+# for `while True`), and break/continue nested in elif chains. Expected values
+# are what CPython computes for the same function.
+
+statement ok
+CREATE OR REPLACE FUNCTION brk(x INT8) RETURNS INT8 AS $$
+import hipy
+@hipy.compiled_function
+def brk(x):
+    i = 0
+    while True:
+        i += 1
+        if i > x:
+            break
+    return i
+$$ LANGUAGE hipy;
+
+query tsv rowsort 1
+select brk(5);
+----
+6
+
+query tsv rowsort 2
+select brk(0);
+----
+1
+
+statement ok
+CREATE OR REPLACE FUNCTION ret_while_true(x INT8) RETURNS INT8 AS $$
+import hipy
+@hipy.compiled_function
+def ret_while_true(x):
+    i = 0
+    while True:
+        i += 1
+        if i > x:
+            return i * 10
+    return 0
+$$ LANGUAGE hipy;
+
+query tsv rowsort 3
+select ret_while_true(5);
+----
+60
+
+query tsv rowsort 4
+select ret_while_true(0);
+----
+10
+
+statement ok
+CREATE OR REPLACE FUNCTION ret_for(x INT8) RETURNS INT8 AS $$
+import hipy
+@hipy.compiled_function
+def ret_for(x):
+    for i in range(100):
+        if i * i > x:
+            return i
+    return -1
+$$ LANGUAGE hipy;
+
+query tsv rowsort 5
+select ret_for(50);
+----
+8
+
+query tsv rowsort 6
+select ret_for(20000);
+----
+-1
+
+statement ok
+CREATE OR REPLACE FUNCTION ret_nested(x INT8) RETURNS INT8 AS $$
+import hipy
+@hipy.compiled_function
+def ret_nested(x):
+    for i in range(10):
+        j = 0
+        while j < 10:
+            if i * j == x:
+                return i * 100 + j
+            j += 1
+    return -1
+$$ LANGUAGE hipy;
+
+query tsv rowsort 7
+select ret_nested(12);
+----
+206
+
+query tsv rowsort 8
+select ret_nested(0);
+----
+0
+
+query tsv rowsort 9
+select ret_nested(97);
+----
+-1
+
+statement ok
+CREATE OR REPLACE FUNCTION ret_str(x INT8) RETURNS TEXT AS $$
+import hipy
+@hipy.compiled_function
+def ret_str(x):
+    for i in range(10):
+        if i == x:
+            return "found" + str(i)
+    return "none"
+$$ LANGUAGE hipy;
+
+query tsv rowsort 10
+select ret_str(3);
+----
+found3
+
+query tsv rowsort 11
+select ret_str(42);
+----
+none
+
+statement ok
+CREATE OR REPLACE FUNCTION ret_after_work(x INT8) RETURNS INT8 AS $$
+import hipy
+@hipy.compiled_function
+def ret_after_work(x):
+    acc = 0
+    i = 0
+    while i < x:
+        acc += i
+        if acc > 20:
+            return acc * 1000 + i
+        i += 1
+    return acc
+$$ LANGUAGE hipy;
+
+query tsv rowsort 12
+select ret_after_work(3);
+----
+3
+
+query tsv rowsort 13
+select ret_after_work(100);
+----
+21006
+
+query tsv rowsort 14
+select ret_after_work(0);
+----
+0
+
+statement ok
+CREATE OR REPLACE FUNCTION cont_elif(x INT8) RETURNS INT8 AS $$
+import hipy
+@hipy.compiled_function
+def cont_elif(x):
+    acc = 0
+    for i in range(x):
+        if i % 3 == 0:
+            acc += 1
+        elif i % 3 == 1:
+            continue
+        else:
+            acc += 100
+        acc += 10
+    return acc
+$$ LANGUAGE hipy;
+
+query tsv rowsort 101
+select cont_elif(7);
+----
+253
+
+query tsv rowsort 102
+select cont_elif(0);
+----
+0
+
+statement ok
+CREATE OR REPLACE FUNCTION break_elif(x INT8) RETURNS INT8 AS $$
+import hipy
+@hipy.compiled_function
+def break_elif(x):
+    acc = 0
+    i = 0
+    while i < 100:
+        if i == x:
+            break
+        elif i % 2 == 0:
+            acc += i
+        else:
+            acc -= 1
+        i += 1
+    return acc * 1000 + i
+$$ LANGUAGE hipy;
+
+query tsv rowsort 103
+select break_elif(9);
+----
+16009
+
+query tsv rowsort 104
+select break_elif(150);
+----
+2400100
+
+statement ok
+CREATE OR REPLACE FUNCTION only_return(x INT8) RETURNS INT8 AS $$
+import hipy
+@hipy.compiled_function
+def only_return(x):
+    i = 0
+    acc = 1
+    while True:
+        acc = acc * 2
+        i += 1
+        if acc > x:
+            return i
+$$ LANGUAGE hipy;
+
+query tsv rowsort 105
+select only_return(1000);
+----
+10
+
+query tsv rowsort 106
+select only_return(1);
+----
+1
