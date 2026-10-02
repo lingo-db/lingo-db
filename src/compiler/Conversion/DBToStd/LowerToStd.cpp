@@ -1271,7 +1271,7 @@ class CreateDictLowering : public OpConversionPattern<db::CreateDictOp> {
       //1,1 lookup function supplied to createDictOp
       auto suppliedSymbol = createDictOp.getCmpKeyFn();
       mlir::func::FuncOp suppliedEqFn = mlir::cast<mlir::func::FuncOp>(createDictOp->getParentOfType<ModuleOp>().lookupSymbol(suppliedSymbol));
-      //1.2 create a function that takes to raw pointers, loads the values, and inlines the operations from the supplied function to compare them (do it inline, do not rely on a magic function)
+      //1.2 create a function that takes to raw pointers, loads the values, and compares them with the supplied function
       auto refType = util::RefType::get(rewriter.getContext(), rewriter.getI8Type());
       auto fnType = FunctionType::get(rewriter.getContext(), {refType, refType}, rewriter.getI1Type());
       auto loweredKeyType = typeConverter->convertType(createDictOp.getType().getKeyType());
@@ -1290,17 +1290,16 @@ class CreateDictLowering : public OpConversionPattern<db::CreateDictOp> {
          rightPtr = rewriter.create<util::GenericMemrefCastOp>(createDictOp.getLoc(), loweredKeyPtrType, rightPtr);
          mlir::Value left = rewriter.create<util::LoadOp>(createDictOp.getLoc(), leftPtr).getVal();
          mlir::Value right = rewriter.create<util::LoadOp>(createDictOp.getLoc(), rightPtr).getVal();
-         //1.3 inline the operations from the supplied function (by cloning them
-         mlir::IRMapping mapping;
-         mapping.map(suppliedEqFn.getArgument(0), left);
-         mapping.map(suppliedEqFn.getArgument(1), right);
-         for (auto& op : suppliedEqFn.getBody().front()) {
-            if (auto returnOp = mlir::dyn_cast_or_null<mlir::func::ReturnOp>(&op)) {
-               rewriter.create<mlir::func::ReturnOp>(createDictOp.getLoc(), mapping.lookup(returnOp.getOperand(0)));
-            } else {
-               rewriter.clone(op, mapping);
-            }
+         //1.3 call the supplied function on the unlowered key type. Its body must not be cloned here: if the
+         // function was converted before this op, its arguments already have the lowered type and its ops are
+         // pending replacement (e.g. a db.compare on !db.string)
+         auto keyType = createDictOp.getType().getKeyType();
+         if (keyType != loweredKeyType) {
+            left = rewriter.create<UnrealizedConversionCastOp>(createDictOp.getLoc(), keyType, left).getResult(0);
+            right = rewriter.create<UnrealizedConversionCastOp>(createDictOp.getLoc(), keyType, right).getResult(0);
          }
+         mlir::Value isEq = rewriter.create<func::CallOp>(createDictOp.getLoc(), suppliedEqFn, mlir::ValueRange{left, right}).getResult(0);
+         rewriter.create<mlir::func::ReturnOp>(createDictOp.getLoc(), isEq);
       }
       auto tplType = mlir::TupleType::get(rewriter.getContext(), {loweredKeyType, loweredValueType});
       auto entryType = mlir::TupleType::get(getContext(), {refType, mlir::IndexType::get(getContext()), tplType});
