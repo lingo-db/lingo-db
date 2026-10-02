@@ -1,0 +1,63 @@
+# sql.nullable(T).get_value() on NULL is a runtime error (ByePy savings H9;
+# Python would raise a TypeError using None as a number). Before, it silently
+# yielded an undefined value.
+
+statement ok
+create table kv(k int8 not null, v int8, f float8);
+
+statement ok
+insert into kv values (0, 10, 1.5), (1, NULL, NULL);
+
+statement ok
+CREATE OR REPLACE FUNCTION getv(x INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def getv(x):
+    return sql.execute(sql.nullable(int), "SELECT v FROM kv WHERE k = PARAM(1)", x).get_value() + 1
+$$ LANGUAGE hipy;
+
+# min(...) over no qualifying row is NULL, inside a loop (as in savings)
+statement ok
+CREATE OR REPLACE FUNCTION minloop(x INT8) RETURNS FLOAT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def minloop(x):
+    total = 0.0
+    for i in range(x):
+        total += sql.execute(sql.nullable(float), "SELECT min(f) FROM kv WHERE k = PARAM(1)", i).get_value()
+    return total
+$$ LANGUAGE hipy;
+
+# get_value_or_default is unaffected
+statement ok
+CREATE OR REPLACE FUNCTION getd(x INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def getd(x):
+    return sql.execute(sql.nullable(int), "SELECT v FROM kv WHERE k = PARAM(1)", x).get_value_or_default(-1)
+$$ LANGUAGE hipy;
+
+query I
+select getv(0), getd(0), getd(1), getd(5)
+----
+11
+10
+-1
+-1
+
+query R
+select minloop(1)
+----
+1.500
+
+statement runtime-error get_value\(\) on NULL
+select getv(1)
+
+statement runtime-error get_value\(\) on NULL
+select getv(5)
+
+statement runtime-error get_value\(\) on NULL
+select minloop(2)
