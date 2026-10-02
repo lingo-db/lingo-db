@@ -1,0 +1,134 @@
+# ByePy "Simple VM" example (vendored/byepy-examples/vm/vm.py, see
+# docs/byepy-vm.md), adapted to LANGUAGE hipy: a register machine whose
+# program lives in a table. Every VM step fetches the current instruction with
+# nested SQL queries *inside the interpreter loop* (parameterised by the
+# loop-carried instruction pointer), i.e. the subqueries are evaluated once
+# per iteration, in place. The program computes the Collatz sequence length of
+# the input. Differences to the original (one scalar query per field,
+# opc as text, a "running" flag instead of "return" in the loop) are
+# explained in docs/byepy-vm.md. Nested SQL strings stay on one line each.
+
+statement ok
+create table program(loc int, opc text, reg1 int, reg2 int, reg3 int);
+
+statement ok
+insert into program values (0,'lod',3,0,NULL),(1,'lod',4,1,NULL),(2,'lod',5,2,NULL),(3,'lod',6,3,NULL),(4,'mov',1,3,NULL),(5,'jeq',0,4,14),(6,'add',1,1,4),(7,'mod',2,0,5),(8,'jeq',2,4,11),(9,'div',0,0,5),(10,'jmp',5,NULL,NULL),(11,'mul',0,0,6),(12,'add',0,0,4),(13,'jmp',5,NULL,NULL),(14,'hlt',1,NULL,NULL);
+
+statement ok
+CREATE OR REPLACE FUNCTION run_vm(n INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+
+@hipy.compiled_function
+def run_vm(n):
+    regs = [n, 0, 0, 0, 0, 0, 0]
+    ip = 0
+    result = 0
+    running = True
+    while running:
+        opc = sql.execute(sql.nullable(str), "SELECT opc FROM program WHERE loc = PARAM(1)", ip).get_value()
+        reg1 = sql.execute(sql.nullable(int), "SELECT reg1 FROM program WHERE loc = PARAM(1)", ip).get_value_or_default(0)
+        reg2 = sql.execute(sql.nullable(int), "SELECT reg2 FROM program WHERE loc = PARAM(1)", ip).get_value_or_default(0)
+        reg3 = sql.execute(sql.nullable(int), "SELECT reg3 FROM program WHERE loc = PARAM(1)", ip).get_value_or_default(0)
+        ip += 1
+        if opc == 'lod':
+            regs[reg1] = reg2
+        elif opc == 'mov':
+            regs[reg1] = regs[reg2]
+        elif opc == 'jeq':
+            if regs[reg1] == regs[reg2]:
+                ip = reg3
+        elif opc == 'jmp':
+            ip = reg1
+        elif opc == 'add':
+            regs[reg1] = regs[reg2] + regs[reg3]
+        elif opc == 'sub':
+            regs[reg1] = regs[reg2] - regs[reg3]
+        elif opc == 'mul':
+            regs[reg1] = regs[reg2] * regs[reg3]
+        elif opc == 'div':
+            regs[reg1] = regs[reg2] // regs[reg3]
+        elif opc == 'mod':
+            regs[reg1] = regs[reg2] % regs[reg3]
+        elif opc == 'hlt':
+            result = regs[reg1]
+            running = False
+    return result
+$$ LANGUAGE hipy;
+
+query tsv rowsort 1
+select run_vm(1), run_vm(2), run_vm(3), run_vm(6), run_vm(7), run_vm(27);
+----
+0	1	7	8	16	111
+
+statement ok
+create table inputs(n int8);
+
+statement ok
+insert into inputs values (1),(2),(3),(4),(5),(6),(7),(8),(9),(10);
+
+query tsv rowsort 2
+select sum(run_vm(n)) from inputs;
+----
+67
+
+# many concurrent UDF invocations (parallel scan), each running its own
+# per-iteration nested queries
+statement ok
+create table inputs100(n int8);
+
+statement ok
+insert into inputs100 values (1),(2),(3),(4),(5),(6),(7),(8),(9),(10),(11),(12),(13),(14),(15),(16),(17),(18),(19),(20),(21),(22),(23),(24),(25),(26),(27),(28),(29),(30),(31),(32),(33),(34),(35),(36),(37),(38),(39),(40),(41),(42),(43),(44),(45),(46),(47),(48),(49),(50),(51),(52),(53),(54),(55),(56),(57),(58),(59),(60),(61),(62),(63),(64),(65),(66),(67),(68),(69),(70),(71),(72),(73),(74),(75),(76),(77),(78),(79),(80),(81),(82),(83),(84),(85),(86),(87),(88),(89),(90),(91),(92),(93),(94),(95),(96),(97),(98),(99),(100);
+
+query tsv rowsort 3
+select sum(run_vm(n)), max(run_vm(n)), count(*) from inputs100;
+----
+3142	118	100
+
+# The same VM, closer to the original source: `while True`, one row-valued
+# query per step (sql.row(...) -> relalg.getfirstrow) and `return` from inside
+# the loop.
+statement ok
+CREATE OR REPLACE FUNCTION run(n INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+
+@hipy.compiled_function
+def run(n):
+    regs = [n, 0, 0, 0, 0, 0, 0]
+    ip = 0
+    while True:
+        opc, reg1, reg2, reg3 = sql.execute(sql.row(str, int, sql.nullable(int), sql.nullable(int)), "SELECT opc, reg1, reg2, reg3 FROM program WHERE loc = PARAM(1)", ip)
+        ip += 1
+        if opc == 'lod':
+            regs[reg1] = reg2.get_value()
+        elif opc == 'mov':
+            regs[reg1] = regs[reg2.get_value()]
+        elif opc == 'jeq':
+            if regs[reg1] == regs[reg2.get_value()]:
+                ip = reg3.get_value()
+        elif opc == 'jmp':
+            ip = reg1
+        elif opc == 'add':
+            regs[reg1] = regs[reg2.get_value()] + regs[reg3.get_value()]
+        elif opc == 'sub':
+            regs[reg1] = regs[reg2.get_value()] - regs[reg3.get_value()]
+        elif opc == 'mul':
+            regs[reg1] = regs[reg2.get_value()] * regs[reg3.get_value()]
+        elif opc == 'div':
+            regs[reg1] = regs[reg2.get_value()] // regs[reg3.get_value()]
+        elif opc == 'mod':
+            regs[reg1] = regs[reg2.get_value()] % regs[reg3.get_value()]
+        elif opc == 'hlt':
+            return regs[reg1]
+$$ LANGUAGE hipy;
+
+query tsv rowsort 4
+select run(1), run(2), run(3), run(6), run(7), run(27);
+----
+0	1	7	8	16	111
+
+query tsv rowsort 5
+select sum(run(n)), max(run(n)), count(*) from inputs100;
+----
+3142	118	100
