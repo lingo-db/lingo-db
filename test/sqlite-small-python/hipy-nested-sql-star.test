@@ -1,0 +1,64 @@
+# `SELECT *` and `SELECT t.*` in row-valued nested SQL (ByePy savings H5):
+# the star expands to the table's columns in declaration order. Before, the
+# nested query had 0 result columns ("Nested SQL returns 0 columns, but the
+# declared row type has 3").
+
+statement ok
+create table kvs(k int8 not null, v int8, s text);
+
+statement ok
+insert into kvs values (0, 10, 'a'), (1, 11, 'b'), (2, 12, NULL);
+
+statement ok
+CREATE OR REPLACE FUNCTION star(x INT8) RETURNS TEXT AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def star(x):
+    k, v, s = sql.execute(sql.row(int, int, sql.nullable(str)), "SELECT * FROM kvs WHERE k = PARAM(1)", x)
+    return str(k) + ":" + str(v) + ":" + s.get_value_or_default("-")
+$$ LANGUAGE hipy;
+
+# t.*, in a loop, as a single tuple value indexed afterwards
+statement ok
+CREATE OR REPLACE FUNCTION tstar(x INT8) RETURNS TEXT AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def tstar(x):
+    res = ""
+    for i in range(x):
+        row = sql.execute(sql.row(int, int, sql.nullable(str)), "SELECT t.* FROM kvs AS t WHERE t.k = PARAM(1)", i)
+        res = res + str(row[0] + row[1]) + row[2].get_value_or_default("-") + ";"
+    return res
+$$ LANGUAGE hipy;
+
+# t.* next to other columns, and a star over a join
+statement ok
+CREATE OR REPLACE FUNCTION mixed(x INT8) RETURNS TEXT AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def mixed(x):
+    n, k, v, s, k2 = sql.execute(sql.row(int, int, int, sql.nullable(str), int), "SELECT t.k * 100, t.*, u.k FROM kvs AS t, kvs AS u WHERE t.k = PARAM(1) AND u.k = t.k + 1", x)
+    return str(n) + ":" + str(k) + ":" + str(v) + ":" + s.get_value_or_default("-") + ":" + str(k2)
+$$ LANGUAGE hipy;
+
+query T
+select x, star(x), tstar(x + 1) from (values (0), (1), (2)) as t(x) order by x
+----
+0
+0:10:a
+10a;
+1
+1:11:b
+10a;12b;
+2
+2:12:-
+10a;12b;14-;
+
+query T
+select mixed(0), mixed(1)
+----
+0:0:10:a:1
+100:1:11:b:2

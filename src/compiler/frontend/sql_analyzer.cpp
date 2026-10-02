@@ -2320,7 +2320,9 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
           */
          size_t i = 0;
          for (auto& [columnId, columnReference] : topDefinedColumnsAll) {
-            if (relationName.empty() || columnReference->scope == relationName) {
+            // `t.*`: the columns defined as `t.<column>`. Not columnReference->scope == "t": the
+            // internal scope can be uniquified or prefixed (nested SQL: "nested_sql_0_t")
+            if (relationName.empty() || columnId.starts_with(relationName + ".")) {
                auto p = topDefinedColumnsWithoutDuplicates.insert({columnReference, i});
                if (p.second) {
                   i++;

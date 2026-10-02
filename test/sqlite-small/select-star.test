@@ -1,6 +1,11 @@
 # Stars in the select list.
 # - `*` / `t.*` next to other targets: before, the star's columns replaced the
 #   targets before it (`select u.k, t.*` returned only t's columns).
+# - `t.*` refers to the columns defined as `t.<column>`: before, it compared
+#   the internal scope name, which is uniquified when an alias occurs twice
+#   (here: t inside the derived table), so `t.*` silently returned the wrong
+#   table's columns (and nested SQL in hipy UDFs, whose scopes are prefixed,
+#   got no columns at all).
 
 statement ok
 create table kvs(k int8 not null, v int8, s text);
@@ -36,3 +41,10 @@ a
 11
 b
 2
+
+query T
+select t.* from (select * from kvs as t where t.k = 0) as q, kvs as t where t.k = q.k + 1
+----
+1
+11
+b
