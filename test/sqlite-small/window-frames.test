@@ -1,0 +1,84 @@
+# ROWS window frames that are empty for some rows. Expected values as in
+# PostgreSQL (computed with SQLite, which has the same ROWS frame semantics).
+
+statement ok
+create table w(id int not null, g int not null, v int);
+
+statement ok
+insert into w values (1,1,10),(2,1,20),(3,2,NULL),(4,1,40),(5,2,50),(6,2,60);
+
+# frame ending before the current row: empty for the first row(s)
+# (NULL for sum/min, 0 for count)
+query tsv rowsort 1
+select id, sum(v) over (order by id rows between unbounded preceding and 1 preceding), count(v) over (order by id rows between unbounded preceding and 1 preceding), min(v) over (order by id rows between unbounded preceding and 1 preceding) from w;
+----
+1	NULL	0	NULL
+2	10	1	10
+3	30	2	10
+4	30	2	10
+5	70	3	10
+6	120	4	10
+
+query tsv rowsort 2
+select id, sum(v) over (order by id rows between 2 preceding and 1 preceding), max(v) over (order by id rows between 3 preceding and 2 preceding) from w;
+----
+1	NULL	NULL
+2	10	NULL
+3	30	10
+4	20	20
+5	40	20
+6	90	40
+
+# frames reaching to/after the end: empty for the last row(s)
+query tsv rowsort 3
+select id, sum(v) over (order by id rows between current row and unbounded following), sum(v) over (order by id rows between 1 following and unbounded following), count(v) over (order by id rows between 1 following and 2 following) from w;
+----
+1	180	170	1
+2	170	150	1
+3	150	150	2
+4	150	110	2
+5	110	60	1
+6	60	NULL	0
+
+# per partition
+query tsv rowsort 4
+select id, sum(v) over (partition by g order by id rows between unbounded preceding and 1 preceding), sum(v) over (partition by g order by id rows between 1 following and unbounded following) from w;
+----
+1	NULL	60
+2	10	40
+3	NULL	110
+4	30	NULL
+5	NULL	60
+6	50	NULL
+
+# frames that are always empty (start after end, or entirely outside the partition)
+query tsv rowsort 5
+select id, sum(v) over (order by id rows between 1 preceding and 2 preceding), count(v) over (order by id rows between 1 preceding and 2 preceding) from w;
+----
+1	NULL	0
+2	NULL	0
+3	NULL	0
+4	NULL	0
+5	NULL	0
+6	NULL	0
+
+query tsv rowsort 6
+select id, sum(v) over (order by id rows between 10 preceding and 7 preceding), sum(v) over (order by id rows between 7 following and 10 following) from w;
+----
+1	NULL	NULL
+2	NULL	NULL
+3	NULL	NULL
+4	NULL	NULL
+5	NULL	NULL
+6	NULL	NULL
+
+# cumulative interval [p_from, p_to) as in the ByePy markov example
+query tsv rowsort 7
+select id, coalesce(sum(v) over (order by id rows between unbounded preceding and 1 preceding), 0) as p_from, sum(v) over (order by id) as p_to from w;
+----
+1	0	10
+2	10	30
+3	30	30
+4	30	70
+5	70	120
+6	120	180

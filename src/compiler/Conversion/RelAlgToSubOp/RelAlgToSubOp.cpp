@@ -2554,11 +2554,7 @@ class WindowLowering : public OpConversionPattern<relalg::WindowOp> {
          tuples::ColumnRefAttr rangeEnd;
          if (fromBegin) {
             rangeBegin = beginReferenceRefAttr;
-         }
-         if (fromEnd) {
-            rangeEnd = endReferenceRefAttr;
-         }
-         if (from == 0) {
+         } else if (from == 0) {
             rangeBegin = referenceRefAttr;
          } else {
             auto [fromDefAttr, fromRefAttr] = createColumn(continuousViewRefType, "frame", "from");
@@ -2566,7 +2562,9 @@ class WindowLowering : public OpConversionPattern<relalg::WindowOp> {
             current = rewriter.create<subop::OffsetReferenceBy>(loc, withConst, referenceRefAttr, colManager.createRef(constCol), fromDefAttr);
             rangeBegin = fromRefAttr;
          }
-         if (to == 0) {
+         if (fromEnd) {
+            rangeEnd = endReferenceRefAttr;
+         } else if (to == 0) {
             rangeEnd = referenceRefAttr;
          } else {
             auto [toDefAttr, toRefAttr] = createColumn(continuousViewRefType, "frame", "to");
@@ -2575,6 +2573,23 @@ class WindowLowering : public OpConversionPattern<relalg::WindowOp> {
             rangeEnd = toRefAttr;
          }
          assert(rangeBegin && rangeEnd);
+         // offset_ref_by clamps to the partition, so a frame that lies (partly) outside of it must be detected
+         // separately: it is empty if it ends before the first row or starts after the last row, or if it
+         // always is (start after end, e.g. `1 PRECEDING AND 2 PRECEDING`)
+         bool alwaysEmpty = !fromBegin && !fromEnd && from > to;
+         tuples::ColumnRefAttr rowsBeforeRef;
+         tuples::ColumnRefAttr rowsAfterRef;
+         if (!distAggrFuncs.empty() && !alwaysEmpty && !fromEnd && to < 0) {
+            auto [rowsBeforeDef, rowsBefore] = createColumn(rewriter.getIndexType(), "frame", "rows_before");
+            current = rewriter.create<subop::EntriesBetweenOp>(loc, current, beginReferenceRefAttr, referenceRefAttr, rowsBeforeDef);
+            rowsBeforeRef = rowsBefore;
+         }
+         if (!distAggrFuncs.empty() && !alwaysEmpty && !fromBegin && from > 0) {
+            auto [rowsAfterDef, rowsAfter] = createColumn(rewriter.getIndexType(), "frame", "rows_after");
+            current = rewriter.create<subop::EntriesBetweenOp>(loc, current, referenceRefAttr, endReferenceRefAttr, rowsAfterDef);
+            rowsAfterRef = rowsAfter;
+         }
+         bool mayBeEmpty = alwaysEmpty || rowsBeforeRef || rowsAfterRef;
          for (auto orderedWindowFn : analyzedWindow.orderedWindowFunctions) {
             current = orderedWindowFn->evaluate(rewriter, loc, current, rangeBegin, rangeEnd, colManager.createRef(&referenceDefAttr.getColumn()));
          }
@@ -2588,8 +2603,52 @@ class WindowLowering : public OpConversionPattern<relalg::WindowOp> {
             mlir::Value segmentTreeView = std::get<0>(segmentTreeViewResult);
             auto stateColumnMapping = std::get<1>(segmentTreeViewResult);
             auto [referenceDef, referenceRef] = createColumn(subop::LookupEntryRefType::get(getContext(), mlir::cast<subop::LookupAbleState>(segmentTreeView.getType())), "lookup", "ref");
-            mlir::Value afterLookup = rewriter.create<subop::LookupOp>(loc, tuples::TupleStreamType::get(getContext()), current, segmentTreeView, rewriter.getArrayAttr({rangeBegin, rangeEnd}), referenceDef);
-            current = rewriter.create<subop::GatherOp>(loc, afterLookup, referenceRef, stateColumnMapping);
+            // the segment tree can not look up an empty range: use the current row instead, and replace the result below
+            auto lookupKeys = alwaysEmpty ? rewriter.getArrayAttr({referenceRefAttr, referenceRefAttr}) : rewriter.getArrayAttr({rangeBegin, rangeEnd});
+            mlir::Value afterLookup = rewriter.create<subop::LookupOp>(loc, tuples::TupleStreamType::get(getContext()), current, segmentTreeView, lookupKeys, referenceDef);
+            if (!mayBeEmpty) {
+               current = rewriter.create<subop::GatherOp>(loc, afterLookup, referenceRef, stateColumnMapping);
+            } else {
+               // gather into temporary columns, then use the aggregate's default value (e.g., NULL or 0) for empty frames
+               DefMappingCollector tmpMapping;
+               llvm::DenseMap<tuples::Column*, tuples::ColumnRefAttr> tmpRefs;
+               for (auto x : stateColumnMapping.getMapping()) {
+                  auto [tmpDef, tmpRef] = createColumn(x.second.getColumn().type, "frame", "aggr");
+                  tmpMapping.push_back({x.first, tmpDef});
+                  tmpRefs.insert({&x.second.getColumn(), tmpRef});
+               }
+               current = rewriter.create<subop::GatherOp>(loc, afterLookup, referenceRef, createColumnDefMemberMappingAttr(getContext(), tmpMapping));
+               std::vector<mlir::Attribute> destAttrs;
+               for (auto aggrFn : distAggrFuncs) {
+                  destAttrs.push_back(aggrFn->getDestAttribute());
+               }
+               current = map(current, rewriter, loc, rewriter.getArrayAttr(destAttrs), [&](mlir::ConversionPatternRewriter& rewriter, subop::MapCreationHelper& helper, mlir::Location loc) {
+                  mlir::Value isEmpty;
+                  auto addCondition = [&](mlir::Value cond) {
+                     isEmpty = isEmpty ? rewriter.create<mlir::arith::OrIOp>(loc, isEmpty, cond).getResult() : cond;
+                  };
+                  if (alwaysEmpty) {
+                     addCondition(rewriter.create<mlir::arith::ConstantIntOp>(loc, 1, 1));
+                  }
+                  if (rowsBeforeRef) {
+                     // fewer than -to rows before the current one: the frame ends before the first row
+                     mlir::Value minRowsBefore = rewriter.create<mlir::arith::ConstantIndexOp>(loc, -to);
+                     addCondition(rewriter.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::ult, helper.access(rowsBeforeRef, loc), minRowsBefore));
+                  }
+                  if (rowsAfterRef) {
+                     // fewer than from rows after the current one: the frame starts after the last row
+                     mlir::Value minRowsAfter = rewriter.create<mlir::arith::ConstantIndexOp>(loc, from);
+                     addCondition(rewriter.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::ult, helper.access(rowsAfterRef, loc), minRowsAfter));
+                  }
+                  std::vector<mlir::Value> results;
+                  for (size_t i = 0; i < distAggrFuncs.size(); i++) {
+                     mlir::Value defaultValue = distAggrFuncs[i]->createDefaultValue(rewriter, loc);
+                     mlir::Value value = helper.access(tmpRefs.at(&distAggrFuncs[i]->getDestAttribute().getColumn()), loc);
+                     results.push_back(rewriter.create<mlir::arith::SelectOp>(loc, isEmpty, defaultValue, value));
+                  }
+                  return results;
+               });
+            }
          }
          return current;
       };
