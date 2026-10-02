@@ -32,6 +32,56 @@ IRAdaptor::IRValueRef IRAdaptor::INVALID_VALUE_REF = mlir::Value();
 namespace {
 utility::GlobalSetting<std::string> baselineDebugFileOut("system.compilation.baseline_object_out", "");
 
+// The baseline compiler loads/stores scalar values only. A tuple-typed util.load/util.store (e.g. the closure argument
+// that the try_wrapped_fn of db.try_except loads and passes on as a whole) is split into one load/store per element.
+mlir::Value loadTuple(mlir::OpBuilder& builder, mlir::Location loc, mlir::TupleType tupleType, mlir::Value ref) {
+   llvm::SmallVector<mlir::Value> elements;
+   for (auto [i, elementType] : llvm::enumerate(tupleType.getTypes())) {
+      auto elementRef = builder.create<dialect::util::TupleElementPtrOp>(loc, dialect::util::RefType::get(elementType), ref, i);
+      if (auto nestedTupleType = mlir::dyn_cast<mlir::TupleType>(elementType)) {
+         elements.push_back(loadTuple(builder, loc, nestedTupleType, elementRef));
+      } else {
+         elements.push_back(builder.create<dialect::util::LoadOp>(loc, elementType, elementRef, mlir::Value()));
+      }
+   }
+   return builder.create<dialect::util::PackOp>(loc, tupleType, elements);
+}
+void storeTuple(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value tuple, mlir::Value ref) {
+   auto tupleType = mlir::cast<mlir::TupleType>(tuple.getType());
+   for (auto [i, elementType] : llvm::enumerate(tupleType.getTypes())) {
+      auto elementRef = builder.create<dialect::util::TupleElementPtrOp>(loc, dialect::util::RefType::get(elementType), ref, i);
+      mlir::Value element = builder.create<dialect::util::GetTupleOp>(loc, elementType, tuple, i);
+      if (mlir::isa<mlir::TupleType>(elementType)) {
+         storeTuple(builder, loc, element, elementRef);
+      } else {
+         builder.create<dialect::util::StoreOp>(loc, element, elementRef, mlir::Value());
+      }
+   }
+}
+mlir::Value elementRefForIndex(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value ref, mlir::Value idx) {
+   return idx ? builder.create<dialect::util::ArrayElementPtrOp>(loc, ref.getType(), ref, idx).getResult() : ref;
+}
+class SplitTupleLoad : public mlir::OpRewritePattern<dialect::util::LoadOp> {
+   using OpRewritePattern::OpRewritePattern;
+   mlir::LogicalResult matchAndRewrite(dialect::util::LoadOp op, mlir::PatternRewriter& rewriter) const override {
+      auto tupleType = mlir::dyn_cast<mlir::TupleType>(op.getVal().getType());
+      if (!tupleType) return mlir::failure();
+      auto ref = elementRefForIndex(rewriter, op.getLoc(), op.getRef(), op.getIdx());
+      rewriter.replaceOp(op, loadTuple(rewriter, op.getLoc(), tupleType, ref));
+      return mlir::success();
+   }
+};
+class SplitTupleStore : public mlir::OpRewritePattern<dialect::util::StoreOp> {
+   using OpRewritePattern::OpRewritePattern;
+   mlir::LogicalResult matchAndRewrite(dialect::util::StoreOp op, mlir::PatternRewriter& rewriter) const override {
+      if (!mlir::isa<mlir::TupleType>(op.getVal().getType())) return mlir::failure();
+      auto ref = elementRefForIndex(rewriter, op.getLoc(), op.getRef(), op.getIdx());
+      storeTuple(rewriter, op.getLoc(), op.getVal(), ref);
+      rewriter.eraseOp(op);
+      return mlir::success();
+   }
+};
+
 class LegalizeForBackend : public mlir::PassWrapper<LegalizeForBackend, mlir::OperationPass<mlir::ModuleOp>> {
    virtual llvm::StringRef getArgument() const override { return "baseline-legalize"; }
 
@@ -48,6 +98,7 @@ class LegalizeForBackend : public mlir::PassWrapper<LegalizeForBackend, mlir::Op
          dialect::util::StoreOp::getCanonicalizationPatterns(patterns, patterns.getContext());
          dialect::util::UndefOp::getCanonicalizationPatterns(patterns, patterns.getContext());
          dialect::util::StoreElementOp::getCanonicalizationPatterns(patterns, patterns.getContext());
+         patterns.insert<SplitTupleLoad, SplitTupleStore>(&getContext());
 
          if (lingodb::compiler::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
             assert(false && "should not happen");
