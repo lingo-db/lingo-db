@@ -1,0 +1,63 @@
+# An ungrouped COUNT in nested SQL over an empty input is 0, also when the
+# nested query depends on a column of the outer query and is decorrelated
+# (the empty input yields no group; before, the UDF saw NULL). The SQL
+# translator compensates the same way for scalar subqueries.
+
+statement ok
+create table kv(k int8 not null, v int8);
+
+statement ok
+insert into kv values (0, 10), (1, NULL), (2, 12);
+
+statement ok
+create table xs(x int8 not null);
+
+statement ok
+insert into xs values (0), (2), (9);
+
+statement ok
+CREATE OR REPLACE FUNCTION cnt(x INT8) RETURNS TEXT AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def cnt(x):
+    n = sql.execute(sql.nullable(int), "SELECT COUNT(*) FROM kv WHERE k < PARAM(1)", x)
+    m = sql.execute(sql.nullable(int), "SELECT COUNT(v) FROM kv WHERE k < PARAM(1)", x)
+    if n.is_null() or m.is_null():
+        return "null"
+    return str(n.get_value()) + "/" + str(m.get_value())
+$$ LANGUAGE hipy;
+
+# as float
+statement ok
+CREATE OR REPLACE FUNCTION cntf(x INT8) RETURNS FLOAT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def cntf(x):
+    return sql.execute(sql.nullable(float), "SELECT COUNT(*) FROM kv WHERE k < PARAM(1)", x).get_value() + 0.5
+$$ LANGUAGE hipy;
+
+query T
+select x, cnt(x), cntf(x) from xs order by x
+----
+0
+0/0
+0.500
+2
+2/1
+2.500
+9
+3/2
+3.500
+
+# in SQL, for comparison
+query I
+select x, (select count(*) from kv where k < x) from xs order by x
+----
+0
+0
+2
+2
+9
+3

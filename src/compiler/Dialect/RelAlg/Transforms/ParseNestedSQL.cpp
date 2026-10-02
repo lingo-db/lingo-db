@@ -9,6 +9,7 @@
 #include "lingodb/compiler/frontend/sql_context.h"
 #include "lingodb/compiler/frontend/sql_mlir_translator.h"
 
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/BuiltinOps.h"
 
 #include <lingodb/catalog/TableCatalogEntry.h>
@@ -31,8 +32,11 @@ class ParseNestedSQL : public mlir::PassWrapper<ParseNestedSQL, mlir::OperationP
 
    // Parse, analyze and translate the SQL text of `op` in front of `builder`'s
    // insertion point. Returns the translator's relalg.materialize (or null
-   // after emitting an error).
-   relalg::MaterializeOp translate(relalg::SQLQueryOp op, mlir::OpBuilder& builder) {
+   // after emitting an error). `zeroInsteadOfNull` receives, per result
+   // column, whether a missing value means 0 (an ungrouped COUNT: when the
+   // query is decorrelated, an empty input yields no group, i.e. NULL; the SQL
+   // translator compensates the same way for scalar subqueries).
+   relalg::MaterializeOp translate(relalg::SQLQueryOp op, mlir::OpBuilder& builder, std::vector<bool>* zeroInsteadOfNull = nullptr) {
       std::string scopePrefix = "nested_sql_" + std::to_string(cnt++) + "_";
       ::Driver drv;
       if (drv.parse(op.getSql().str(), /*isFile=*/false)) {
@@ -53,6 +57,11 @@ class ParseNestedSQL : public mlir::PassWrapper<ParseNestedSQL, mlir::OperationP
       auto materializeOp = mlir::dyn_cast_or_null<relalg::MaterializeOp>(translated.value().getDefiningOp());
       if (!materializeOp) {
          op.emitError("Nested SQL did not lower to a relalg.materialize");
+      }
+      if (zeroInsteadOfNull) {
+         for (auto& column : sqlContext->currentScope->targetInfo.getTargetColumns()) {
+            zeroInsteadOfNull->push_back(column->resultType.useZeroInsteadOfNull);
+         }
       }
       return materializeOp;
    }
@@ -142,9 +151,20 @@ class ParseNestedSQL : public mlir::PassWrapper<ParseNestedSQL, mlir::OperationP
       mlir::Type resultType = op.getResult().getType();
       auto tupleType = mlir::dyn_cast<mlir::TupleType>(resultType);
       if (!tupleType) {
-         auto materializeOp = translate(op, builder);
+         std::vector<bool> zeroInsteadOfNull;
+         auto materializeOp = translate(op, builder, &zeroInsteadOfNull);
          if (!materializeOp) return {};
-         return scalarFromColumn(builder, loc, materializeOp, 0, resultType);
+         mlir::Value scalar = scalarFromColumn(builder, loc, materializeOp, 0, resultType);
+         mlir::Type baseType = getBaseType(resultType);
+         if (!zeroInsteadOfNull.empty() && zeroInsteadOfNull[0] && mlir::isa<db::NullableType>(resultType) && (mlir::isa<mlir::IntegerType>(baseType) || mlir::isa<mlir::FloatType>(baseType))) {
+            mlir::Value isNull = builder.create<db::IsNullOp>(loc, scalar);
+            mlir::Value value = builder.create<db::NullableGetVal>(loc, baseType, scalar);
+            mlir::Attribute zeroAttr = mlir::isa<mlir::FloatType>(baseType) ? mlir::Attribute(builder.getFloatAttr(baseType, 0.0)) : mlir::Attribute(builder.getIntegerAttr(baseType, 0));
+            mlir::Value zero = builder.create<db::ConstantOp>(loc, baseType, zeroAttr);
+            mlir::Value count = builder.create<mlir::arith::SelectOp>(loc, isNull, zero, value);
+            return builder.create<db::AsNullableOp>(loc, resultType, count);
+         }
+         return scalar;
       }
       // Row-valued query: the values of its first row, one per declared tuple
       // element (cast to the declared element types); a runtime error if it
