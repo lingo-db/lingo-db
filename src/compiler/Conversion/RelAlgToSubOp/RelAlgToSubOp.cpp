@@ -3233,12 +3233,15 @@ class GetFirstRowLowering : public OpConversionPattern<relalg::GetFirstRowOp> {
       auto stateType = subop::SimpleStateType::get(ctxt, createStateMembersAttr(ctxt, members));
       auto createOp = rewriter.create<subop::CreateSimpleStateOp>(loc, stateType);
       {
-         // only the flag is initialized; the columns are only read if set
+         // the columns are only used if the flag is set (placeholders otherwise)
          Block* initialValueBlock = new Block;
          mlir::OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPointToStart(initialValueBlock);
-         mlir::Value notFound = rewriter.create<db::ConstantOp>(loc, rewriter.getI1Type(), rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
-         rewriter.create<tuples::ReturnOp>(loc, notFound);
+         llvm::SmallVector<mlir::Value> initialValues{rewriter.create<db::ConstantOp>(loc, rewriter.getI1Type(), rewriter.getIntegerAttr(rewriter.getI1Type(), 0))};
+         for (auto type : resultType.getTypes()) {
+            initialValues.push_back(createPlaceholderValue(rewriter, loc, type));
+         }
+         rewriter.create<tuples::ReturnOp>(loc, initialValues);
          createOp.getInitFn().push_back(initialValueBlock);
       }
       auto [foundDef, foundRef] = createColumn(rewriter.getI1Type(), "getfirstrow", "found");

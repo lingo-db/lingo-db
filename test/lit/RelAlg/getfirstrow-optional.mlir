@@ -4,9 +4,18 @@
 
 // relalg.getfirstrow with a nullable tuple as result type (hipy's
 // sql.nullable(sql.row(...))): NULL instead of a runtime error if there is no
-// row.
+// row. The members of the simple_state are initialized with placeholders
+// (strings: "", nullable: NULL) besides the "found" flag: reading the state
+// back copies (and refcounts) the strings even if no row was found; before,
+// they were uninitialized memory (random crashes in StringRuntime::addUse).
 
 // CHECK-LABEL: func.func @main
+// CHECK: subop.create_simple_state <[found$0 : i1, col$0 : i64, col$1 : !db.string, col$2 : !db.nullable<!db.string>]> initial
+// CHECK-NEXT: db.constant(false) : i1
+// CHECK-NEXT: util.undef : i64
+// CHECK-NEXT: db.constant("") : !db.string
+// CHECK-NEXT: db.null : <!db.string>
+// CHECK-NEXT: tuples.return
 // CHECK: subop.state_to_native {{.*}} -> tuple<i1, i64, !db.string, !db.nullable<!db.string>>
 // CHECK: %[[ROW:[0-9]+]]:4 = util.unpack
 // CHECK-NOT: raiseError
