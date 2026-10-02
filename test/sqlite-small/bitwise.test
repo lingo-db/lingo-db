@@ -1,0 +1,50 @@
+# Bitwise operators on integers (PostgreSQL semantics): & | # (xor) ~ << >>.
+# Expected values as in PostgreSQL unless noted otherwise.
+
+query tsv nosort 1
+select 12 & 10, 12 | 10, 12 # 10, ~5, 1 << 3, -16 >> 2;
+----
+8	14	6	-6	8	-4
+
+# all operators have the same precedence (left-associative), above
+# comparisons and below + and -; a prefix ~ binds weaker than +
+query tsv nosort 2
+select 6 & 3 << 1, 1 << 2 + 1, 5 & 4 <> 0, 3 | 4 <= 7, ~5 + 1, 6 & 3 # 1;
+----
+4	8	t	t	-7	3
+
+# shift amounts are taken modulo the bit width (int4 literals here)
+query tsv nosort 3
+select 1 << 31, 1 << 32, 1 << 33;
+----
+-2147483648	1	2
+
+statement ok
+create table bits(a int8 not null, b int4, s int);
+
+statement ok
+insert into bits values (5, 3, 1), (6, null, 2), (-1, 1, 33);
+
+# mixed widths (int8 / int4) are promoted, NULLs propagate
+query tsv rowsort 4
+select a, a & b, a | b, a # b, ~b, a << s, a >> s, b << s from bits;
+----
+-1	1	-1	-2	-2	-8589934592	-1	2
+5	1	7	6	-4	10	2	6
+6	NULL	NULL	NULL	NULL	24	1	NULL
+
+# both operands are promoted to a common type, also the shift amount
+# (PostgreSQL has no int4 << int8)
+query tsv nosort 5
+select (cast(65536 as int8) * 65536) | 1, cast(1 as int8) << 40, 1 << cast(40 as int8);
+----
+4294967297	1099511627776	1099511627776
+
+# the bit test of the ByePy packing example
+query tsv rowsort 6
+select s from bits where 6 & (1 << s - 1) <> 0;
+----
+2
+
+statement frontend-error: Operator & expects integer operands
+select 1.5 & 1;

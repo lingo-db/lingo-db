@@ -183,6 +183,13 @@ enum class ExpressionType : uint8_t {
    BOUND_EXPANDED = 234,
    SET = 242,
    BOUND_SET = 243,
+   // bitwise operators on integers: &, |, # (xor), ~ (not), <<, >>
+   OPERATOR_BITWISE_AND = 244,
+   OPERATOR_BITWISE_OR = 245,
+   OPERATOR_BITWISE_XOR = 246,
+   OPERATOR_BITWISE_NOT = 247,
+   OPERATOR_SHIFT_LEFT = 248,
+   OPERATOR_SHIFT_RIGHT = 249,
 
 };
 enum class ExpressionClass : uint8_t {

@@ -872,6 +872,11 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
             case ast::ExpressionType::OPERATOR_DIVIDE:
             case ast::ExpressionType::OPERATOR_MOD:
             case ast::ExpressionType::OPERATOR_TIMES:
+            case ast::ExpressionType::OPERATOR_BITWISE_AND:
+            case ast::ExpressionType::OPERATOR_BITWISE_OR:
+            case ast::ExpressionType::OPERATOR_BITWISE_XOR:
+            case ast::ExpressionType::OPERATOR_SHIFT_LEFT:
+            case ast::ExpressionType::OPERATOR_SHIFT_RIGHT:
             case ast::ExpressionType::OPERATOR_PLUS: {
                assert(operatorExpr->children.size() == 2);
                left = translateExpression(builder, operatorExpr->children[0], context);
@@ -901,6 +906,14 @@ mlir::Value SQLMlirTranslator::translateExpression(mlir::OpBuilder& builder, std
             }
             case ast::ExpressionType::OPERATOR_NOT: {
                return builder.create<db::NotOp>(exprLocation, translateExpression(builder, operatorExpr->children[0], context));
+            }
+            case ast::ExpressionType::OPERATOR_BITWISE_NOT: {
+               // ~x = x # -1
+               assert(operatorExpr->children.size() == 1);
+               auto child = translateExpression(builder, operatorExpr->children[0], context);
+               child = operatorExpr->resultType->castValueToThisType(builder, child, operatorExpr->children[0]->resultType->isNullable);
+               mlir::Value allOnes = builder.create<db::ConstantOp>(exprLocation, getBaseType(child.getType()), builder.getI64IntegerAttr(-1));
+               return builder.create<db::BitwiseXorOp>(exprLocation, child, allOnes);
             }
             default: translatorError("Operator not implemented", expression->loc);
          }
@@ -1052,6 +1065,21 @@ mlir::Value SQLMlirTranslator::translateBinaryOperatorExpression(mlir::OpBuilder
       case ast::ExpressionType::OPERATOR_MOD: {
          auto ct = {expression->children[0]->resultType->castValue(builder, left), expression->children[1]->resultType->castValue(builder, right)};
          return builder.create<db::ModOp>(location, ct);
+      }
+      case ast::ExpressionType::OPERATOR_BITWISE_AND:
+      case ast::ExpressionType::OPERATOR_BITWISE_OR:
+      case ast::ExpressionType::OPERATOR_BITWISE_XOR:
+      case ast::ExpressionType::OPERATOR_SHIFT_LEFT:
+      case ast::ExpressionType::OPERATOR_SHIFT_RIGHT: {
+         // the operands are cast to a common integer type (also for shifts, unlike PostgreSQL's int4 shift amount)
+         std::vector ct = {expression->resultType->castValueToThisType(builder, left, expression->children[0]->resultType->isNullable), expression->resultType->castValueToThisType(builder, right, expression->children[1]->resultType->isNullable)};
+         switch (expression->type) {
+            case ast::ExpressionType::OPERATOR_BITWISE_AND: return builder.create<db::BitwiseAndOp>(location, ct);
+            case ast::ExpressionType::OPERATOR_BITWISE_OR: return builder.create<db::BitwiseOrOp>(location, ct);
+            case ast::ExpressionType::OPERATOR_BITWISE_XOR: return builder.create<db::BitwiseXorOp>(location, ct);
+            case ast::ExpressionType::OPERATOR_SHIFT_LEFT: return builder.create<db::ShiftLeftOp>(location, ct);
+            default: return builder.create<db::ShiftRightOp>(location, ct);
+         }
       }
       default: translatorError("Binary operator not implemented", expression->loc);
    }

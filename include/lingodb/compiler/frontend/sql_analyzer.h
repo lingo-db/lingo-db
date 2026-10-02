@@ -200,14 +200,20 @@ class SQLQueryAnalyzer {
    std::shared_ptr<ast::BoundColumnRefExpression> analyzeColumnRefExpression(std::shared_ptr<ast::ColumnRefExpression> columnRef, std::shared_ptr<SQLContext> context);
 
    ast::ExpressionType stringToExpressionType(const std::string& parserStr, size_t numOperands) {
-      if (numOperands == 1) {
-         // no prefix operators supported yet
-         return ast::ExpressionType::OPERATOR_UNKNOWN;
-      }
       std::string str = parserStr;
       std::transform(str.begin(), str.end(), str.begin(), ::toupper);
+      if (numOperands == 1) {
+         return llvm::StringSwitch<ast::ExpressionType>(str)
+            .Case("~", ast::ExpressionType::OPERATOR_BITWISE_NOT)
+            .Default(ast::ExpressionType::OPERATOR_UNKNOWN);
+      }
       return llvm::StringSwitch<ast::ExpressionType>(str)
          .Case("||", ast::ExpressionType::OPERATOR_CONCAT)
+         .Case("&", ast::ExpressionType::OPERATOR_BITWISE_AND)
+         .Case("|", ast::ExpressionType::OPERATOR_BITWISE_OR)
+         .Case("#", ast::ExpressionType::OPERATOR_BITWISE_XOR)
+         .Case("<<", ast::ExpressionType::OPERATOR_SHIFT_LEFT)
+         .Case(">>", ast::ExpressionType::OPERATOR_SHIFT_RIGHT)
          .Default(ast::ExpressionType::OPERATOR_UNKNOWN);
    }
 

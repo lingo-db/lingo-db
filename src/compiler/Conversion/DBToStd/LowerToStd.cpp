@@ -628,6 +628,21 @@ mlir::Value getDecimalScaleMultiplierConstant(mlir::OpBuilder& builder, int32_t 
    auto multiplier = builder.create<arith::ConstantOp>(loc, stdType, builder.getIntegerAttr(stdType, APInt(mlir::cast<mlir::IntegerType>(stdType).getWidth(), parts)));
    return multiplier;
 }
+// Shift amounts are taken modulo the bit width: arith shifts by >= the bit width are poison.
+template <class DBOp, class ArithOp>
+class ShiftOpLowering : public OpConversionPattern<DBOp> {
+   public:
+   using OpConversionPattern<DBOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(DBOp shiftOp, typename OpConversionPattern<DBOp>::OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto intType = mlir::dyn_cast_or_null<mlir::IntegerType>(getBaseType(shiftOp.getLeft().getType()));
+      if (!intType) return failure();
+      auto loc = shiftOp->getLoc();
+      auto mask = rewriter.create<arith::ConstantOp>(loc, intType, rewriter.getIntegerAttr(intType, intType.getWidth() - 1));
+      auto amount = rewriter.create<arith::AndIOp>(loc, adaptor.getRight(), mask);
+      rewriter.template replaceOpWithNewOp<ArithOp>(shiftOp, adaptor.getLeft(), amount);
+      return success();
+   }
+};
 template <class DBOp, class Op>
 class DecimalOpScaledLowering : public OpConversionPattern<DBOp> {
    public:
@@ -1764,6 +1779,11 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<BinOpLowering<db::MulOp, mlir::IntegerType, arith::MulIOp>>(typeConverter, ctxt);
    patterns.insert<BinOpLowering<db::DivOp, mlir::IntegerType, arith::DivSIOp>>(typeConverter, ctxt);
    patterns.insert<BinOpLowering<db::ModOp, mlir::IntegerType, arith::RemSIOp>>(typeConverter, ctxt);
+   patterns.insert<BinOpLowering<db::BitwiseAndOp, mlir::IntegerType, arith::AndIOp>>(typeConverter, ctxt);
+   patterns.insert<BinOpLowering<db::BitwiseOrOp, mlir::IntegerType, arith::OrIOp>>(typeConverter, ctxt);
+   patterns.insert<BinOpLowering<db::BitwiseXorOp, mlir::IntegerType, arith::XOrIOp>>(typeConverter, ctxt);
+   patterns.insert<ShiftOpLowering<db::ShiftLeftOp, arith::ShLIOp>>(typeConverter, ctxt);
+   patterns.insert<ShiftOpLowering<db::ShiftRightOp, arith::ShRSIOp>>(typeConverter, ctxt);
 
    patterns.insert<BinOpLowering<db::AddOp, mlir::FloatType, arith::AddFOp>>(typeConverter, ctxt);
    patterns.insert<BinOpLowering<db::SubOp, mlir::FloatType, arith::SubFOp>>(typeConverter, ctxt);

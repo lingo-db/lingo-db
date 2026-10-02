@@ -2555,6 +2555,19 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeOperatorExpressio
 
          break;
       }
+      case ast::ExpressionType::OPERATOR_BITWISE_AND:
+      case ast::ExpressionType::OPERATOR_BITWISE_OR:
+      case ast::ExpressionType::OPERATOR_BITWISE_XOR:
+      case ast::ExpressionType::OPERATOR_BITWISE_NOT:
+      case ast::ExpressionType::OPERATOR_SHIFT_LEFT:
+      case ast::ExpressionType::OPERATOR_SHIFT_RIGHT: {
+         for (auto& t : castValues) {
+            if (t.type.getTypeId() != catalog::LogicalTypeId::INT) {
+               error("Operator " << operatorExpr->opString << " expects integer operands", operatorExpr->loc);
+            }
+         }
+         break;
+      }
       case ast::ExpressionType::OPERATOR_NOT: {
          resultType = NullableType(catalog::Type::boolean());
          if (boundChildren.size() != 1) {

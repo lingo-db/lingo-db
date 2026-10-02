@@ -433,6 +433,24 @@ def DB_DivOp : DB_BinaryOp<"div"> {
     }
   }];
 }
+// Bitwise operations and shifts on integers (operands of the same type).
+// Shift amounts are taken modulo the bit width (no poison for large/negative
+// amounts); shift_right is arithmetic (sign-extending), as in PostgreSQL.
+def DB_BitwiseAndOp : DB_BinaryOp<"bitwise_and",[DB_SupportsInvalidValues]> {
+    let summary = "Bitwise and of integers";
+}
+def DB_BitwiseOrOp : DB_BinaryOp<"bitwise_or",[DB_SupportsInvalidValues]> {
+    let summary = "Bitwise or of integers";
+}
+def DB_BitwiseXorOp : DB_BinaryOp<"bitwise_xor",[DB_SupportsInvalidValues]> {
+    let summary = "Bitwise exclusive or of integers";
+}
+def DB_ShiftLeftOp : DB_BinaryOp<"shift_left",[DB_SupportsInvalidValues]> {
+    let summary = "Shift an integer left";
+}
+def DB_ShiftRightOp : DB_BinaryOp<"shift_right",[DB_SupportsInvalidValues]> {
+    let summary = "Shift an integer right (arithmetic)";
+}
 def DB_ModOp : DB_BinaryOp<"mod"> {
     let summary = "Remainder of int/float/decimal";
 
