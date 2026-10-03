@@ -1,0 +1,59 @@
+# hipy: a local variable named like the compiled function itself is a local
+# variable (Python's scoping rule), also inside loop/if bodies; it used to
+# resolve to the function (e.g. `AttributeError: ('no attribute', 'append',
+# ...)`). The ByePy march example has `march = []` in `def march`. A function
+# that does not assign its own name still calls itself (recursion).
+# Expected values from CPython.
+
+statement ok
+CREATE OR REPLACE FUNCTION selfint(n INT8) RETURNS INT8 AS $$
+import hipy
+@hipy.compiled_function
+def selfint(n):
+    selfint = n + 1
+    return selfint * 2
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION selflist(n INT8) RETURNS TEXT AS $$
+import hipy
+@hipy.compiled_function
+def selflist(n):
+    selflist = []
+    for i in range(n):
+        if i % 2 == 0:
+            selflist.append(i)
+    return repr(selflist)
+$$ LANGUAGE hipy;
+
+statement ok
+CREATE OR REPLACE FUNCTION selfloop(n INT8) RETURNS INT8 AS $$
+import hipy
+@hipy.compiled_function
+def selfloop(n):
+    selfloop = 0
+    i = 0
+    while i < n:
+        selfloop += i
+        i += 1
+    return selfloop
+$$ LANGUAGE hipy;
+
+# recursion with a compile-time depth (unrolled by hipy)
+statement ok
+CREATE OR REPLACE FUNCTION rep(n INT8) RETURNS INT8 AS $$
+import hipy
+@hipy.compiled_function
+def rep(n, k=3):
+    if k == 0:
+        return 0
+    return n + rep(n, k - 1)
+$$ LANGUAGE hipy;
+
+query T
+select selfint(3), selflist(5), selfloop(4), rep(5)
+----
+8
+[0, 2, 4]
+6
+15
