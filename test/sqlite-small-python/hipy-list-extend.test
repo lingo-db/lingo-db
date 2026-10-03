@@ -1,0 +1,63 @@
+# list.extend in hipy: with a runtime list, a compile-time list (both ways),
+# a range, a list of strings, the list itself (appends it once) and in a
+# while loop (a stack that is extended with children, as in the ByePy
+# barnes_hut traversal). Expected values from CPython.
+
+statement ok
+CREATE OR REPLACE FUNCTION ext(n INT8) RETURNS TEXT AS $$
+import hipy
+@hipy.compiled_function
+def ext(n):
+    a = [i for i in range(n)]
+    a.extend([i * 10 for i in range(n)])
+    a.extend([7, 8])
+    b = [1, 2]
+    b.extend([3])
+    b.extend(a)
+    c = [5]
+    c.extend(range(n))
+    return repr(a) + " " + repr(b) + " " + repr(c)
+$$ LANGUAGE hipy;
+
+query T
+select ext(0), ext(2)
+----
+[7, 8] [1, 2, 3, 7, 8] [5]
+[0, 1, 0, 10, 7, 8] [1, 2, 3, 0, 1, 0, 10, 7, 8] [5, 0, 1]
+
+statement ok
+CREATE OR REPLACE FUNCTION ext_self(n INT8) RETURNS TEXT AS $$
+import hipy
+@hipy.compiled_function
+def ext_self(n):
+    l = ["a-long-enough-string-number-" + str(i) for i in range(n)]
+    l.extend(l)
+    return repr(len(l)) + " " + l[len(l) - 1]
+$$ LANGUAGE hipy;
+
+query T
+select ext_self(2)
+----
+4 a-long-enough-string-number-1
+
+statement ok
+CREATE OR REPLACE FUNCTION ext_loop(bound INT8) RETURNS INT8 AS $$
+import hipy
+@hipy.compiled_function
+def ext_loop(bound):
+    Q = [1]
+    total = 0
+    while len(Q) > 0:
+        node = Q.pop()
+        total += node
+        if node < bound:
+            Q.extend([2 * node, 2 * node + 1])
+    return total
+$$ LANGUAGE hipy;
+
+query I
+select ext_loop(1), ext_loop(2), ext_loop(8)
+----
+1
+6
+120
