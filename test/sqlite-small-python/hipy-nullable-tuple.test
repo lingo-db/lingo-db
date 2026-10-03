@@ -1,0 +1,96 @@
+# hipy: None merged with a (named) tuple gives a nullable tuple (a variable
+# that is None on one path and a tuple on another, e.g. `goal = None` before
+# a loop that sets `goal = current`; used by the ByePy march example), and
+# == / != on sql.nullable values: None equals only None, otherwise the value
+# is compared (in both operand orders). Results as "1"/"0" per comparison;
+# expected values from CPython.
+
+statement ok
+CREATE OR REPLACE FUNCTION ntl(n INT8) RETURNS TEXT AS $$
+import hipy
+import hipy.lib.collections
+from collections import namedtuple
+@hipy.compiled_function
+def ntl(n):
+    P = namedtuple("P", ["x", "y"])
+    goal = None
+    i = 0
+    while i < 3:
+        if i == n:
+            goal = P(i, 2 * i)
+        i += 1
+    r = "1" if goal is None else "0"
+    r += "1" if goal == P(n, 2 * n) else "0"
+    r += "1" if P(n, 2 * n) == goal else "0"
+    r += "1" if goal != P(n, 2 * n) else "0"
+    r += "1" if goal == (n, 2 * n) else "0"
+    r += "1" if goal == None else "0"
+    r += "1" if goal != None else "0"
+    if goal is not None:
+        r += " " + repr(goal.get_value())
+    return r
+$$ LANGUAGE hipy;
+
+query T
+select n, ntl(n) from (values (-1), (0), (2)) as t(n) order by n
+----
+-1
+1001010
+0
+0110101 P(x=0, y=0)
+2
+0110101 P(x=2, y=4)
+
+statement ok
+CREATE OR REPLACE FUNCTION nts(n INT8) RETURNS TEXT AS $$
+import hipy
+@hipy.compiled_function
+def nts(n):
+    a = None
+    if n > 0:
+        a = (n, "abcdefghijklmnopq" + str(n))
+    b = None
+    if n > 1:
+        b = (n, "abcdefghijklmnopq" + str(n))
+    r = "1" if a == b else "0"
+    r += "1" if a != b else "0"
+    r += "1" if b == a else "0"
+    if a is not None:
+        r += " " + repr(a.get_value())
+    return r
+$$ LANGUAGE hipy;
+
+query T
+select n, nts(n) from (values (0), (1), (2)) as t(n) order by n
+----
+0
+101
+1
+010 (1, 'abcdefghijklmnopq1')
+2
+101 (2, 'abcdefghijklmnopq2')
+
+statement ok
+CREATE OR REPLACE FUNCTION nti(n INT8) RETURNS TEXT AS $$
+import hipy
+@hipy.compiled_function
+def nti(n):
+    v = None
+    if n > 0:
+        v = n
+    r = "1" if v == None else "0"
+    r += "1" if v == 3 else "0"
+    r += "1" if 3 == v else "0"
+    r += "1" if v != 3 else "0"
+    return r
+$$ LANGUAGE hipy;
+
+query T
+select n, nti(n) from (values (0), (2), (3)) as t(n) order by n
+----
+0
+1001
+2
+0001
+3
+0110
