@@ -1,0 +1,69 @@
+# hipy namedtuples as loop-carried values: a namedtuple reassigned in a while
+# loop, a list of namedtuples built in a for loop, and a namedtuple merged
+# from both branches of an if (used to crash at compile time:
+# `__init__() got multiple values for argument 'value'`). Used by the ByePy
+# march example (current position, list of positions). Expected values from
+# CPython.
+
+statement ok
+CREATE OR REPLACE FUNCTION walk(n INT8) RETURNS TEXT AS $$
+import hipy
+import hipy.lib.collections
+from collections import namedtuple
+@hipy.compiled_function
+def walk(n):
+    P = namedtuple("P", ["x", "y"])
+    p = P(0, 0)
+    i = 0
+    while i < n:
+        p = P(p.x + 1, p.y + i)
+        i += 1
+    return repr(p)
+$$ LANGUAGE hipy;
+
+query T
+select walk(0), walk(4)
+----
+P(x=0, y=0)
+P(x=4, y=6)
+
+statement ok
+CREATE OR REPLACE FUNCTION path(n INT8) RETURNS TEXT AS $$
+import hipy
+import hipy.lib.collections
+from collections import namedtuple
+@hipy.compiled_function
+def path(n):
+    P = namedtuple("P", ["x", "y"])
+    ps = []
+    for i in range(n):
+        ps.append(P(i, i * i))
+    return repr(ps)
+$$ LANGUAGE hipy;
+
+query T
+select path(0), path(3)
+----
+[]
+[P(x=0, y=0), P(x=1, y=1), P(x=2, y=4)]
+
+statement ok
+CREATE OR REPLACE FUNCTION pick(n INT8) RETURNS TEXT AS $$
+import hipy
+import hipy.lib.collections
+from collections import namedtuple
+@hipy.compiled_function
+def pick(n):
+    P = namedtuple("P", ["x", "y"])
+    if n > 0:
+        p = P(n, 1)
+    else:
+        p = P(0, n)
+    return repr(p) + " " + str(p.x + p.y)
+$$ LANGUAGE hipy;
+
+query T
+select pick(5), pick(-2)
+----
+P(x=5, y=1) 6
+P(x=0, y=-2) -2
