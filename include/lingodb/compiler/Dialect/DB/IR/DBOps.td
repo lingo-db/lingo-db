@@ -202,6 +202,19 @@ def DB_ListSetOp : DB_Op<"list_set", [DeclareOpInterfaceMethods<DB_RefCountedOp,
     }];
 }
 
+def DB_ListPopOp : DB_Op<"list_pop", []> {
+    let summary = "Remove the element at an index from a list and return it";
+    let description = [{
+        The list's reference to the element moves to the result (an owned
+        value, unlike the borrowed result of list_get). Runtime error if the
+        index is out of range.
+    }];
+
+    let arguments = (ins ListType:$list, Index:$index);
+    let results = (outs AnyType:$element);
+    let assemblyFormat = "$list `:` type($list) `[` $index `]` `:` type($element) attr-dict";
+}
+
 def DB_ListSortOp : DB_Op<"list_sort", []> {
     let summary = "Sort list in place using a user-supplied comparator";
 

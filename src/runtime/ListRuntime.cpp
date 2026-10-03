@@ -1,5 +1,7 @@
 #include "lingodb/runtime/ListRuntime.h"
 #include <algorithm>
+#include <cstring>
+#include <stdexcept>
 using namespace lingodb::runtime;
 
 List* List::create(size_t sizeOfType) {
@@ -11,6 +13,22 @@ uint8_t* List::append() {
    }
    auto* res = values.data() + len * sizeOfType;
    len++;
+   return res;
+}
+
+uint8_t* List::pop(size_t pos) {
+   if (len == 0) {
+      throw std::runtime_error("pop from empty list");
+   }
+   if (pos >= len) {
+      throw std::runtime_error("pop index out of range");
+   }
+   // move the element behind the (shortened) end, where it stays until the next append
+   std::vector<uint8_t> element(values.data() + pos * sizeOfType, values.data() + (pos + 1) * sizeOfType);
+   std::memmove(values.data() + pos * sizeOfType, values.data() + (pos + 1) * sizeOfType, (len - pos - 1) * sizeOfType);
+   len--;
+   auto* res = values.data() + len * sizeOfType;
+   std::memcpy(res, element.data(), sizeOfType);
    return res;
 }
 

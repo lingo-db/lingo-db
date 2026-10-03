@@ -16,6 +16,8 @@ class List {
    uint8_t* at(size_t pos);
    static List* fromBuffer(size_t sizeOfType, Buffer buffer);
    uint8_t* append();
+   // removes the element at pos; returns a pointer to it, valid until the next append
+   uint8_t* pop(size_t pos);
    size_t size();
    Buffer getBuffer();
    static void cleanupUse(List* list);

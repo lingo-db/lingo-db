@@ -107,6 +107,17 @@ func.func @list_get_borrows_element(%l: !db.list<!db.string>, %i: index) {
   return
 }
 
+// ListPopOp is not a RefCountedOp: the list's reference moves to the
+// result (owned), so no add_use after it, but a cleanup_use at the end.
+// CHECK-LABEL: func.func @list_pop_owns_element
+// CHECK: %[[E:.+]] = db.list_pop
+// CHECK-NOT: db.memory.add_use
+// CHECK: db.memory.cleanup_use %[[E]] : !db.string
+func.func @list_pop_owns_element(%l: !db.list<!db.string>, %i: index) {
+  %0 = db.list_pop %l : !db.list<!db.string>[%i] : !db.string
+  return
+}
+
 // NullableGetVal implements RefCountedOp: the unwrapped result is borrowed
 // (the underlying buffer is shared with the nullable). Pass emits an
 // add_use after so the unwrapped value owns its own reference and the

@@ -1242,6 +1242,19 @@ class ListGetLowering : public OpConversionPattern<db::ListGetOp> {
       return success();
    }
 };
+class ListPopLowering : public OpConversionPattern<db::ListPopOp> {
+   public:
+   using OpConversionPattern<db::ListPopOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(db::ListPopOp listPopOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = listPopOp.getLoc();
+      auto elementType = typeConverter->convertType(listPopOp.getType());
+      mlir::Value ptr = rt::List::pop(rewriter, loc)({adaptor.getList(), adaptor.getIndex()})[0];
+      ptr = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(rewriter.getContext(), elementType), ptr);
+      auto loadOp = rewriter.create<util::LoadOp>(loc, ptr);
+      rewriter.replaceOp(listPopOp, loadOp.getVal());
+      return success();
+   }
+};
 class ListSetLowering : public OpConversionPattern<db::ListSetOp> {
    public:
    using OpConversionPattern<db::ListSetOp>::OpConversionPattern;
@@ -1847,6 +1860,7 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<ListAppendLowering>(typeConverter, ctxt);
    patterns.insert<ListGetLowering>(typeConverter, ctxt);
    patterns.insert<ListSetLowering>(typeConverter, ctxt);
+   patterns.insert<ListPopLowering>(typeConverter, ctxt);
    patterns.insert<ListSortLowering>(typeConverter, ctxt);
    patterns.insert<CreateDictLowering>(typeConverter, ctxt);
    patterns.insert<DictLengthLowering>(typeConverter, ctxt);
