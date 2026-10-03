@@ -1,0 +1,116 @@
+# List-valued nested SQL: sql.execute(sql.rows(t1, t2, ...), ...) in LANGUAGE
+# hipy UDFs. The query is lowered to relalg.getrows (evaluated in place,
+# inside or outside of loops): all rows as a list of tuples, in the order of
+# the query, cast to the declared element types (int4 -> int8, non-nullable
+# -> nullable, NULL columns into nullable elements). Used by the ByePy
+# barnes_hut example (array_agg of the children of a node).
+
+statement ok
+create table kv(k int, g int not null, v float8 not null, n int);
+
+statement ok
+insert into kv values (2, 1, 0.5, 7), (3, 1, 1.5, NULL), (4, 2, 2.5, 9), (5, 1, 3.5, 10);
+
+# 0, 1 and n rows, outside of a loop; len, indexing, iteration, NULLs
+statement ok
+CREATE OR REPLACE FUNCTION group_rows(grp INT8) RETURNS TEXT AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def group_rows(grp):
+    rows = sql.execute(sql.rows(int, float, sql.nullable(int)), "SELECT k, v, n FROM kv WHERE g = PARAM(1) ORDER BY k DESC", grp)
+    res = repr(len(rows))
+    for k, v, n in rows:
+        res = res + " " + repr(k) + ":" + repr(v) + ":" + (repr(n.get_value()) if n is not None else "None")
+    return res
+$$ LANGUAGE hipy;
+
+query T
+select group_rows(0), group_rows(2), group_rows(1)
+----
+0
+1 4:2.5:9
+3 5:3.5:10 3:1.5:None 2:0.5:7
+
+# in a while loop (a stack extended with the rows of each group, popped
+# until empty), as in the barnes_hut traversal
+statement ok
+CREATE OR REPLACE FUNCTION walk(x INT8) RETURNS TEXT AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def walk(x):
+    Q = [(x, 0.25)]
+    res = ""
+    while len(Q) > 0:
+        g, v = Q.pop()
+        res = res + repr(g) + "/" + repr(v) + ";"
+        if g > 0:
+            Q.extend(sql.execute(sql.rows(int, float), "SELECT k, v FROM kv WHERE g = PARAM(1) ORDER BY k", g))
+    return res
+$$ LANGUAGE hipy;
+
+query T
+select walk(1)
+----
+1/0.25;5/3.5;3/1.5;2/0.5;4/2.5;
+
+query IT rowsort
+select k, walk(k) from kv
+----
+2
+2/0.25;4/2.5;
+3
+3/0.25;
+4
+4/0.25;
+5
+5/0.25;
+
+# a non-nullable element read from a NULL is a runtime error
+statement ok
+CREATE OR REPLACE FUNCTION not_null(grp INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def not_null(grp):
+    s = 0
+    for k, n in sql.execute(sql.rows(int, int), "SELECT k, n FROM kv WHERE g = PARAM(1)", grp):
+        s += n
+    return s
+$$ LANGUAGE hipy;
+
+query I
+select not_null(2)
+----
+9
+
+statement error
+select not_null(1)
+
+# the number of declared elements must match the number of columns (a
+# compile error when the nested query is translated)
+statement ok
+CREATE OR REPLACE FUNCTION wrong_count(grp INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def wrong_count(grp):
+    return len(sql.execute(sql.rows(int), "SELECT k, v FROM kv WHERE g = PARAM(1)", grp))
+$$ LANGUAGE hipy;
+
+statement error
+select wrong_count(1)
+
+# strings are not supported yet (a compile error)
+statement ok
+CREATE OR REPLACE FUNCTION strs(grp INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def strs(grp):
+    return len(sql.execute(sql.rows(int, str), "SELECT k, 'x' FROM kv WHERE g = PARAM(1)", grp))
+$$ LANGUAGE hipy;
+
+statement error
+select strs(1)
