@@ -172,6 +172,16 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
          }
       }
 
+      // A returned value may also be cleaned up here (a block argument that the
+      // terminator forwards, e.g. a loop-carried value in scf.while's
+      // before-region): add its use first, so the cleanup can't free it.
+      if (block != mapBlock) {
+         for (auto value : returnedValues) {
+            if (typeNeedsManagement(value.getType())) {
+               addUse(value, block->getTerminator(), notCounted);
+            }
+         }
+      }
       for (auto value : valuesToManage) {
          cleanupUse(block->getTerminator(), value, notCounted);
       }
@@ -185,12 +195,6 @@ class MemoryMgmtPass : public mlir::PassWrapper<MemoryMgmtPass, mlir::OperationP
             mlir::OpBuilder builder(block->getTerminator());
             mlir::Value newVal = managed.emitPromoteToGlobal(builder, block->getTerminator()->getLoc(), operand.get());
             operand.set(newVal);
-         }
-      } else {
-         for (auto value : returnedValues) {
-            if (typeNeedsManagement(value.getType())) {
-               addUse(value, block->getTerminator(), notCounted);
-            }
          }
       }
    }

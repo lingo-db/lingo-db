@@ -1,0 +1,28 @@
+# A list and a (long, heap-allocated) string reassigned in a while loop. The
+# memory management freed the loop-carried value in scf.while's before-region
+# (cleanup_use before the add_use for scf.condition), so a value created in
+# the body was used after free: garbage lengths / bytes or a crash. Used by
+# the ByePy barnes_hut example (the stack). Expected values from CPython.
+
+statement ok
+CREATE OR REPLACE FUNCTION grow(n INT8) RETURNS TEXT AS $$
+import hipy
+@hipy.compiled_function
+def grow(n):
+    Q = [1]
+    s = "start"
+    i = 0
+    while i < n:
+        Q = Q + [i]
+        s = s + "-and-another-long-piece"
+        i += 1
+    return repr(len(Q)) + " " + repr(Q[len(Q) - 1]) + " " + s
+$$ LANGUAGE hipy;
+
+query T
+select grow(0), grow(1), grow(3)
+----
+1 1 start
+2 0 start-and-another-long-piece
+4 2 start-and-another-long-piece-and-another-long-piece-and-another-long-piece
+

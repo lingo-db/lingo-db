@@ -227,3 +227,27 @@ func.func @pyobject_create_module_not_counted(%arg: !py_interp.py_object) -> !py
   %r = py_interp.py_call %fn(%arg) []
   return %r : !py_interp.py_object
 }
+
+// A block argument that the terminator forwards (here: the loop-carried list
+// in scf.while's before-region) gets an add_use for being returned and a
+// cleanup_use for being a block argument. The add_use must come first: with
+// the cleanup first, a list created in the loop body (refcount 1) was freed
+// before scf.condition forwarded it.
+// CHECK-LABEL: func.func @while_forwards_block_arg
+// CHECK: scf.while (%[[A:.+]] = %arg0)
+// CHECK: arith.cmpi
+// CHECK-NEXT: db.memory.add_use %[[A]] : !db.list<i32>
+// CHECK-NEXT: db.memory.cleanup_use %[[A]] : !db.list<i32>
+// CHECK-NEXT: scf.condition
+func.func @while_forwards_block_arg(%s: !db.list<i32>, %n: index) -> !db.list<i32> {
+  %r = scf.while (%a = %s) : (!db.list<i32>) -> !db.list<i32> {
+    %len = db.list_length %a : !db.list<i32>
+    %c = arith.cmpi ult, %len, %n : index
+    scf.condition(%c) %a : !db.list<i32>
+  } do {
+  ^bb0(%a: !db.list<i32>):
+    %new = db.create_list !db.list<i32>
+    scf.yield %new : !db.list<i32>
+  }
+  return %r : !db.list<i32>
+}
