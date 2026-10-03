@@ -2377,8 +2377,10 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
                error("Conjunction is only possible with children of type boolean", expr->loc);
             }
          }
-         return drv.nf.node<ast::BoundConjunctionExpression>(conjunction->loc, conjunction->type, conjunction->alias, boundChildren);
-         break;
+         auto boundConjunction = drv.nf.node<ast::BoundConjunctionExpression>(conjunction->loc, conjunction->type, conjunction->alias, boundChildren);
+         // db.and / db.or are nullable if any operand is
+         boundConjunction->resultType->isNullable = std::ranges::any_of(boundChildren, [](auto& c) { return c->resultType->isNullable; });
+         return boundConjunction;
       }
       case ast::ExpressionClass::OPERATOR: {
          auto operatorExpr = std::static_pointer_cast<ast::OperatorExpression>(rootNode);

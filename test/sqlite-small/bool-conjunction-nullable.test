@@ -1,0 +1,36 @@
+# AND / OR of a NOT NULL and a nullable bool column in the select list: the
+# result is nullable (three-valued logic).
+
+statement ok
+create table flags(k integer not null, a bool not null, b bool, primary key (k));
+
+statement ok
+insert into flags values (1, true, false), (2, true, null), (3, false, null), (4, true, true);
+
+query T rowsort
+select k, a and b, a or b from flags
+----
+1
+f
+t
+2
+NULL
+t
+3
+f
+NULL
+4
+t
+t
+
+query T rowsort
+select k, a and k > 1 from flags
+----
+1
+f
+2
+t
+3
+f
+4
+t
