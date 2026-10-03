@@ -1405,6 +1405,11 @@ mlir::Value SQLMlirTranslator::translateTableRef(mlir::OpBuilder& builder, std::
                      assert(constExpr->resultType.has_value());
                      break;
                   }
+                  case ast::ConstantType::BOOLEAN: {
+                     auto bValue = std::static_pointer_cast<ast::BoolValue>(constExpr->value);
+                     value = builder.getIntegerAttr(builder.getI1Type(), bValue->bVal);
+                     break;
+                  }
 
                   default: translatorError("Invalid constant in expression list", constExpr->loc);
                }

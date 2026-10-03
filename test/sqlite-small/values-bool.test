@@ -1,0 +1,32 @@
+# Boolean literals in VALUES lists (INSERT ... VALUES and VALUES as a table),
+# also mixed with NULL in a nullable bool column.
+
+statement ok
+create table flags(k integer not null, a bool not null, b bool, primary key (k));
+
+statement ok
+insert into flags values (1, true, false), (2, false, null), (3, true, true);
+
+query T rowsort
+select k, a, b from flags
+----
+1
+t
+f
+2
+f
+NULL
+3
+t
+t
+
+query T rowsort
+select k, x from (values (1, true), (2, false)) as t(k, x) where x = true
+----
+1
+t
+
+query T
+select count(*) from flags where b is null
+----
+1
