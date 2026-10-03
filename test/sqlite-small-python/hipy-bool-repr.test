@@ -1,0 +1,19 @@
+# hipy repr() / str() of runtime bools ("True" / "False"), also inside a
+# tuple and a list. repr() used to return the compile-time repr of hipy's
+# bool object (`<hipy.lib.builtins.bool object at 0x...>`) and str() had no
+# lowering. Expected values from CPython.
+
+statement ok
+CREATE OR REPLACE FUNCTION brepr(a INT8, b INT8) RETURNS TEXT AS $$
+import hipy
+@hipy.compiled_function
+def brepr(a, b):
+    t = a < b
+    return repr(t) + " " + str(a == b) + " " + repr((t, a != b)) + " " + repr([t, not t]) + " " + f"{t}"
+$$ LANGUAGE hipy;
+
+query T
+select brepr(1, 2), brepr(2, 2)
+----
+True False (True, True) [True, False] True
+False True (False, False) [False, True] False
