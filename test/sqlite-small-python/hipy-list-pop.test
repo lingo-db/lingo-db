@@ -1,0 +1,96 @@
+# list.pop() / pop(i) in hipy (db.list_pop): from the end, the front, the
+# middle and with a negative index; a list of strings (the popped string
+# owns the list's reference); a list of namedtuples used as a stack in a
+# while loop (the ByePy barnes_hut traversal); pop from an empty list and an
+# index out of range fail. Expected values from CPython.
+
+statement ok
+CREATE OR REPLACE FUNCTION pops(n INT8) RETURNS TEXT AS $$
+import hipy
+@hipy.compiled_function
+def pops(n):
+    l = [i * 10 for i in range(n)]
+    a = l.pop()
+    b = l.pop(0)
+    c = l.pop(1)
+    d = l.pop(-2)
+    return repr([a, b, c, d]) + " " + repr(l)
+$$ LANGUAGE hipy;
+
+query T
+select pops(5), pops(7)
+----
+[40, 0, 20, 10] [30]
+[60, 0, 20, 40] [10, 30, 50]
+
+statement ok
+CREATE OR REPLACE FUNCTION pop_strs(n INT8) RETURNS TEXT AS $$
+import hipy
+@hipy.compiled_function
+def pop_strs(n):
+    l = []
+    for i in range(n):
+        l.append("a-long-enough-string-number-" + str(i))
+    first = l.pop(0)
+    res = []
+    while len(l) > 0:
+        res.append(l.pop())
+    return first + " " + repr(res) + " " + repr(len(l))
+$$ LANGUAGE hipy;
+
+query T
+select pop_strs(3)
+----
+a-long-enough-string-number-0 ['a-long-enough-string-number-2', 'a-long-enough-string-number-1'] 0
+
+statement ok
+CREATE OR REPLACE FUNCTION tree_sum(depth INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.collections
+from collections import namedtuple
+@hipy.compiled_function
+def tree_sum(depth):
+    N = namedtuple("N", ["id", "level"])
+    Q = [N(1, 0)]
+    total = 0
+    while len(Q) > 0:
+        node = Q.pop()
+        total += node.id
+        if node.level < depth:
+            Q.append(N(2 * node.id, node.level + 1))
+            Q.append(N(2 * node.id + 1, node.level + 1))
+    return total
+$$ LANGUAGE hipy;
+
+query I
+select tree_sum(0), tree_sum(1), tree_sum(3)
+----
+1
+6
+120
+
+statement ok
+CREATE OR REPLACE FUNCTION pop_at(n INT8, i INT8) RETURNS INT8 AS $$
+import hipy
+@hipy.compiled_function
+def pop_at(n, i):
+    l = [j for j in range(n)]
+    return l.pop(i)
+$$ LANGUAGE hipy;
+
+query I
+select pop_at(3, 2), pop_at(3, -3)
+----
+2
+0
+
+# pop from empty list
+statement error
+select pop_at(0, -1)
+
+# pop index out of range
+statement error
+select pop_at(3, 3)
+
+statement error
+select pop_at(3, -4)
