@@ -1,0 +1,32 @@
+# Comparisons of bool columns with constants in a selection on a base table
+# (these must not be pushed into the scan: the scan restrictions have no
+# filter for bool columns), also on a nullable bool column.
+
+statement ok
+create table flags(k integer not null, a bool not null, b bool, primary key (k));
+
+statement ok
+insert into flags values (1, true, false), (2, false, null), (3, true, true), (4, false, false);
+
+query T rowsort
+select k from flags where a = true
+----
+1
+3
+
+query T rowsort
+select k from flags where b = false
+----
+1
+4
+
+query T rowsort
+select k from flags where false <> a
+----
+1
+3
+
+query T rowsort
+select k from flags where a = true and b = false
+----
+1

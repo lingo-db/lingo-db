@@ -325,6 +325,8 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
       }
       if (auto condOp = mlir::dyn_cast_or_null<db::CmpOp>(returnOp.getResults()[0].getDefiningOp())) {
          if (getBaseType(condOp.getLeft().getType()) != getBaseType(condOp.getRight().getType())) return false;
+         // the scan restrictions (runtime/storage/Restrictions.cpp) have no filter for bool columns
+         if (getBaseType(condOp.getLeft().getType()).isInteger(1)) return false;
          auto* left = condOp.getLeft().getDefiningOp();
          auto* right = condOp.getRight().getDefiningOp();
          if (!left || !right) return false;
@@ -357,6 +359,7 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
          std::variant<std::string, int64_t, double> lowerConst;
          std::variant<std::string, int64_t, double> upperConst;
          bool colNullable;
+         if (getBaseType(betweenOp.getVal().getType()).isInteger(1)) return false;
          if (getBaseType(betweenOp.getVal().getType()) != betweenOp.getLower().getType()) return false;
          if (getBaseType(betweenOp.getVal().getType()) != betweenOp.getUpper().getType()) return false;
          if (getColumnName(betweenOp.getVal(), baseTableOp, columnName, colNullable) &&
@@ -377,6 +380,7 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
          std::string columnName;
          bool colNullable;
          std::variant<std::vector<std::string>, std::vector<int64_t>, std::vector<double>> vals;
+         if (getBaseType(inOp.getVal().getType()).isInteger(1)) return false;
          if (!getColumnName(inOp.getVal(), baseTableOp, columnName, colNullable)) return false;
          for (auto val : inOp.getVals()) {
             std::variant<std::string, int64_t, double> constVal;
