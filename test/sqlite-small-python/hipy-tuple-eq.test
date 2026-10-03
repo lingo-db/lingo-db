@@ -1,0 +1,38 @@
+# hipy == and != on tuples and namedtuples (element-wise; tuples of different
+# lengths and None are unequal; a namedtuple equals a plain tuple with the
+# same elements). Used by the ByePy march example (`current == goal`).
+# Results as "1"/"0" per comparison; expected values from CPython.
+
+statement ok
+CREATE OR REPLACE FUNCTION teq(a INT8, b INT8) RETURNS TEXT AS $$
+import hipy
+import hipy.lib.collections
+from collections import namedtuple
+@hipy.compiled_function
+def teq(a, b):
+    P = namedtuple("P", ["x", "y"])
+    r = ""
+    r += "1" if (a, b) == (b, a) else "0"
+    r += "1" if (a, b) != (b, a) else "0"
+    r += "1" if (a, b) == (a, b, 0) else "0"
+    r += "1" if (a, b) != (a, b, 0) else "0"
+    r += "1" if (a, (b, "s")) == (a, (b, "s")) else "0"
+    r += "1" if (a, (b, "s")) == (a, (b, "t")) else "0"
+    r += "1" if (a, 1.5) == (a, b * 0.5) else "0"
+    r += "1" if P(a, b) == P(b, a) else "0"
+    r += "1" if P(a, b) == (a, b) else "0"
+    r += "1" if (a, b) != P(a, b) else "0"
+    r += "1" if (a, b) == None else "0"
+    r += "1" if (a, b) != None else "0"
+    return r
+$$ LANGUAGE hipy;
+
+query T
+select a, b, teq(a, b) from (values (1, 2), (3, 3)) as t(a, b) order by a
+----
+1
+2
+010110001001
+3
+3
+100110111001
