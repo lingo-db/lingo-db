@@ -1,0 +1,31 @@
+# A selection whose predicate is just a bool column (`WHERE flag`, `AND flag`),
+# not a comparison; also a nullable bool column (NULL is not true).
+
+statement ok
+create table flags(k integer not null, a bool not null, b bool, primary key (k));
+
+statement ok
+insert into flags values (1, true, false), (2, false, null), (3, true, true), (4, true, null);
+
+query T rowsort
+select k from flags where a
+----
+1
+3
+4
+
+query T rowsort
+select k from flags where b
+----
+3
+
+query T rowsort
+select k from flags where k > 1 and a
+----
+3
+4
+
+query T rowsort
+select k from (select 1 as k, true as x) t where x
+----
+1

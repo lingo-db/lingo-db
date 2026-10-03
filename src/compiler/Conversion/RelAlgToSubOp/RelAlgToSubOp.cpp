@@ -312,7 +312,10 @@ static mlir::Value translateSelection(mlir::Value stream, mlir::Region& predicat
                mlir::Value predicateTuple = predicate.front().getArgument(0);
                b.getInsertionBlock()->walk([&](tuples::GetColumnOp getColumnOp) {
                   if (getColumnOp.getTuple() != predicateTuple) return;
-                  getColumnOp.replaceAllUsesWith(helper.access(getColumnOp.getAttr(), getColumnOp->getLoc()));
+                  auto accessed = helper.access(getColumnOp.getAttr(), getColumnOp->getLoc());
+                  // the predicate may be the column itself (`WHERE flag`)
+                  if (predVal == getColumnOp.getResult()) predVal = accessed;
+                  getColumnOp.replaceAllUsesWith(accessed);
                   toErase.push_back(getColumnOp);
                });
                for (auto* op : toErase) {
