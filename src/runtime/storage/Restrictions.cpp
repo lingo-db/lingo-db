@@ -35,6 +35,19 @@ struct Neq {
       return a != b;
    }
 };
+// ordered, like the compiled comparison (arith.cmpf one): false if a value is NaN
+template <>
+struct Neq<double> {
+   static bool apply(double a, double b) {
+      return a < b || a > b;
+   }
+};
+template <>
+struct Neq<float> {
+   static bool apply(float a, float b) {
+      return a < b || a > b;
+   }
+};
 template <class T>
 struct Gt {
    static bool apply(T a, T b) {
@@ -360,6 +373,25 @@ std::unique_ptr<lingodb::runtime::Filter> createSimpleTypeFilter(lingodb::runtim
          throw std::runtime_error("unsupported filter op");
    }
 }
+// a float constant arrives as a string ("0.5"), an integer or a double; parsed
+// like db.constant (std::stod)
+double toDouble(const std::variant<std::string, int64_t, double>& value) {
+   if (auto* str = std::get_if<std::string>(&value)) return std::stod(*str);
+   if (auto* i = std::get_if<int64_t>(&value)) return static_cast<double>(*i);
+   return std::get<double>(value);
+}
+template <class T>
+std::unique_ptr<lingodb::runtime::Filter> createFloatFilter(lingodb::runtime::FilterDescription& filterDesc) {
+   if (filterDesc.op == lingodb::runtime::FilterOp::IN) {
+      std::vector<T> values;
+      std::visit([&](const auto& vals) {
+         for (const auto& v : vals) values.push_back(static_cast<T>(toDouble(v)));
+      },
+                 filterDesc.values);
+      return std::make_unique<SimpleTypeInFilter<T>>(values);
+   }
+   return createSimpleTypeSimpleFilters<T>(filterDesc.op, static_cast<T>(toDouble(filterDesc.value)));
+}
 } // namespace
 
 std::pair<size_t, uint16_t*> lingodb::runtime::Restrictions::applyFilters(size_t offset, size_t length, uint16_t* selVec1, uint16_t* selVec2, std::function<const ArrayView*(size_t)> getArrayView) {
@@ -436,6 +468,14 @@ std::unique_ptr<lingodb::runtime::Restrictions> lingodb::runtime::Restrictions::
          }
          case arrow::Type::INT64: {
             restrictions->filters.push_back({createSimpleTypeFilter<int64_t, int64_t>(filterDesc.op, filterDesc), colId});
+            break;
+         }
+         case arrow::Type::DOUBLE: {
+            restrictions->filters.push_back({createFloatFilter<double>(filterDesc), colId});
+            break;
+         }
+         case arrow::Type::FLOAT: {
+            restrictions->filters.push_back({createFloatFilter<float>(filterDesc), colId});
             break;
          }
          case arrow::Type::DATE32: {
