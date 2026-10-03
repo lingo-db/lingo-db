@@ -1,0 +1,50 @@
+# hipy namedtuples defined at module level (`P = namedtuple(...)` outside the
+# compiled function, as the ByePy examples define their record classes): used
+# for construction (also from a tuple with *), field access, repr, as
+# loop-carried values and nested in another namedtuple. The module-level code
+# runs in CPython; hipy maps the class to its own namedtuple (needs `import
+# hipy.lib.collections`, as namedtuples inside the function do). Used to fail
+# with "only functions from udf_module module are supported".
+# Expected values from CPython.
+
+statement ok
+CREATE OR REPLACE FUNCTION mnt(n INT8) RETURNS TEXT AS $$
+import hipy
+import hipy.lib.collections
+from collections import namedtuple
+
+P = namedtuple("P", ["x", "y"])
+Seg = namedtuple("Seg", ["start", "end", "len"])
+
+@hipy.compiled_function
+def mnt(n):
+    p = P(0, 0)
+    ps = []
+    i = 0
+    while i < n:
+        p = P(p.x + 1, p.y + i)
+        ps.append(p)
+        i += 1
+    q = P(*(n, n))
+    s = Seg(P(0, 0), p, p.x)
+    return repr(ps) + " " + repr(q) + " " + repr(s) + " " + str(s.end.y)
+$$ LANGUAGE hipy;
+
+query T
+select mnt(0), mnt(3)
+----
+[] P(x=0, y=0) Seg(start=P(x=0, y=0), end=P(x=0, y=0), len=0) 0
+[P(x=1, y=0), P(x=2, y=1), P(x=3, y=3)] P(x=3, y=3) Seg(start=P(x=0, y=0), end=P(x=3, y=3), len=3) 3
+
+# without hipy's collections module: a clear error
+statement error
+CREATE OR REPLACE FUNCTION mnt2(n INT8) RETURNS TEXT AS $$
+import hipy
+from collections import namedtuple
+
+P = namedtuple("P", ["x", "y"])
+
+@hipy.compiled_function
+def mnt2(n):
+    return repr(P(n, n))
+$$ LANGUAGE hipy;
