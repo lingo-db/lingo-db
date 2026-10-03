@@ -469,8 +469,13 @@ struct IRCompilerBase : tpde::CompilerBase<IRAdaptor, Derived, Config> {
          }
 
          if (op_width > res_width) {
-            lhs_pr = std::move(lhs_pr).into_extended(true, res_width, op_width);
-            rhs_pr = std::move(rhs_pr).into_extended(true, res_width, op_width);
+            // the upper bits matter for the unsigned ops (zero-extend) and the signed ones (sign-extend); for the
+            // others zero-extend, so that i1 results stay 0/1 (true sign-extended is all ones, which e.g. a C
+            // `bool` parameter does not accept)
+            const bool sign = res_width != 1 && mlir::isa<mlir::arith::DivSIOp, mlir::arith::RemSIOp, mlir::arith::ShRSIOp,
+                                                          mlir::arith::MinSIOp, mlir::arith::MaxSIOp>(op);
+            lhs_pr = std::move(lhs_pr).into_extended(sign, res_width, op_width);
+            rhs_pr = std::move(rhs_pr).into_extended(sign, res_width, op_width);
          }
 
          auto lhs_op = GenericValuePart{std::move(lhs_pr)};

@@ -1,0 +1,49 @@
+# AND / OR / NOT on a nullable bool column, with true values at several row
+# positions (the result column is bit-packed: the baseline backend used to
+# pass i1 results of and/or as all-ones, which set the wrong bits).
+
+statement ok
+create table flags(k integer not null, b bool, primary key (k));
+
+statement ok
+insert into flags values (1, false), (2, true), (3, null), (4, true), (5, true), (6, false), (7, null), (8, true), (9, true);
+
+query T rowsort
+select k, b or false, b and true, b or b from flags
+----
+1
+f
+f
+f
+2
+t
+t
+t
+3
+NULL
+NULL
+NULL
+4
+t
+t
+t
+5
+t
+t
+t
+6
+f
+f
+f
+7
+NULL
+NULL
+NULL
+8
+t
+t
+t
+9
+t
+t
+t
