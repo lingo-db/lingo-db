@@ -1,0 +1,55 @@
+# Subqueries (NOT EXISTS, EXISTS, a scalar subquery, IN) inside nested SQL
+# that is issued in a while / for loop of a hipy UDF, with the loop variable
+# as PARAM. They failed to compile ("operand #0 does not dominate this use"):
+# ExtractNestedOperators moved the subquery's operators out of the loop.
+# Used by the ByePy barnes_hut example (NOT EXISTS of a separating wall).
+
+statement ok
+create table w(a float8 not null, b float8 not null);
+
+statement ok
+insert into w values (1.0, 2.0), (3.0, 4.0);
+
+statement ok
+CREATE OR REPLACE FUNCTION ex(n INT8) RETURNS TEXT AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def ex(n):
+    res = ""
+    i = 0
+    while i < n:
+        x = i * 1.0
+        e = sql.execute(bool, "SELECT NOT EXISTS (SELECT 1 FROM w WHERE w.a > PARAM(1))", x)
+        f = sql.execute(bool, "SELECT EXISTS (SELECT 1 FROM w WHERE w.b < PARAM(1) + 1.5)", x)
+        c = sql.execute(int, "SELECT (SELECT count(*) FROM w WHERE w.a < PARAM(1)) + 10", x)
+        m = sql.execute(int, "SELECT count(*) FROM w AS w1 WHERE w1.a IN (SELECT w2.b - 1.0 FROM w AS w2 WHERE w2.a < PARAM(1))", x)
+        res = res + repr(e) + "," + repr(f) + "," + repr(c) + "," + repr(m) + ";"
+        i += 1
+    return res
+$$ LANGUAGE hipy;
+
+query T
+select ex(4)
+----
+False,False,10,0;False,True,10,0;False,True,11,1;True,True,11,1;
+
+# the barnes_hut shape: a derived table of PARAMs, a NOT EXISTS correlated
+# with it, in a for loop
+statement ok
+CREATE OR REPLACE FUNCTION sep(n INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def sep(n):
+    s = 0
+    for i in range(n):
+        if sql.execute(bool, "SELECT NOT EXISTS (SELECT 1 FROM w WHERE (w.a <= t.p) <> (w.a <= t.q)) FROM (SELECT PARAM(1) + 0.0 AS p, PARAM(2) + 0.0 AS q) AS t", i * 1.0, 2.5):
+            s += 1
+    return s
+$$ LANGUAGE hipy;
+
+query I
+select sep(5)
+----
+2

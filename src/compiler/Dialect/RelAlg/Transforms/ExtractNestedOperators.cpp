@@ -36,6 +36,10 @@ class ExtractNestedOperators : public mlir::PassWrapper<ExtractNestedOperators, 
                   mapping.map(o.getLambdaArgument(), innerLambda.getLambdaArgument());
                }
                toMoveBefore = o;
+               // an operator evaluated in place (e.g. in a loop: an EXISTS in
+               // nested SQL in a loop) may use values that only exist there
+               // (loop-carried values as PARAMs): don't move out of it
+               if (relalg::detail::isEvaluatedInPlace(o.getOperation())) break;
                o = mlir::dyn_cast_or_null<TupleLambdaOperator>(o->getParentOfType<Operator>().getOperation());
             }
             innerOperator->walk([&](mlir::Operation* op) {
