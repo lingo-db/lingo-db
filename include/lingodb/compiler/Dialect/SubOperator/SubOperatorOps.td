@@ -968,6 +968,8 @@ def StateToNativeOp : SubOperator_Op<"state_to_native",[Pure]> {
           Crosses the boundary from `subop` data flow into plain SSA /
           imperative code. Supported shapes:
             - `SimpleState`  -> `tuple<...>` (members in declaration order)
+            - `Buffer`       -> `!db.list<tuple<...>>` (one tuple per entry,
+                                members in declaration order)
             - `LocalTable`   -> `arrow.table` (the underlying ArrowTable*)
       }];
 

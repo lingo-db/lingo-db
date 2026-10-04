@@ -1141,6 +1141,34 @@ class StateToNativeLowering : public SubOpConversionPattern<subop::StateToNative
          rewriter.replaceOp(op, rewriter.create<util::PackOp>(op->getLoc(), loaded).getResult());
          return success();
       }
+      if (auto bufferType = mlir::dyn_cast<subop::BufferType>(op.getState().getType())) {
+         // buffer -> list<tuple<members...>>: copy every entry (in buffer
+         // order) into a fresh list. The elements are not reference counted
+         // (the memory management pass already ran; see ParseNestedSQL).
+         auto loc = op->getLoc();
+         auto listType = mlir::cast<db::ListType>(op.getRes().getType());
+         EntryStorageHelper storageHelper(op, bufferType.getMembers(), bufferType.hasLock(), typeConverter);
+         mlir::Value continuous = rt::GrowingBuffer::asContinuous(rewriter, loc)({adaptor.getState()})[0];
+         auto entryType = storageHelper.getStorageType();
+         mlir::Value entries = rewriter.create<util::BufferCastOp>(loc, util::BufferType::get(rewriter.getContext(), entryType), continuous);
+         mlir::Value list = rewriter.create<db::CreateListOp>(loc, listType);
+         auto start = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
+         auto end = rewriter.create<util::BufferGetLen>(loc, rewriter.getIndexType(), entries);
+         auto step = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
+         auto forOp = rewriter.create<mlir::scf::ForOp>(loc, start, end, step, mlir::ValueRange{});
+         rewriter.atStartOf(forOp.getBody(), [&](SubOpRewriter& rewriter) {
+            mlir::Value entry = rewriter.create<util::BufferGetElementRef>(loc, util::RefType::get(entryType), entries, forOp.getInductionVar());
+            auto values = storageHelper.getValueMap(entry, rewriter, loc);
+            llvm::SmallVector<mlir::Value> row;
+            for (auto member : bufferType.getMembers().getMembers()) {
+               row.push_back(values.get(member));
+            }
+            mlir::Value tuple = rewriter.create<util::PackOp>(loc, listType.getElementType(), row);
+            rewriter.create<db::ListAppendOp>(loc, list, tuple);
+         });
+         rewriter.replaceOp(op, list);
+         return success();
+      }
       auto arrowTableType = mlir::dyn_cast<lingodb::compiler::dialect::arrow::TableType>(op.getRes().getType());
       if (!arrowTableType) return failure();
       auto fromPtr = rewriter.create<lingodb::compiler::dialect::arrow::TableFromPtrOp>(

@@ -1250,6 +1250,7 @@ llvm::SmallVector<subop::Member> subop::CreateContinuousView::getReadMembers() {
 namespace {
 // Verify the state↔native pairing. Supported shapes:
 //   - `SimpleState` <-> `tuple<...>` (members in declaration order)
+//   - `Buffer`      ->  `!db.list<tuple<...>>` (state_to_native only)
 //   - `LocalTable`  <-> `arrow.table`
 mlir::LogicalResult verifyStateNativeShape(
    mlir::Operation* op, mlir::Type stateTy, mlir::Type nativeTy) {
@@ -1258,6 +1259,22 @@ mlir::LogicalResult verifyStateNativeShape(
       if (!tupleTy)
          return op->emitOpError("native side must be a tuple for SimpleState");
       auto members = simpleStateTy.getMembers().getMembers();
+      if (members.size() != tupleTy.size())
+         return op->emitOpError("tuple arity must match number of state members");
+      auto& memberManager = op->getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
+      for (size_t i = 0; i < members.size(); ++i) {
+         if (memberManager.getType(members[i]) != tupleTy.getType(i))
+            return op->emitOpError("tuple element ")
+               << i << " type does not match member type";
+      }
+      return mlir::success();
+   }
+   if (auto bufferTy = mlir::dyn_cast<subop::BufferType>(stateTy)) {
+      auto listTy = mlir::dyn_cast<db::ListType>(nativeTy);
+      auto tupleTy = listTy ? mlir::dyn_cast<mlir::TupleType>(listTy.getElementType()) : mlir::TupleType();
+      if (!tupleTy)
+         return op->emitOpError("native side must be a list of tuples for Buffer");
+      auto members = bufferTy.getMembers().getMembers();
       if (members.size() != tupleTy.size())
          return op->emitOpError("tuple arity must match number of state members");
       auto& memberManager = op->getContext()->getOrLoadDialect<subop::SubOperatorDialect>()->getMemberManager();
