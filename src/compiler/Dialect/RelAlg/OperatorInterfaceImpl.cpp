@@ -704,7 +704,7 @@ bool relalg::detail::isNestedInLoop(mlir::Operation* op) {
 bool relalg::detail::isEvaluatedInPlace(mlir::Operation* op) {
    if (isNestedInLoop(op)) return true;
    for (auto* user : op->getUsers()) {
-      if (mlir::isa<relalg::GetFirstRowOp>(user)) return true;
+      if (mlir::isa<relalg::GetFirstRowOp, relalg::GetRowsOp>(user)) return true;
       if (mlir::isa<Operator>(user) && isEvaluatedInPlace(user)) return true;
    }
    return false;
@@ -723,6 +723,9 @@ relalg::ColumnSet relalg::detail::getColumnsUsedBySink(mlir::Operation* op) {
    }
    if (auto getFirstRowOp = mlir::dyn_cast_or_null<relalg::GetFirstRowOp>(op)) {
       return relalg::ColumnSet::fromArrayAttr(getFirstRowOp.getCols());
+   }
+   if (auto getRowsOp = mlir::dyn_cast_or_null<relalg::GetRowsOp>(op)) {
+      return relalg::ColumnSet::fromArrayAttr(getRowsOp.getCols());
    }
    return {};
 }

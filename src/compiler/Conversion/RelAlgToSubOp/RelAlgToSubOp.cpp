@@ -3286,6 +3286,31 @@ class GetFirstRowLowering : public OpConversionPattern<relalg::GetFirstRowOp> {
    }
 };
 
+// relalg.getrows is evaluated in place (see
+// relalg::detail::isEvaluatedInPlace): materialize the row's columns into a
+// fresh buffer and read it back as a list of tuples via subop.state_to_native.
+class GetRowsLowering : public OpConversionPattern<relalg::GetRowsOp> {
+   public:
+   using OpConversionPattern<relalg::GetRowsOp>::OpConversionPattern;
+
+   LogicalResult matchAndRewrite(relalg::GetRowsOp getRowsOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = getRowsOp->getLoc();
+      auto* ctxt = rewriter.getContext();
+      llvm::SmallVector<Member> members;
+      RefMappingCollector mapping;
+      for (auto [col, type] : llvm::zip(getRowsOp.getCols(), getRowsOp.getRowType().getTypes())) {
+         auto member = createMember(ctxt, "col", type);
+         members.push_back(member);
+         mapping.push_back({member, mlir::cast<tuples::ColumnRefAttr>(col)});
+      }
+      auto bufferType = subop::BufferType::get(ctxt, createStateMembersAttr(ctxt, members));
+      mlir::Value buffer = rewriter.create<subop::GenericCreateOp>(loc, bufferType);
+      rewriter.create<subop::MaterializeOp>(loc, adaptor.getRel(), buffer, createColumnRefMemberMappingAttr(ctxt, mapping));
+      rewriter.replaceOpWithNewOp<subop::StateToNativeOp>(getRowsOp, getRowsOp.getType(), buffer);
+      return success();
+   }
+};
+
 class TrackTuplesLowering : public OpConversionPattern<relalg::TrackTuplesOP> {
    public:
    using OpConversionPattern<relalg::TrackTuplesOP>::OpConversionPattern;
@@ -3396,6 +3421,7 @@ void RelalgToSubOpLoweringPass::runOnOperation() {
    patterns.insert<NestedLowering>(ctxt);
    patterns.insert<GetScalarLowering>(ctxt);
    patterns.insert<GetFirstRowLowering>(ctxt);
+   patterns.insert<GetRowsLowering>(ctxt);
    patterns.insert<TrackTuplesLowering>(ctxt);
 
    if (failed(applyFullConversion(module, target, std::move(patterns))))

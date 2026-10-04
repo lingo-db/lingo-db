@@ -26,8 +26,9 @@ using namespace lingodb::compiler::dialect;
 // to the analyzer/translator. The translator emits a `relalg.materialize`
 // for the parsed query — we convert that to a `relalg.getscalar` since the
 // surrounding hipy UDF expects a single scalar value (typically wrapped in
-// a nullable<T>) or, for a row-valued query (result type tuple<...>, hipy's
-// sql.row(...)), one value per result column.
+// a nullable<T>), for a row-valued query (result type tuple<...>, hipy's
+// sql.row(...)) one value per result column, or for a list-valued query
+// (result type list<tuple<...>>, hipy's sql.rows(...)) all rows.
 class ParseNestedSQL : public mlir::PassWrapper<ParseNestedSQL, mlir::OperationPass<mlir::ModuleOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-parse-nested-sql"; }
    lingodb::catalog::Catalog& catalog;
@@ -157,10 +158,59 @@ class ParseNestedSQL : public mlir::PassWrapper<ParseNestedSQL, mlir::OperationP
       return true;
    }
 
+   // List-valued query (result type list<tuple<...>>, hipy's sql.rows(...)):
+   // the values of all rows, one tuple per row, cast to the declared element
+   // types; a runtime error for NULL in a non-nullable element.
+   mlir::Value lowerRows(relalg::SQLQueryOp op, mlir::OpBuilder& builder, db::ListType listType) {
+      auto loc = op.getLoc();
+      auto rowType = mlir::dyn_cast<mlir::TupleType>(listType.getElementType());
+      if (!rowType) {
+         op.emitError("Nested SQL with a list result needs a list of tuples (a row type)");
+         return {};
+      }
+      for (auto type : rowType.getTypes()) {
+         // the list is filled after the memory management pass ran
+         if (auto managed = mlir::dyn_cast<db::ManagedType>(type); managed && managed.needsManagement()) {
+            op.emitError("Nested SQL with a list result does not support reference-counted values (e.g. strings) yet");
+            return {};
+         }
+      }
+      auto materializeOp = translate(op, builder);
+      if (!materializeOp) return {};
+      if (!checkColumnCount(op, materializeOp, rowType.size())) return {};
+      mlir::Value rel = materializeOp.getRel();
+      llvm::SmallVector<tuples::ColumnRefAttr> cols;
+      bool needsCast = false;
+      for (auto [col, type] : llvm::zip(materializeOp.getCols(), rowType.getTypes())) {
+         cols.push_back(mlir::cast<tuples::ColumnRefAttr>(col));
+         needsCast |= cols.back().getColumn().type != type;
+      }
+      if (needsCast) {
+         std::tie(rel, cols) = addMap(builder, loc, rel, rowType.getTypes(), cols, [&](mlir::OpBuilder& b, llvm::ArrayRef<mlir::Value> values) {
+            llvm::SmallVector<mlir::Value> casted;
+            for (auto [value, type] : llvm::zip(values, rowType.getTypes())) {
+               mlir::Value v = value;
+               if (mlir::isa<db::NullableType>(v.getType()) && !mlir::isa<db::NullableType>(type)) {
+                  v = checkedGetValue(b, loc, v, "nested SQL query returned NULL for a non-nullable result type");
+               }
+               casted.push_back(coerce(b, loc, v, type, /*exact=*/true));
+            }
+            return casted;
+         });
+      }
+      materializeOp->dropAllUses();
+      materializeOp->erase();
+      llvm::SmallVector<mlir::Attribute> colAttrs(cols.begin(), cols.end());
+      return builder.create<relalg::GetRowsOp>(loc, listType, rel, builder.getArrayAttr(colAttrs));
+   }
+
    // Lower one relalg.sql_query; returns the replacement value or null.
    mlir::Value lower(relalg::SQLQueryOp op, mlir::OpBuilder& builder) {
       auto loc = op.getLoc();
       mlir::Type resultType = op.getResult().getType();
+      if (auto listType = mlir::dyn_cast<db::ListType>(resultType)) {
+         return lowerRows(op, builder, listType);
+      }
       auto tupleType = mlir::dyn_cast<mlir::TupleType>(resultType);
       // sql.nullable(sql.row(...)): NULL instead of a runtime error if there is no row
       bool optionalRow = false;

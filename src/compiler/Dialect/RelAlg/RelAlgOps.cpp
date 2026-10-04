@@ -348,6 +348,20 @@ mlir::TupleType relalg::GetFirstRowOp::getRowType() {
    }
    return mlir::success();
 }
+mlir::TupleType relalg::GetRowsOp::getRowType() {
+   return mlir::cast<mlir::TupleType>(mlir::cast<db::ListType>(getType()).getElementType());
+}
+::mlir::LogicalResult relalg::GetRowsOp::verify() {
+   auto listType = mlir::dyn_cast<db::ListType>(getType());
+   auto rowType = listType ? mlir::dyn_cast<mlir::TupleType>(listType.getElementType()) : mlir::TupleType();
+   if (!rowType) {
+      return emitOpError("result must be a list of tuples");
+   }
+   if (rowType.size() != getCols().size()) {
+      return emitOpError("result tuple must have one element per column");
+   }
+   return mlir::success();
+}
 ::mlir::LogicalResult relalg::MapOp::verify() {
    if (getPredicate().empty() || getPredicate().front().empty()) {
       emitError("mapOp without body");

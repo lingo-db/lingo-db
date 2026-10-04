@@ -534,6 +534,25 @@ def GetFirstRowOp : RelAlg_Op<"getfirstrow", []> {
     }];
 }
 
+def GetRowsOp : RelAlg_Op<"getrows", []> {
+    let summary = "values of all rows of a relation, as a list of tuples";
+    let description = [{
+        Returns the values of the columns `cols` of all rows of `rel` as a
+        `!db.list<tuple<...>>` (one tuple element per column), in the order
+        of `rel`. Used for list-valued nested SQL (hipy's sql.rows(...)).
+        Like relalg.getfirstrow, it is evaluated in place: the subtree it
+        consumes is neither extracted nor decorrelated.
+    }];
+    let arguments = (ins TupleStream:$rel, ArrayAttr:$cols);
+    let results = (outs AnyType:$res);
+    let assemblyFormat = [{ $rel custom<CustRefArr>($cols) `:` type($res) attr-dict }];
+    let hasVerifier = 1;
+    let extraClassDeclaration = [{
+        // the element type of the result list
+        mlir::TupleType getRowType();
+    }];
+}
+
 def GetListOp : RelAlg_Op<"getlist", [Pure]> {
     let summary = "get multiple columns";
 

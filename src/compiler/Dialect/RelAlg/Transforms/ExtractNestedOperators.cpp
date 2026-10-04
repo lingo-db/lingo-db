@@ -25,8 +25,8 @@ class ExtractNestedOperators : public mlir::PassWrapper<ExtractNestedOperators, 
          // An operator nested in a loop (e.g. nested SQL in a hipy UDF's
          // scf.for/scf.while body) is evaluated once per iteration and may use
          // loop-carried values that do not exist outside the loop; a subtree
-         // consumed by relalg.getfirstrow is evaluated in place as well: keep
-         // it.
+         // consumed by relalg.getfirstrow / relalg.getrows is evaluated in
+         // place as well: keep it.
          if (relalg::detail::isEvaluatedInPlace(innerOperator.getOperation())) return;
          if (auto o = mlir::dyn_cast_or_null<TupleLambdaOperator>(innerOperator->getParentOfType<Operator>().getOperation())) {
             mlir::IRMapping mapping;
