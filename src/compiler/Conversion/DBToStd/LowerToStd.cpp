@@ -12,6 +12,7 @@
 #include "lingodb/compiler/Dialect/util/UtilDialect.h"
 #include "lingodb/compiler/Dialect/util/UtilOps.h"
 #include "lingodb/compiler/mlir-support/parsing.h"
+#include "lingodb/compiler/runtime/DecimalRuntime.h"
 #include "lingodb/compiler/runtime/Hashtable.h"
 #include "lingodb/compiler/runtime/ListRuntime.h"
 #include "lingodb/compiler/runtime/StringRuntime.h"
@@ -924,6 +925,11 @@ class CmpOpLowering : public OpConversionPattern<db::CmpOp> {
       return success();
    }
 };
+// 10^exp, correctly rounded (powf computed 10^13 as 9999999827968: decimal
+// <-> float casts were off in the 8th digit)
+static double powerOfTen(int exp) {
+   return std::stod("1e" + std::to_string(exp));
+}
 class CastNoneOpLowering : public OpConversionPattern<db::CastOp> {
    public:
    using OpConversionPattern<db::CastOp>::OpConversionPattern;
@@ -988,7 +994,7 @@ class CastOpLowering : public OpConversionPattern<db::CastOp> {
             value = rewriter.replaceOpWithNewOp<arith::FPToSIOp>(op, convertedTargetType, value);
             return success();
          } else if (auto decimalTargetType = mlir::dyn_cast_or_null<db::DecimalType>(scalarTargetType)) {
-            auto multiplier = rewriter.create<arith::ConstantOp>(loc, convertedSourceType, FloatAttr::get(convertedSourceType, powf(10, decimalTargetType.getS())));
+            auto multiplier = rewriter.create<arith::ConstantOp>(loc, convertedSourceType, FloatAttr::get(convertedSourceType, powerOfTen(decimalTargetType.getS())));
             value = rewriter.create<arith::MulFOp>(loc, convertedSourceType, value, multiplier);
             rewriter.replaceOpWithNewOp<arith::FPToSIOp>(op, convertedTargetType, value);
             return success();
@@ -1015,10 +1021,36 @@ class CastOpLowering : public OpConversionPattern<db::CastOp> {
                rewriter.replaceOp(op, value);
             }
             return success();
-         } else if (mlir::isa<FloatType>(scalarTargetType)) {
-            auto multiplier = rewriter.create<arith::ConstantOp>(loc, convertedTargetType, FloatAttr::get(convertedTargetType, powf(10, decimalSourceType.getS())));
-            value = rewriter.create<arith::SIToFPOp>(loc, convertedTargetType, value);
-            rewriter.replaceOpWithNewOp<arith::DivFOp>(op, convertedTargetType, value, multiplier);
+         } else if (auto floatType = mlir::dyn_cast<FloatType>(scalarTargetType)) {
+            // value / 10^scale, correctly rounded: one division if both are
+            // exact floats (|value| <= 2^mantissa, 10^scale <= 10^22 / 10^10),
+            // otherwise (e.g. a decimal(22, 19) literal) via the runtime
+            auto scale = decimalSourceType.getS();
+            bool isF64 = floatType.getWidth() == 64;
+            if (!isF64 && floatType.getWidth() != 32) return failure();
+            auto valueType = mlir::cast<mlir::IntegerType>(convertedSourceType);
+            auto slowPath = [&](mlir::OpBuilder& b, mlir::Location loc) -> mlir::Value {
+               mlir::Value wide = value;
+               if (valueType.getWidth() < 128) wide = b.create<arith::ExtSIOp>(loc, b.getIntegerType(128), value);
+               mlir::Value scaleValue = b.create<arith::ConstantIntOp>(loc, scale, 64);
+               return isF64 ? rt::DecimalRuntime::toDouble(b, loc)({wide, scaleValue})[0] : rt::DecimalRuntime::toFloat(b, loc)({wide, scaleValue})[0];
+            };
+            if (scale > (isF64 ? 22 : 10)) {
+               rewriter.replaceOp(op, slowPath(rewriter, loc));
+               return success();
+            }
+            auto mantissaLimit = APInt(valueType.getWidth(), 1) << (isF64 ? 53 : 24);
+            mlir::Value limit = rewriter.create<arith::ConstantOp>(loc, valueType, rewriter.getIntegerAttr(valueType, mantissaLimit));
+            mlir::Value negLimit = rewriter.create<arith::ConstantOp>(loc, valueType, rewriter.getIntegerAttr(valueType, -mantissaLimit));
+            mlir::Value belowLimit = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::sle, value, limit);
+            mlir::Value aboveNegLimit = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::sge, value, negLimit);
+            mlir::Value exact = rewriter.create<arith::AndIOp>(loc, belowLimit, aboveNegLimit);
+            auto ifOp = rewriter.create<mlir::scf::IfOp>(
+               loc, exact, [&](mlir::OpBuilder& b, mlir::Location loc) {
+                  auto multiplier = b.create<arith::ConstantOp>(loc, convertedTargetType, FloatAttr::get(convertedTargetType, powerOfTen(scale)));
+                  mlir::Value asFloat = b.create<arith::SIToFPOp>(loc, convertedTargetType, value);
+                  b.create<mlir::scf::YieldOp>(loc, mlir::ValueRange{b.create<arith::DivFOp>(loc, convertedTargetType, asFloat, multiplier)}); }, [&](mlir::OpBuilder& b, mlir::Location loc) { b.create<mlir::scf::YieldOp>(loc, slowPath(b, loc)); });
+            rewriter.replaceOp(op, ifOp.getResult(0));
             return success();
          } else if (auto targetIntWidth = getIntegerWidth(scalarTargetType, false)) {
             int decimalWidth = mlir::cast<mlir::IntegerType>(convertedSourceType).getWidth();

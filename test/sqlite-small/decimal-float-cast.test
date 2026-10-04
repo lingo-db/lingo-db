@@ -1,0 +1,40 @@
+# Casts between decimals and floats used 10^scale computed with powf (single
+# precision: 10^13 = 9999999827968), so they were off in the 8th digit, e.g.
+# a decimal literal inserted into a float8 column: 1.5 -> 1.5000000258048005
+# (silently wrong data, e.g. in the ByePy barnes_hut tables). And decimal ->
+# float was rounded twice (int -> float, then / 10^scale) when the decimal's
+# integer exceeds the float's mantissa: in a VALUES list typed decimal(22, 19),
+# 478.587731813332 became 478.58773181333197; now correctly rounded.
+
+statement ok
+create table f(a float8);
+
+statement ok
+insert into f values (639.4267984578837), (1.5)
+
+query T rowsort
+select cast(a as text) from f
+----
+1.5
+639.4267984578837
+
+statement ok
+insert into f values (478.587731813332), (0.0011541243087648917)
+
+query T rowsort
+select cast(a as text) from f where a > 2 or a < 0.01
+----
+0.0011541243087648918
+478.587731813332
+639.4267984578837
+
+query T
+select cast(cast(0 - cast(478.587731813332 as decimal(22, 19)) as float8) as text)
+----
+-478.587731813332
+
+# and back: float -> decimal
+query T
+select cast(cast(a as decimal(15, 13)) as text) from f where a > 1 and a < 2
+----
+1.5000000000000
