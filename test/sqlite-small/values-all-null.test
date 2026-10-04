@@ -1,0 +1,43 @@
+# A VALUES column that is NULL in every row (of several) has the NULL type;
+# its rows are stored in a buffer, whose none payload could not be lowered
+# ("failed to legalize unresolved materialization from i1 to none"). Here as
+# INSERT values (e.g. the leaves of the ByePy barnes_hut quad-tree, whose node
+# is NULL) and in a query, for several column types.
+
+statement ok
+create table t(node integer, parent integer not null, s text, f float8, d date);
+
+statement ok
+insert into t values (null, 37, null, null, null), (null, 38, null, null, null)
+
+statement ok
+insert into t values (1, 39, 'a', 1.5, '2024-01-02'), (null, 40, null, null, null)
+
+query IIT rowsort
+select parent, node, s from t
+----
+37
+NULL
+NULL
+38
+NULL
+NULL
+39
+1
+a
+40
+NULL
+NULL
+
+query I
+select count(*) from t where node is null and f is null and d is null
+----
+3
+
+query IT rowsort
+select b, a is null from (values (null, 1), (null, 2)) as v(a, b)
+----
+1
+t
+2
+t

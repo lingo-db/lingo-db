@@ -930,10 +930,9 @@ class CastNoneOpLowering : public OpConversionPattern<db::CastOp> {
    LogicalResult matchAndRewrite(db::CastOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto scalarSourceType = op.getVal().getType();
       auto scalarTargetType = op.getType();
-      auto convertedSourceType = typeConverter->convertType(scalarSourceType);
       auto convertedTargetType = typeConverter->convertType(scalarTargetType);
-      if (mlir::isa<db::StringType>(scalarSourceType) || mlir::isa<db::StringType>(scalarTargetType)) return failure();
-      if (!mlir::isa<NoneType>(convertedSourceType)) {
+      // the payload of a NULL (any target type): any value will do
+      if (!mlir::isa<NoneType>(scalarSourceType)) {
          return mlir::failure();
       }
       rewriter.replaceOpWithNewOp<util::UndefOp>(op, convertedTargetType);
@@ -1651,6 +1650,11 @@ void DBToStdLoweringPass::runOnOperation() {
    TypeConverter typeConverter;
    auto* ctxt = &getContext();
    typeConverter.addConversion([&](mlir::Type type) { return type; });
+   // the payload of the NULL type (e.g. an all-NULL column of a VALUES list,
+   // stored in a buffer): a placeholder i1, as inside db.nullable<none>
+   typeConverter.addConversion([&](mlir::NoneType) {
+      return mlir::IntegerType::get(ctxt, 1);
+   });
    typeConverter.addConversion([&](::db::DateType t) {
       return mlir::IntegerType::get(ctxt, 64);
    });
