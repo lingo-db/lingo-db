@@ -1,0 +1,45 @@
+# PARAM(n) directly in the select list of nested SQL (a bare PARAM, with an
+# alias, a derived table of PARAMs with a column alias list), also in a loop
+# with a NOT EXISTS correlated with the derived table (the ByePy barnes_hut
+# wall query). Failed with "Invalid expression" before.
+
+statement ok
+create table w(a float8 not null);
+
+statement ok
+insert into w values (1.0), (3.0);
+
+statement ok
+CREATE OR REPLACE FUNCTION p(x FLOAT8, y INT8) RETURNS TEXT AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def p(x, y):
+    a = sql.execute(float, "SELECT PARAM(1)", x)
+    b = sql.execute(int, "SELECT t.v + 1 FROM (SELECT PARAM(1) AS v) AS t", y)
+    c, d = sql.execute(sql.row(float, int), "SELECT t.u, t.v FROM (SELECT PARAM(1), PARAM(2)) AS t(u, v)", x, y)
+    return repr(a) + " " + repr(b) + " " + repr(c) + " " + repr(d)
+$$ LANGUAGE hipy;
+
+query T
+select p(1.5, 7)
+----
+1.5 8 1.5 7
+
+statement ok
+CREATE OR REPLACE FUNCTION sep(n INT8) RETURNS INT8 AS $$
+import hipy
+import hipy.lib.sql as sql
+@hipy.compiled_function
+def sep(n):
+    s = 0
+    for i in range(n):
+        if sql.execute(bool, "SELECT NOT EXISTS (SELECT 1 FROM w WHERE (w.a <= t.p) <> (w.a <= t.q)) FROM (SELECT PARAM(1), PARAM(2)) AS t(p, q)", i * 1.0, 2.5):
+            s += 1
+    return s
+$$ LANGUAGE hipy;
+
+query I
+select sep(5)
+----
+2

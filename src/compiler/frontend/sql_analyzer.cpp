@@ -1200,6 +1200,7 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                case ast::ExpressionClass::BOUND_BETWEEN:
                case ast::ExpressionClass::BOUND_COMPARISON:
                case ast::ExpressionClass::BOUND_CONSTANT:
+               case ast::ExpressionClass::BOUND_PARAMETER:
                case ast::ExpressionClass::BOUND_OPERATOR:
                case ast::ExpressionClass::BOUND_CAST:
                case ast::ExpressionClass::BOUND_SUBQUERY:
@@ -3119,7 +3120,9 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeFunctionExpressio
          error("Unsupported parameter type for PARAM function", paramIdxExpr->loc);
       }
       NullableType resType{rawResType, nullable};
-      return drv.nf.node<ast::BoundParameterExpression>(function->loc, resType, paramIdx);
+      auto boundParameter = drv.nf.node<ast::BoundParameterExpression>(function->loc, resType, paramIdx);
+      boundParameter->alias = function->alias;
+      return boundParameter;
    } else if (upperCaseFName == "REGEXP_REPLACE") {
       if (function->arguments.size() != 3) {
          error("Function REGEXP_REPLACE needs exactly 3 arguments", function->loc);
