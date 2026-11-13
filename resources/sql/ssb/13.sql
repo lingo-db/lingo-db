@@ -1,5 +1,5 @@
 select sum(lo_extendedprice*lo_discount) as revenue
-from lineorder, date
+from lineorder, "date"
 where lo_orderdate = d_datekey
 and d_weeknuminyear = 6
 and d_year = 1994

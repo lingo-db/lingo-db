@@ -1,5 +1,5 @@
 select c_nation,s_nation,d_year,sum(lo_revenue) as revenue
-from lineorder,customer, supplier,date
+from lineorder,customer, supplier,"date"
 where lo_custkey = c_custkey
 and lo_suppkey = s_suppkey
 and lo_orderdate = d_datekey
