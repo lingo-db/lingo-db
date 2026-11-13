@@ -1186,7 +1186,8 @@ class ScanRefsTableLowering : public SubOpConversionPattern<subop::ScanRefsOp> {
             mlir::Value index = forOp2.getInductionVar();
             if (tableType.getFiltered()) {
                auto idx = rewriter.create<util::LoadOp>(loc, selVecPtr, index);
-               index = rewriter.create<mlir::arith::IndexCastOp>(loc, rewriter.getIndexType(), idx);
+               mlir::Value idx64 = rewriter.create<mlir::arith::ExtUIOp>(loc, rewriter.getI64Type(), idx);
+               index = rewriter.create<mlir::arith::IndexCastOp>(loc, rewriter.getIndexType(), idx64);
             }
             auto withOffset = rewriter.create<mlir::arith::AddIOp>(loc, index, globalOffset);
             auto currentRecord = rewriter.create<util::PackOp>(loc, mlir::ValueRange{withOffset, arraysVal});
