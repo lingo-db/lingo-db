@@ -223,6 +223,37 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
       return false;
    }
 
+   // permutes leftHash (the index side) and the matching rightHash/nullsEqual entries into the index's column order
+   void reorderKeysToIndexColumns(mlir::Operation* op, relalg::BaseTableOp baseTable, const std::string& indexName) {
+      auto& colManager = op->getContext()->getLoadedDialect<tuples::TupleStreamDialect>()->getColumnManager();
+      auto meta = mlir::dyn_cast_or_null<relalg::TableMetaDataAttr>(baseTable->getAttr("meta"));
+      auto leftHash = op->getAttrOfType<mlir::ArrayAttr>("leftHash");
+      auto rightHash = op->getAttrOfType<mlir::ArrayAttr>("rightHash");
+      auto nullsEqual = op->getAttrOfType<mlir::ArrayAttr>("nullsEqual");
+      if (!meta || !leftHash || !rightHash || !nullsEqual) return;
+      std::vector<std::string> indexColumns;
+      for (auto& [idxName, cols] : meta.getMeta()->getIndices()) {
+         if (idxName == indexName) indexColumns = cols;
+      }
+      if (indexColumns.size() != leftHash.size()) return;
+      std::vector<mlir::Attribute> newLeft, newRight, newNullsEqual;
+      for (const auto& indexColumn : indexColumns) {
+         for (size_t i = 0; i < leftHash.size(); i++) {
+            auto* column = &mlir::cast<tuples::ColumnRefAttr>(leftHash[i]).getColumn();
+            if (colManager.getName(column).second == indexColumn) {
+               newLeft.push_back(leftHash[i]);
+               newRight.push_back(rightHash[i]);
+               newNullsEqual.push_back(nullsEqual[i]);
+               break;
+            }
+         }
+      }
+      if (newLeft.size() != leftHash.size()) return;
+      op->setAttr("leftHash", mlir::ArrayAttr::get(op->getContext(), newLeft));
+      op->setAttr("rightHash", mlir::ArrayAttr::get(op->getContext(), newRight));
+      op->setAttr("nullsEqual", mlir::ArrayAttr::get(op->getContext(), newNullsEqual));
+   }
+
    bool isBaseRelationWithSelects(Operator op, std::stack<mlir::Operation*>& path) {
       // Saves operations until base relation is reached on stack for easy access
       return ::llvm::TypeSwitch<mlir::Operation*, bool>(op.getOperation())
@@ -577,12 +608,8 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                      }
                      leftBaseTable->setAttr("virtual", mlir::UnitAttr::get(&getContext()));
 
-                     // Add name of table to leftHash annotation
-                     std::vector<mlir::Attribute> leftHash;
-                     for (auto attr : mlir::dyn_cast_or_null<mlir::ArrayAttr>(op->getAttr("leftHash"))) {
-                        leftHash.push_back(attr);
-                     }
-                     op->setAttr("leftHash", mlir::ArrayAttr::get(&getContext(), leftHash));
+                     // the index hashed its keys in column order (LingoDBHashIndex::rawInsert), the probe hashes them in leftHash order
+                     reorderKeysToIndexColumns(op, leftBaseTable, leftIndexName);
 
                      op->setAttr("impl", mlir::StringAttr::get(op.getContext(), "indexNestedLoop"));
                      op->setAttr("useIndexNestedLoop", mlir::UnitAttr::get(op.getContext()));
