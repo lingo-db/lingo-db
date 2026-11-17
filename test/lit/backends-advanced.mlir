@@ -1,6 +1,6 @@
-// RUN: LINGODB_EXECUTION_MODE=DEBUGGING LINGODB_BACKEND_ONLY=ON run-mlir %s | FileCheck %s
-// RUN: LINGODB_EXECUTION_MODE=DEFAULT LINGODB_BACKEND_ONLY=ON run-mlir %s | FileCheck %s
-// RUN: LINGODB_EXECUTION_MODE=C LINGODB_BACKEND_ONLY=ON run-mlir %s | FileCheck %s
+// RUN: env LINGODB_EXECUTION_MODE=DEBUGGING LINGODB_BACKEND_ONLY=ON run-mlir %s | FileCheck %s
+// RUN: env LINGODB_EXECUTION_MODE=DEFAULT LINGODB_BACKEND_ONLY=ON run-mlir %s | FileCheck %s
+// RUN: env LINGODB_EXECUTION_MODE=C LINGODB_BACKEND_ONLY=ON run-mlir %s | FileCheck %s
 
 module  {
     func.func private @dumpString(!util.varlen32)
