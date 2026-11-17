@@ -1,5 +1,5 @@
 // RUN: env LINGODB_EXECUTION_MODE=DEFAULT run-mlir %s | FileCheck %s
-// RUN: %if baseline-backend %{LINGODB_EXECUTION_MODE=BASELINE run-mlir %s | FileCheck %s %}
+// RUN: %if baseline-backend %{env LINGODB_EXECUTION_MODE=BASELINE run-mlir %s | FileCheck %s %}
 
  module {
  	func.func @test (%arg0: !db.nullable<i32>,%arg1: !db.nullable<i32>) -> !db.nullable<i32> {
