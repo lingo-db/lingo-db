@@ -8,7 +8,48 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  prepare_dependencies:
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # This cache only speeds up installation. Jobs below use the artifact,
+      # because a cache can be evicted before a queued test job starts.
+      - name: Cache Homebrew packages
+        id: cache-brew
+        uses: actions/cache@v4
+        with:
+          path: |
+            /opt/homebrew
+            ~/Library/Caches/Homebrew
+          key: brew-macos-15-${{ hashFiles('.github/workflows/workflow-macos-15-aarch64.yml') }}
+          restore-keys: |
+            brew-macos-15-
+
+      - name: Install dependencies with Homebrew
+        run: |
+          brew update
+          brew install ccache cmake ninja llvm@20 catch2 lit bzip2 libffi libedit libxml2 brotli zlib apache-arrow boost flex bison
+          brew link --force ccache cmake ninja llvm@20 catch2 lit bzip2 libffi libedit libxml2 brotli zlib apache-arrow boost flex bison
+
+      - name: Archive Homebrew dependencies
+        run: tar -czf "$RUNNER_TEMP/homebrew.tar.gz" -C /opt homebrew
+
+      - name: Upload Homebrew dependencies
+        uses: actions/upload-artifact@v4
+        with:
+          name: homebrew-macos
+          path: ${{ runner.temp }}/homebrew.tar.gz
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Remove temporary archive
+        run: rm "$RUNNER_TEMP/homebrew.tar.gz"
+
   build:
+    needs: prepare_dependencies
     runs-on: macos-15
     strategy:
       matrix:
@@ -28,22 +69,17 @@ jobs:
         with:
           path: ~/.ccache
           key: ccache-${{ matrix.build_type }}-build-macos-15
-      - name: Cache Homebrew packages
-        id: cache-brew
-        uses: actions/cache@v4
-        with:
-          path: |
-            /opt/homebrew
-            ~/Library/Caches/Homebrew
-          key: brew-macos-15-${{ hashFiles('.github/workflows/workflow-macos-15-aarch64.yml') }}
-          restore-keys: |
-            brew-macos-15-
 
-      - name: Install dependencies with Homebrew
+      - name: Download Homebrew dependencies
+        uses: actions/download-artifact@v4
+        with:
+          name: homebrew-macos
+          path: ${{ runner.temp }}/homebrew-dependencies
+
+      - name: Restore Homebrew dependencies
         run: |
-          brew update
-          brew install ccache cmake ninja llvm@20 catch2 lit bzip2 libffi libedit libxml2 brotli zlib apache-arrow boost flex bison
-          brew link --force ccache cmake ninja llvm@20 catch2 lit bzip2 libffi libedit libxml2 brotli zlib apache-arrow boost flex bison
+          sudo tar -xzf "$RUNNER_TEMP/homebrew-dependencies/homebrew.tar.gz" -C /opt
+          rm "$RUNNER_TEMP/homebrew-dependencies/homebrew.tar.gz"
 
       - name: Build
         env:
@@ -77,22 +113,16 @@ jobs:
         with:
           name: ${{ matrix.build_type }}-build-macos
           path: build/lingodb-${{ matrix.build_type }}
-      - name: Resolve Homebrew tap conflict (uninstall cmake & untap local/pinned if present)
-        shell: bash
-        run: |
-          brew uninstall cmake || true
-          brew untap local/pinned || true
-      - name: Cache Homebrew packages
-        id: cache-brew
-        uses: actions/cache@v3
+      - name: Download Homebrew dependencies
+        uses: actions/download-artifact@v4
         with:
-          fail-on-cache-miss: True
-          path: |
-            /opt/homebrew
-            ~/Library/Caches/Homebrew
-          key: brew-macos-15-${{ hashFiles('.github/workflows/workflow-macos-15-aarch64.yml') }}
-          restore-keys: |
-            brew-macos-15-
+          name: homebrew-macos
+          path: ${{ runner.temp }}/homebrew-dependencies
+
+      - name: Restore Homebrew dependencies
+        run: |
+          sudo tar -xzf "$RUNNER_TEMP/homebrew-dependencies/homebrew.tar.gz" -C /opt
+          rm "$RUNNER_TEMP/homebrew-dependencies/homebrew.tar.gz"
 
       - name: Setup for tests
         run: |
@@ -140,17 +170,16 @@ jobs:
           name: ${{ matrix.build_type }}-build-macos
           path: build/lingodb-${{ matrix.build_type }}
 
-      - name: Cache Homebrew packages
-        id: cache-brew
-        uses: actions/cache@v3
+      - name: Download Homebrew dependencies
+        uses: actions/download-artifact@v4
         with:
-          fail-on-cache-miss: True
-          path: |
-            /opt/homebrew
-            ~/Library/Caches/Homebrew
-          key: brew-macos-15-${{ hashFiles('.github/workflows/workflow-macos-15-aarch64.yml') }}
-          restore-keys: |
-            brew-macos-15-
+          name: homebrew-macos
+          path: ${{ runner.temp }}/homebrew-dependencies
+
+      - name: Restore Homebrew dependencies
+        run: |
+          sudo tar -xzf "$RUNNER_TEMP/homebrew-dependencies/homebrew.tar.gz" -C /opt
+          rm "$RUNNER_TEMP/homebrew-dependencies/homebrew.tar.gz"
 
       - name: Test
         run: |
@@ -178,21 +207,20 @@ jobs:
           name: ${{ matrix.build_type }}-build-macos
           path: build/lingodb-${{ matrix.build_type }}
 
-      - name: Cache Homebrew packages
-        id: cache-brew
-        uses: actions/cache@v3
+      - name: Download Homebrew dependencies
+        uses: actions/download-artifact@v4
         with:
-          fail-on-cache-miss: True
-          path: |
-            /opt/homebrew
-            ~/Library/Caches/Homebrew
-          key: brew-macos-15-${{ hashFiles('.github/workflows/workflow-macos-15-aarch64.yml') }}
-          restore-keys: |
-            brew-macos-15-
+          name: homebrew-macos
+          path: ${{ runner.temp }}/homebrew-dependencies
+
+      - name: Restore Homebrew dependencies
+        run: |
+          sudo tar -xzf "$RUNNER_TEMP/homebrew-dependencies/homebrew.tar.gz" -C /opt
+          rm "$RUNNER_TEMP/homebrew-dependencies/homebrew.tar.gz"
 
       - name: Cache datasets
         id: cache-datasets
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/datasets/
           key: datasets-macos-with-job
