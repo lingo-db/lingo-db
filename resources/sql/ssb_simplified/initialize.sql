@@ -1,4 +1,3 @@
-/* Table for Crystal library (GPU processing) */
 set persist=1;
 create table "date" (
                         d_datekey          int,

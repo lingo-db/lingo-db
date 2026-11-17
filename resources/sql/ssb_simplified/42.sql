@@ -1,5 +1,5 @@
 select d_year,s_nation,p_category,sum(lo_revenue-lo_supplycost) as profit
-from lineorder,customer,supplier,part,date
+from lineorder,customer,supplier,part,"date"
 where lo_custkey = c_custkey
 and lo_suppkey = s_suppkey
 and lo_partkey = p_partkey
