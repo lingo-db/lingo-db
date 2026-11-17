@@ -1,5 +1,6 @@
 [build-system]
-requires = ["scikit-build-core>=0.10", "nanobind", "cmake", "ninja","pyarrow===24.0.0"]
+# Match the nanobind range supported by the vendored LLVM 20 Python bindings.
+requires = ["scikit-build-core>=0.10", "nanobind>=2.4,<3", "cmake", "ninja","pyarrow===24.0.0"]
 build-backend = "scikit_build_core.build"
 
 [project]
