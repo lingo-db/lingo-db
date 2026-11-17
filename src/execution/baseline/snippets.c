@@ -250,8 +250,7 @@ bool util_is_ref_valid(void* ref) {
 }
 
 uint64_t util_hash_combine(uint64_t h1, uint64_t h2) {
-   uint64_t reversed = __builtin_bswap64(h1);
-   return h2 ^ reversed;
+   return (h2 * 1099511628211ull) ^ h1;
 }
 
 typedef struct UtilTryCheapHashRes {

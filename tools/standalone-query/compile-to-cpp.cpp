@@ -55,7 +55,7 @@ class CppGenerator : public lingodb::execution::ExecutionBackend {
                     "\treturn m1 ^ __builtin_bswap64(m1);\n"
                     "}"
                     "size_t hash_combine(size_t h1, size_t h2){\n"
-                    "\treturn h2 ^ __builtin_bswap64(h1);\n"
+                    "\treturn (h2 * 1099511628211ull) ^ h1;\n"
                     "}\n"
                     "extern \"C\" size_t hashVarLenData(runtime::VarLen32);\n"
                     ""

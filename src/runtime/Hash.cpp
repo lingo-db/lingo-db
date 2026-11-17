@@ -22,13 +22,15 @@ uint64_t byteSwap64(uint64_t x) {
    return __builtin_bswap64(x);
 }
 
+constexpr uint64_t kHashCombineMultiplier = 1099511628211ull;
+
 uint64_t dbHash64(int64_t v) {
    uint64_t m1 = 11400714819323198549ull * static_cast<uint64_t>(v);
    return m1 ^ byteSwap64(m1);
 }
 
 void dbHashFoldPiece(uint64_t& acc, uint64_t piece) {
-   acc = byteSwap64(acc) ^ piece;
+   acc = (acc * kHashCombineMultiplier) ^ piece;
 }
 
 template <typename TArrowArray>
@@ -52,7 +54,7 @@ uint64_t dbHashVarLen32(VarLen32 v) {
    }
    uint64_t fHash = dbHash64(static_cast<int64_t>(first64));
    uint64_t lHash = dbHash64(static_cast<int64_t>(last64));
-   return fHash ^ byteSwap64(lHash);
+   return (lHash * kHashCombineMultiplier) ^ fHash; // combine(fHash, lHash)
 }
 
 void hashColumnPieceBatchRuntime(const arrow::Array& array, int64_t numRows, std::vector<uint64_t>& running) {

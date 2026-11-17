@@ -506,8 +506,9 @@ class HashCombineLowering : public OpConversionPattern<util::HashCombine> {
    public:
    using OpConversionPattern<util::HashCombine>::OpConversionPattern;
    LogicalResult matchAndRewrite(util::HashCombine op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      Value reversed = rewriter.create<mlir::LLVM::ByteSwapOp>(op->getLoc(), adaptor.getH2());
-      Value result = rewriter.create<LLVM::XOrOp>(op->getLoc(), adaptor.getH1(), reversed);
+      Value c = rewriter.create<mlir::LLVM::ConstantOp>(op->getLoc(), rewriter.getI64Type(), rewriter.getI64IntegerAttr(1099511628211ull));
+      Value mixed = rewriter.create<LLVM::MulOp>(op->getLoc(), adaptor.getH2(), c);
+      Value result = rewriter.create<LLVM::XOrOp>(op->getLoc(), mixed, adaptor.getH1());
       rewriter.replaceOp(op, result);
       return success();
    }
