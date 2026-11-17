@@ -34,8 +34,21 @@ include(FindZLIB)
 message("Using ZLIB: ${ZLIB_INCLUDE_DIRS}")
 message("Using Python3: ${Python3_EXECUTABLE}")
 
-find_package(Arrow 24 REQUIRED)
-find_package(ArrowCompute 24 REQUIRED)
+# Docker images and Python wheels use the baseline Arrow major. Also accept
+# explicitly supported newer majors for rolling dependencies such as Homebrew.
+set(LINGODB_ARROW_BASELINE_MAJOR 24)
+set(LINGODB_ARROW_ADDITIONAL_MAJORS 26)
+set(LINGODB_ARROW_SUPPORTED_MAJORS ${LINGODB_ARROW_BASELINE_MAJOR} ${LINGODB_ARROW_ADDITIONAL_MAJORS})
+
+# Arrow's package version check rejects other majors, so check our allowlist
+# after discovery instead of passing the baseline to find_package.
+find_package(Arrow CONFIG REQUIRED)
+string(REGEX MATCH "^[0-9]+" LINGODB_ARROW_MAJOR "${ARROW_VERSION}")
+if (NOT LINGODB_ARROW_MAJOR IN_LIST LINGODB_ARROW_SUPPORTED_MAJORS)
+    message(FATAL_ERROR "Unsupported Arrow version ${ARROW_VERSION}. Supported majors: ${LINGODB_ARROW_SUPPORTED_MAJORS}")
+endif ()
+# Never combine Arrow and ArrowCompute from different releases.
+find_package(ArrowCompute ${ARROW_VERSION} EXACT CONFIG REQUIRED)
 option(ENABLE_GPU_BACKEND "enable GPU backend" OFF)
 option(ENABLE_BASELINE_BACKEND "enable tpde baseline backend" OFF)
 option(ENABLE_TESTS "enable tests" ON)

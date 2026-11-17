@@ -4,7 +4,7 @@ on: [ pull_request ]
 
 jobs:
   clang-format:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout code
@@ -12,9 +12,9 @@ jobs:
 
       - name: Install clang-format
         run: |
-          echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-20 main" | sudo tee /etc/apt/sources.list.d/llvm-toolchain-noble-20.list > /dev/null && \
-          wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add - && \
-          sudo apt update && \
+          wget -qO - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /usr/share/keyrings/llvm.asc > /dev/null
+          echo "deb [signed-by=/usr/share/keyrings/llvm.asc] https://apt.llvm.org/noble/ llvm-toolchain-noble-20 main" | sudo tee /etc/apt/sources.list.d/llvm-toolchain-noble-20.list > /dev/null
+          sudo apt-get update
           sudo apt-get install -y clang-format-20
 
       - name: Run clang-format
