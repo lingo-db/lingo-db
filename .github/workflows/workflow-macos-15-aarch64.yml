@@ -78,7 +78,11 @@ jobs:
 
       - name: Restore Homebrew dependencies
         run: |
-          sudo tar -xzf "$RUNNER_TEMP/homebrew-dependencies/homebrew.tar.gz" -C /opt
+          mkdir -p "$RUNNER_TEMP/homebrew-restored"
+          tar -xzf "$RUNNER_TEMP/homebrew-dependencies/homebrew.tar.gz" -C "$RUNNER_TEMP/homebrew-restored"
+          sudo mv /opt/homebrew "$RUNNER_TEMP/homebrew-preinstalled"
+          sudo mv "$RUNNER_TEMP/homebrew-restored/homebrew" /opt/homebrew
+          sudo rm -rf "$RUNNER_TEMP/homebrew-preinstalled"
           rm "$RUNNER_TEMP/homebrew-dependencies/homebrew.tar.gz"
 
       - name: Build
@@ -121,7 +125,11 @@ jobs:
 
       - name: Restore Homebrew dependencies
         run: |
-          sudo tar -xzf "$RUNNER_TEMP/homebrew-dependencies/homebrew.tar.gz" -C /opt
+          mkdir -p "$RUNNER_TEMP/homebrew-restored"
+          tar -xzf "$RUNNER_TEMP/homebrew-dependencies/homebrew.tar.gz" -C "$RUNNER_TEMP/homebrew-restored"
+          sudo mv /opt/homebrew "$RUNNER_TEMP/homebrew-preinstalled"
+          sudo mv "$RUNNER_TEMP/homebrew-restored/homebrew" /opt/homebrew
+          sudo rm -rf "$RUNNER_TEMP/homebrew-preinstalled"
           rm "$RUNNER_TEMP/homebrew-dependencies/homebrew.tar.gz"
 
       - name: Setup for tests
@@ -178,7 +186,11 @@ jobs:
 
       - name: Restore Homebrew dependencies
         run: |
-          sudo tar -xzf "$RUNNER_TEMP/homebrew-dependencies/homebrew.tar.gz" -C /opt
+          mkdir -p "$RUNNER_TEMP/homebrew-restored"
+          tar -xzf "$RUNNER_TEMP/homebrew-dependencies/homebrew.tar.gz" -C "$RUNNER_TEMP/homebrew-restored"
+          sudo mv /opt/homebrew "$RUNNER_TEMP/homebrew-preinstalled"
+          sudo mv "$RUNNER_TEMP/homebrew-restored/homebrew" /opt/homebrew
+          sudo rm -rf "$RUNNER_TEMP/homebrew-preinstalled"
           rm "$RUNNER_TEMP/homebrew-dependencies/homebrew.tar.gz"
 
       - name: Test
@@ -215,7 +227,11 @@ jobs:
 
       - name: Restore Homebrew dependencies
         run: |
-          sudo tar -xzf "$RUNNER_TEMP/homebrew-dependencies/homebrew.tar.gz" -C /opt
+          mkdir -p "$RUNNER_TEMP/homebrew-restored"
+          tar -xzf "$RUNNER_TEMP/homebrew-dependencies/homebrew.tar.gz" -C "$RUNNER_TEMP/homebrew-restored"
+          sudo mv /opt/homebrew "$RUNNER_TEMP/homebrew-preinstalled"
+          sudo mv "$RUNNER_TEMP/homebrew-restored/homebrew" /opt/homebrew
+          sudo rm -rf "$RUNNER_TEMP/homebrew-preinstalled"
           rm "$RUNNER_TEMP/homebrew-dependencies/homebrew.tar.gz"
 
       - name: Cache datasets
