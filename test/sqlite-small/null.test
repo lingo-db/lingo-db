@@ -1,0 +1,5 @@
+query tsv
+SELECT NULL FROM (VALUES (1), (2)) AS t(value);
+----
+NULL
+NULL

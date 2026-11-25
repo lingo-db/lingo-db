@@ -1268,7 +1268,9 @@ class CreateFromResultTableLowering : public SubOpConversionPattern<subop::Creat
 };
 class CreateTableLowering : public SubOpConversionPattern<subop::GenericCreateOp> {
    std::string arrowDescrFromType(mlir::Type type) const {
-      if (type.isIndex()) {
+      if (mlir::isa<mlir::NoneType>(type)) {
+         return "null";
+      } else if (type.isIndex()) {
          return "int[64]";
       } else if (isIntegerType(type, 1)) {
          return "bool";
