@@ -180,24 +180,28 @@ std::shared_ptr<Plan> Plan::joinPlans(NodeSet s1, NodeSet s2, std::shared_ptr<Pl
    }
    for (auto& edge : queryGraph.joins) {
       if (edge.connects(s1, s2)) {
-         if (!edge.op) {
+         if (edge.ops.empty()) {
             //special case: forced cross product
             //do nothing
-         } else if (!mlir::isa<relalg::SelectionOp>(edge.op.getOperation()) && !mlir::isa<relalg::InnerJoinOp>(edge.op.getOperation())) {
-            specialJoin = edge.op;
+         } else if (edge.specialJoin) {
+            specialJoin = edge.ops[0];
             if (!edge.left.isSubsetOf(s1)) {
                std::swap(s1, s2);
                std::swap(p1, p2);
             }
             totalSelectivity *= edge.selectivity;
          } else {
+
             bool useSelection = true;
             if (edge.equality && equivalentColumns.isEquivalent(edge.equality->first, edge.equality->second)) {
                useSelection = false;
             }
+
             if (useSelection) {
                totalSelectivity *= edge.selectivity;
-               predicates.insert(edge.op);
+               for (auto op: edge.ops) {
+                  predicates.insert(op);
+               }
             }
          }
          if (edge.equality) {

@@ -37,7 +37,8 @@ class QueryGraph {
       }
    };
    struct JoinEdge {
-      Operator op;
+      bool specialJoin = false;
+      llvm::SmallVector<Operator> ops;
       NodeSet right;
       NodeSet left;
       double selectivity = 1;
@@ -128,16 +129,26 @@ class QueryGraph {
    void addJoinEdge(NodeSet left, NodeSet right, Operator op, std::optional<size_t> createdNode) {
       assert(left.valid());
       assert(right.valid());
-
+      bool currSimpleJoin = op && !createdNode && mlir::isa<lingodb::compiler::dialect::relalg::SelectionOp, lingodb::compiler::dialect::relalg::InnerJoinOp>(op);
+      if(currSimpleJoin) {
+         for (auto& existingEdge : joins) {
+            if (!existingEdge.specialJoin&& !existingEdge.createdNode &&existingEdge.left==left&&existingEdge.right==right) {
+               existingEdge.ops.push_back(op);
+               return;
+            }
+         }
+      }
       size_t edgeid = joins.size();
       joins.emplace_back();
       JoinEdge& e = joins.back();
       if (op) {
-         e.op = op;
+         e.ops = {op};
          if (mlir::isa<lingodb::compiler::dialect::relalg::SelectionOp, lingodb::compiler::dialect::relalg::InnerJoinOp>(op)) {
-            e.equality = analyzePredicate(mlir::cast<PredicateOperator>(e.op.getOperation()));
+            e.equality = analyzePredicate(mlir::cast<PredicateOperator>(op.getOperation()));
          }
       }
+      e.specialJoin = !currSimpleJoin;
+
       e.left = left;
       e.right = right;
       e.createdNode = createdNode;
@@ -351,7 +362,7 @@ class QueryGraph {
       }
    }
    ColumnSet getPKey(dialect::relalg::QueryGraph::Node& n);
-   double estimateSelectivity(Operator op, NodeSet left, NodeSet right);
+   double estimateSelectivity(const llvm::SmallVector<Operator>& op, NodeSet left, NodeSet right);
    void estimate();
    double calculateSelectivity(SelectionEdge& edge, NodeSet left, NodeSet right);
 };
