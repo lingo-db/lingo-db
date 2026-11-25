@@ -519,6 +519,24 @@ def DB_OneOfOp : DB_LogicalOp<"oneof",[DB_NeedsNullWrap]> {
     let hasCanonicalizeMethod = 1;
 }
 
+def DB_LikeOp : DB_LogicalOp<"like", [DB_NeedsNullWrap]> {
+    let summary = "whether value matches the SQL LIKE pattern `pattern`";
+    let description = [{
+        In `pattern`, `%` matches any (possibly empty) sequence of characters and `_` matches exactly one character; both can be escaped with `escape` (a single character, `\` if unspecified).
+        The result is `NULL` if any operand is `NULL`.
+    }];
+
+    let arguments = (ins NullableDBType:$val,NullableDBType:$pattern,OptionalAttr<StrAttr>:$escape);
+    let assemblyFormat = "$val `:` type($val) `like` $pattern `:` type($pattern) (`escape` $escape^)? attr-dict";
+    let hasVerifier = 1;
+    let hasCanonicalizeMethod = 1;
+}
+
+def DB_StringOrCharType : AnyTypeOf<[DB_StringType, DB_CharType], "string or char type">;
+def DB_ConstLikeOp : DB_LogicalOp<"const_like"> {
+    let arguments = (ins DB_StringOrCharType:$val, DB_StringOrCharType:$pattern);
+    let assemblyFormat = "$val `:` type($val) `const_like` $pattern `:` type($pattern) attr-dict";
+}
 def AndOp : DB_LogicalOp<"and"> {
     let summary = "Logical And";
 

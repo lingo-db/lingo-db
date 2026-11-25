@@ -1043,6 +1043,92 @@ class OneOfLowering : public OpConversionPattern<db::OneOfOp> {
       return success();
    }
 };
+class ConstLikeLowering : public OpConversionPattern<db::ConstLikeOp> {
+   public:
+   using OpConversionPattern<db::ConstLikeOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(db::ConstLikeOp likeOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      std::string pattern =  mlir::dyn_cast<mlir::StringAttr>(mlir::dyn_cast_or_null<db::ConstantOp>(likeOp.getPattern().getDefiningOp()).getValue()).str();
+      llvm::SmallVector<llvm::SmallVector<uint8_t>> subpatterns;
+      llvm::SmallVector<llvm::SmallVector<int32_t>> underscorePositions;
+      {
+         llvm::SmallVector<uint8_t> currentSubpattern;
+         llvm::SmallVector<int32_t> currentUnderscorePositions;
+         bool forceFlush = true;
+         auto flushCurrent = [&]() {
+            if (!currentSubpattern.empty() || forceFlush) {
+               forceFlush = false;
+               subpatterns.push_back(std::move(currentSubpattern));
+               currentSubpattern.clear();
+               underscorePositions.push_back(std::move(currentUnderscorePositions));
+               currentUnderscorePositions.clear();
+            }
+         };
+
+         size_t pos = 0;
+         while (pos < pattern.size()) {
+            char c = pattern[pos++];
+            if (c == '\\') {
+               // this should never lead to a bug because of the verifier.
+               currentSubpattern.push_back(pattern[pos++]);
+            } else if (c == '%')
+               flushCurrent();
+            else if (c == '_') {
+               currentUnderscorePositions.push_back(currentSubpattern.size());
+               currentSubpattern.push_back('_');
+            } else
+               currentSubpattern.push_back(c);
+         }
+
+         forceFlush = true;
+         flushCurrent();
+      }
+
+      auto toStringAttr = [&](const llvm::SmallVectorImpl<uint8_t> &s) -> mlir::StringAttr {
+         return rewriter.getStringAttr(
+             llvm::StringRef(reinterpret_cast<const char *>(s.data()), s.size()));
+      };
+      mlir::DictionaryAttr prefixAttr = nullptr;
+
+      if (subpatterns.size() == 1) {
+         llvm::SmallVector<mlir::Attribute> subpatternAttrs;
+         mlir::ArrayAttr subpatternsAttr = rewriter.getArrayAttr(subpatternAttrs);
+         auto utilLikeOp = rewriter.create<util::LikeOp>(likeOp.getLoc(), rewriter.getI1Type(), adaptor.getVal(), rewriter.getDictionaryAttr({
+                  rewriter.getNamedAttr("prefix", toStringAttr(subpatterns.front())),
+                  rewriter.getNamedAttr("skip", rewriter.getDenseI32ArrayAttr(underscorePositions.front()))
+         }), nullptr, subpatternsAttr, rewriter.getBoolAttr(true));
+         rewriter.replaceOp(likeOp, utilLikeOp);
+         return mlir::success();
+      }
+      if (!subpatterns.front().empty()) {
+         prefixAttr = rewriter.getDictionaryAttr({
+            rewriter.getNamedAttr("prefix", toStringAttr(subpatterns.front())),
+            rewriter.getNamedAttr("skip", rewriter.getDenseI32ArrayAttr(underscorePositions.front()))
+         });
+      }
+      mlir::DictionaryAttr suffixAttr = nullptr;
+      if (!subpatterns.back().empty()) {
+         suffixAttr = rewriter.getDictionaryAttr({
+            rewriter.getNamedAttr("suffix", toStringAttr(subpatterns.back())),
+            rewriter.getNamedAttr("skip", rewriter.getDenseI32ArrayAttr(underscorePositions.back()))
+         });
+      }
+
+      llvm::SmallVector<mlir::Attribute> subpatternAttrs;
+      for (size_t i = 1; i < subpatterns.size() - 1; ++i) {
+         subpatternAttrs.push_back(
+            rewriter.getDictionaryAttr({
+               rewriter.getNamedAttr("subpattern", toStringAttr(subpatterns[i])),
+               rewriter.getNamedAttr("skip", rewriter.getDenseI32ArrayAttr(underscorePositions[i]))
+            })
+         );
+      }
+      mlir::ArrayAttr subpatternsAttr = rewriter.getArrayAttr(subpatternAttrs);
+      auto utilLikeOp = rewriter.create<util::LikeOp>(likeOp.getLoc(), rewriter.getI1Type(), adaptor.getVal(), prefixAttr, suffixAttr, subpatternsAttr, rewriter.getBoolAttr(false));
+      rewriter.replaceOp(likeOp, utilLikeOp);
+      return mlir::success();
+   }
+};
+
 class SortCompareLowering : public OpConversionPattern<db::SortCompare> {
    public:
    using OpConversionPattern<db::SortCompare>::OpConversionPattern;
@@ -1578,6 +1664,7 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<CmpOpLowering>(typeConverter, ctxt);
    patterns.insert<BetweenLowering>(typeConverter, ctxt);
    patterns.insert<OneOfLowering>(typeConverter, ctxt);
+   patterns.insert<ConstLikeLowering>(typeConverter, ctxt);
    patterns.insert<SortCompareLowering>(typeConverter, ctxt);
 
    patterns.insert<NotOpLowering>(typeConverter, ctxt);

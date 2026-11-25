@@ -42,9 +42,21 @@ def BufferGetElementRef : Util_Op<"buffer_getelementref"> {
     let assemblyFormat = " $buffer `[` $idx `]` `:` type($buffer) `->` type($ref) attr-dict";
     let hasVerifier=1;
 }
-def VarLenGetLen : Util_Op<"varlen32_getlen"> {
+def VarLenGetLen : Util_Op<"varlen32_getlen", [Pure]> {
     let arguments = (ins VarLen32Type:$varlen);
     let results = (outs Index: $len);
+    let assemblyFormat = " $varlen attr-dict";
+    let hasCanonicalizeMethod = 1;
+}
+def VarLenGetRef : Util_Op<"varlen32_get_ref", [Pure]> {
+    let arguments = (ins VarLen32Type:$varlen);
+    let results = (outs RefType:$ref);
+    let assemblyFormat = "$varlen `:` type($ref) attr-dict";
+    let hasFolder = 1;
+}
+def VarLenGetInlinedString : Util_Op<"varlen32_get_inlined_str", [Pure]> {
+    let arguments = (ins VarLen32Type:$varlen);
+    let results = (outs I128:$str);
     let assemblyFormat = " $varlen attr-dict";
 }
 
@@ -73,7 +85,69 @@ def VarLenTryCheapHash : Util_Op<"varlen32_try_cheap_hash"> {
     let results = (outs I1: $complete, Index:$hash);
     let assemblyFormat = " $varlen attr-dict";
 }
+def LikeOp : Util_Op<"like"> {
+    let arguments = (ins VarLen32Type:$str, OptionalAttr<DictionaryAttr>:$prefix, OptionalAttr<DictionaryAttr>:$suffix, DictArrayAttr:$subpatterns, I1Attr:$forceExact);
+    let results = (outs I1:$matches);
+    let assemblyFormat = "$str `like` $subpatterns (`prefix` $prefix^)? (`suffix` $suffix^)? `forceExact` $forceExact attr-dict `:` functional-type(operands, results)";
+}
+def BytesStartsWith : Util_Op<"bytes_starts_with", [Pure]> {
+    let arguments = (ins I128:$str, StrAttr:$prefix, Index:$startIndex, Index:$endIndex);
+    let results = (outs I1:$starts_with);
+    let assemblyFormat = " $str `[` $startIndex `to` $endIndex `]` `,` $prefix attr-dict";
+}
+def StringStartsWith : Util_Op<"string_starts_with", [DeclareOpInterfaceMethods<MemoryEffectsOpInterface>]> {
+    let arguments = (ins RefType:$str, StrAttr:$prefix, Index:$startIndex, Index:$endIndex);
+    let results = (outs I1:$starts_with);
+    let assemblyFormat = " $str `[` $startIndex `to` $endIndex `]` `,` $prefix attr-dict";
+}
+def BytesEndsWith : Util_Op<"bytes_ends_with", [Pure]> {
+    let arguments = (ins I128:$str, StrAttr:$suffix, Index:$startIndex, Index:$endIndex);
+    let results = (outs I1:$ends_with);
+    let assemblyFormat = " $str `[` $startIndex `to` $endIndex `]` `,` $suffix attr-dict";
+}
+def StringEndsWith : Util_Op<"string_ends_with", [DeclareOpInterfaceMethods<MemoryEffectsOpInterface>]> {
+    let arguments = (ins RefType:$str, StrAttr:$suffix, Index:$startIndex, Index:$endIndex);
+    let results = (outs I1:$ends_with);
+    let assemblyFormat = " $str `[` $startIndex `to` $endIndex `]` `,` $suffix attr-dict";
+}
+def BytesContains : Util_Op<"bytes_contains", [Pure]> {
+    let arguments = (ins I128:$str, StrAttr:$subpattern, Index:$startIndex, Index:$endIndex);
+    let results = (outs I1:$contains, Index:$matchStart);
+    let assemblyFormat = " $str `[` $startIndex `to` $endIndex `]` `,` $subpattern attr-dict";
+}
+def StringContains : Util_Op<"string_contains", [DeclareOpInterfaceMethods<MemoryEffectsOpInterface>]> {
+    let arguments = (ins RefType:$str, StrAttr:$subpattern, Index:$startIndex, Index:$endIndex);
+    let results = (outs I1:$contains, Index:$matchStart);
+    let assemblyFormat = " $str `[` $startIndex `to` $endIndex `]` `,` $subpattern attr-dict";
+}
+def BytesNonMatchIndex : Util_Op<"bytes_non_match_index", [Pure]> {
+    let arguments = (ins I128:$str, StrAttr:$subpattern, Index:$startIndex, Index:$endIndex);
+    let results = (outs Index:$pos);
+    let assemblyFormat = " $str `[` $startIndex `to` $endIndex `]` `,` $subpattern attr-dict";
+}
 
+def StringNonMatchIndex : Util_Op<"string_non_match_index", [DeclareOpInterfaceMethods<MemoryEffectsOpInterface>]> {
+    let arguments = (ins RefType:$str, StrAttr:$subpattern, Index:$startIndex, Index:$endIndex);
+    let results = (outs Index:$pos);
+    let assemblyFormat = " $str `[` $startIndex `to` $endIndex `]` `,` $subpattern attr-dict";
+}
+
+def RefMemchr : Util_Op<"memchr", [DeclareOpInterfaceMethods<MemoryEffectsOpInterface>]> {
+    let arguments = (ins RefType:$ref, Index:$len, I8:$byte);
+    let results = (outs I1:$found, Index:$pos);
+    let assemblyFormat = "$ref `:` type($ref) `,` $len `,` $byte attr-dict";
+}
+
+def InlineMemchr : Util_Op<"swar_memchr", [Pure]> {
+    let arguments = (ins I128:$data, Index:$len, I8:$byte);
+    let results = (outs I1:$found, Index:$pos);
+    let assemblyFormat = "$data `,` $len `,` $byte attr-dict";
+}
+def GetUTF8CodeLenOp : Util_Op<"get_utf8codelen", [Pure]> {
+    let arguments = (ins I8:$byte);
+    let results = (outs Index:$len);
+    let assemblyFormat = "$byte attr-dict `:` type($len)";
+}
 def Hash64 : Util_Op<"hash_64",[Pure]> {
     let arguments = (ins Index:$val);
     let results = (outs Index:$hash);
@@ -185,6 +259,11 @@ let builders = [
     }]>
 ];
 }
+def UnalignedLoadOp  : Util_Op<"unaligned_load",[DeclareOpInterfaceMethods<MemoryEffectsOpInterface>]> {
+    let arguments = (ins RefType:$ref);
+    let results=(outs AnyType:$val);
+    let assemblyFormat = "$ref `:`type($ref) `->` type($val) attr-dict";
+}
 def ArrayElementPtrOp  : Util_Op<"arrayelementptr",[Pure]> {
     let arguments = (ins RefType:$ref,Index:$idx);
     let results=(outs RefType:$res);
@@ -254,5 +333,27 @@ def SetBitConstOp : Util_Op<"set_bit_const",[Pure]> {
     let arguments = (ins AnyInteger: $bitset, I1: $val,  I32Attr:$bitpos);
     let results =(outs AnyInteger: $res);
     let assemblyFormat = " $bitset `:` type($bitset) `,` $val `,` $bitpos `->` type($res) attr-dict";
+}
+def CreateConstArrayOp : Util_Op<"const_array", [Pure]> {
+    let arguments = (ins ElementsAttr:$data, I64Attr:$alignment);
+    let results = (outs RefType:$res);
+    let assemblyFormat = "$data `:` type($res) attr-dict";
+    let hasVerifier = 1;
+}
+def GetConstArrayAtOp : Util_Op<"get_const_array_at", [Pure]> {
+    let arguments = (ins RefType:$array, Index:$idx);
+    let results = (outs AnyType:$res);
+    let assemblyFormat = "$array `[` $idx `]` `:` type($array) `->` type($res) attr-dict";
+    let hasVerifier = 1;
+}
+def LoadVectorOp : Util_Op<"load_vector", [DeclareOpInterfaceMethods<MemoryEffectsOpInterface>]> {
+    let arguments = (ins RefType:$ref, I64Attr:$alignment);
+    let results = (outs VectorOfLengthAndType<[16], [I8]>:$res);
+    let assemblyFormat = "$ref `align` $alignment `:` type($ref) `->` type($res) attr-dict";
+}
+def CmpistriOp : Util_Op<"pcmpistri", [Pure]> {
+    let arguments = (ins VectorOfLengthAndType<[16], [I8]>:$a, VectorOfLengthAndType<[16], [I8]>:$b, I8Attr:$flags);
+    let results = (outs I32:$index);
+    let assemblyFormat = "$a `,` $b `,` $flags `:` type($a) `,` type($b) attr-dict";
 }
 #endif// OPS

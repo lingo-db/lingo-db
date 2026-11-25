@@ -190,8 +190,47 @@ LogicalResult util::StoreOp::canonicalize(util::StoreOp op, mlir::PatternRewrite
 void util::LoadOp::getEffects(::mlir::SmallVectorImpl<::mlir::SideEffects::EffectInstance<::mlir::MemoryEffects::Effect>>& effects) {
    effects.emplace_back(MemoryEffects::Read::get());
 }
+void util::UnalignedLoadOp::getEffects(::mlir::SmallVectorImpl<::mlir::SideEffects::EffectInstance<::mlir::MemoryEffects::Effect>>& effects) {
+   effects.emplace_back(MemoryEffects::Read::get());
+}
 void util::LoadElementOp::getEffects(::mlir::SmallVectorImpl<::mlir::SideEffects::EffectInstance<::mlir::MemoryEffects::Effect>>& effects) {
    effects.emplace_back(MemoryEffects::Read::get());
+}
+
+LogicalResult util::VarLenGetLen::canonicalize(util::VarLenGetLen varLenGetLenOp, mlir::PatternRewriter& rewriter) {
+   auto createOp = varLenGetLenOp.getVarlen().getDefiningOp<util::CreateVarLen>();
+   if (!createOp) return mlir::failure();
+   rewriter.replaceOpWithNewOp<mlir::arith::IndexCastOp>(varLenGetLenOp, rewriter.getIndexType(), createOp.getLen());
+   return mlir::success();
+}
+
+OpFoldResult util::VarLenGetRef::fold(FoldAdaptor adaptor) {
+   auto varlen = getVarlen();
+   if (auto* varlenParent = varlen.getDefiningOp()) {
+      if (auto createVarlenOp = mlir::dyn_cast_or_null<util::CreateVarLen>(varlenParent)) {
+         return createVarlenOp.getRef();
+      }
+   }
+   return {};
+}
+
+void util::RefMemchr::getEffects(::mlir::SmallVectorImpl<::mlir::SideEffects::EffectInstance<::mlir::MemoryEffects::Effect>>& effects) {
+   effects.emplace_back(MemoryEffects::Read::get());
+}
+void util::StringStartsWith::getEffects(llvm::SmallVectorImpl<mlir::SideEffects::EffectInstance<mlir::MemoryEffects::Effect>>& effects) {
+   effects.emplace_back(mlir::MemoryEffects::Read::get());
+}
+void util::StringEndsWith::getEffects(llvm::SmallVectorImpl<mlir::SideEffects::EffectInstance<mlir::MemoryEffects::Effect>>& effects) {
+   effects.emplace_back(mlir::MemoryEffects::Read::get());
+}
+void util::StringContains::getEffects(llvm::SmallVectorImpl<mlir::SideEffects::EffectInstance<mlir::MemoryEffects::Effect>>& effects) {
+   effects.emplace_back(mlir::MemoryEffects::Read::get());
+}
+void util::StringNonMatchIndex::getEffects(llvm::SmallVectorImpl<mlir::SideEffects::EffectInstance<mlir::MemoryEffects::Effect>>& effects) {
+   effects.emplace_back(mlir::MemoryEffects::Read::get());
+}
+void util::LoadVectorOp::getEffects(llvm::SmallVectorImpl<mlir::SideEffects::EffectInstance<mlir::MemoryEffects::Effect>>& effects) {
+   effects.emplace_back(mlir::MemoryEffects::Read::get());
 }
 ::mlir::LogicalResult util::TupleElementPtrOp::verify() {
    util::TupleElementPtrOp& op = *this;
@@ -205,6 +244,29 @@ void util::LoadElementOp::getEffects(::mlir::SmallVectorImpl<::mlir::SideEffects
       op->print(llvm::outs(), flags);
       return mlir::failure();
    }
+   return mlir::success();
+}
+
+::mlir::LogicalResult util::CreateConstArrayOp::verify() {
+   util::CreateConstArrayOp& op = *this;
+   auto resElementType = op.getRes().getType().getElementType();
+   auto dataElementType = mlir::cast<mlir::ShapedType>(op.getData().getType()).getElementType();
+   if (resElementType != dataElementType) {
+      op.emitOpError("Element types do not match");
+      mlir::OpPrintingFlags flags;
+      flags.assumeVerified();
+      op->print(llvm::outs(), flags);
+      return mlir::failure();
+   }
+   return mlir::success();
+}
+
+::mlir::LogicalResult util::GetConstArrayAtOp::verify() {
+   util::GetConstArrayAtOp& op = *this;
+   auto refType = mlir::cast<util::RefType>(op.getArray().getType());
+   if (refType.getElementType() != op.getRes().getType())
+      return op.emitOpError("result type ") << op.getRes().getType()
+             << " does not match array element type " << refType.getElementType();
    return mlir::success();
 }
 #define GET_OP_CLASSES

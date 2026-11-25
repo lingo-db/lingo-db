@@ -1,6 +1,7 @@
 add_mlir_conversion_library(MLIRUtilToLLVM
         LowerToLLVM.cpp
         UtilTypeConversion.cpp
+        Transforms/PrepareLowering.cpp
 
         ADDITIONAL_HEADER_DIRS
         ../../../lingodb/compiler/Conversion/UtilToLLVM

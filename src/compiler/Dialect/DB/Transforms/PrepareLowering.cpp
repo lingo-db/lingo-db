@@ -174,6 +174,32 @@ class SimplifyCompareISAPattern : public mlir::RewritePattern {
       return mlir::success();
    }
 };
+class SpecializeLikePatterns : public mlir::RewritePattern {
+   public:
+   SpecializeLikePatterns(mlir::MLIRContext* context)
+      : RewritePattern(db::LikeOp::getOperationName(), 1, context) {}
+
+   mlir::LogicalResult matchAndRewrite(mlir::Operation* op,
+                                       mlir::PatternRewriter& rewriter) const override {
+      auto likeOp = mlir::cast<db::LikeOp>(op);
+
+      // Is the pattern a compile-time constant string?
+      std::optional<std::string> constPattern;
+      if (auto constOp = mlir::dyn_cast_or_null<db::ConstantOp>(likeOp.getPattern().getDefiningOp()))
+         if (auto strAttr = mlir::dyn_cast<mlir::StringAttr>(constOp.getValue()))
+            constPattern = strAttr.str();
+
+      if (!constPattern) {
+         rewriter.replaceOpWithNewOp<db::RuntimeCall>(op, likeOp.getRes().getType(), "Like", mlir::ValueRange{likeOp.getVal(), likeOp.getPattern()});
+         return mlir::success();
+      }
+      std::string pattern = constPattern.value();
+
+      auto constLikeOp = rewriter.create<db::ConstLikeOp>(op->getLoc(), likeOp.getRes().getType(), likeOp.getVal(), likeOp.getPattern());
+      rewriter.replaceOp(likeOp, constLikeOp);
+      return mlir::success();
+   }
+};
 //Pattern that optimizes the join order
 class PrepareLowering : public mlir::PassWrapper<PrepareLowering, mlir::OperationPass<mlir::ModuleOp>> {
    virtual llvm::StringRef getArgument() const override { return "db-prepare-lowering"; }
@@ -194,6 +220,7 @@ class PrepareLowering : public mlir::PassWrapper<PrepareLowering, mlir::Operatio
          patterns.insert<SimplifyCompareISAPattern>(&getContext());
          //patterns.insert<SimplifyNullableCondSkip>(&getContext());
          patterns.insert<WrapWithNullCheck>(&getContext());
+         patterns.insert<SpecializeLikePatterns>(&getContext());
          lingodb::compiler::dialect::db::addOptimizeRuntimeFunctionPatterns(patterns);
          if (lingodb::compiler::applyPatternsGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
             assert(false && "should not happen");

@@ -9,6 +9,7 @@
 
 namespace lingodb::compiler::dialect {
 namespace util {
+std::unique_ptr<mlir::Pass> createPrepareLoweringPass();
 void populateUtilToLLVMConversionPatterns(mlir::LLVMTypeConverter& typeConverter, mlir::RewritePatternSet& patterns);
 void populateUtilTypeConversionPatterns(mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns);
 std::unique_ptr<mlir::Pass> createUtilToLLVMPass();

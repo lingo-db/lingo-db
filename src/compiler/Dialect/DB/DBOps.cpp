@@ -398,6 +398,63 @@ LogicalResult db::OneOfOp::canonicalize(db::OneOfOp oneofOp, mlir::PatternRewrit
    }
    return failure();
 }
+LogicalResult db::LikeOp::verify() {
+   for (auto t : {getBaseType(getVal().getType()), getBaseType(getPattern().getType())})
+      if (!mlir::isa<db::StringType, db::CharType>(t))
+         return emitOpError("expects string-like operands");
+   if (auto constOp = mlir::dyn_cast_or_null<db::ConstantOp>(getPattern().getDefiningOp())) {
+      auto pattern = mlir::dyn_cast<mlir::StringAttr>(constOp.getValue()).str();
+      size_t i = 0;
+      while (i < pattern.size()) {
+         char c = pattern[i++];
+         if (c == '\\') {
+            if (i == pattern.size())
+               return emitOpError("pattern constant cannot end with escape");
+            ++i;
+         }
+      }
+   }
+   return mlir::success();
+}
+LogicalResult db::LikeOp::canonicalize(db::LikeOp likeOp, mlir::PatternRewriter& rewriter) {
+   if (!mlir::isa<db::StringType>(getBaseType(likeOp.getVal().getType())))
+      return mlir::failure();
+
+   auto constOp = mlir::dyn_cast_or_null<db::ConstantOp>(likeOp.getPattern().getDefiningOp());
+   if (!constOp)
+      return mlir::failure();
+
+   auto patternAttr = mlir::dyn_cast<mlir::StringAttr>(constOp.getValue());
+   if (!patternAttr)
+      return mlir::failure();
+
+   llvm::StringRef pattern = patternAttr.getValue();
+   size_t i = 0;
+   std::string literal;
+   while (i < pattern.size()) {
+      char c = pattern[i++];
+      if (c == '%' || c == '_')
+         return mlir::failure();
+      if (c == '\\') {
+         if (i == pattern.size() - 1)
+            return mlir::failure();
+         literal.push_back(pattern[i]);
+         ++i;
+      } else {
+         literal.push_back(c);
+      }
+   }
+
+   auto rhs = rewriter.create<db::ConstantOp>(likeOp->getLoc(), db::StringType::get(likeOp.getContext()), rewriter.getStringAttr(literal));
+   rewriter.replaceOpWithNewOp<db::CmpOp>(likeOp, db::DBCmpPredicate::eq, likeOp.getVal(), rhs);
+   return mlir::success();
+}
+LogicalResult verifySimpleStringPredicate(mlir::Operation* op, mlir::Type val) {
+   auto valueType = getBaseType(val);
+   if (!mlir::isa<db::StringType>(valueType))
+      return op->emitOpError("expects string-like operands");
+   return success();
+}
 OpFoldResult db::IsNullOp::fold(FoldAdaptor adaptor) {
    auto nullableVal = getVal();
    if (!mlir::isa<db::NullableType>(nullableVal.getType())) {
