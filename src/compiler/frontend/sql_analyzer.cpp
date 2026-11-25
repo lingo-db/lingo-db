@@ -1055,13 +1055,14 @@ std::shared_ptr<ast::TableProducer> SQLQueryAnalyzer::analyzePipeOperator(std::s
                case ast::ExpressionClass::BOUND_STAR: {
                   auto star = std::static_pointer_cast<ast::BoundStarExpression>(parsedExpression);
                   targetColumns.resize(star->columnReferences.size());
-                  context->currentScope->targetInfo.resize(star->columnReferences.size());
+                  auto oldSize = context->currentScope->targetInfo.size();
+                  context->currentScope->targetInfo.resize(oldSize + star->columnReferences.size());
                   std::vector<catalog::Catalog> catalogs;
                   std::string scope;
                   std::vector<catalog::Column> columns;
                   for (auto& [columnReference, index] : star->columnReferences) {
                      targetColumns[index] = columnReference;
-                     context->currentScope->targetInfo[(index)] = columnReference;
+                     context->currentScope->targetInfo[(index) + oldSize] = columnReference;
                   }
 
                   break;

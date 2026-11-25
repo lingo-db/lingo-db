@@ -68,6 +68,17 @@ def Arrow_AppendFixedSizedOp : Arrow_Op<"array_builder.append_fixed_sized"> {
     let arguments = (ins Arrow_ArrayBuilder:$builder, AnyType: $value, Optional<I1>: $valid);
     let assemblyFormat = " $builder `,` $value `:` type($value) ( `,` $valid^ )? attr-dict";
 }
+
+def Arrow_AppendNullOp : Arrow_Op<"array_builder.append_null"> {
+    let summary = "Appends a null value to an Arrow array builder.";
+    let description = [{
+        This operation appends a null/none value to an Arrow array builder.
+
+    }];
+    let arguments = (ins Arrow_ArrayBuilder:$builder);
+    let assemblyFormat = " $builder attr-dict";
+}
+
 def Arrow_AppendVariableSizeBinaryOp : Arrow_Op<"array_builder.append_variable_sized_binary"> {
     let summary = "Appends a variable sized binary value to an Arrow array builder.";
     let description = [{
