@@ -473,7 +473,34 @@ select * from studenten s
 24002	Xenokrates	18
 25403	Jonas	12
 
+query tsv
+select power(2, 10), pow(9, 0.5), power(2, -2);
+----
+1024	3	0.25
+
+statement ok
+create table power_inputs(base float8, exponent float8);
+
+statement ok
+insert into power_inputs values (2, 10), (null, 2), (4, null);
+
+query tsv
+select power(base, exponent) from power_inputs;
+----
+1024
+NULL
+NULL
+
 #Explicitly expecting a error from the parser or analyzer
+statement frontend-error: Function pow needs exactly two arguments
+select power(2);
+
+statement frontend-error: Argument of pow must be numeric
+select power('invalid', 2);
+
+statement frontend-error: Argument of pow must be numeric
+select power(2, 'invalid');
+
 statement frontend-error: No Catalog found with name
 select * from student s
 
