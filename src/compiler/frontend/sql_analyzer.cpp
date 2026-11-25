@@ -2183,11 +2183,12 @@ std::shared_ptr<ast::BoundExpression> SQLQueryAnalyzer::analyzeExpression(std::s
          auto commonTypes = SQLTypeUtils::toCommonTypes(types);
          left->resultType = commonTypes[0];
          size_t x = 1;
+         bool isNullable = commonTypes[0].castType->isNullable;
          for (auto boundChild : boundRightChildren) {
             boundChild->resultType = commonTypes[x];
+            isNullable = isNullable || boundChild->resultType->isNullable;
             x++;
          }
-         bool isNullable = commonTypes[0].castType->isNullable;
          auto boundComparison = drv.nf.node<ast::BoundComparisonExpression>(comparison->loc, comparison->type, comparison->alias, isNullable, left, boundRightChildren);
          return boundComparison;
       }
