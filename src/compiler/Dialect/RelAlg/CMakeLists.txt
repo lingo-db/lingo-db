@@ -26,6 +26,7 @@ add_mlir_dialect_library(MLIRRelAlg
         Transforms/queryopt/DPhyp.cpp
         Transforms/queryopt/GOO.cpp
         Transforms/queryopt/QueryGraph.cpp
+        Transforms/queryopt/SampleCorrection.cpp
         Passes.cpp
         ADDITIONAL_HEADER_DIRS
         ../../../../include/lingodb/compiler/Dialect/RelAlg

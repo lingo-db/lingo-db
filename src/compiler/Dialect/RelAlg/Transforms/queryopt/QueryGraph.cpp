@@ -1,12 +1,19 @@
 #include "lingodb/compiler/Dialect/RelAlg/Transforms/queryopt/QueryGraph.h"
 
+#include "lingodb/compiler/Dialect/RelAlg/Transforms/queryopt/SampleCorrection.h"
 #include "lingodb/compiler/mlir-support/eval.h"
 #include "lingodb/compiler/mlir-support/parsing.h"
+#include "lingodb/utility/Setting.h"
 
+#include <algorithm>
 #include <iostream>
 
 #include <arrow/record_batch.h>
 namespace {
+// Toggle for the Moerkotte/Hertzschuch μ-estimator (CIDR'20). On by default;
+// set LINGODB_OPT_SAMPLE_CORRECTION=false to fall back to naive k/m · n.
+lingodb::utility::GlobalSetting<bool> sampleCorrection("system.opt.sample_correction", true);
+
 std::unique_ptr<lingodb::compiler::support::eval::expr> buildConstant(mlir::Type type, std::variant<int64_t, double, std::string> parseArg) {
    namespace db = lingodb::compiler::dialect::db;
    ::arrow::Type::type typeConstant = ::arrow::Type::type::NA;
@@ -290,8 +297,15 @@ std::optional<double> estimateUsingSample(QueryGraph::Node& n) {
       auto optionalCount = lingodb::compiler::support::eval::countResults(sample.getSampleData(), lingodb::compiler::support::eval::createAnd(expressions));
       if (!optionalCount.has_value()) return {};
       auto count = optionalCount.value();
+      const double m = static_cast<double>(sample.getSampleData()->num_rows());
+      if (sampleCorrection.getValue()) {
+         const double n = static_cast<double>(meta.getMeta()->getNumRows());
+         if (n <= 0 || m <= 0) return {};
+         const double mu = muEstimate(n, static_cast<double>(count), m);
+         return std::max(mu, 1.0) / n;
+      }
       if (count == 0) count = 1;
-      return static_cast<double>(count) / static_cast<double>(sample.getSampleData()->num_rows());
+      return static_cast<double>(count) / m;
    }
 
    return {};
@@ -328,9 +342,14 @@ void annotateBaseTable(relalg::BaseTableOp baseTableOp) {
          auto optionalCount = lingodb::compiler::support::eval::countResults(sample.getSampleData(), lingodb::compiler::support::eval::createAnd(expressions));
          if (optionalCount.has_value()) {
             auto count = optionalCount.value();
-            if (count == 0) count = 1;
-            double selectivity = static_cast<double>(count) / static_cast<double>(sample.getSampleData()->num_rows());
-            filteredRows = static_cast<double>(totalRows) * selectivity;
+            const double m = static_cast<double>(sample.getSampleData()->num_rows());
+            if (sampleCorrection.getValue() && totalRows > 0 && m > 0) {
+               filteredRows = std::max(muEstimate(static_cast<double>(totalRows), static_cast<double>(count), m), 1.0);
+            } else {
+               if (count == 0) count = 1;
+               double selectivity = static_cast<double>(count) / m;
+               filteredRows = static_cast<double>(totalRows) * selectivity;
+            }
          }
       }
       baseTableOp->setAttr("rows", mlir::FloatAttr::get(mlir::Float64Type::get(baseTableOp.getContext()), filteredRows));

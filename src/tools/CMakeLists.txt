@@ -57,3 +57,9 @@ add_executable(run-sql run-sql.cpp)
 target_link_libraries(run-sql PUBLIC ${COMMON_LIBS})
 set_target_properties(run-sql PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 target_compile_definitions(run-sql PRIVATE ${COMPILE_DEFS})
+
+# cardinality-errors
+add_executable(cardinality-errors cardinality-errors.cpp)
+target_link_libraries(cardinality-errors PUBLIC ${LIBS} ${COMMON_LIBS})
+set_target_properties(cardinality-errors PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+target_compile_definitions(cardinality-errors PRIVATE ${COMPILE_DEFS})
