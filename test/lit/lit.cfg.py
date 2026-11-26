@@ -33,11 +33,11 @@ config.substitutions.append(('%PATH%', config.environment['PATH']))
 config.substitutions.append(('%shlibext', config.llvm_shlib_ext))
 
 if platform.system() == "Darwin":  # Check if the system is macOS
-    config.environment['LINGODB_COMPILATION_STATIC_LINKER'] = "/opt/homebrew/bin/clang++"  # Use the CMake CXX compiler path
-    config.environment['LINGODB_COMPILATION_C_BACKEND_COMPILER_DRIVER'] = "/opt/homebrew/bin/clang++"  # Use the CMake CXX compiler path
+    config.environment['LINGODB_COMPILATION_STATIC_LINKER'] = config.host_cxx  # Use the configured compiler
+    config.environment['LINGODB_COMPILATION_C_BACKEND_COMPILER_DRIVER'] = config.host_cxx  # Use the configured compiler
 
 llvm_config.with_system_environment(
-    ['HOME', 'INCLUDE', 'LIB', 'TMP', 'TEMP', "LINGODB_COMPILATION_STATICLINKER", "LINGODB_COMPILATION_C_BACKEND_COMPILER_DRIVER", "ENABLE_BASELINE_BACKEND"])
+    ['HOME', 'INCLUDE', 'LIB', 'TMP', 'TEMP', 'TMPDIR', "LINGODB_COMPILATION_STATICLINKER", "LINGODB_COMPILATION_C_BACKEND_COMPILER_DRIVER", "ENABLE_BASELINE_BACKEND"])
 
 llvm_config.use_default_substitutions()
 
