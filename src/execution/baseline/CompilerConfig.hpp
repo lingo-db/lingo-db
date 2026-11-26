@@ -4,6 +4,9 @@
 #include <tpde/x64/CompilerX64.hpp>
 #elif defined(__aarch64__)
 #include <tpde/arm64/CompilerA64.hpp>
+#if defined(__APPLE__)
+#include <tpde/arm64/PlatformConfigDarwin.hpp>
+#endif
 #endif
 
 namespace lingodb::execution::baseline {
