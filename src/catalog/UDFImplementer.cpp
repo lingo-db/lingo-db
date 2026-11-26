@@ -26,6 +26,7 @@
 #include <fstream>
 
 #include <dlfcn.h>
+#include <unistd.h>
 namespace {
 lingodb::utility::GlobalSetting<std::string> cUDFCompilerDriver("system.compilation.c_udf_compiler_driver", "cc");
 
@@ -49,11 +50,12 @@ class CUDFImplementer : public lingodb::catalog::MLIRUDFImplementor {
             bool soFileAlreadyExists = false;
             //Determine path to so file and check if so file already exists in db directory
             if (catalog->getDbDir().empty()) {
-               char tempSoFileTemplate[] = "/tmp/c_udf_XXXXXX";
-               int soFd = mkstemp(tempSoFileTemplate);
+               auto tempSoFileTemplate = (std::filesystem::temp_directory_path() / "c_udf_XXXXXX").string();
+               int soFd = mkstemp(tempSoFileTemplate.data());
                if (soFd == -1) {
                   throw std::runtime_error("Failed to create temporary file.");
                }
+               close(soFd);
                pathToSOFile = tempSoFileTemplate;
             } else {
                std::filesystem::create_directories(catalog->getDbDir() + "/udf");
@@ -61,12 +63,13 @@ class CUDFImplementer : public lingodb::catalog::MLIRUDFImplementor {
                soFileAlreadyExists = std::filesystem::exists(pathToSOFile);
             }
             if (!soFileAlreadyExists) {
-               char tempCFileTemplate[] = "/tmp/c_udf_XXXXXX";
-               int fd = mkstemp(tempCFileTemplate);
+               auto tempCFileTemplate = (std::filesystem::temp_directory_path() / "c_udf_XXXXXX").string();
+               int fd = mkstemp(tempCFileTemplate.data());
                if (fd == -1) {
                   throw std::runtime_error("Failed to create temporary file.");
                }
-               pathToCFile = std::string(tempCFileTemplate) + ".c";
+               close(fd);
+               pathToCFile = tempCFileTemplate + ".c";
                std::filesystem::rename(tempCFileTemplate, pathToCFile);
 
                std::ofstream tempFile(pathToCFile, std::ios::out | std::ios::trunc);
