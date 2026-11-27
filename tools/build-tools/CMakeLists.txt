@@ -18,26 +18,14 @@ set(CLANG_TOOL_FLAGS "${CLANG_TOOL_FLAGS}" "-I${CMAKE_SOURCE_DIR}/include")
 set(CLANG_TOOL_FLAGS "${CLANG_TOOL_FLAGS}" "-I${ARROW_INCLUDE_DIR}")
 
 # Get Clang resource directory
-# Check if the compiler is ccache
-if(CMAKE_CXX_COMPILER MATCHES "ccache")
-    set(ACTUAL_CXX_COMPILER ${CMAKE_CXX_COMPILER_ARG1})
-else()
-    set(ACTUAL_CXX_COMPILER ${CMAKE_CXX_COMPILER})
-endif()
-
-# Remove whitespace from ACTUAL_CXX_COMPILER
-string(STRIP "${ACTUAL_CXX_COMPILER}" ACTUAL_CXX_COMPILER)
-
-# only use resource dir if actual compiler is clang
-if (ACTUAL_CXX_COMPILER MATCHES "clang")
+if (CMAKE_CXX_COMPILER MATCHES "clang")
     execute_process(
-            COMMAND ${ACTUAL_CXX_COMPILER} --print-resource-dir
+            COMMAND ${CMAKE_CXX_COMPILER} --print-resource-dir
             OUTPUT_VARIABLE CLANG_RESOURCE_DIR
             OUTPUT_STRIP_TRAILING_WHITESPACE
     )
-    # Fail if the result is empty
     if(CLANG_RESOURCE_DIR STREQUAL "")
-        message(FATAL_ERROR "Failed to query clang resource directory. `${ACTUAL_CXX_COMPILER} --print-resource-dir` did not return a valid resource directory.")
+        message(FATAL_ERROR "Failed to query clang resource directory. `${CMAKE_CXX_COMPILER} --print-resource-dir` did not return a valid resource directory.")
     endif()
     message(STATUS "Queried clang resource dir: ${CLANG_RESOURCE_DIR}")
     set(CLANG_TOOL_FLAGS "${CLANG_TOOL_FLAGS}" "-resource-dir" "${CLANG_RESOURCE_DIR}")

@@ -37,8 +37,10 @@ jobs:
           make build-${{ matrix.build_type }}
         env:
           CCACHE_DIR: /ccache
-          CC: ccache clang-20
-          CXX: ccache clang++-20
+          CC: clang-20
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CXX: clang++-20
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
           ENABLE_BASELINE_BACKEND: "ON"
       - uses: actions/upload-artifact@master
         with:

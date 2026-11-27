@@ -47,8 +47,10 @@ jobs:
 
       - name: Build
         env:
-          CXX: "ccache /opt/homebrew/opt/llvm@20/bin/clang++"
-          CC: "ccache /opt/homebrew/opt/llvm@20/bin/clang"
+          CXX: "/opt/homebrew/opt/llvm@20/bin/clang++"
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
+          CC: "/opt/homebrew/opt/llvm@20/bin/clang"
+          CMAKE_C_COMPILER_LAUNCHER: ccache
           CCACHE_DIR: "~/.ccache"
           CMAKE_PREFIX_PATH: "/opt/homebrew/"
           ENABLE_MIMALLOC: "OFF"
